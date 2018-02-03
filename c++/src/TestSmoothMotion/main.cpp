@@ -8,15 +8,25 @@
 #include <stdio.h>
 #include <limits>
 
-// Core
-#include "helpers/TypeDefinitions.h"
+#include <cstring>
 
-#define ARRAY_IMPLEMENTATION
+// Core
+#include "helpers/Types.h"
+#define __WASTELADNS_MATH_IMPL__
+#include "helpers/Math.h"
+#define __WASTELADNS_ANGLE_IMPL__
+#include "helpers/Angle.h"
+#define __WASTELADNS_VEC_IMPL__
+#include "helpers/Vec.h"
+#define __WASTELADNS_COLOR_IMPL__
+#include "helpers/Color.h"
+#define __WASTELADNS_ARRAY_IMPL__
 #include "helpers/Array.h"
-#undef ARRAY_IMPLEMENTATION
 
 // Rest
-#include "helpers/GrcPrimitives.h"
+#define __WASTELADNS_DEBUGDRAW_IMPL__
+#define __WASTELADNS_DEBUGDRAW_TEXT__
+#include "helpers/debugdraw.h"
 
 namespace Input {
     
@@ -89,47 +99,6 @@ namespace Input {
     };
 };
 
-namespace Math {
-    
-    template<typename _T>
-    _T abs(_T a) {
-        return a > 0.f ? a : -a;
-    }
-    
-    template <typename _T>
-    _T min(_T a, _T b) {
-        return a < b ? a : b;
-    }
-    
-    template <typename _T>
-    _T max(_T a, _T b) {
-        return a > b ? a : b;
-    }
-    
-    template <typename _T>
-    _T clamp(_T x, _T a, _T b) {
-        return min(max(x, a), b);
-    }
-    
-    const f32 e32 = 2.7182818284590452353602874713527f;
-    const f64 e64 = 2.7182818284590452353602874713527;
-    
-    template <u8 _order = 3>
-    f32 exp_taylor(f32 x) {
-        
-        switch (_order) {
-            case 2:
-                return 1.0 + x + x * x * 0.5;
-            case 3:
-                return 1.0 + x + x * x * 0.5 + x * x * x / 6.0;
-            case 4:
-                return 1.0 + x + x * x * 0.5 + x * x * x / 6.0 + x * x * x * x / 24.0;
-            default:
-                return pow(Math::e64, x);
-        }
-    }
-}
-
 namespace Math3D {
     // CM = Column Major
     typedef f32 TransformMatrixCM32[16];
@@ -141,9 +110,9 @@ namespace EaseCurves {
     template <typename _T>
     _T lappr(_T current, _T target, _T rate, _T timeDelta) {
         if (current < target) {
-            return Math::min(current + rate * timeDelta, target);
+            return Math<_T>::min(current + rate * timeDelta, target);
         } else {
-            return Math::max(current - rate * timeDelta, target);
+            return Math<_T>::max(current - rate * timeDelta, target);
         }
     }
     template f32 lappr<f32>(f32 current, f32 target, f32 rate, f32 timeDelta);
@@ -152,77 +121,29 @@ namespace EaseCurves {
     template <typename _T>
     _T eappr(_T curr, _T target, _T timeHorizon, _T timeDelta) {
         
-        curr = target + (curr - target) / Math::exp_taylor( timeDelta * Math::e64 / timeHorizon );
+        curr = target + (curr - target) / Math<_T>::exp_taylor( timeDelta * Math<_T>::e / timeHorizon );
         
         return curr;
     };
     template f32 eappr<f32>(f32 curr, f32 target, f32 timeHorizon, f32 timeDelta);
     template f64 eappr<f64>(f64 curr, f64 target, f64 timeHorizon, f64 timeDelta);
     
-    f32 subsampled_eappr(f32 curr, f32 target, f32 timeHorizon, f32 timeDelta, f32 stepTime) {
+    template <typename _T>
+    _T subsampled_eappr(_T curr, _T target, _T timeHorizon, _T timeDelta, _T stepTime) {
         
         s32 steps = (s32)(0.5f + timeDelta / stepTime);
 
-        f32 t = 0.f;
+        _T t = 0.f;
         for (s32 i = 0; i < steps; i++) {
-            curr = target + (curr - target) / Math::exp_taylor(stepTime * Math::e64 / (timeHorizon - t));
+            curr = target + (curr - target) / Math<_T>::exp_taylor(stepTime * Math<_T>::e / (timeHorizon - t));
             t += stepTime;
         }
-        curr = target + (curr - target) / Math::exp_taylor((timeDelta - t) * Math::e64 / (timeHorizon - timeDelta));
+        curr = target + (curr - target) / Math<_T>::exp_taylor((timeDelta - t) * Math<_T>::e / (timeHorizon - timeDelta));
 
         return curr;
     };
-}
-
-namespace Angle {
-    
-    const f32 pi32 = 3.14159265358979323846264338327950288f;
-    const f64 pi64 = 3.14159265358979323846264338327950288;
-    const f32 twopi32 = 6.2831853071795864769252867665590576f;
-    const f64 twopi64 = 6.2831853071795864769252867665590576;
-    const f32 r2d32 = 180.f / pi32;
-    const f32 d2r32 = pi32 / 180.f;
-    const f64 r2d64 = 180.0 / pi64;
-    const f64 d2r64 = pi64 / 180.0;
-    
-    template <typename _T = f32> _T heading(Vec2& v);
-    template <> f32 heading<f32>(Vec2& v) {
-        return atan2f(v.x, v.y);
-    }
-    template <> f64 heading<f64>(Vec2& v) {
-        return atan2(v.x, v.y);
-    }
-    
-    Vec2 direction(f32 headingRad) {
-        return Vec2(sinf(headingRad), cosf(headingRad));
-    }
-    Vec2 direction(f64 headingRad) {
-        return Vec2(sin(headingRad), cos(headingRad));
-    }
-    
-    // TODO: understand this
-    f32 canonize(f32 rad) {
-        rad = fmodf(rad + pi32, twopi32);
-        if (rad < 0.f) {
-            rad += twopi32;
-        }
-        return rad - pi32;
-    }
-    f64 canonize(f64 rad) {
-        rad = fmod(rad + pi64, twopi64);
-        if (rad < 0.f) {
-            rad += twopi64;
-        }
-        return rad - pi64;
-    }
-    
-    template <typename _T = f32>
-    _T shortestDelta(_T toRad, _T fromRad) {
-        _T delta = toRad - fromRad;
-        return canonize(delta);
-    }
-    template f32 shortestDelta<f32>(f32 toRad, f32 fromRad);
-    template f64 shortestDelta<f64>(f64 toRad, f64 fromRad);
+    template f32 subsampled_eappr<f32>(f32 curr, f32 target, f32 timeHorizon, f32 timeDelta, f32 stepTime);
+    template f64 subsampled_eappr<f64>(f64 curr, f64 target, f64 timeHorizon, f64 timeDelta, f64 stepTime);
 }
 
 namespace Camera {
@@ -239,7 +160,7 @@ namespace Camera {
     };
     
     void computeProjectionMatrix(const FrustumParams& params, Math3D::TransformMatrixCM64& matrix) {
-        const f64 xMax = params.near * tanf(params.fov * 2.f * Angle::d2r64);
+        const f64 xMax = params.near * tan(params.fov * 2.f * Angle<f64>::d2r);
         const f64 xMin = -xMax;
         const f64 yMin = xMin / params.aspect;
         const f64 yMax = xMax / params.aspect;
@@ -382,15 +303,15 @@ namespace Game {
             inputDirWS.y += 3 * input.pressed(UP) + input.down(UP) - input.released(UP);
             inputDirWS.x -= 3 * input.pressed(LEFT) + input.down(LEFT) - input.released(LEFT);
             inputDirWS.x += 3 * input.pressed(RIGHT) + input.down(RIGHT) - input.released(RIGHT);
-            inputDirWS.x = Math::clamp(inputDirWS.x, -1.f, 1.f);
-            inputDirWS.y = Math::clamp(inputDirWS.y, -1.f, 1.f);
+            inputDirWS.x = Math<f32>::clamp(inputDirWS.x, -1.f, 1.f);
+            inputDirWS.y = Math<f32>::clamp(inputDirWS.y, -1.f, 1.f);
             
             f32 speed = 0.f;
             if (inputDirWS.x != 0 || inputDirWS.y != 0) {
-                f32 inputHeadingWS = Angle::heading(inputDirWS);
+                f32 inputHeadingWS = Angle<f32>::heading(inputDirWS);
                 
                 f32 currentHeadingLS = 0.f;
-                f32 inputHeadingLS = Angle::shortestDelta(inputHeadingWS, controller.heading);
+                f32 inputHeadingLS = Angle<f32>::shortestDelta(inputHeadingWS, controller.heading);
                 
                 switch (Private::easeType) {
                     default:
@@ -411,14 +332,14 @@ namespace Game {
                         break;
                 }
 
-                controller.heading = Angle::canonize(controller.heading + currentHeadingLS);
-                controller.dir = Angle::direction(controller.heading);
+                controller.heading = Angle<f32>::modpi(controller.heading + currentHeadingLS);
+                controller.dir = Angle<f32>::direction(controller.heading);
                 speed = 160.f;
             }
             
-            controller.pos = controller.pos + controller.dir * speed * params.timeDelta;
+            controller.pos = Vec::add(controller.pos, Vec::scale(controller.dir, (speed * params.timeDelta)));
             
-            f32 historyData[] = { Angle::heading(inputDirWS), controller.heading };
+            f32 historyData[] = { Angle<f32>::heading(inputDirWS), controller.heading };
             Array::Queue::BatchPush<f32>((f32**)&(Private::inputDirWSHistory), 2, Private::historyCount, Private::historyMaxCount, historyData);
         }
     };
@@ -480,6 +401,8 @@ int main(int argc, char** argv) {
                 Camera::computeProjectionMatrix(ortho, projectionTransform);
                 glMultMatrixf(projectionTransform);
             }
+            glEnable(GL_BLEND);
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
             
             // Scene set up
             game.player.motion.pos = Vec2(0.f, 0.f);
@@ -492,7 +415,7 @@ int main(int argc, char** argv) {
             app.time.tillNextFrame = 0.0;
             do {
                 if (app.time.tillNextFrame <= 0.0001) {
-                    app.time.lastFrameDelta = fminf(app.time.now - app.time.lastFrame, app.time.config.maxFrameLength);
+                    app.time.lastFrameDelta = Math<f64>::min(app.time.now - app.time.lastFrame, app.time.config.maxFrameLength);
                     app.time.lastFrame = app.time.now;
                     app.time.frame++;
                     
@@ -523,7 +446,7 @@ int main(int argc, char** argv) {
                         }
                         if (app.input.keyboardSet.pressed(GLFW_KEY_9)) {
                             game.timerate += 0.1f;
-                            game.timerate = Math::max(game.timerate, 0.01f);
+                            game.timerate = Math<f32>::max(game.timerate, 0.01f);
                         }
                         
                         // Locomotion update
@@ -533,10 +456,10 @@ int main(int argc, char** argv) {
                             UpdateMovementParams locoParams;
                             locoParams.controller = &game.player.motion;
                             locoParams.inputSet = &game.playerSet;
-                            locoParams.timeDelta = app.time.lastFrameDelta * game.timerate;
+                            locoParams.timeDelta = (f32)(app.time.lastFrameDelta * game.timerate);
                             updateMovement(locoParams);
                             
-                            if ( trailCount == 0 || (trail[trailCount - 1] - game.player.motion.pos).module() > f32eps) {
+                            if ( trailCount == 0 || Vec::mag(Vec::subtract(trail[trailCount - 1], game.player.motion.pos)) > Math<f32>::eps) {
                                 Array::Params posParams;
                                 posParams.data = (void*)trail;
                                 posParams.count = &trailCount;
@@ -567,41 +490,41 @@ int main(int argc, char** argv) {
                             // Debug text
                             char buffer[128];
                             sprintf(buffer, "player inputDir:%.3f, currentDir:%.3f rate:%.3f",
-                                    Angle::canonize(Angle::heading(motion.inputDirWS)), motion.heading, game.timerate );
+                                    Angle<f32>::modpi(Angle<f32>::heading(motion.inputDirWS)), motion.heading, game.timerate );
                             
                             Vec3 debugPos = Vec3(app.orthoParams.left + 10.f, app.orthoParams.top - 10.f, 0.f);
                             const Col textColor(1.0f, 1.0f, 1.0f, 1.0f);
                             
-                            GrcPrimitives::TextParams textParams;
+                            DebugDraw::TextParams textParams;
                             textParams.scale = 2.f;
                             textParams.pos = debugPos;
                             textParams.text = buffer;
-                            GrcPrimitives::text(textParams);
+                            DebugDraw::text(textParams);
                             debugPos.y -= 10.f * textParams.scale;
                             
-                            sprintf(buffer, "Ease:%s", easeNames[Private::easeType]);
+							sprintf(buffer, "Ease:%s", easeNames[Private::easeType]);
                             textParams.pos = debugPos;
-                            GrcPrimitives::text(textParams);
+                            DebugDraw::text(textParams);
                             debugPos.y -= 20.f * textParams.scale;
                             
-                            GrcPrimitives::GraphParams graphParams;
+                            DebugDraw::GraphParams graphParams;
                             graphParams.topLeft = debugPos;
                             graphParams.w = 600;
-                            graphParams.max = Angle::pi32;
-                            graphParams.min = -Angle::pi32;
+                            graphParams.max = Angle<f32>::pi;
+                            graphParams.min = -Angle<f32>::pi;
                             graphParams.count = Private::historyCount;
                             
                             graphParams.values = Private::inputDirWSHistory;
-                            graphParams.color = Col(0.1f, 0.3f, 0.f, 0.3f);
-                            GrcPrimitives::graph(graphParams);
+                            graphParams.color = Col(0.5f, 0.8f, 0.f, 0.2f);
+                            DebugDraw::graph(graphParams);
                             
                             graphParams.values = Private::dirHistory;
-                            graphParams.color = Col(0.5f, 0.8f, 0.f, 0.3f);
-                            GrcPrimitives::graph(graphParams);
+                            graphParams.color = Col(0.5f, 0.8f, 0.f, 0.6f);
+                            DebugDraw::graph(graphParams);
                             
                             Col trailColor(0.3f, 0.3f, 0.3f, 1.f);
                             for (int i = 1; i < trailCount; i++) {
-                                GrcPrimitives::segment(Vec3(trail[i-1], 0.f), Vec3(trail[i], 0.f), trailColor);
+                                DebugDraw::segment(Vec3(trail[i-1], 0.f), Vec3(trail[i], 0.f), trailColor);
                             }
                         }
                         
@@ -614,14 +537,14 @@ int main(int argc, char** argv) {
                             f32 y = motion.pos.y;
                             
                             glTranslatef(x, y, 0.f);
-                            glRotatef(motion.heading * Angle::r2d32, 0.f, 0.f, -1.f);
+                            glRotatef(motion.heading * Angle<f32>::r2d, 0.f, 0.f, -1.f);
                             
                             f32 w = 5.f;
                             f32 h = 10.f;
                             const Col playerColor(1.0f, 1.0f, 1.0f, 1.0f);
-                            GrcPrimitives::segment(Vec3(-w, -h, 0.f), Vec3(0.f, h, 0.f), playerColor);
-                            GrcPrimitives::segment(Vec3(0.f, h, 0.f), Vec3(w, -h, 0.f), playerColor);
-                            GrcPrimitives::segment(Vec3(w, -h, 0.f), Vec3(-w, -h, 0.f), playerColor);
+                            DebugDraw::segment(Vec3(-w, -h, 0.f), Vec3(0.f, h, 0.f), playerColor);
+                            DebugDraw::segment(Vec3(0.f, h, 0.f), Vec3(w, -h, 0.f), playerColor);
+                            DebugDraw::segment(Vec3(w, -h, 0.f), Vec3(-w, -h, 0.f), playerColor);
                         }
                         glPopMatrix();
                         

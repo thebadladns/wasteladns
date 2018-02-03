@@ -1,5 +1,5 @@
-#ifndef __TYPEDEFINITIONS_H__
-#define __TYPEDEFINITIONS_H__
+#ifndef __WASTELADNS_TYPES_H__
+#define __WASTELADNS_TYPES_H__
 
 #include "stdint.h"
 
@@ -15,6 +15,4 @@ typedef uint8_t u8;
 typedef float f32;
 typedef double f64;
 
-static const float f32eps = 0.0000001f;
-
-#endif
+#endif // __WASTELADNS_TYPES_H__

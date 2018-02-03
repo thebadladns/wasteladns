@@ -1,0 +1,410 @@
+#include "GLFW/glfw3.h"
+
+#define GRC_PRIMITIVES_ENABLE_TEXT 1
+#include "lib/stb/stb_easy_font.h"
+
+// C libs
+#include <stdlib.h>
+#include <stdio.h>
+#include <limits>
+#include <cstring>
+
+// Core
+#include "helpers/Types.h"
+#define __WASTELADNS_MATH_IMPL__
+#include "helpers/Math.h"
+#define __WASTELADNS_ANGLE_IMPL__
+#include "helpers/Angle.h"
+#define __WASTELADNS_VEC_IMPL__
+#include "helpers/Vec.h"
+#define __WASTELADNS_COLOR_IMPL__
+#include "helpers/Color.h"
+
+// Rest
+#define __WASTELADNS_DEBUGDRAW_IMPL__
+#define __WASTELADNS_DEBUGDRAW_TEXT__
+#include "helpers/debugdraw.h"
+
+namespace Input {
+    
+    namespace DebugSet {
+        enum Keys : u8 {
+            ESC = 1 << 0
+            , EXIT = ESC
+            , COUNT = 2
+            , CLEAR = 0
+        };
+        typedef s32 Mapping[Keys::COUNT];
+        extern const Mapping mapping = {
+            GLFW_KEY_ESCAPE
+        };
+    };
+    
+    template<typename _Set, const s32* _mapping>
+    struct DigitalState {
+        bool down(_Set key) const {
+            return (current & key) != 0;
+        }
+        bool up(_Set key) const {
+            return (current & key) == 0;
+        }
+        bool released(_Set key) const {
+            return (current & key) == 0 && (last & key) != 0;
+        }
+        bool pressed(_Set key) const {
+            return (current & key) != 0 && (last & key) == 0;
+        }
+        void pollState(GLFWwindow* window) {
+            last = current;
+            current = _Set::CLEAR;
+            for (int i = 0; i < _Set::COUNT; i++) {
+                s32 keyState = glfwGetKey(window, _mapping[i]);
+                s32 keyOn = (keyState == GLFW_PRESS) || (keyState == GLFW_REPEAT);
+                current = (_Set) (current | (keyOn << i));
+            }
+        }
+        
+        _Set last;
+        _Set current;
+    };
+    
+    struct KeyboardState {
+        bool down(s32 key) {
+            return current[key] != 0;
+        }
+        bool up(s32 key) {
+            return current[key] == 0;
+        }
+        bool released(s32 key) {
+            return current[key] == 0 && last[key] != 0;
+        }
+        bool pressed(s32 key) {
+            return current[key] != 0 && last[key] == 0;
+        }
+        void pollState(GLFWwindow* window) {
+            memcpy(last, current, GLFW_KEY_LAST);
+            memset(current, 0, GLFW_KEY_LAST);
+            for (int i = 0; i < GLFW_KEY_LAST; i++) {
+                current[i] = glfwGetKey(window, i);
+            }
+        }
+        
+        u8 last[GLFW_KEY_LAST];
+        u8 current[GLFW_KEY_LAST];
+    };
+};
+
+namespace Math3D {
+    typedef f32 Transform32[16];
+    typedef f64 Transform64[16];
+}
+
+namespace Camera {
+    
+    // frustum.fov = 60.0;
+    // frustum.aspect = 1.0;
+    // frustum.near = 1.0;
+    // frustum.far = 200.0;
+    struct FrustumParams {
+        f32 fov;
+        f32 aspect;
+        f32 near;
+        f32 far;
+    };
+    
+    void computeProjectionMatrix(const FrustumParams& params, Math3D::Transform64& matrixCM) {
+        const f64 xMax = params.near * tanf(params.fov * 2.f * Angle<f64>::d2r);
+        const f64 xMin = -xMax;
+        const f64 yMin = xMin / params.aspect;
+        const f64 yMax = xMax / params.aspect;
+        
+        memset(matrixCM, 0, sizeof(matrixCM));
+        matrixCM[0] = (2.0 * params.near) / (xMax - xMin);
+        matrixCM[5] = (2.0 * params.near) / (yMax - yMin);
+        matrixCM[10] = -(params.far + params.near) / (params.far - params.near);
+        matrixCM[8] = (xMax + xMin) / (xMax - xMin);
+        matrixCM[9] = (yMax + yMin) / (yMax - yMin);
+        matrixCM[11] = -1.f;
+        matrixCM[14] = -(2.0 * params.far * params.near) / (params.far - params.near);
+    }
+    
+    // ortho.right = app.mainWindow.width * 0.5f;
+    // ortho.top = app.mainWindow.height * 0.5f;
+    // ortho.left = -ortho.right;
+    // ortho.bottom = -ortho.top;
+    // ortho.near = -1.f;
+    // ortho.far = 200.f;
+    struct OrthoParams {
+        f32 left;
+        f32 right;
+        f32 top;
+        f32 bottom;
+        f32 near;
+        f32 far;
+    };
+    
+    void computeProjectionMatrix(const OrthoParams& params, Math3D::Transform32& matrixCM) {
+        memset(matrixCM, 0, sizeof(matrixCM));
+        matrixCM[0] = 2.f / (params.right - params.left);
+        matrixCM[5] = 2.f / (params.top - params.bottom);
+        matrixCM[10] = -2.f / (params.far - params.near);
+        matrixCM[12] = -(params.right + params.left) / (params.right - params.left);
+        matrixCM[13] = -(params.top + params.bottom) / (params.top - params.bottom);
+        matrixCM[14] = -(params.far + params.near) / (params.far - params.near);
+        matrixCM[15] = 1.f;
+    }
+};
+
+namespace App {
+    struct Time {
+        f64 running;
+        f64 start;
+        f64 now;
+    };
+    
+    struct Window {
+        GLFWwindow* handle;
+        f32 desiredRatio;
+        u32 width;
+        u32 height;
+        bool fullscreen = false;
+    };
+    
+    struct Input {
+        ::Input::KeyboardState keyboardSet;
+    };
+    
+    struct Instance {
+        Window mainWindow;
+        Camera::OrthoParams orthoParams;
+        Time time;
+        Input input;
+    };
+};
+App::Instance app;
+
+namespace Game {
+    
+    struct Time {
+        struct Config {
+            f64 targetFramerate;
+            f64 maxFrameLength;
+        };
+        
+        Config config;
+        
+        f64 lastFrame;
+        f64 lastFrameDelta;
+        f64 nextFrame;
+        
+        s64 frame;
+    };
+    
+    namespace PlayerInputSet {
+        enum Keys : u8 {
+              LEFT = 1 << 0
+            , RIGHT = 1 << 1
+            , SPACE = 1 << 2
+            , COUNT = 3
+            , CLEAR = 0
+        };
+        typedef s32 Mapping[Keys::COUNT];
+        extern const Mapping mapping = {
+              GLFW_KEY_A
+            , GLFW_KEY_D
+            , GLFW_KEY_SPACE
+        };
+    };
+    typedef ::Input::DigitalState<PlayerInputSet::Keys, PlayerInputSet::mapping> PlayerInput;
+ 
+    struct Player {
+        f32 x, y;
+        f32 heading;
+        f32 trajectoryLength;
+    };
+    
+    struct Cage {
+        f32 left;
+        f32 right;
+        f32 top;
+        f32 bottom;
+    };
+    
+    struct Instance {
+        Time time;
+        PlayerInput playerInput;
+        Cage cage;
+        Player player;
+    };
+}
+Game::Instance game;
+
+int main(int argc, char** argv) {
+    
+    if (glfwInit())
+    {
+        App::Window& window = app.mainWindow;
+        
+        glfwWindowHint(GLFW_DOUBLEBUFFER, GL_TRUE);
+        window.width = 640;
+        window.height = 480;
+        window.desiredRatio = window.width / (f32) window.height;
+        window.fullscreen = false;
+        window.handle = glfwCreateWindow(
+                                         window.width
+                                         , window.height
+                                         , "smooth motion test"
+                                         , nullptr /*monitor*/
+                                         , nullptr /*share*/
+                                         );
+        if (window.handle)
+        {
+            // Input setup
+            glfwSetInputMode(app.mainWindow.handle, GLFW_STICKY_KEYS, 1);
+            
+            // Render setup
+            glfwMakeContextCurrent(window.handle);
+            glfwSwapInterval(1);
+            glMatrixMode(GL_PROJECTION);
+            {
+                glLoadIdentity();
+                Math3D::Transform32 projectionTransformCM;
+                Camera::OrthoParams& ortho = app.orthoParams;
+                ortho.right = app.mainWindow.width * 0.5f;
+                ortho.top = app.mainWindow.height * 0.5f;
+                ortho.left = -ortho.right;
+                ortho.bottom = -ortho.top;
+                ortho.near = -1.f;
+                ortho.far = 200.f;
+                Camera::computeProjectionMatrix(ortho, projectionTransformCM);
+                glMultMatrixf(projectionTransformCM);
+            }
+            glEnable(GL_BLEND);
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+            
+            {
+                game.cage.left = -80.f;
+                game.cage.right = 80.f;
+                game.cage.top = 80.f;
+                game.cage.bottom = -80.f;
+                
+                game.player.x = 0.f;
+                game.player.y = 0.f;
+                game.player.trajectoryLength = 120.f;
+            }
+            
+            game.time.config.maxFrameLength = 0.1;
+            game.time.config.targetFramerate = 1.0 / 60.0;
+            app.time.now = app.time.start = glfwGetTime();
+            game.time.lastFrame = game.time.nextFrame = app.time.now;
+            game.time.frame = 0;
+            do {
+                if (app.time.now >= game.time.nextFrame) {
+                    game.time.lastFrameDelta = Math<f32>::min(app.time.now - game.time.lastFrame, game.time.config.maxFrameLength);
+                    game.time.lastFrame = app.time.now;
+                    game.time.nextFrame = app.time.now + game.time.config.targetFramerate;
+                    
+                    {
+                        using namespace Game;
+                        
+                        glfwPollEvents();
+                        app.input.keyboardSet.pollState(window.handle);
+                        game.playerInput.pollState(window.handle);
+                        
+                        // Logic
+                        {
+                            if (app.input.keyboardSet.released(GLFW_KEY_ESCAPE)) {
+                                glfwSetWindowShouldClose(app.mainWindow.handle, 1);
+                            }
+                            
+                            
+                            if (game.playerInput.down(Game::PlayerInputSet::LEFT)) {
+                               game.player.heading -= 0.035;
+                            }
+                            
+                            
+                            if (game.playerInput.down(Game::PlayerInputSet::RIGHT)) {
+                               game.player.heading += 0.035;
+                            }
+                        }
+                        
+                        { // Render update
+                            glClearColor(0.f, 0.f, 0.f, 1.f);
+                            glClear(GL_COLOR_BUFFER_BIT);
+                            
+                            // Debug
+                            {
+                                
+                                Vec3 debugPos = Vec3(app.orthoParams.left + 10.f, app.orthoParams.top - 10.f, 0.f);
+                                const Col textColor(1.0f, 1.0f, 1.0f, 1.0f);
+                                
+                                DebugDraw::TextParams textParams;
+                                textParams.scale = 2.f;
+                                textParams.pos = debugPos;
+                                textParams.text = "A & D to turn, SPACE to fire";
+                                DebugDraw::text(textParams);
+                                debugPos.y -= 15.f * textParams.scale;
+                             
+                                // Debug text
+                                char buffer[128];
+                                sprintf(buffer, "player heading:%.3f", game.player.heading);
+                                textParams.pos = debugPos;
+                                textParams.text = buffer;
+                                DebugDraw::text(textParams);
+                            }
+                            
+                            // Scene
+                            {
+                                // Player
+                                glMatrixMode(GL_MODELVIEW);
+                                glPushMatrix();
+                                {
+                                    Game::Player& player = game.player;
+    
+                                    f32 x = player.x;
+                                    f32 y = player.y;
+    
+                                    glTranslatef(x, y, 0.f);
+                                    glRotatef(player.heading * Angle<f32>::r2d, 0.f, 0.f, -1.f);
+    
+                                    f32 w = 5.f;
+                                    f32 h = 10.f;
+                                    const Col playerColor(1.0f, 1.0f, 1.0f, 1.0f);
+                                    const Col playerTrajectoryColor(1.0f, 1.0f, 1.0f, 0.5f);
+                                    DebugDraw::segment(Vec3(-w, -h, 0.f), Vec3(0.f, h, 0.f), playerColor);
+                                    DebugDraw::segment(Vec3(0.f, h, 0.f), Vec3(w, -h, 0.f), playerColor);
+                                    DebugDraw::segment(Vec3(w, -h, 0.f), Vec3(-w, -h, 0.f), playerColor);
+                                    DebugDraw::segment(Vec3(0.f, h, 0.f), Vec3(0.f, player.trajectoryLength, 0.f), playerTrajectoryColor);
+                                }
+                                glPopMatrix();
+                                
+                                // Cage
+                                
+                                Game::Cage& cage = game.cage;
+                                
+                                const Col gridColor(1.0f, 1.0f, 1.0f, 1.0f);
+                                DebugDraw::segment(Vec3(cage.left, cage.bottom, 0.f), Vec3(cage.left, cage.top, 0.f), gridColor);
+                                DebugDraw::segment(Vec3(cage.left, cage.top, 0.f), Vec3(cage.right, cage.top, 0.f), gridColor);
+                                DebugDraw::segment(Vec3(cage.right, cage.top, 0.f), Vec3(cage.right, cage.bottom, 0.f), gridColor);
+                                DebugDraw::segment(Vec3(cage.right, cage.bottom, 0.f), Vec3(cage.left, cage.bottom, 0.f), gridColor);
+                            }
+                            
+                            
+                            // Needed since GLFW_DOUBLEBUFFER is GL_TRUE
+                            glfwSwapBuffers(app.mainWindow.handle);
+                        }
+                    }
+                }
+                
+                app.time.now = glfwGetTime();
+                app.time.running = app.time.now - app.time.start;
+            }
+            while (!glfwWindowShouldClose(app.mainWindow.handle));
+            glfwDestroyWindow(app.mainWindow.handle);
+        }
+        
+        glfwTerminate();
+    }
+    
+    return 0;
+}
