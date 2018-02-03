@@ -1,0 +1,128 @@
+#######
+# MacOS
+#######
+
+# general
+.DS_Store
+
+#######
+# CMake
+#######
+
+CMakeCache.txt
+CMakeFiles
+CMakeScripts
+cmake_install.cmake
+cmake_uninstall.cmake
+compile_commands.json
+
+#####
+# C++
+#####
+
+# compiled Object files
+*.slo
+*.lo
+*.o
+*.obj
+*.elf
+
+# linker output
+*.ilk
+*.map
+*.exp
+
+# precompiled Headers
+*.gch
+*.pch
+
+# compiled Dynamic libraries
+*.so
+*.so.*
+*.dylib
+*.dll
+
+# compiled Static libraries
+*.lai
+*.la
+*.a
+*.lib
+
+# executables
+*.exe
+*.out
+*.app
+
+# debug files
+*.dSYM/
+*.su
+*.idb
+*.pdb
+
+####
+# VS
+####
+
+# project files
+*.vcxproj
+*.vcxproj.filters
+*.sln
+
+
+# user-specific files
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# build results
+[Dd]ebug/
+[Dd]ebugPublic/
+[Rr]elease/
+[Rr]eleases/
+x64/
+x86/
+bld/
+Win32/
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+*.dir/
+
+#######
+# Xcode
+#######
+
+# project files
+*.xcodeproj
+*.build
+
+# build generated
+build/
+DerivedData/
+
+# various settings
+*.pbxuser
+!default.pbxuser
+*.mode1v3
+!default.mode1v3
+*.mode2v3
+!default.mode2v3
+*.perspectivev3
+!default.perspectivev3
+xcuserdata/
+
+## other
+*.moved-aside
+*.xccheckout
+*.xcscmblueprint
+
+####
+# VI
+####
+
+# swap
+[._]*.s[a-w][a-z]
+[._]s[a-w][a-z]
+# temporary
+*~
