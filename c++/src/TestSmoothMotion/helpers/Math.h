@@ -1,6 +1,11 @@
 #ifndef __WASTELADNS_MATH_H__
 #define __WASTELADNS_MATH_H__
 
+#ifndef __WASTELADNS_C_MATH_H__
+#include <math.h>
+#define __WASTELADNS_C_MATH_H__
+#endif
+
 #ifndef __WASTELADNS_TYPES_H__
 #include "Types.h"
 #endif
@@ -19,6 +24,15 @@ struct Math {
     template <u8 _order = 3>
     static _T exp_taylor(_T x);
 };
+
+#ifndef __WASTELADNS_MATH_IMPL__
+extern template struct Math<f32>;
+extern template struct Math<f64>;
+
+extern template f32 Math<f32>::exp_taylor<3>(f32 x);
+extern template f64 Math<f64>::exp_taylor<3>(f64 x);
+
+#endif
 
 #endif // __WASTELADNS_MATH_H__
 
@@ -69,6 +83,9 @@ _T Math<_T>::exp_taylor(_T x) {
             return (_T) pow(e, x);
     }
 }
+
+template f32 Math<f32>::exp_taylor<3>(f32 x);
+template f64 Math<f64>::exp_taylor<3>(f64 x);
 
 template struct Math<f32>;
 template struct Math<f64>;

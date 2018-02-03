@@ -1,6 +1,11 @@
 #ifndef __WASTELADNS_ANGLE_H__
 #define __WASTELADNS_ANGLE_H__
 
+#ifndef __WASTELADNS_C_MATH_H__
+#include <math.h>
+#define __WASTELADNS_C_MATH_H__
+#endif
+
 #ifndef __WASTELADNS_TYPES_H__
 #include "Types.h"
 #endif
@@ -25,13 +30,15 @@ struct Angle {
     static _T shortestDelta(_T toRad, _T fromRad);
 };
 
+#ifndef __WASTELADNS_ANGLE_IMPL__
+extern template struct Angle<f32>;
+extern template struct Angle<f64>;
+#endif
+
 #endif // __WASTELADNS_ANGLE_H__
 
 #ifdef __WASTELADNS_ANGLE_IMPL__
 #undef __WASTELADNS_ANGLE_IMPL__
-
-template struct Angle<f32>;
-template struct Angle<f64>;
 
 template <>
 const f32 Angle<f32>::pi = 3.14159265358979323846264338327950288f;
@@ -91,5 +98,8 @@ _T Angle<_T>::shortestDelta(_T toRad, _T fromRad) {
     _T delta = toRad - fromRad;
     return modpi(delta);
 }
+
+template struct Angle<f32>;
+template struct Angle<f64>;
 
 #endif // __WASTELADNS_ANGLE_IMPL__

@@ -20,6 +20,10 @@ struct Vector2 {
         _T coords[2];
     };
 };
+#ifndef __WASTELADNS_VEC_IMPL__
+extern template struct Vector2<f32>;
+extern template struct Vector2<f64>;
+#endif
 typedef Vector2<f32> Vec2;
 
 template <typename _T>
@@ -38,6 +42,10 @@ struct Vector3 {
         _T coords[3];
     };
 };
+#ifndef __WASTELADNS_VEC_IMPL__
+extern template struct Vector3<f32>;
+extern template struct Vector3<f64>;
+#endif
 typedef Vector3<f32> Vec3;
 
 template <typename _T>
@@ -57,6 +65,10 @@ struct Vector4 {
         _T coords[4];
     };
 };
+#ifndef __WASTELADNS_VEC_IMPL__
+extern template struct Vector4<f32>;
+extern template struct Vector4<f64>;
+#endif
 typedef Vector4<f32> Vec4;
 
 template <typename _T>
@@ -92,6 +104,10 @@ struct Vector {
     static Vector3<_T> cross(const Vector3<_T>& a, const Vector3<_T>& b);
     static Vector4<_T> cross(const Vector4<_T>& a, const Vector4<_T>& b);
 };
+#ifndef __WASTELADNS_VEC_IMPL__
+extern template struct Vector<f32>;
+extern template struct Vector<f64>;
+#endif
 typedef Vector<f32> Vec;
 
 #endif // __WASTELADNS_VEC_H__
@@ -102,9 +118,6 @@ typedef Vector<f32> Vec;
 #ifndef __WASTELADNS_MATH_H__
 #include "Math.h"
 #endif
-
-template struct Vector<f32>;
-template struct Vector<f64>;
 
 template<typename _T>
 Vector2<_T>::Vector2() {}
@@ -330,4 +343,14 @@ Vector4<_T> Vector<_T>::cross(const Vector4<_T>& a, const Vector4<_T>& b) {
                        a.x * b.y - a.y * b.x,
                        0.0);
 }
+
+template struct Vector2<f32>;
+template struct Vector3<f32>;
+template struct Vector4<f32>;
+template struct Vector2<f64>;
+template struct Vector3<f64>;
+template struct Vector4<f64>;
+template struct Vector<f32>;
+template struct Vector<f64>;
+
 #endif // __WASTELADNS_VEC_IMPL__

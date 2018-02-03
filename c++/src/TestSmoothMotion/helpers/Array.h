@@ -1,6 +1,10 @@
 #ifndef __WASTELADNS_ARRAY_H__
 #define __WASTELADNS_ARRAY_H__
 
+#ifndef __WASTELADNS_TYPES_H__
+#include "Types.h"
+#endif
+
 namespace Array {
     
     struct Params {
@@ -35,9 +39,22 @@ namespace Array {
         void Push(const BatchParams& params, void* elem);
     }
 }
+
+#ifndef __WASTELADNS_ARRAY_IMPL__
+extern template void Array::Queue::Push<f32>(f32* data, s32& count, s32 maxCount, f32& elem);
+extern template void Array::Queue::BatchPush<f32>(f32** data, u32 batchCount, s32& count, s32 maxCount, f32* elem);
+#endif
+
 #endif // __WASTELADNS_ARRAY_H__
 
 #ifdef __WASTELADNS_ARRAY_IMPL__
+#undef __WASTELADNS_ARRAY_IMPL__
+
+#ifndef __WASTELADNS_C_CSTRING_H__
+#include <cstring>
+#define __WASTELADNS_C_CSTRING_H__
+#endif
+
 namespace Array {
     namespace Queue {
         
@@ -95,4 +112,8 @@ namespace Array {
         }
     }
 }
+
+template void Array::Queue::Push<f32>(f32* data, s32& count, s32 maxCount, f32& elem);
+template void Array::Queue::BatchPush<f32>(f32** data, u32 batchCount, s32& count, s32 maxCount, f32* elem);
+
 #endif // __WASTELADNS_ARRAY_IMPL__

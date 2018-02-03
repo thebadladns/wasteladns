@@ -1,6 +1,11 @@
 #ifndef __WASTELADNS_COLOR_H__
 #define __WASTELADNS_COLOR_H__
 
+#ifndef __WASTELADNS_C_MATH_H__
+#include <math.h>
+#define __WASTELADNS_C_MATH_H__
+#endif
+
 #ifndef __WASTELADNS_TYPES_H__
 #include "Types.h"
 #endif
@@ -17,18 +22,18 @@ struct Color {
     Color(const ValueType uR, const ValueType uG, const ValueType uB, const ValueType a = ((1 << alphaBitCount) - 1));
     ~Color();
     
-    __inline f32 getRf() const;
-    __inline f32 getGf() const;
-    __inline f32 getBf() const;
-    __inline f32 getAf() const;
+    f32 getRf() const;
+    f32 getGf() const;
+    f32 getBf() const;
+    f32 getAf() const;
     
-    __inline ValueType getRu() const;
-    __inline ValueType getGu() const;
-    __inline ValueType getBu() const;
-    __inline ValueType getAu() const;
+    ValueType getRu() const;
+    ValueType getGu() const;
+    ValueType getBu() const;
+    ValueType getAu() const;
     
-    __inline void set(const f32 fR, const f32 fG, const f32 fB, const f32 fA = 1.f);
-    __inline void set(const ValueType uR, const ValueType uG, const ValueType uB, const ValueType uA = ((1 << alphaBitCount) - 1));
+    void set(const f32 fR, const f32 fG, const f32 fB, const f32 fA = 1.f);
+    void set(const ValueType uR, const ValueType uG, const ValueType uB, const ValueType uA = ((1 << alphaBitCount) - 1));
     
     static Color<ValueType, redBitCount, greenBitCount, blueBitCount, alphaBitCount> add(const Color<ValueType, redBitCount, greenBitCount, blueBitCount, alphaBitCount> &a, const Color<ValueType, redBitCount, greenBitCount, blueBitCount, alphaBitCount> &b);
     static Color<ValueType, redBitCount, greenBitCount, blueBitCount, alphaBitCount> scale(const Color<ValueType, redBitCount, greenBitCount, blueBitCount, alphaBitCount> &a, f32 b);
@@ -36,6 +41,7 @@ struct Color {
     ValueType color;
 };
 
+extern template struct Color<u32, 8, 8, 8, 8>;
 typedef Color<u32, 8, 8, 8, 8> Col32;
 typedef Col32 Col;
 

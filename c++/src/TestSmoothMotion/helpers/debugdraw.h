@@ -1,12 +1,17 @@
 #ifndef __WASTELADNS_DEBUGDRAW_H__
 #define __WASTELADNS_DEBUGDRAW_H__
 
+#ifndef __WASTELADNS_GLFW3_H__
+#include "GLFW/glfw3.h"
+#define __WASTELADNS_GLFW3_H__
+#endif
+
 #ifndef __WASTELADNS_TYPES_H__
 #include "Types.h"
 #endif
 
 #ifndef __WASTELADNS_VEC_H__
-struct Vec3;
+#include "Vec.h"
 #endif
 
 #ifndef __WASTELADNS_COLOR_H__
@@ -58,12 +63,12 @@ namespace DebugDraw
 #include "Math.h"
 #endif
 
-#ifndef __WASTELADNS_VEC_H__
-#include "Vec.h"
-#endif
-
 #ifndef __WASTELADNS_ANGLE_H__
 #include "Angle.h"
+#endif
+
+#ifdef __WASTELADNS_DEBUGDRAW_TEXT__
+#include "../lib/stb/stb_easy_font.h"
 #endif
 
 namespace DebugDraw {

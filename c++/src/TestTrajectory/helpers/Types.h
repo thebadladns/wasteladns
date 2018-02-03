@@ -1,7 +1,10 @@
 #ifndef __WASTELADNS_TYPES_H__
 #define __WASTELADNS_TYPES_H__
 
+#ifndef __WASTELADNS_C_STDINT_H__
 #include "stdint.h"
+#define __WASTELADNS_C_STDLIB_H__
+#endif
 
 typedef int64_t s64;
 typedef uint64_t u64;

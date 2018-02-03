@@ -1,13 +1,17 @@
 #include "GLFW/glfw3.h"
-
-#define GRC_PRIMITIVES_ENABLE_TEXT 1
-#include "lib/stb/stb_easy_font.h"
+#define __WASTELADNS_GLFW3_H__
 
 // C libs
 #include <stdlib.h>
+#define __WASTELADNS_C_STDLIB_H__
+#include <math.h>
+#define __WASTELADNS_C_MATH_H__
 #include <stdio.h>
+#define __WASTELADNS_C_STDIO_H__
 #include <limits>
+#define __WASTELADNS_C_LIMITS_H__
 #include <cstring>
+#define __WASTELADNS_C_CSTRING_H__
 
 // Core
 #include "helpers/Types.h"
@@ -113,7 +117,7 @@ namespace Camera {
     };
     
     void computeProjectionMatrix(const FrustumParams& params, Math3D::Transform64& matrixCM) {
-        const f64 xMax = params.near * tanf(params.fov * 2.f * Angle<f64>::d2r);
+        const f64 xMax = params.near * tan(params.fov * 2.f * Angle<f64>::d2r);
         const f64 xMin = -xMax;
         const f64 yMin = xMin / params.aspect;
         const f64 yMax = xMax / params.aspect;
@@ -300,7 +304,7 @@ int main(int argc, char** argv) {
             game.time.frame = 0;
             do {
                 if (app.time.now >= game.time.nextFrame) {
-                    game.time.lastFrameDelta = Math<f32>::min(app.time.now - game.time.lastFrame, game.time.config.maxFrameLength);
+                    game.time.lastFrameDelta = Math<f64>::min(app.time.now - game.time.lastFrame, game.time.config.maxFrameLength);
                     game.time.lastFrame = app.time.now;
                     game.time.nextFrame = app.time.now + game.time.config.targetFramerate;
                     
@@ -319,12 +323,12 @@ int main(int argc, char** argv) {
                             
                             
                             if (game.playerInput.down(Game::PlayerInputSet::LEFT)) {
-                               game.player.heading -= 0.035;
+                               game.player.heading -= 0.035f;
                             }
                             
                             
                             if (game.playerInput.down(Game::PlayerInputSet::RIGHT)) {
-                               game.player.heading += 0.035;
+                               game.player.heading += 0.035f;
                             }
                         }
                         

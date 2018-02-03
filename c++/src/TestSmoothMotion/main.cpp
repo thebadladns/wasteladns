@@ -1,14 +1,16 @@
 #include "GLFW/glfw3.h"
 
-#define GRC_PRIMITIVES_ENABLE_TEXT 1
-#include "lib/stb/stb_easy_font.h"
-
 // C libs
 #include <stdlib.h>
+#define __WASTELADNS_C_STDLIB_H__
+#include <math.h>
+#define __WASTELADNS_C_MATH_H__
 #include <stdio.h>
+#define __WASTELADNS_C_STDIO_H__
 #include <limits>
-
+#define __WASTELADNS_C_LIMITS_H__
 #include <cstring>
+#define __WASTELADNS_C_CSTRING_H__
 
 // Core
 #include "helpers/Types.h"
