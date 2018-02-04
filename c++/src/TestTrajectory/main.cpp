@@ -29,6 +29,44 @@
 #define __WASTELADNS_DEBUGDRAW_TEXT__
 #include "helpers/debugdraw.h"
 
+namespace Resources {
+    
+    struct Texture {
+        u32 handle;
+        u32 width;
+        u32 height;
+    };
+    
+    enum TextureId : u8 {
+        Dot,
+        TextureMaxCount,
+    };
+    
+    struct Manager {
+        Texture textures[TextureMaxCount];
+    };
+    
+    Texture& get(Manager& manager, const TextureId id) {
+        return manager.textures[id];
+    }
+    
+    Texture& load(Manager& manager, const TextureId id, const u8* data, const u8 w, const u8 h) {
+        
+        Texture& texture = manager.textures[id];
+        
+        glGenTextures(1, &texture.handle);
+        glBindTexture(GL_TEXTURE_2D, texture.handle);
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_LUMINANCE, w, h, 0, GL_LUMINANCE, GL_UNSIGNED_BYTE, data);
+        
+        return texture;
+    };
+}
+
 namespace Input {
     
     namespace DebugSet {
@@ -304,14 +342,31 @@ namespace Game {
         f32 speed;
         f32 accumulatedImpulse;
         f32 heading;
-        f32 trajectoryLength;
+    };
+    
+    struct Trajectory {
+      
+        struct Config {
+            f32 baseLength;
+            f32 maxLength;
+            f32 baseDotStride;
+            f32 minDotStride;
+            f32 initialOffset;
+            f32 offsetSpeed;
+        };
+        
+        Config config;
+        f32 offset;
+        f32 dotStride;
     };
     
     struct Instance {
+        Resources::Manager resourceManager;
         Time time;
         PlayerInput playerInput;
         Cage::Bounds cage;
         Player player;
+        Trajectory trajectory;
     };
 }
 Game::Instance game;
@@ -356,9 +411,8 @@ int main(int argc, char** argv) {
                 Camera::computeProjectionMatrix(ortho, projectionTransformCM);
                 glMultMatrixf(projectionTransformCM);
             }
-            glEnable(GL_BLEND);
-            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
             
+            // Logic setup
             {
                 game.cage.left = -80.f;
                 game.cage.right = 80.f;
@@ -366,13 +420,34 @@ int main(int argc, char** argv) {
                 game.cage.bottom = -80.f;
                 
                 game.player.pos = Vec2(0.f, 0.f);
-                game.player.trajectoryLength = 200.f;
                 game.player.speed = 0.f;
                 game.player.accumulatedImpulse = 0.f;
                 game.player.config.maxImpulse = 600.f;
                 game.player.config.friction = 400.f;
-                game.player.config.bounceLoss = 0.9f;
+                game.player.config.bounceLoss = 0.8f;
                 game.player.config.radius = 11.f;
+                
+                game.trajectory.config.baseLength = 80.f;
+                game.trajectory.config.maxLength = 320.f;
+                game.trajectory.config.baseDotStride = 8.f;
+                game.trajectory.config.minDotStride = 6.f;
+                game.trajectory.config.initialOffset = game.player.config.radius + 2.f;
+                game.trajectory.config.offsetSpeed = 20.f;
+                game.trajectory.offset = 0.f;
+                game.trajectory.dotStride = game.trajectory.config.baseDotStride;
+                
+                const u8 dotTextureSize = 8;
+                const unsigned char dotTexture[ 8 * 8 ] = {
+                    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                    0x00, 0x00, 0xff, 0xff, 0xff, 0xff, 0x00, 0x00,
+                    0x00, 0x00, 0xff, 0xff, 0xff, 0xff, 0x00, 0x00,
+                    0x00, 0x00, 0xff, 0xff, 0xff, 0xff, 0x00, 0x00,
+                    0x00, 0x00, 0xff, 0xff, 0xff, 0xff, 0x00, 0x00,
+                    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+                };
+                Resources::load(game.resourceManager, Resources::TextureId::Dot, dotTexture, dotTextureSize, dotTextureSize);
             }
             
             game.time.config.maxFrameLength = 0.1;
@@ -417,8 +492,13 @@ int main(int argc, char** argv) {
                                     game.player.speed = game.player.accumulatedImpulse;
                                     game.player.accumulatedImpulse = 0.f;
                                 }
+                                
+                                game.trajectory.dotStride = Math<f32>::max(game.trajectory.config.baseDotStride / Math<f32>::max(game.player.accumulatedImpulse / 400.f, 1.f), game.trajectory.config.minDotStride);
+                                if (game.player.accumulatedImpulse > Math<f32>::eps) {
+                                    game.trajectory.offset = fmod(game.trajectory.offset + game.trajectory.config.offsetSpeed * timeDelta, game.trajectory.dotStride);
+                                }
                             }
-                            
+
                             player.speed = Math<f32>::max(player.speed - player.config.friction * timeDelta, 0.f);
                             
                             if (player.speed > Math<f32>::eps) {
@@ -459,7 +539,6 @@ int main(int argc, char** argv) {
                             
                             // Debug
                             {
-                                
                                 Vec3 debugPos = Vec3(app.orthoParams.left + 10.f, app.orthoParams.top - 10.f, 0.f);
                                 const Col textColor(1.0f, 1.0f, 1.0f, 1.0f);
                                 
@@ -506,11 +585,28 @@ int main(int argc, char** argv) {
                                 // Trajectory
                                 if ( game.player.speed < Math<f32>::eps )
                                 {
+                                    Game::Trajectory& trajectory = game.trajectory;
+                                    Resources::Texture& texture = Resources::get(game.resourceManager, Resources::TextureId::Dot);
+                                    
+                                    glEnable(GL_BLEND);
+                                    glBlendFunc(GL_SRC_ALPHA, GL_ONE);
+                                    glDepthMask(GL_FALSE);
+                                    glEnable(GL_TEXTURE_2D);
+                                    glBindTexture(GL_TEXTURE_2D, texture.handle);
+                                    
+                                    glBegin(GL_QUADS);
+                                    const Col color(0.88f, 0.83f, 0.73f, 1.0f);
+                                    glColor4f(RGBA_PARAMS(color));
+                                    
                                     Vec2 pos = game.player.pos;
                                     Vec2 dir = Angle<f32>::direction(game.player.heading);
                                     Vec2 renderPos = Vec::add(pos, Vec::scale(dir, game.player.config.radius));
                                     
-                                    Vec2 vel = Vec::scale(dir, game.player.trajectoryLength);
+                                    // Reduce stride when impulse is high
+                                    const f32 trajectoryLength = Math<f32>::min(trajectory.config.baseLength * Math<f32>::max(game.player.accumulatedImpulse / 300.f , 1.f), trajectory.config.maxLength);
+                                    
+                                    Vec2 vel = Vec::scale(dir, trajectoryLength);
+                                    f32 offset = trajectory.offset + trajectory.config.initialOffset;
                                     
                                     Cage::IntersectParams params;
                                     params.cage = &game.cage;
@@ -522,17 +618,37 @@ int main(int argc, char** argv) {
                                         Cage::intersect(params);
                                         
                                         Vec2 nextPos = Vec::add(*params.pos, Vec::scale(vel, params.collisionT));
-                                        
-                                        const Col playerTrajectoryColor(0.3f, 0.3f, 0.3f, 1.0f);
-                                        DebugDraw::segment(Vec3(renderPos, 0.f), Vec3(nextPos, 0.f), playerTrajectoryColor);
+                                        Vec2 resultDir = Vec::subtract(nextPos, pos);
+                                        f32 resultLength = Vec::mag(resultDir);
+                                        resultDir = Vec::invScale(resultDir, resultLength);
+                                        f32 currentDistance = offset;
+                                        while (currentDistance < resultLength) {
+                                            const f32 dotSize = 2.f;
+                                            const Vec2 dotPos = Vec::add(pos, Vec::scale(resultDir, currentDistance));
+                                            
+                                            glTexCoord2f(0.0, 1.0); glVertex2f(dotPos.x - dotSize,dotPos.y - dotSize);
+                                            glTexCoord2f(1.0, 1.0); glVertex2f(dotPos.x + dotSize,dotPos.y - dotSize);
+                                            glTexCoord2f(1.0, 0.0); glVertex2f(dotPos.x + dotSize,dotPos.y + dotSize);
+                                            glTexCoord2f(0.0, 0.0); glVertex2f(dotPos.x - dotSize,dotPos.y + dotSize);
+                                            
+                                            currentDistance += trajectory.dotStride;
+                                        }
                                         
                                         if (params.collision) {
                                             vel = Vec::scale(params.bounceDir, Vec::mag(vel) * (1.f - params.collisionT));
                                             pos = Vec::add(nextPos, Vec::scale(Vec::normalize(vel), 0.1f));
                                             renderPos = pos;
+                                            offset = currentDistance - resultLength;
                                         }
                                         
                                     } while(params.collision);
+                                    
+                                    
+                                    glEnd();
+                                    glBindTexture(GL_TEXTURE_2D, 0);
+                                    glDisable(GL_TEXTURE_2D);
+                                    glDisable(GL_BLEND);
+                                    glDepthMask(GL_TRUE);
                                 }
                                 
                                 // Cage
@@ -545,8 +661,7 @@ int main(int argc, char** argv) {
                                 DebugDraw::segment(Vec3(cage.right, cage.top, 0.f), Vec3(cage.right, cage.bottom, 0.f), gridColor);
                                 DebugDraw::segment(Vec3(cage.right, cage.bottom, 0.f), Vec3(cage.left, cage.bottom, 0.f), gridColor);
                             }
-                            
-                            
+
                             // Needed since GLFW_DOUBLEBUFFER is GL_TRUE
                             glfwSwapBuffers(app.mainWindow.handle);
                         }
