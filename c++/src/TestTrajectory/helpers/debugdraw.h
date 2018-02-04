@@ -26,7 +26,7 @@ namespace DebugDraw
     void line(const Vec3& vPos, const Vec3& vDir, const Col color);
     
     void poly(const Vec3* aPos, const u8 count, Col color);
-    void circle(const Vec3& vPos, const Vec3 vAxis, const f32 radius, const Col color);
+    void circle(const Vec3& vPos, const Vec3& vAxis, const f32 radius, const Col color);
     void sphere(const Vec3& vPos, const f32 radius, const Col color);
     
 #ifdef __WASTELADNS_DEBUGDRAW_TEXT__
@@ -112,7 +112,7 @@ void DebugDraw::poly(const Vec3* aPos, const u8 count, Col color) {
     }
 }
 
-void DebugDraw::circle(const Vec3& vPos, const Vec3 vAxis, const f32 radius, const Col color) {
+void DebugDraw::circle(const Vec3& vPos, const Vec3& vAxis, const f32 radius, const Col color) {
     
     const Vec3 expectedForward = Vec3(0.f, 0.f, -1.f);
     const Vec3 up = Vec::normalize(vAxis);

@@ -301,7 +301,7 @@ bool Vector<_T>::normalizeSafe(Vector2<_T>& v) {
         v.y /= magnitude;
         return true;
     }
-    return true;
+    return false;
 }
 template<typename _T>
 bool Vector<_T>::normalizeSafe(Vector3<_T>& v) {
@@ -312,7 +312,7 @@ bool Vector<_T>::normalizeSafe(Vector3<_T>& v) {
         v.z /= magnitude;
         return true;
     }
-    return true;
+    return false;
 }
 template<typename _T>
 bool Vector<_T>::normalizeSafe(Vector4<_T>& v) {
@@ -324,7 +324,7 @@ bool Vector<_T>::normalizeSafe(Vector4<_T>& v) {
         v.w /= magnitude;
         return true;
     }
-    return true;
+    return false;
 }
 template<typename _T>
 Vector2<_T> Vector<_T>::cross(const Vector2<_T>& a, const Vector2<_T>& b) {

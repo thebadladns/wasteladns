@@ -221,23 +221,96 @@ namespace Game {
     };
     typedef ::Input::DigitalState<PlayerInputSet::Keys, PlayerInputSet::mapping> PlayerInput;
  
+    namespace Cage {
+        
+        struct Bounds {
+            f32 left;
+            f32 right;
+            f32 top;
+            f32 bottom;
+        };
+        
+        f32 intersectH(const Vec2& pos, const Vec2& dir, const f32 y) {
+            if (Math<f32>::abs(dir.y) > Math<f32>::eps) {
+                return (y - pos.y) / dir.y;
+            } else {
+                return std::numeric_limits<f32>::max();
+            }
+        }
+        
+        f32 intersectV(const Vec2& pos, const Vec2& dir, const f32 x) {
+            if (Math<f32>::abs(dir.x) > Math<f32>::eps) {
+                return (x - pos.x) / dir.x;
+            } else {
+                return std::numeric_limits<f32>::max();
+            }
+        }
+        
+        struct IntersectParams {
+            const Vec2* pos;
+            const Vec2* dir;
+            const Bounds* cage;
+            Vec2 bounceDir; // out
+            f32 radius;
+            f32 collisionT; // inout
+            bool collision; // out
+        };
+        void intersect(IntersectParams& params) {
+            
+            params.collision = false;
+            
+            f32 leftT = intersectV(*params.pos, *params.dir, params.cage->left + params.radius);
+            if (leftT > 0.f && leftT < params.collisionT) {
+                params.bounceDir = Vec::normalize(*params.dir);
+                params.bounceDir.x = -params.bounceDir.x;
+                params.collisionT = leftT;
+                params.collision = true;
+            }
+            f32 rightT = intersectV(*params.pos, *params.dir, params.cage->right - params.radius);
+            if (rightT > 0.f && rightT < params.collisionT) {
+                params.bounceDir = Vec::normalize(*params.dir);
+                params.bounceDir.x = -params.bounceDir.x;
+                params.collisionT = rightT;
+                params.collision = true;
+            }
+            f32 topT = intersectH(*params.pos, *params.dir, params.cage->top - params.radius);
+            if (topT > 0.f && topT < params.collisionT) {
+                params.bounceDir = Vec::normalize(*params.dir);
+                params.bounceDir.y = -params.bounceDir.y;
+                params.collisionT = topT;
+                params.collision = true;
+            }
+            f32 bottomT = intersectH(*params.pos, *params.dir, params.cage->bottom + params.radius);
+            if (bottomT > 0.f && bottomT < params.collisionT) {
+                params.bounceDir = Vec::normalize(*params.dir);
+                params.bounceDir.y = -params.bounceDir.y;
+                params.collisionT = bottomT;
+                params.collision = true;
+            }
+        }
+    }
+    
     struct Player {
-        f32 x, y;
+        
+        struct Config {
+            f32 maxImpulse;
+            f32 bounceLoss;
+            f32 friction;
+            f32 radius;
+        };
+        
+        Config config;
+        Vec2 pos;
+        f32 speed;
+        f32 accumulatedImpulse;
         f32 heading;
         f32 trajectoryLength;
-    };
-    
-    struct Cage {
-        f32 left;
-        f32 right;
-        f32 top;
-        f32 bottom;
     };
     
     struct Instance {
         Time time;
         PlayerInput playerInput;
-        Cage cage;
+        Cage::Bounds cage;
         Player player;
     };
 }
@@ -292,9 +365,14 @@ int main(int argc, char** argv) {
                 game.cage.top = 80.f;
                 game.cage.bottom = -80.f;
                 
-                game.player.x = 0.f;
-                game.player.y = 0.f;
-                game.player.trajectoryLength = 120.f;
+                game.player.pos = Vec2(0.f, 0.f);
+                game.player.trajectoryLength = 200.f;
+                game.player.speed = 0.f;
+                game.player.accumulatedImpulse = 0.f;
+                game.player.config.maxImpulse = 600.f;
+                game.player.config.friction = 400.f;
+                game.player.config.bounceLoss = 0.9f;
+                game.player.config.radius = 11.f;
             }
             
             game.time.config.maxFrameLength = 0.1;
@@ -309,6 +387,8 @@ int main(int argc, char** argv) {
                     game.time.nextFrame = app.time.now + game.time.config.targetFramerate;
                     
                     {
+                        f32 timeDelta = game.time.config.targetFramerate;
+                        
                         using namespace Game;
                         
                         glfwPollEvents();
@@ -321,14 +401,55 @@ int main(int argc, char** argv) {
                                 glfwSetWindowShouldClose(app.mainWindow.handle, 1);
                             }
                             
+                            Game::Player& player = game.player;
                             
-                            if (game.playerInput.down(Game::PlayerInputSet::LEFT)) {
-                               game.player.heading -= 0.035f;
+                            if (player.speed < Math<f32>::eps) {
+                                if (game.playerInput.down(Game::PlayerInputSet::LEFT)) {
+                                   player.heading -= 0.035f;
+                                }
+                                if (game.playerInput.down(Game::PlayerInputSet::RIGHT)) {
+                                   player.heading += 0.035f;
+                                }
+                                if (game.playerInput.down(Game::PlayerInputSet::SPACE)) {
+                                    game.player.accumulatedImpulse += 600.f * timeDelta;
+                                    game.player.accumulatedImpulse = Math<f32>::min(game.player.accumulatedImpulse, game.player.config.maxImpulse);
+                                } else if (game.playerInput.released(Game::PlayerInputSet::SPACE)) {
+                                    game.player.speed = game.player.accumulatedImpulse;
+                                    game.player.accumulatedImpulse = 0.f;
+                                }
                             }
                             
+                            player.speed = Math<f32>::max(player.speed - player.config.friction * timeDelta, 0.f);
                             
-                            if (game.playerInput.down(Game::PlayerInputSet::RIGHT)) {
-                               game.player.heading += 0.035f;
+                            if (player.speed > Math<f32>::eps) {
+                                Vec2 dir = Angle<f32>::direction(player.heading);
+                                Vec2 vel = Vec::scale(dir, player.speed * timeDelta);
+                                
+                                f32 currentT = 0.f;
+                                
+                                Cage::IntersectParams params;
+                                params.cage = &game.cage;
+                                params.radius = player.config.radius;
+                                do {
+                                    vel = Vec::scale(dir, player.speed * timeDelta * (1.f - currentT));
+                                    
+                                    params.pos = &player.pos;
+                                    params.dir = &vel;
+                                    params.collisionT = 1.f;
+                                    Cage::intersect(params);
+                                    
+                                    player.pos = Vec::add(*params.pos, Vec::scale(vel, params.collisionT));
+                                    
+                                    if (params.collision) {
+                                        player.speed = Math<f32>::max(player.speed * player.config.bounceLoss, 0.f);
+                                        currentT += params.collisionT;
+                                        dir = params.bounceDir;
+                                    }
+                                    
+                                } while(params.collision);
+                                
+                                player.heading = Angle<f32>::heading(vel);
+                                
                             }
                         }
                         
@@ -351,7 +472,7 @@ int main(int argc, char** argv) {
                              
                                 // Debug text
                                 char buffer[128];
-                                sprintf(buffer, "player heading:%.3f", game.player.heading);
+                                sprintf(buffer, "player impulse:%.3f speed:%.3f", game.player.accumulatedImpulse, game.player.speed);
                                 textParams.pos = debugPos;
                                 textParams.text = buffer;
                                 DebugDraw::text(textParams);
@@ -365,26 +486,58 @@ int main(int argc, char** argv) {
                                 {
                                     Game::Player& player = game.player;
     
-                                    f32 x = player.x;
-                                    f32 y = player.y;
-    
-                                    glTranslatef(x, y, 0.f);
+                                    glTranslatef(player.pos.x, player.pos.y, 0.f);
                                     glRotatef(player.heading * Angle<f32>::r2d, 0.f, 0.f, -1.f);
-    
+                                    
                                     f32 w = 5.f;
-                                    f32 h = 10.f;
+                                    f32 h = 2.5f;
+                                    Vec2 renderPos(0.f, 5.f);
+                                    f32 x = renderPos.x;
+                                    f32 y = renderPos.y;
+                                    
                                     const Col playerColor(1.0f, 1.0f, 1.0f, 1.0f);
-                                    const Col playerTrajectoryColor(1.0f, 1.0f, 1.0f, 0.5f);
-                                    DebugDraw::segment(Vec3(-w, -h, 0.f), Vec3(0.f, h, 0.f), playerColor);
-                                    DebugDraw::segment(Vec3(0.f, h, 0.f), Vec3(w, -h, 0.f), playerColor);
-                                    DebugDraw::segment(Vec3(w, -h, 0.f), Vec3(-w, -h, 0.f), playerColor);
-                                    DebugDraw::segment(Vec3(0.f, h, 0.f), Vec3(0.f, player.trajectoryLength, 0.f), playerTrajectoryColor);
+                                    DebugDraw::circle(Vec3(0.f, 0.f, 0.f), Vec3(0.f, 0.f, -1.f), game.player.config.radius, playerColor);
+                                    DebugDraw::segment(Vec3(x - w, y - h, 0.f), Vec3(x, y + h, 0.f), playerColor);
+                                    DebugDraw::segment(Vec3(x, y + h, 0.f), Vec3(x + w, y - h, 0.f), playerColor);
+                                    DebugDraw::segment(Vec3(x + w, y - h, 0.f), Vec3(x - w, y - h, 0.f), playerColor);
                                 }
                                 glPopMatrix();
                                 
+                                // Trajectory
+                                if ( game.player.speed < Math<f32>::eps )
+                                {
+                                    Vec2 pos = game.player.pos;
+                                    Vec2 dir = Angle<f32>::direction(game.player.heading);
+                                    Vec2 renderPos = Vec::add(pos, Vec::scale(dir, game.player.config.radius));
+                                    
+                                    Vec2 vel = Vec::scale(dir, game.player.trajectoryLength);
+                                    
+                                    Cage::IntersectParams params;
+                                    params.cage = &game.cage;
+                                    params.radius = game.player.config.radius;
+                                    do {
+                                        params.pos = &pos;
+                                        params.dir = &vel;
+                                        params.collisionT = 1.f;
+                                        Cage::intersect(params);
+                                        
+                                        Vec2 nextPos = Vec::add(*params.pos, Vec::scale(vel, params.collisionT));
+                                        
+                                        const Col playerTrajectoryColor(0.3f, 0.3f, 0.3f, 1.0f);
+                                        DebugDraw::segment(Vec3(renderPos, 0.f), Vec3(nextPos, 0.f), playerTrajectoryColor);
+                                        
+                                        if (params.collision) {
+                                            vel = Vec::scale(params.bounceDir, Vec::mag(vel) * (1.f - params.collisionT));
+                                            pos = Vec::add(nextPos, Vec::scale(Vec::normalize(vel), 0.1f));
+                                            renderPos = pos;
+                                        }
+                                        
+                                    } while(params.collision);
+                                }
+                                
                                 // Cage
                                 
-                                Game::Cage& cage = game.cage;
+                                Game::Cage::Bounds& cage = game.cage;
                                 
                                 const Col gridColor(1.0f, 1.0f, 1.0f, 1.0f);
                                 DebugDraw::segment(Vec3(cage.left, cage.bottom, 0.f), Vec3(cage.left, cage.top, 0.f), gridColor);
