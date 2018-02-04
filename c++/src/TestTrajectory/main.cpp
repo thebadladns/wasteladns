@@ -161,11 +161,11 @@ namespace Camera {
         const f64 yMax = xMax / params.aspect;
         
         memset(matrixCM, 0, sizeof(matrixCM));
-        matrixCM[0] = (2.0 * params.near) / (xMax - xMin);
-        matrixCM[5] = (2.0 * params.near) / (yMax - yMin);
+        matrixCM[0] = -(2.0 * params.near) / (xMax - xMin);
+        matrixCM[5] = -(2.0 * params.near) / (yMax - yMin);
         matrixCM[10] = -(params.far + params.near) / (params.far - params.near);
-        matrixCM[8] = (xMax + xMin) / (xMax - xMin);
-        matrixCM[9] = (yMax + yMin) / (yMax - yMin);
+        matrixCM[8] = -(xMax + xMin) / (xMax - xMin);
+        matrixCM[9] = -(yMax + yMin) / (yMax - yMin);
         matrixCM[11] = -1.f;
         matrixCM[14] = -(2.0 * params.far * params.near) / (params.far - params.near);
     }
@@ -218,7 +218,6 @@ namespace App {
     
     struct Instance {
         Window mainWindow;
-        Camera::OrthoParams orthoParams;
         Time time;
         Input input;
     };
@@ -240,6 +239,14 @@ namespace Game {
         f64 nextFrame;
         
         s64 frame;
+    };
+    
+    struct View {
+        Camera::OrthoParams orthoParams;
+        Camera::FrustumParams frustumParams;
+        Math3D::Transform32 orthoTransformCM;
+        Math3D::Transform64 frustumTransformCM;
+        bool perspective;
     };
     
     namespace PlayerInputSet {
@@ -362,7 +369,11 @@ namespace Game {
     
     struct Instance {
         Resources::Manager resourceManager;
+        
         Time time;
+        
+        View view;
+        
         PlayerInput playerInput;
         Cage::Bounds cage;
         Player player;
@@ -400,8 +411,8 @@ int main(int argc, char** argv) {
             glMatrixMode(GL_PROJECTION);
             {
                 glLoadIdentity();
-                Math3D::Transform32 projectionTransformCM;
-                Camera::OrthoParams& ortho = app.orthoParams;
+                Math3D::Transform32& projectionTransformCM = game.view.orthoTransformCM;
+                Camera::OrthoParams& ortho = game.view.orthoParams;
                 ortho.right = app.mainWindow.width * 0.5f;
                 ortho.top = app.mainWindow.height * 0.5f;
                 ortho.left = -ortho.right;
@@ -410,6 +421,16 @@ int main(int argc, char** argv) {
                 ortho.far = 200.f;
                 Camera::computeProjectionMatrix(ortho, projectionTransformCM);
                 glMultMatrixf(projectionTransformCM);
+
+                Math3D::Transform64& frustumTransformCM = game.view.frustumTransformCM;
+                Camera::FrustumParams& frustum = game.view.frustumParams;
+                frustum.fov = 60.0;
+                frustum.aspect = 1.0;
+                frustum.near = 1.0;
+                frustum.far = 200.0;
+                Camera::computeProjectionMatrix(frustum, frustumTransformCM);
+                
+                game.view.perspective = false;
             }
             
             // Logic setup
@@ -475,6 +496,9 @@ int main(int argc, char** argv) {
                             if (app.input.keyboardSet.released(GLFW_KEY_ESCAPE)) {
                                 glfwSetWindowShouldClose(app.mainWindow.handle, 1);
                             }
+                            if (app.input.keyboardSet.pressed(GLFW_KEY_TAB)) {
+                                game.view.perspective = !game.view.perspective;
+                            }
                             
                             Game::Player& player = game.player;
                             
@@ -524,6 +548,7 @@ int main(int argc, char** argv) {
                                         player.speed = Math<f32>::max(player.speed * player.config.bounceLoss, 0.f);
                                         currentT += params.collisionT;
                                         dir = params.bounceDir;
+                                        player.pos = Vec::add(player.pos, Vec::scale(dir, 0.1f));
                                     }
                                     
                                 } while(params.collision);
@@ -539,18 +564,23 @@ int main(int argc, char** argv) {
                             
                             // Debug
                             {
-                                Vec3 debugPos = Vec3(app.orthoParams.left + 10.f, app.orthoParams.top - 10.f, 0.f);
+                                glMatrixMode(GL_PROJECTION);
+                                glLoadIdentity();
+                                glMultMatrixf(game.view.orthoTransformCM);
+                                
+                                Vec3 debugPos = Vec3(game.view.orthoParams.left + 10.f, game.view.orthoParams.top - 10.f, -50);
                                 const Col textColor(1.0f, 1.0f, 1.0f, 1.0f);
                                 
                                 DebugDraw::TextParams textParams;
                                 textParams.scale = 2.f;
+                                char buffer[128];
+                                
+                                snprintf(buffer, sizeof(buffer), "A & D to turn, SPACE to fire, TAB toggle perp %s", game.view.perspective ? "OFF" : "ON");
                                 textParams.pos = debugPos;
-                                textParams.text = "A & D to turn, SPACE to fire";
+                                textParams.text = buffer;
                                 DebugDraw::text(textParams);
                                 debugPos.y -= 15.f * textParams.scale;
                              
-                                // Debug text
-                                char buffer[128];
                                 snprintf(buffer, sizeof(buffer), "player impulse:%.3f speed:%.3f", game.player.accumulatedImpulse, game.player.speed);
                                 textParams.pos = debugPos;
                                 textParams.text = buffer;
@@ -559,6 +589,21 @@ int main(int argc, char** argv) {
                             
                             // Scene
                             {
+                                glMatrixMode(GL_MODELVIEW);
+                                glPushMatrix();
+                                
+                                if (game.view.perspective) {
+                                    glMatrixMode(GL_PROJECTION);
+                                    glLoadIdentity();
+                                    glMultMatrixd(game.view.frustumTransformCM);
+                                    
+                                    glMatrixMode(GL_MODELVIEW);
+                                    glTranslatef(0.f, 40.f, 0.f);
+                                    glRotatef(15.f, -1.f, 0.f, 0.f);
+                                }
+                                    
+                                f32 z = -150.f;
+                                
                                 // Player
                                 glMatrixMode(GL_MODELVIEW);
                                 glPushMatrix();
@@ -575,11 +620,12 @@ int main(int argc, char** argv) {
                                     f32 y = renderPos.y;
                                     
                                     const Col playerColor(1.0f, 1.0f, 1.0f, 1.0f);
-                                    DebugDraw::circle(Vec3(0.f, 0.f, 0.f), Vec3(0.f, 0.f, -1.f), game.player.config.radius, playerColor);
-                                    DebugDraw::segment(Vec3(x - w, y - h, 0.f), Vec3(x, y + h, 0.f), playerColor);
-                                    DebugDraw::segment(Vec3(x, y + h, 0.f), Vec3(x + w, y - h, 0.f), playerColor);
-                                    DebugDraw::segment(Vec3(x + w, y - h, 0.f), Vec3(x - w, y - h, 0.f), playerColor);
+                                    DebugDraw::circle(Vec3(0.f, 0.f, z), Vec3(0.f, 0.f, -1.f), game.player.config.radius, playerColor);
+                                    DebugDraw::segment(Vec3(x - w, y - h, z), Vec3(x, y + h, z), playerColor);
+                                    DebugDraw::segment(Vec3(x, y + h, z), Vec3(x + w, y - h, z), playerColor);
+                                    DebugDraw::segment(Vec3(x + w, y - h, z), Vec3(x - w, y - h, z), playerColor);
                                 }
+                                glMatrixMode(GL_MODELVIEW);
                                 glPopMatrix();
                                 
                                 // Trajectory
@@ -626,10 +672,10 @@ int main(int argc, char** argv) {
                                             const f32 dotSize = 2.f;
                                             const Vec2 dotPos = Vec::add(pos, Vec::scale(resultDir, currentDistance));
                                             
-                                            glTexCoord2f(0.0, 1.0); glVertex2f(dotPos.x - dotSize,dotPos.y - dotSize);
-                                            glTexCoord2f(1.0, 1.0); glVertex2f(dotPos.x + dotSize,dotPos.y - dotSize);
-                                            glTexCoord2f(1.0, 0.0); glVertex2f(dotPos.x + dotSize,dotPos.y + dotSize);
-                                            glTexCoord2f(0.0, 0.0); glVertex2f(dotPos.x - dotSize,dotPos.y + dotSize);
+                                            glTexCoord2f(0.0, 1.0); glVertex3f(dotPos.x - dotSize,dotPos.y - dotSize, z);
+                                            glTexCoord2f(1.0, 1.0); glVertex3f(dotPos.x + dotSize,dotPos.y - dotSize, z);
+                                            glTexCoord2f(1.0, 0.0); glVertex3f(dotPos.x + dotSize,dotPos.y + dotSize, z);
+                                            glTexCoord2f(0.0, 0.0); glVertex3f(dotPos.x - dotSize,dotPos.y + dotSize, z);
                                             
                                             currentDistance += trajectory.dotStride;
                                         }
@@ -656,10 +702,13 @@ int main(int argc, char** argv) {
                                 Game::Cage::Bounds& cage = game.cage;
                                 
                                 const Col gridColor(1.0f, 1.0f, 1.0f, 1.0f);
-                                DebugDraw::segment(Vec3(cage.left, cage.bottom, 0.f), Vec3(cage.left, cage.top, 0.f), gridColor);
-                                DebugDraw::segment(Vec3(cage.left, cage.top, 0.f), Vec3(cage.right, cage.top, 0.f), gridColor);
-                                DebugDraw::segment(Vec3(cage.right, cage.top, 0.f), Vec3(cage.right, cage.bottom, 0.f), gridColor);
-                                DebugDraw::segment(Vec3(cage.right, cage.bottom, 0.f), Vec3(cage.left, cage.bottom, 0.f), gridColor);
+                                DebugDraw::segment(Vec3(cage.left, cage.bottom, z), Vec3(cage.left, cage.top, z), gridColor);
+                                DebugDraw::segment(Vec3(cage.left, cage.top, z), Vec3(cage.right, cage.top, z), gridColor);
+                                DebugDraw::segment(Vec3(cage.right, cage.top, z), Vec3(cage.right, cage.bottom, z), gridColor);
+                                DebugDraw::segment(Vec3(cage.right, cage.bottom, z), Vec3(cage.left, cage.bottom, z), gridColor);
+                                
+                                glMatrixMode(GL_MODELVIEW);
+                                glPopMatrix();
                             }
 
                             // Needed since GLFW_DOUBLEBUFFER is GL_TRUE
