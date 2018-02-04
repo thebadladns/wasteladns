@@ -387,7 +387,7 @@ int main(int argc, char** argv) {
                     game.time.nextFrame = app.time.now + game.time.config.targetFramerate;
                     
                     {
-                        f32 timeDelta = game.time.config.targetFramerate;
+                        f32 timeDelta = (f32) game.time.config.targetFramerate;
                         
                         using namespace Game;
                         
@@ -472,7 +472,7 @@ int main(int argc, char** argv) {
                              
                                 // Debug text
                                 char buffer[128];
-                                sprintf(buffer, "player impulse:%.3f speed:%.3f", game.player.accumulatedImpulse, game.player.speed);
+                                snprintf(buffer, sizeof(buffer), "player impulse:%.3f speed:%.3f", game.player.accumulatedImpulse, game.player.speed);
                                 textParams.pos = debugPos;
                                 textParams.text = buffer;
                                 DebugDraw::text(textParams);

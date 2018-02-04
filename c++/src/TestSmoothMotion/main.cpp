@@ -491,7 +491,7 @@ int main(int argc, char** argv) {
                             
                             // Debug text
                             char buffer[128];
-                            sprintf(buffer, "player inputDir:%.3f, currentDir:%.3f rate:%.3f",
+                            snprintf(buffer, sizeof(buffer), "player inputDir:%.3f, currentDir:%.3f rate:%.3f",
                                     Angle<f32>::modpi(Angle<f32>::heading(motion.inputDirWS)), motion.heading, game.timerate );
                             
                             Vec3 debugPos = Vec3(app.orthoParams.left + 10.f, app.orthoParams.top - 10.f, 0.f);
@@ -504,7 +504,7 @@ int main(int argc, char** argv) {
                             DebugDraw::text(textParams);
                             debugPos.y -= 10.f * textParams.scale;
                             
-							sprintf(buffer, "Ease:%s", easeNames[Private::easeType]);
+							snprintf(buffer, sizeof(buffer), "Ease:%s", easeNames[Private::easeType]);
                             textParams.pos = debugPos;
                             DebugDraw::text(textParams);
                             debugPos.y -= 20.f * textParams.scale;
