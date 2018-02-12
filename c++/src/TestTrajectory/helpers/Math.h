@@ -1,3 +1,19 @@
+#if !defined(__WASTELADNS_MATH_H__) || defined(__WASTELADNS_MATH_IMPL__)
+
+#ifndef __WASTELADNS_TEMPLATE_DEFINES_H__
+#include "Template_defines.h"
+#endif
+
+// g=generic, s=specialized
+#define MATH_TEMPLATES(g,s,...) \
+    g(RT_PT(abs, __VA_ARGS__)) \
+    g(RT_PTT(min, __VA_ARGS__)) \
+    g(RT_PTT(max, __VA_ARGS__)) \
+    g(RT_PTTT(clamp, __VA_ARGS__))
+#define MATH_TEMPLATES_R(g,s,...) \
+    s(RT_PT(sqrt, __VA_ARGS__)) \
+    g(RT_PT(expTaylor, __VA_ARGS__))
+
 #ifndef __WASTELADNS_MATH_H__
 #define __WASTELADNS_MATH_H__
 
@@ -10,84 +26,80 @@
 #include "Types.h"
 #endif
 
-template<typename _T>
-struct Math {
-    static const _T eps;
-    static const _T e;
+namespace Math {
     
-    static _T abs(_T a);
-    static _T min(_T a, _T b);
-    static _T max(_T a, _T b);
-    static _T clamp(_T x, _T a, _T b);
-    static _T sqrt(_T a);
+DEFINE_TEMPLATES(MATH_TEMPLATES)
+DEFINE_TEMPLATES(MATH_TEMPLATES_R)
     
-    template <u8 _order = 3>
-    static _T exp_taylor(_T x);
-};
-
-#ifndef __WASTELADNS_MATH_IMPL__
-extern template struct Math<f32>;
-extern template struct Math<f64>;
-
-extern template f32 Math<f32>::exp_taylor<3>(f32 x);
-extern template f64 Math<f64>::exp_taylor<3>(f64 x);
-
-#endif
+template<typename _T> const _T eps;
+template<typename _T> const _T e;
+template <> const f32 eps<f32> = 1.19e-07f;
+template <> const f64 eps<f64> = 2.22e-16;
+template <> const f32 e<f32> = 2.7182818284590452353602874713527f;
+template <> const f64 e<f64> = 2.7182818284590452353602874713527;
+    
+}
 
 #endif // __WASTELADNS_MATH_H__
 
 #ifdef __WASTELADNS_MATH_IMPL__
 #undef __WASTELADNS_MATH_IMPL__
 
-template <> const f32 Math<f32>::eps = 0.0000001f;
-template <> const f64 Math<f64>::eps = 0.0000001;
-template <> const f32 Math<f32>::e = 2.7182818284590452353602874713527f;
-template <> const f64 Math<f64>::e = 2.7182818284590452353602874713527;
-
-template<typename _T>
-_T Math<_T>::abs(_T a) {
-    return a > 0.f ? a : -a;
-}
-
-template <typename _T>
-_T Math<_T>::min(_T a, _T b) {
-    return a < b ? a : b;
-}
-
-template <typename _T>
-_T Math<_T>::max(_T a, _T b) {
-    return a > b ? a : b;
-}
-
-template <typename _T>
-_T Math<_T>::clamp(_T x, _T a, _T b) {
-    return min(max(x, a), b);
-}
-
-template <typename _T>
-_T Math<_T>::sqrt(_T a) {
-    return ::sqrt(a);
-}
-
-template <typename _T>
-template <u8 _order>
-_T Math<_T>::exp_taylor(_T x) {
-    switch (_order) {
-        case 2:
-            return (_T) (1.0 + x + x * x * 0.5);
-        case 3:
-            return (_T) (1.0 + x + x * x * 0.5 + x * x * x / 6.0);
-        case 4:
-            return (_T) (1.0 + x + x * x * 0.5 + x * x * x / 6.0 + x * x * x * x / 24.0);
-        default:
-            return (_T) pow(e, x);
+namespace Math {
+    
+    template<typename _T>
+    _T abs(_T a) {
+        return a > 0.f ? a : -a;
     }
+    
+    template <typename _T>
+    _T min(_T a, _T b) {
+        return a < b ? a : b;
+    }
+    
+    template <typename _T>
+    _T max(_T a, _T b) {
+        return a > b ? a : b;
+    }
+    
+    template <typename _T>
+    _T clamp(_T x, _T a, _T b) {
+        return min(max(x, a), b);
+    }
+    
+    template <>
+    f32 sqrt(f32 a) {
+        return ::sqrtf(a);
+    }
+    template <>
+    f64 sqrt(f64 a) {
+        return ::sqrt(a);
+    }
+    
+    template <typename _T>
+    _T expTaylor(_T x) {
+        const int order = 3;
+        switch (order) {
+            case 2:
+                return (_T) (1.0 + x + x * x * 0.5);
+            case 3:
+                return (_T) (1.0 + x + x * x * 0.5 + x * x * x / 6.0);
+            case 4:
+                return (_T) (1.0 + x + x * x * 0.5 + x * x * x / 6.0 + x * x * x * x / 24.0);
+            default:
+                return (_T) pow(e<_T>, x);
+        }
+    }
+    
+INSTANTIATE_TEMPLATES(MATH_TEMPLATES, u8)
+INSTANTIATE_TEMPLATES(MATH_TEMPLATES, f32)
+INSTANTIATE_TEMPLATES(MATH_TEMPLATES, f64)
+
+INSTANTIATE_TEMPLATES(MATH_TEMPLATES_R, f32)
+INSTANTIATE_TEMPLATES(MATH_TEMPLATES_R, f64)
+
 }
-
-template f32 Math<f32>::exp_taylor<3>(f32 x);
-template f64 Math<f64>::exp_taylor<3>(f64 x);
-
-template struct Math<f32>;
-template struct Math<f64>;
-
+    
 #endif // __WASTELADNS_MATH_IMPL__
+
+#endif // !defined(__WASTELADNS_MATH_H__) || defined(__WASTELADNS_MATH_IMPL__)

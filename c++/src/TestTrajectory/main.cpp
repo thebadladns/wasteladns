@@ -51,7 +51,6 @@ namespace Resources {
     }
     
     Texture& load(Manager& manager, const TextureId id, const u8* data, const u8 w, const u8 h) {
-        
         Texture& texture = manager.textures[id];
         
         glGenTextures(1, &texture.handle);
@@ -155,7 +154,7 @@ namespace Camera {
     };
     
     void computeProjectionMatrix(const FrustumParams& params, Math3D::Transform64& matrixCM) {
-        const f64 xMax = params.near * tan(params.fov * 2.f * Angle<f64>::d2r);
+        const f64 xMax = params.near * tan(params.fov * 2.f * Angle::d2r<f64>);
         const f64 xMin = -xMax;
         const f64 yMin = xMin / params.aspect;
         const f64 yMax = xMax / params.aspect;
@@ -276,7 +275,7 @@ namespace Game {
         };
         
         f32 intersectH(const Vec2& pos, const Vec2& dir, const f32 y) {
-            if (Math<f32>::abs(dir.y) > Math<f32>::eps) {
+            if (Math::abs(dir.y) > Math::eps<f32>) {
                 return (y - pos.y) / dir.y;
             } else {
                 return std::numeric_limits<f32>::max();
@@ -284,7 +283,7 @@ namespace Game {
         }
         
         f32 intersectV(const Vec2& pos, const Vec2& dir, const f32 x) {
-            if (Math<f32>::abs(dir.x) > Math<f32>::eps) {
+            if (Math::abs(dir.x) > Math::eps<f32>) {
                 return (x - pos.x) / dir.x;
             } else {
                 return std::numeric_limits<f32>::max();
@@ -304,32 +303,36 @@ namespace Game {
             
             params.collision = false;
             
+            // Assuming there will be floating point errors,
+            // bias them towards a time before the collision happened
+            const f32 collisionBuffer = Math::eps<f32>;
+            
             f32 leftT = intersectV(*params.pos, *params.dir, params.cage->left + params.radius);
             if (leftT > 0.f && leftT < params.collisionT) {
                 params.bounceDir = Vec::normalize(*params.dir);
                 params.bounceDir.x = -params.bounceDir.x;
-                params.collisionT = leftT;
+                params.collisionT = leftT - collisionBuffer;
                 params.collision = true;
             }
             f32 rightT = intersectV(*params.pos, *params.dir, params.cage->right - params.radius);
             if (rightT > 0.f && rightT < params.collisionT) {
                 params.bounceDir = Vec::normalize(*params.dir);
                 params.bounceDir.x = -params.bounceDir.x;
-                params.collisionT = rightT;
+                params.collisionT = rightT - collisionBuffer;
                 params.collision = true;
             }
             f32 topT = intersectH(*params.pos, *params.dir, params.cage->top - params.radius);
             if (topT > 0.f && topT < params.collisionT) {
                 params.bounceDir = Vec::normalize(*params.dir);
                 params.bounceDir.y = -params.bounceDir.y;
-                params.collisionT = topT;
+                params.collisionT = topT - collisionBuffer;
                 params.collision = true;
             }
             f32 bottomT = intersectH(*params.pos, *params.dir, params.cage->bottom + params.radius);
             if (bottomT > 0.f && bottomT < params.collisionT) {
                 params.bounceDir = Vec::normalize(*params.dir);
                 params.bounceDir.y = -params.bounceDir.y;
-                params.collisionT = bottomT;
+                params.collisionT = bottomT - collisionBuffer;
                 params.collision = true;
             }
         }
@@ -478,7 +481,7 @@ int main(int argc, char** argv) {
             game.time.frame = 0;
             do {
                 if (app.time.now >= game.time.nextFrame) {
-                    game.time.lastFrameDelta = Math<f64>::min(app.time.now - game.time.lastFrame, game.time.config.maxFrameLength);
+                    game.time.lastFrameDelta = Math::min(app.time.now - game.time.lastFrame, game.time.config.maxFrameLength);
                     game.time.lastFrame = app.time.now;
                     game.time.nextFrame = app.time.now + game.time.config.targetFramerate;
                     
@@ -502,7 +505,7 @@ int main(int argc, char** argv) {
                             
                             Game::Player& player = game.player;
                             
-                            if (player.speed < Math<f32>::eps) {
+                            if (player.speed < Math::eps<f32>) {
                                 if (game.playerInput.down(Game::PlayerInputSet::LEFT)) {
                                    player.heading -= 0.035f;
                                 }
@@ -511,22 +514,22 @@ int main(int argc, char** argv) {
                                 }
                                 if (game.playerInput.down(Game::PlayerInputSet::SPACE)) {
                                     game.player.accumulatedImpulse += 600.f * timeDelta;
-                                    game.player.accumulatedImpulse = Math<f32>::min(game.player.accumulatedImpulse, game.player.config.maxImpulse);
+                                    game.player.accumulatedImpulse = Math::min(game.player.accumulatedImpulse, game.player.config.maxImpulse);
                                 } else if (game.playerInput.released(Game::PlayerInputSet::SPACE)) {
                                     game.player.speed = game.player.accumulatedImpulse;
                                     game.player.accumulatedImpulse = 0.f;
                                 }
                                 
-                                game.trajectory.dotStride = Math<f32>::max(game.trajectory.config.baseDotStride / Math<f32>::max(game.player.accumulatedImpulse / 400.f, 1.f), game.trajectory.config.minDotStride);
-                                if (game.player.accumulatedImpulse > Math<f32>::eps) {
+                                game.trajectory.dotStride = Math::max(game.trajectory.config.baseDotStride / Math::max(game.player.accumulatedImpulse / 400.f, 1.f), game.trajectory.config.minDotStride);
+                                if (game.player.accumulatedImpulse > Math::eps<f32>) {
                                     game.trajectory.offset = fmod(game.trajectory.offset + game.trajectory.config.offsetSpeed * timeDelta, game.trajectory.dotStride);
                                 }
                             }
 
-                            player.speed = Math<f32>::max(player.speed - player.config.friction * timeDelta, 0.f);
+                            player.speed = Math::max(player.speed - player.config.friction * timeDelta, 0.f);
                             
-                            if (player.speed > Math<f32>::eps) {
-                                Vec2 dir = Angle<f32>::direction(player.heading);
+                            if (player.speed > Math::eps<f32>) {
+                                Vec2 dir = Angle::direction(player.heading);
                                 Vec2 vel = Vec::scale(dir, player.speed * timeDelta);
                                 
                                 f32 currentT = 0.f;
@@ -545,15 +548,14 @@ int main(int argc, char** argv) {
                                     player.pos = Vec::add(*params.pos, Vec::scale(vel, params.collisionT));
                                     
                                     if (params.collision) {
-                                        player.speed = Math<f32>::max(player.speed * player.config.bounceLoss, 0.f);
-                                        currentT += params.collisionT;
+                                        player.speed = Math::max(player.speed * player.config.bounceLoss, 0.f);
+                                        currentT += params.collisionT * (1.f - currentT);
                                         dir = params.bounceDir;
-                                        player.pos = Vec::add(player.pos, Vec::scale(dir, 0.1f));
                                     }
                                     
                                 } while(params.collision);
                                 
-                                player.heading = Angle<f32>::heading(vel);
+                                player.heading = Angle::orientation(vel);
                                 
                             }
                         }
@@ -611,16 +613,16 @@ int main(int argc, char** argv) {
                                     Game::Player& player = game.player;
     
                                     glTranslatef(player.pos.x, player.pos.y, 0.f);
-                                    glRotatef(player.heading * Angle<f32>::r2d, 0.f, 0.f, -1.f);
+                                    glRotatef(player.heading * Angle::r2d<f32>, 0.f, 0.f, -1.f);
                                     
                                     f32 w = 5.f;
                                     f32 h = 2.5f;
                                     Vec2 renderPos(0.f, 5.f);
                                     f32 x = renderPos.x;
                                     f32 y = renderPos.y;
-                                    
-                                    const Col playerColor(1.0f, 1.0f, 1.0f, 1.0f);
-                                    DebugDraw::circle(Vec3(0.f, 0.f, z), Vec3(0.f, 0.f, -1.f), game.player.config.radius, playerColor);
+
+                                    Col playerColor(1.0f, 1.0f, 1.0f, 1.0f);
+									DebugDraw::circle(Vec3(0.f, 0.f, z), Vec3(0.f, 0.f, -1.f), game.player.config.radius, playerColor);
                                     DebugDraw::segment(Vec3(x - w, y - h, z), Vec3(x, y + h, z), playerColor);
                                     DebugDraw::segment(Vec3(x, y + h, z), Vec3(x + w, y - h, z), playerColor);
                                     DebugDraw::segment(Vec3(x + w, y - h, z), Vec3(x - w, y - h, z), playerColor);
@@ -629,7 +631,7 @@ int main(int argc, char** argv) {
                                 glPopMatrix();
                                 
                                 // Trajectory
-                                if ( game.player.speed < Math<f32>::eps )
+                                if ( game.player.speed < Math::eps<f32> )
                                 {
                                     Game::Trajectory& trajectory = game.trajectory;
                                     Resources::Texture& texture = Resources::get(game.resourceManager, Resources::TextureId::Dot);
@@ -645,11 +647,11 @@ int main(int argc, char** argv) {
                                     glColor4f(RGBA_PARAMS(color));
                                     
                                     Vec2 pos = game.player.pos;
-                                    Vec2 dir = Angle<f32>::direction(game.player.heading);
+                                    Vec2 dir = Angle::direction(game.player.heading);
                                     Vec2 renderPos = Vec::add(pos, Vec::scale(dir, game.player.config.radius));
                                     
                                     // Reduce stride when impulse is high
-                                    const f32 trajectoryLength = Math<f32>::min(trajectory.config.baseLength * Math<f32>::max(game.player.accumulatedImpulse / 300.f , 1.f), trajectory.config.maxLength);
+                                    const f32 trajectoryLength = Math::min(trajectory.config.baseLength * Math::max(game.player.accumulatedImpulse / 300.f , 1.f), trajectory.config.maxLength);
                                     
                                     Vec2 vel = Vec::scale(dir, trajectoryLength);
                                     f32 offset = trajectory.offset + trajectory.config.initialOffset;
@@ -667,22 +669,32 @@ int main(int argc, char** argv) {
                                         Vec2 resultDir = Vec::subtract(nextPos, pos);
                                         f32 resultLength = Vec::mag(resultDir);
                                         resultDir = Vec::invScale(resultDir, resultLength);
+                                        Vec2 resultDirOrthoRight(resultDir.y, -resultDir.x);
+                                        
+                                        const f32 dotSize = 4.f;
+                                        Vec2 xWS = Vec::scale(resultDir, dotSize);
+                                        Vec2 yWS = Vec::scale(resultDirOrthoRight, dotSize);
+                                        
                                         f32 currentDistance = offset;
                                         while (currentDistance < resultLength) {
-                                            const f32 dotSize = 2.f;
-                                            const Vec2 dotPos = Vec::add(pos, Vec::scale(resultDir, currentDistance));
                                             
-                                            glTexCoord2f(0.0, 1.0); glVertex3f(dotPos.x - dotSize,dotPos.y - dotSize, z);
-                                            glTexCoord2f(1.0, 1.0); glVertex3f(dotPos.x + dotSize,dotPos.y - dotSize, z);
-                                            glTexCoord2f(1.0, 0.0); glVertex3f(dotPos.x + dotSize,dotPos.y + dotSize, z);
-                                            glTexCoord2f(0.0, 0.0); glVertex3f(dotPos.x - dotSize,dotPos.y + dotSize, z);
+                                            Vec2 dotPos = Vec::add(pos, Vec::scale(resultDir, currentDistance));
+                                            Vec2 dotPosBL = Vec::subtract(dotPos, Vec::scale(Vec::add(xWS, yWS), 0.5f) );
+                                            Vec2 dotPosBR = Vec::add(dotPosBL, xWS);
+                                            Vec2 dotPosTR = Vec::add(dotPosBR, yWS);
+                                            Vec2 dotPosTL = Vec::add(dotPosBL, yWS);
+                                            
+                                            glTexCoord2f(0.0, 1.0); glVertex3f(dotPosBR.x,dotPosBR.y, z);
+                                            glTexCoord2f(1.0, 1.0); glVertex3f(dotPosTR.x,dotPosTR.y, z);
+                                            glTexCoord2f(1.0, 0.0); glVertex3f(dotPosTL.x,dotPosTL.y, z);
+                                            glTexCoord2f(0.0, 0.0); glVertex3f(dotPosBL.x,dotPosBL.y, z);
                                             
                                             currentDistance += trajectory.dotStride;
                                         }
                                         
                                         if (params.collision) {
                                             vel = Vec::scale(params.bounceDir, Vec::mag(vel) * (1.f - params.collisionT));
-                                            pos = Vec::add(nextPos, Vec::scale(Vec::normalize(vel), 0.1f));
+                                            pos = nextPos;
                                             renderPos = pos;
                                             offset = currentDistance - resultLength;
                                         }

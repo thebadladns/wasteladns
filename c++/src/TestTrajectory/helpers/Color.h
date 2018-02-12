@@ -143,10 +143,10 @@ Color<ValueType, redBitCount, greenBitCount, blueBitCount, alphaBitCount> Color<
     const float bB = b.getBf();
     const float bA = b.getAf();
     
-    const float oR = Math<f32>::clamp(aR + bR, 0.f, 1.f);
-    const float oG = Math<f32>::clamp(aG + bG, 0.f, 1.f);
-    const float oB = Math<f32>::clamp(aB + bB, 0.f, 1.f);
-    const float oA = Math<f32>::clamp(aA + bA, 0.f, 1.f);
+    const float oR = Math::clamp(aR + bR, 0.f, 1.f);
+    const float oG = Math::clamp(aG + bG, 0.f, 1.f);
+    const float oB = Math::clamp(aB + bB, 0.f, 1.f);
+    const float oA = Math::clamp(aA + bA, 0.f, 1.f);
     
     Color<ValueType, redBitCount, greenBitCount, blueBitCount, alphaBitCount> output(oR, oG, oB, oA);
     
@@ -160,10 +160,10 @@ Color<ValueType, redBitCount, greenBitCount, blueBitCount, alphaBitCount> Color<
     const float aB = a.getBf();
     const float aA = a.getAf();
     
-    const float oR = Math<f32>::clamp(aR * b, 0.f, 1.f);
-    const float oG = Math<f32>::clamp(aG * b, 0.f, 1.f);
-    const float oB = Math<f32>::clamp(aB * b, 0.f, 1.f);
-    const float oA = Math<f32>::clamp(aA * b, 0.f, 1.f);
+    const float oR = Math::clamp(aR * b, 0.f, 1.f);
+    const float oG = Math::clamp(aG * b, 0.f, 1.f);
+    const float oB = Math::clamp(aB * b, 0.f, 1.f);
+    const float oA = Math::clamp(aA * b, 0.f, 1.f);
     
     Color<ValueType, redBitCount, greenBitCount, blueBitCount, alphaBitCount> output(oR, oG, oB, oA);
     

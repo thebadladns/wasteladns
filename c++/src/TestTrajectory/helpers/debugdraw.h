@@ -126,8 +126,8 @@ void DebugDraw::circle(const Vec3& vPos, const Vec3& vAxis, const f32 radius, co
     Vec3 aPos[Private::kDebugCircleVertexCount];
     for (u8 i = 0; i < Private::kDebugCircleVertexCount; i++) {
         
-        const f32 angle = i * 2.f * Angle<f32>::pi / (f32) Private::kDebugCircleVertexCount;
-        const Vec3 normalizedOffset = Vec::add(Vec::scale(right, (f32) cos(angle)), Vec::scale(forward, (f32) sin(angle)));
+        const f32 angle = i * 2.f * Angle::pi<f32> / (f32) Private::kDebugCircleVertexCount;
+        const Vec3 normalizedOffset = Vec::add(Vec::scale(right, Angle::cos(angle)), Vec::scale(forward, Angle::sin(angle)));
         
         aPos[i] = Vec::add(vPos, Vec::scale(normalizedOffset, radius));
     }
@@ -142,7 +142,7 @@ void DebugDraw::sphere(const Vec3& vPos, const f32 radius, const Col color) {
     const Vec3 sectionYAxis(0.f, 1.f, 0.f);
     for (u8 i = 0; i < Private::kDebugSphereSectionCount; i++) {
         
-        const f32 angle = i * Angle<f32>::pi / (f32) Private::kDebugSphereSectionCount;
+        const f32 angle = i * Angle::pi<f32> / (f32) Private::kDebugSphereSectionCount;
         const f32 sinAngle = sin(angle);
         const f32 cosAngle = cos(angle);
         const f32 sectionRadius = radius * sinAngle;

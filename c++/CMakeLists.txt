@@ -5,7 +5,7 @@ cmake_minimum_required(VERSION 2.8.12)
 set(CMAKE_SUPPRESS_REGENERATION true)
 
 # using c++11
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 14)
 
 # binary output
 set(CMAKE_BINARY_DIR ${CMAKE_SOURCE_DIR}/bin)

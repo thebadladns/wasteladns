@@ -1,3 +1,18 @@
+#if !defined(__WASTELADNS_ANGLE_H__) || defined(__WASTELADNS_ANGLE_IMPL__)
+
+#ifndef __WASTELADNS_TEMPLATE_DEFINES_H__
+#include "Template_defines.h"
+#endif
+
+// g=generic, s=specialized
+#define ANGLE_TEMPLATES(g,s,...) \
+    s(RT_PT(sin, __VA_ARGS__)) \
+    s(RT_PT(cos, __VA_ARGS__)) \
+    s(RT_PTT(atan2, __VA_ARGS__)) \
+    s(RT_PTT(mod, __VA_ARGS__)) \
+    g(RT2_PT(direction, __VA_ARGS__)) \
+    g(RT_PT2(orientation, __VA_ARGS__))
+
 #ifndef __WASTELADNS_ANGLE_H__
 #define __WASTELADNS_ANGLE_H__
 
@@ -14,92 +29,79 @@
 #include "Vec.h"
 #endif
 
-template <typename _T>
-struct Angle {
+namespace Angle {
+DEFINE_TEMPLATES(ANGLE_TEMPLATES)
     
-    static const _T pi;
-    static const _T twopi;
-    static const _T r2d;
-    static const _T d2r;
+template <typename _T> const _T pi;
+template <typename _T> const _T twopi;
+template <typename _T> const _T r2d = 180.f / pi<_T>;
+template <typename _T> const _T d2r = pi<_T> / 180.f;
+template <> const f32 pi<f32> = 3.1415927410125732421875f;
+template <> const f64 pi<f64> = 3.14159265358979311599796346854;
+template <> const f32 twopi<f32> = 6.283185482025146484375f;
+template <> const f64 twopi<f64> = 6.28318530717958623199592693709;
     
-    static Vector2<_T> direction(_T headingRad);
-    static _T heading(const Vector2<_T>& v);
-    
-    static _T modpi(_T rad);
-    
-    static _T shortestDelta(_T toRad, _T fromRad);
-};
-
-#ifndef __WASTELADNS_ANGLE_IMPL__
-extern template struct Angle<f32>;
-extern template struct Angle<f64>;
-#endif
+}
 
 #endif // __WASTELADNS_ANGLE_H__
-
+    
 #ifdef __WASTELADNS_ANGLE_IMPL__
 #undef __WASTELADNS_ANGLE_IMPL__
 
-template <>
-const f32 Angle<f32>::pi = 3.14159265358979323846264338327950288f;
-template <>
-const f32 Angle<f32>::twopi = 6.2831853071795864769252867665590576f;
-template <>
-const f32 Angle<f32>::r2d = 180.f / Angle<f32>::pi;
-template <>
-const f32 Angle<f32>::d2r = Angle<f32>::pi / 180.f;
-template <>
-const f64 Angle<f64>::pi = 3.14159265358979323846264338327950288;
-template <>
-const f64 Angle<f64>::twopi = 6.2831853071795864769252867665590576;
-template <>
-const f64 Angle<f64>::r2d = 180.0 / Angle<f64>::pi;
-template <>
-const f64 Angle<f64>::d2r = Angle<f64>::pi / 180.0;
+namespace Angle {
 
-template <>
-Vector2<f32> Angle<f32>::direction(f32 headingRad) {
-    return Vector2<f32>(sinf(headingRad), cosf(headingRad));
+
+template <> f32 sin(const f32 v) {
+    return ::sinf(v);
 }
-template <>
-Vector2<f64> Angle<f64>::direction(f64 headingRad) {
-    return Vector2<f64>(sin(headingRad), cos(headingRad));
+template <> f64 sin(const f64 v) {
+    return ::sin(v);
+}
+template <> f32 cos(const f32 v) {
+    return ::cosf(v);
+}
+template <> f64 cos(const f64 v) {
+    return ::cos(v);
+}
+template <> f32 atan2(const f32 a, const f32 b) {
+    return ::atan2f(a, b);
+}
+template <> f64 atan2(const f64 a, const f64 b) {
+    return ::atan2(a, b);
+}
+template <> f32 mod(const f32 a, const f32 b) {
+    return ::fmodf(a, b);
+}
+template <> f64 mod(const f64 a, const f64 b) {
+    return ::fmod(a, b);
+}
+template <typename _T> Vector2<_T> direction(_T headingRad) {
+    return Vector2<_T>(sin(headingRad), cos(headingRad));
 }
 
-template <>
-f32 Angle<f32>::heading(const Vector2<f32>& v) {
-    return atan2f(v.x, v.y);
-}
-template <>
-f64 Angle<f64>::heading(const Vector2<f64>& v) {
+template <typename _T> _T orientation(const Vector2<_T>& v) {
     return atan2(v.x, v.y);
 }
 
 // TODO: understand this
-template <>
-f32 Angle<f32>::modpi(f32 rad) {
-    rad = fmodf(rad + pi, twopi);
+template <typename _T> _T modpi(_T rad) {
+    rad = mod(rad + pi<_T>, twopi<_T>);
     if (rad < 0.f) {
-        rad += twopi;
+        rad += twopi<_T>;
     }
-    return rad - pi;
+    return rad - pi<_T>;
 }
-template <>
-f64 Angle<f64>::modpi(f64 rad) {
-    rad = fmod(rad + pi, twopi);
-    if (rad < 0.f) {
-        rad += twopi;
-    }
-    return rad - pi;
-}
-
-template <typename _T>
-_T Angle<_T>::shortestDelta(_T toRad, _T fromRad) {
+    
+template <typename _T> _T subtractShort(_T toRad, _T fromRad) {
     _T delta = toRad - fromRad;
     return modpi(delta);
 }
 
-template struct Angle<f32>;
-template struct Angle<f64>;
-
+INSTANTIATE_TEMPLATES(ANGLE_TEMPLATES, f32)
+INSTANTIATE_TEMPLATES(ANGLE_TEMPLATES, f64)
+    
+}
+    
 #endif // __WASTELADNS_ANGLE_IMPL__
+
+#endif // !defined(__WASTELADNS_ANGLE_H__) || defined(__WASTELADNS_ANGLE_IMPL__)
