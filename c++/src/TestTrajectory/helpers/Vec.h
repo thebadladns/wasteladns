@@ -1,4 +1,9 @@
-#if !defined(__WASTELADNS_VEC_H__) || defined(__WASTELADNS_VEC_IMPL__)
+#ifndef __WASTELADNS_VEC_H__
+#define __WASTELADNS_VEC_H__
+
+#ifndef __WASTELADNS_TYPES_H__
+#include "Types.h"
+#endif
 
 #ifndef __WASTELADNS_TEMPLATE_DEFINES_H__
 #include "Template_defines.h"
@@ -36,13 +41,6 @@
     g(RT2_PT2T2(cross, __VA_ARGS__)) \
     g(RT3_PT3T3(cross, __VA_ARGS__)) \
     g(RT4_PT4T4(cross, __VA_ARGS__))
-
-#ifndef __WASTELADNS_VEC_H__
-#define __WASTELADNS_VEC_H__
-
-#ifndef __WASTELADNS_TYPES_H__
-#include "Types.h"
-#endif
 
 #define VEC2_FORMAT "(%f, %f)"
 #define VEC2_FORMAT_LITE "(%.3f, %.3f)"
@@ -358,5 +356,3 @@ template struct Vector3<f64>;
 template struct Vector4<f64>;
 
 #endif // __WASTELADNS_VEC_IMPL__
-
-#endif // !defined(__WASTELADNS_VEC_H__) || defined(__WASTELADNS_VEC_IMPL__)

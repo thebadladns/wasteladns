@@ -1,18 +1,3 @@
-#if !defined(__WASTELADNS_ANGLE_H__) || defined(__WASTELADNS_ANGLE_IMPL__)
-
-#ifndef __WASTELADNS_TEMPLATE_DEFINES_H__
-#include "Template_defines.h"
-#endif
-
-// g=generic, s=specialized
-#define ANGLE_TEMPLATES(g,s,...) \
-    s(RT_PT(sin, __VA_ARGS__)) \
-    s(RT_PT(cos, __VA_ARGS__)) \
-    s(RT_PTT(atan2, __VA_ARGS__)) \
-    s(RT_PTT(mod, __VA_ARGS__)) \
-    g(RT2_PT(direction, __VA_ARGS__)) \
-    g(RT_PT2(orientation, __VA_ARGS__))
-
 #ifndef __WASTELADNS_ANGLE_H__
 #define __WASTELADNS_ANGLE_H__
 
@@ -25,9 +10,22 @@
 #include "Types.h"
 #endif
 
+#ifndef __WASTELADNS_TEMPLATE_DEFINES_H__
+#include "Template_defines.h"
+#endif
+
 #ifndef __WASTELADNS_VEC_H__
 #include "Vec.h"
 #endif
+
+// g=generic, s=specialized
+#define ANGLE_TEMPLATES(g,s,...) \
+    s(RT_PT(sin, __VA_ARGS__)) \
+    s(RT_PT(cos, __VA_ARGS__)) \
+    s(RT_PTT(atan2, __VA_ARGS__)) \
+    s(RT_PTT(mod, __VA_ARGS__)) \
+    g(RT2_PT(direction, __VA_ARGS__)) \
+    g(RT_PT2(orientation, __VA_ARGS__))
 
 namespace Angle {
 DEFINE_TEMPLATES(ANGLE_TEMPLATES)
@@ -103,5 +101,3 @@ INSTANTIATE_TEMPLATES(ANGLE_TEMPLATES, f64)
 }
     
 #endif // __WASTELADNS_ANGLE_IMPL__
-
-#endif // !defined(__WASTELADNS_ANGLE_H__) || defined(__WASTELADNS_ANGLE_IMPL__)

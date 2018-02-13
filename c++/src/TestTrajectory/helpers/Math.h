@@ -1,19 +1,3 @@
-#if !defined(__WASTELADNS_MATH_H__) || defined(__WASTELADNS_MATH_IMPL__)
-
-#ifndef __WASTELADNS_TEMPLATE_DEFINES_H__
-#include "Template_defines.h"
-#endif
-
-// g=generic, s=specialized
-#define MATH_TEMPLATES(g,s,...) \
-    g(RT_PT(abs, __VA_ARGS__)) \
-    g(RT_PTT(min, __VA_ARGS__)) \
-    g(RT_PTT(max, __VA_ARGS__)) \
-    g(RT_PTTT(clamp, __VA_ARGS__))
-#define MATH_TEMPLATES_R(g,s,...) \
-    s(RT_PT(sqrt, __VA_ARGS__)) \
-    g(RT_PT(expTaylor, __VA_ARGS__))
-
 #ifndef __WASTELADNS_MATH_H__
 #define __WASTELADNS_MATH_H__
 
@@ -25,6 +9,20 @@
 #ifndef __WASTELADNS_TYPES_H__
 #include "Types.h"
 #endif
+
+#ifndef __WASTELADNS_TEMPLATE_DEFINES_H__
+#include "Template_defines.h"
+#endif
+
+// g=generic, s=specialized
+#define MATH_TEMPLATES(g,s,...) \
+    g(RT_PT(abs, __VA_ARGS__)) \
+    g(RT_PTT(min, __VA_ARGS__)) \
+    g(RT_PTT(max, __VA_ARGS__)) \
+    g(RT_PTTT(clamp, __VA_ARGS__))
+    #define MATH_TEMPLATES_R(g,s,...) \
+    s(RT_PT(sqrt, __VA_ARGS__)) \
+    g(RT_PT(expTaylor, __VA_ARGS__))
 
 namespace Math {
     
@@ -101,5 +99,3 @@ INSTANTIATE_TEMPLATES(MATH_TEMPLATES_R, f64)
 }
     
 #endif // __WASTELADNS_MATH_IMPL__
-
-#endif // !defined(__WASTELADNS_MATH_H__) || defined(__WASTELADNS_MATH_IMPL__)
