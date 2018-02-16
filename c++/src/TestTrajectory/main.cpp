@@ -633,17 +633,27 @@ int main(int argc, char** argv) {
                                 // Trajectory
                                 if ( game.player.speed < Math::eps<f32> )
                                 {
+                                    struct BatchedVertex
+                                    {
+                                        f32 s, t;
+                                        f32 x, y, z;
+                                    };
+                                    enum { kBatchDotCount = 40 };
+                                    BatchedVertex batchedVertices[kBatchDotCount * 4];
+                                    BatchedVertex* v = batchedVertices;
+                                    u32 dotCount = 0;
+                                    const Col color(1.f, 1.f, 1.0f, 0.5f);
+                                    
                                     Game::Trajectory& trajectory = game.trajectory;
                                     Resources::Texture& texture = Resources::get(game.resourceManager, Resources::TextureId::Dot);
                                     
+                                    glInterleavedArrays(GL_T2F_V3F, 0, batchedVertices);
                                     glEnable(GL_BLEND);
                                     glBlendFunc(GL_SRC_ALPHA, GL_ONE);
                                     glDepthMask(GL_FALSE);
                                     glEnable(GL_TEXTURE_2D);
                                     glBindTexture(GL_TEXTURE_2D, texture.handle);
                                     
-                                    glBegin(GL_QUADS);
-                                    const Col color(0.88f, 0.83f, 0.73f, 1.0f);
                                     glColor4f(RGBA_PARAMS(color));
                                     
                                     Vec2 pos = game.player.pos;
@@ -671,25 +681,37 @@ int main(int argc, char** argv) {
                                         resultDir = Vec::invScale(resultDir, resultLength);
                                         Vec2 resultDirOrthoRight(resultDir.y, -resultDir.x);
                                         
-                                        const f32 dotSize = 4.f;
+                                        const f32 dotSize = 6.f;
                                         Vec2 xWS = Vec::scale(resultDir, dotSize);
                                         Vec2 yWS = Vec::scale(resultDirOrthoRight, dotSize);
                                         
                                         f32 currentDistance = offset;
-                                        while (currentDistance < resultLength) {
+                                        while (currentDistance < resultLength && dotCount < kBatchDotCount) {
                                             
                                             Vec2 dotPos = Vec::add(pos, Vec::scale(resultDir, currentDistance));
                                             Vec2 dotPosBL = Vec::subtract(dotPos, Vec::scale(Vec::add(xWS, yWS), 0.5f) );
                                             Vec2 dotPosBR = Vec::add(dotPosBL, xWS);
                                             Vec2 dotPosTR = Vec::add(dotPosBR, yWS);
                                             Vec2 dotPosTL = Vec::add(dotPosBL, yWS);
+
+                                            // Lower left corner
+                                            v->s = 0.f; v->t = 0.f; v->x = dotPosBL.x; v->y = dotPosBL.y; v->z = z;
+                                            v++;
                                             
-                                            glTexCoord2f(0.0, 1.0); glVertex3f(dotPosBR.x,dotPosBR.y, z);
-                                            glTexCoord2f(1.0, 1.0); glVertex3f(dotPosTR.x,dotPosTR.y, z);
-                                            glTexCoord2f(1.0, 0.0); glVertex3f(dotPosTL.x,dotPosTL.y, z);
-                                            glTexCoord2f(0.0, 0.0); glVertex3f(dotPosBL.x,dotPosBL.y, z);
+                                            // Lower right corner
+                                            v->s = 1.f; v->t = 0.f; v->x = dotPosBR.x; v->y = dotPosBR.y; v->z = z;
+                                            v++;
+                                            
+                                            // Upper right corner
+                                            v->s = 1.f; v->t = 1.f; v->x = dotPosTR.x; v->y = dotPosTR.y; v->z = z;
+                                            v++;
+                                            
+                                            // Upper left corner
+                                            v->s = 0.f; v->t = 1.f; v->x = dotPosTL.x; v->y = dotPosTL.y; v->z = z;
+                                            v++;
                                             
                                             currentDistance += trajectory.dotStride;
+                                            dotCount++;
                                         }
                                         
                                         if (params.collision) {
@@ -699,10 +721,15 @@ int main(int argc, char** argv) {
                                             offset = currentDistance - resultLength;
                                         }
                                         
-                                    } while(params.collision);
+                                    } while(params.collision && dotCount < kBatchDotCount);
                                     
+                                    glDrawArrays(GL_QUADS, 0, 4 * dotCount);
                                     
-                                    glEnd();
+                                    // Disable client state implicitly set by glInterleavedArrays
+                                    glDisableClientState(GL_VERTEX_ARRAY);
+                                    glDisableClientState(GL_TEXTURE_COORD_ARRAY);
+                                    glDisableClientState(GL_COLOR_ARRAY);
+                                    
                                     glBindTexture(GL_TEXTURE_2D, 0);
                                     glDisable(GL_TEXTURE_2D);
                                     glDisable(GL_BLEND);
