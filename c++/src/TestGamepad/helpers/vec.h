@@ -40,7 +40,13 @@
     g(RT4_PT4T4(subtract, __VA_ARGS__)) \
     g(RT2_PT2T2(cross, __VA_ARGS__)) \
     g(RT3_PT3T3(cross, __VA_ARGS__)) \
-    g(RT4_PT4T4(cross, __VA_ARGS__))
+    g(RT4_PT4T4(cross, __VA_ARGS__)) \
+    g(RT2_PT2T2(max, __VA_ARGS__)) \
+    g(RT3_PT3T3(max, __VA_ARGS__)) \
+    g(RT4_PT4T4(max, __VA_ARGS__)) \
+    g(RT2_PT2T2(min, __VA_ARGS__)) \
+    g(RT3_PT3T3(min, __VA_ARGS__)) \
+    g(RT4_PT4T4(min, __VA_ARGS__))
 
 #define VEC2_FORMAT "(%f, %f)"
 #define VEC2_FORMAT_LITE "(%.3f, %.3f)"
@@ -342,6 +348,40 @@ Vector4<_T> cross(const Vector4<_T>& a, const Vector4<_T>& b) {
                        a.z * b.x - a.x * b.z,
                        a.x * b.y - a.y * b.x,
                        0.0);
+}
+template <typename _T>
+Vector2<_T> max(const Vector2<_T>& a, const Vector2<_T>& b) {
+    return Vector2<_T>(Math::max(a.x,b.x), Math::max(a.y, b.y));
+}
+template <typename _T>
+Vector3<_T> max(const Vector3<_T>& a, const Vector3<_T>& b) {
+    return Vector3<_T>(Math::max(a.x,b.x),
+                       Math::max(a.y,b.y),
+                       Math::max(a.z,b.z));
+}
+template <typename _T>
+Vector4<_T> max(const Vector4<_T>& a, const Vector4<_T>& b) {
+    return Vector4<_T>(Math::max(a.x,b.x),
+                       Math::max(a.y,b.y),
+                       Math::max(a.z,b.z),
+                       Math::max(a.w,b.w));
+}
+template <typename _T>
+Vector2<_T> min(const Vector2<_T>& a, const Vector2<_T>& b) {
+    return Vector2<_T>(Math::min(a.x,b.x), Math::min(a.y, b.y));
+}
+template <typename _T>
+Vector3<_T> min(const Vector3<_T>& a, const Vector3<_T>& b) {
+    return Vector3<_T>(Math::min(a.x,b.x),
+                       Math::min(a.y,b.y),
+                       Math::min(a.z,b.z));
+}
+template <typename _T>
+Vector4<_T> min(const Vector4<_T>& a, const Vector4<_T>& b) {
+    return Vector4<_T>(Math::min(a.x,b.x),
+                       Math::min(a.y,b.y),
+                       Math::min(a.z,b.z),
+                       Math::min(a.w,b.w));
 }
 
 INSTANTIATE_TEMPLATES(VECTOR_TEMPLATES,f32);

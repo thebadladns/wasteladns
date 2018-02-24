@@ -49,9 +49,9 @@ const char* svg = R"(
 <path id="select" class="cls-1" d="M104.077,84.1H95l2.441,12.8h4.923Z"/>
 <path id="start" class="cls-1" d="M190.986,84H200L197.576,97h-4.89Z"/>
 <path id="r1" class="cls-1" d="M250,69H221l4-19h19Z"/>
-<path id="r2" class="cls-1" d="M247,45H219l7-13h14Z"/>
+<path id="r2" class="cls-1" d="M247,43H219l7-14h14Z"/>
 <path id="l1" class="cls-1" d="M45,69H74L70,50H51Z"/>
-<path id="l2" class="cls-1" d="M48,45H76L69,32H55Z"/>
+<path id="l2" class="cls-1" d="M48,43H76L70,29H55Z"/>
 <path id="tpad" class="cls-1" d="M112,65l-4,22,11,38h57l11-38-4-22H112Z"/>
 
 )";
@@ -188,11 +188,14 @@ const u32 mapping_ps4Name = Hash::fnv("Wireless Controller");
 typedef std::map<u32, std::string> SVGPaths;
     
 struct RenderBuffer {
-    Vec3* vertex;
+    Vec2* vertex;
+    Vec2 max, min;
     u32 count;
 };
 
 struct RenderBuffers {
+    
+    RenderBuffers() {}
     
     union {
         struct {
@@ -210,10 +213,15 @@ struct RenderBuffers {
 
 void parsenode_svg(RenderBuffer& vbuffer, const char* svg_path) {
     
-    f32 z = 0.f;
-    vbuffer.vertex = (Vec3*) &(vertexMem[vertexMemCount]);
+    Vec2& max = vbuffer.max;
+    Vec2& min = vbuffer.min;
+    max.x = max.y = -10000.f;
+    min.x = min.y = 10000.f;
     vbuffer.count = 0;
-    const u32 vertexPerPoint = 3;
+    
+    vbuffer.vertex = (Vec2*) &(vertexMem[vertexMemCount]);
+    vbuffer.count = 0;
+    const u32 vertexPerPoint = 2;
     const u32 maxVertexCount = (vertexMemMaxCount - vertexMemCount) / 3;
     
     enum class Mode { None, Move, Line, HLine, VLine };
@@ -252,6 +260,8 @@ void parsenode_svg(RenderBuffer& vbuffer, const char* svg_path) {
         } else if (c == 'Z') {
             break;
         } else {
+            
+            Vec2* v = nullptr;
             switch(mode) {
                 case Mode::Move:
                 case Mode::Line:
@@ -262,13 +272,12 @@ void parsenode_svg(RenderBuffer& vbuffer, const char* svg_path) {
                     }
                     f32 y = -strtof(svgptr, &svgptr);
                     
-                    Vec3& v = vbuffer.vertex[vbuffer.count];
-                    v.x = x; v.y = y; v.z = z;
+                    v = &vbuffer.vertex[vbuffer.count];
+                    v->x = x; v->y = y;
                     if (local) {
-                        Vec3& vprev = vbuffer.vertex[vbuffer.count-1];
-                        v = Vec::add(v, vprev);
+                        Vec2& vprev = vbuffer.vertex[vbuffer.count-1];
+                        *v = Vec::add(*v, vprev);
                     }
-                    vbuffer.count++;
                 }
                 break;
     
@@ -276,39 +285,44 @@ void parsenode_svg(RenderBuffer& vbuffer, const char* svg_path) {
                 {
                     f32 y = -strtof(svgptr, &svgptr);
                     
-                    Vec3& v = vbuffer.vertex[vbuffer.count];
-                    v.y = y;
-                    Vec3& vprev = vbuffer.vertex[vbuffer.count-1];
+                    v = &vbuffer.vertex[vbuffer.count];
+                    v->y = y;
+                    Vec2& vprev = vbuffer.vertex[vbuffer.count-1];
                     if (local) {
-                        v.x = 0.f; v.z = 0.f;
-                        v = Vec::add(v, vprev);
+                        v->x = 0.f;
+                        *v = Vec::add(*v, vprev);
                     } else {
-                        v.x = vprev.x; v.z = vprev.z;
+                        v->x = vprev.x;
                     }
-                    vbuffer.count++;
                 }
                 break;
                 case Mode::HLine:
                 {
                     f32 x = strtof(svgptr, &svgptr);
                     
-                    Vec3& v = vbuffer.vertex[vbuffer.count];
-                    v.x = x;
-                    Vec3& vprev = vbuffer.vertex[vbuffer.count-1];
+                    v = &vbuffer.vertex[vbuffer.count];
+                    v->x = x;
+                    Vec2& vprev = vbuffer.vertex[vbuffer.count-1];
                     if (local) {
-                        v.y = 0.f; v.z = 0.f;
-                        v = Vec::add(v, vprev);
+                        v->y = 0.f;
+                        *v = Vec::add(*v, vprev);
                     } else {
-                        v.y = vprev.y; v.z = vprev.z;
+                        v->y = vprev.y;
                     }
-                    vbuffer.count++;
                 }
                 break;
                 default:
                     break;
             }
-            // Read delimiter
-            svgptr--;
+            
+            if (v) {
+                vbuffer.count++;
+                max = Vec::max(max, *v);
+                min = Vec::min(min, *v);
+                
+                // Read delimiter
+                svgptr--;
+            }
         }
     }
     
@@ -407,127 +421,60 @@ void parsetree_svg(RenderBuffers& vertexBuffers, const char* svg_tree) {
         }
     }
     
-    auto search = rawPaths.find(Hash::fnv("base"));
-    if (search != rawPaths.end()) {
-        printf("base: %s\n", search->second.c_str());
-        
-        parsenode_svg(vertexBuffers.base, search->second.c_str());
-    }
-    search = rawPaths.find(Hash::fnv("tpad"));
-    if (search != rawPaths.end()) {
-        printf("touch pad: %s\n", search->second.c_str());
-        
-        parsenode_svg(vertexBuffers.tpad, search->second.c_str());
-    }
-    search = rawPaths.find(Hash::fnv("axis-l-base"));
-    if (search != rawPaths.end()) {
-        printf("axis-l-base: %s\n", search->second.c_str());
-        
-        parsenode_svg(vertexBuffers.axisbase_l, search->second.c_str());
+    Vec2 max, min;
+    
+    struct ShapeEntry {
+        RenderBuffer* buffer;
+        u32 hash;
+    };
+    ShapeEntry shapes[] = {
+          { &vertexBuffers.base, Hash::fnv("base") }
+        , { &vertexBuffers.tpad, Hash::fnv("tpad") }
+        , { &vertexBuffers.axisbase_l, Hash::fnv("axis-l-base") }
+        , { &vertexBuffers.axisbase_r, Hash::fnv("axis-r-base") }
+        , { &vertexBuffers.button_u, Hash::fnv("t") }
+        , { &vertexBuffers.button_d, Hash::fnv("x") }
+        , { &vertexBuffers.button_r, Hash::fnv("o") }
+        , { &vertexBuffers.button_l, Hash::fnv("s") }
+        , { &vertexBuffers.dpad_u, Hash::fnv("u") }
+        , { &vertexBuffers.dpad_r, Hash::fnv("r") }
+        , { &vertexBuffers.dpad_d, Hash::fnv("d") }
+        , { &vertexBuffers.dpad_l, Hash::fnv("l") }
+        , { &vertexBuffers.start, Hash::fnv("start") }
+        , { &vertexBuffers.select, Hash::fnv("select") }
+        , { &vertexBuffers.l1, Hash::fnv("l1") }
+        , { &vertexBuffers.l2, Hash::fnv("l2") }
+        , { &vertexBuffers.r1, Hash::fnv("r1") }
+        , { &vertexBuffers.r2, Hash::fnv("r2") }
+        , { &vertexBuffers.axis_l, Hash::fnv("axis-l-mov") }
+        , { &vertexBuffers.axis_r, Hash::fnv("axis-r-mov") }
+    };
+    
+    for (ShapeEntry& entry : shapes) {
+        auto search = rawPaths.find(entry.hash);
+        if (search != rawPaths.end()) {
+            parsenode_svg(*entry.buffer, search->second.c_str());
+            max = Vec::max(max, entry.buffer->max);
+            min = Vec::min(min, entry.buffer->min);
+        }
     }
     
-    search = rawPaths.find(Hash::fnv("axis-r-base"));
-    if (search != rawPaths.end()) {
-        printf("axis-r-base: %s\n", search->second.c_str());
+    // Center all nodes and recompute min-max
+    Vec2 center = Vec::scale(Vec::add(max, min), 0.5f);
+    for (ShapeEntry& entry : shapes) {
         
-        parsenode_svg(vertexBuffers.axisbase_r, search->second.c_str());
-    }
-    search = rawPaths.find(Hash::fnv("t"));
-    if (search != rawPaths.end()) {
-        printf("t: %s\n", search->second.c_str());
+        Vec2& shapeMax = entry.buffer->max;
+        Vec2& shapeMin = entry.buffer->min;
         
-        parsenode_svg(vertexBuffers.button_u, search->second.c_str());
-    }
-    search = rawPaths.find(Hash::fnv("x"));
-    if (search != rawPaths.end()) {
-        printf("x: %s\n", search->second.c_str());
-        
-        parsenode_svg(vertexBuffers.button_d, search->second.c_str());
-    }
-    search = rawPaths.find(Hash::fnv("o"));
-    if (search != rawPaths.end()) {
-        printf("o: %s\n", search->second.c_str());
-        
-        parsenode_svg(vertexBuffers.button_r, search->second.c_str());
-    }
-    search = rawPaths.find(Hash::fnv("s"));
-    if (search != rawPaths.end()) {
-        printf("s: %s\n", search->second.c_str());
-        
-        parsenode_svg(vertexBuffers.button_l, search->second.c_str());
-    }
-    search = rawPaths.find(Hash::fnv("u"));
-    if (search != rawPaths.end()) {
-        printf("u: %s\n", search->second.c_str());
-        
-        parsenode_svg(vertexBuffers.dpad_u, search->second.c_str());
-    }
-    search = rawPaths.find(Hash::fnv("r"));
-    if (search != rawPaths.end()) {
-        printf("r: %s\n", search->second.c_str());
-        
-        parsenode_svg(vertexBuffers.dpad_r, search->second.c_str());
-    }
-    search = rawPaths.find(Hash::fnv("d"));
-    if (search != rawPaths.end()) {
-        printf("d: %s\n", search->second.c_str());
-        
-        parsenode_svg(vertexBuffers.dpad_d, search->second.c_str());
-    }
-    search = rawPaths.find(Hash::fnv("l"));
-    if (search != rawPaths.end()) {
-        printf("l: %s\n", search->second.c_str());
-        
-        parsenode_svg(vertexBuffers.dpad_l, search->second.c_str());
-    }
-    search = rawPaths.find(Hash::fnv("start"));
-    if (search != rawPaths.end()) {
-        printf("start: %s\n", search->second.c_str());
-        
-        parsenode_svg(vertexBuffers.start, search->second.c_str());
-    }
-    search = rawPaths.find(Hash::fnv("select"));
-    if (search != rawPaths.end()) {
-        printf("select: %s\n", search->second.c_str());
-        
-        parsenode_svg(vertexBuffers.select, search->second.c_str());
-    }
-    search = rawPaths.find(Hash::fnv("l1"));
-    if (search != rawPaths.end()) {
-        printf("l1: %s\n", search->second.c_str());
-        
-        parsenode_svg(vertexBuffers.l1, search->second.c_str());
-    }
-    
-    search = rawPaths.find(Hash::fnv("l2"));
-    if (search != rawPaths.end()) {
-        printf("l2: %s\n", search->second.c_str());
-        
-        parsenode_svg(vertexBuffers.l2, search->second.c_str());
-    }
-    search = rawPaths.find(Hash::fnv("r1"));
-    if (search != rawPaths.end()) {
-        printf("r1: %s\n", search->second.c_str());
-        
-        parsenode_svg(vertexBuffers.r1, search->second.c_str());
-    }
-    search = rawPaths.find(Hash::fnv("r2"));
-    if (search != rawPaths.end()) {
-        printf("r2: %s\n", search->second.c_str());
-        
-        parsenode_svg(vertexBuffers.r2, search->second.c_str());
-    }
-    search = rawPaths.find(Hash::fnv("axis-l-mov"));
-    if (search != rawPaths.end()) {
-        printf("axis-l: %s\n", search->second.c_str());
-        
-        parsenode_svg(vertexBuffers.axis_l, search->second.c_str());
-    }
-    search = rawPaths.find(Hash::fnv("axis-r-mov"));
-    if (search != rawPaths.end()) {
-        printf("axis-r: %s\n", search->second.c_str());
-        
-        parsenode_svg(vertexBuffers.axis_r, search->second.c_str());
+        shapeMin.x = shapeMin.y = 10000.f;
+        shapeMax.x = shapeMax.y = -10000.f;
+        for (u32 i = 0; i < entry.buffer->count; i++) {
+            Vec2& pos = entry.buffer->vertex[i];
+            pos = Vec::subtract(pos, center);
+            
+            shapeMax = Vec::max(shapeMax, pos);
+            shapeMin = Vec::min(shapeMin, pos);
+        }
     }
 }
     

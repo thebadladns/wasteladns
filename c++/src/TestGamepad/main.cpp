@@ -223,17 +223,13 @@ int main(int argc, char** argv) {
 							glLoadIdentity();
 							glMultMatrixf(game.view.orthoTransformCM);
                             
-                            glMatrixMode(GL_MODELVIEW);
-                            glPushMatrix();
                             {
-                                glTranslatef(-150.f, 80.f, 0.f);
-                                
                                 const Col padColor(1.0f, 1.0f, 1.0f, 1.0f);
                                 glColor4f(RGBA_PARAMS(padColor));
                                 
                                 glEnableClientState(GL_VERTEX_ARRAY);
                                 for (RenderBuffer& buffer : controllerBuffers.sbuffers) {
-                                    glVertexPointer(3, GL_FLOAT, 0, buffer.vertex);
+                                    glVertexPointer(2, GL_FLOAT, 0, buffer.vertex);
                                     glDrawArrays(GL_LINE_LOOP, 0, buffer.count);
                                 }
                                 for (u32 i = 0; i < (s32) DynamicShape::ButtonEnd; i++) {
@@ -244,7 +240,7 @@ int main(int argc, char** argv) {
                                         primitive = GL_TRIANGLE_FAN;
                                     }
 
-                                    glVertexPointer(3, GL_FLOAT, 0, buffer.vertex);
+                                    glVertexPointer(2, GL_FLOAT, 0, buffer.vertex);
                                     glDrawArrays(primitive, 0, buffer.count);
                                 }
                                 const f32 axisMovementMag = 5.f;
@@ -263,18 +259,19 @@ int main(int argc, char** argv) {
                                     glPushMatrix();
                                     {
                                         glTranslatef(xoffset, yoffset, 0.f);
-                                        glVertexPointer(3, GL_FLOAT, 0, buffer.vertex);
+                                        glVertexPointer(2, GL_FLOAT, 0, buffer.vertex);
                                         glDrawArrays(primitive, 0, buffer.count);
                                     }
                                     glPopMatrix();
                                 }
-                                const f32 triggerMovementMag = 20.f;
+                                
                                 for (u32 i = (s32)DynamicShape::TriggerStart; i < (s32)DynamicShape::TriggerEnd; i++) {
-                                    
+
                                     const s32 offset_i = i - (s32)DynamicShape::TriggerStart;
                                     const RenderBuffer& buffer = controllerBuffers.dbuffers[i];
+                                    const Vec2 center = Vec::scale(Vec::add(buffer.min, buffer.max), 0.5f);
+                                    
                                     f32 axis = Math::bias(axisStates[(s32)trigger2analog_mapping[offset_i]]);
-                                    f32 yoffset = - triggerMovementMag * axis;
                                     
                                     s32 primitive = GL_LINE_LOOP;
                                     if (buttonStates[(s32)shape2button_mapping[i]]) {
@@ -283,16 +280,20 @@ int main(int argc, char** argv) {
                                     
                                     glPushMatrix();
                                     {
-                                        glTranslatef(0.f, yoffset, 0.f);
-                                        glScalef(1.f, Math::lerp(axis, 1.f, 0.5f), 1.f);
-                                        glVertexPointer(3, GL_FLOAT, 0, buffer.vertex);
+                                        f32 yscale = Math::lerp(axis, 1.f, 0.4f);
+                                        f32 height = buffer.max.y - buffer.min.y;
+                                        f32 scaledHeight = yscale * height;
+                                        glTranslatef(center.x, center.y, 0.f);
+                                        glScalef(1.f, yscale, 1.f);
+                                        glTranslatef(-center.x, -center.y - (height - scaledHeight), 0.f);
+                                        
+                                        glVertexPointer(2, GL_FLOAT, 0, buffer.vertex);
                                         glDrawArrays(primitive, 0, buffer.count);
                                     }
                                     glPopMatrix();
                                 }
                                 glDisableClientState(GL_VERTEX_ARRAY);
                             }
-                            glPopMatrix();
 
                             Vec3 debugPos = Vec3(game.view.orthoParams.left + 10.f, game.view.orthoParams.top - 10.f, -50);
                             const Col textColor(1.0f, 1.0f, 1.0f, 1.0f);
@@ -311,33 +312,33 @@ int main(int argc, char** argv) {
                                 textParams.pos = debugPos;
                                 textParams.text = glfwGetJoystickName(GLFW_JOYSTICK_1);
                                 DebugDraw::text(textParams);
-//                                debugPos.y -= 15.f * textParams.scale;
-//
-//                                s32 axesCount;
-//                                const f32* axes = glfwGetJoystickAxes(GLFW_JOYSTICK_1, &axesCount);
-//                                snprintf(buffer, sizeof(buffer), "Axes: ");
-//                                for (s32 i = 0; i < axesCount; i++) {
-//                                    char axisBuff[32];
-//                                    snprintf(axisBuff, sizeof(axisBuff), " %d:%.3f", i, axes[i]);
-//                                    strncat(buffer, axisBuff, Math::min(sizeof(buffer)-strlen(axisBuff), strlen(axisBuff)));
-//                                }
-//                                textParams.pos = debugPos;
-//                                textParams.text = buffer;
-//                                DebugDraw::text(textParams);
-//                                debugPos.y -= 15.f * textParams.scale;
-//
-//                                s32 buttonCount;
-//                                const u8* buttons = glfwGetJoystickButtons(GLFW_JOYSTICK_1, &buttonCount);
-//                                snprintf(buffer, sizeof(buffer), "Buttons: ");
-//                                for (s32 i = 0; i < buttonCount; i++) {
-//                                    char buttonBuff[32];
-//                                    snprintf(buttonBuff, sizeof(buttonBuff), " %d:%x", i, buttons[i]);
-//                                    strncat(buffer, buttonBuff, Math::min(sizeof(buffer)-strlen(buttonBuff), strlen(buttonBuff)));
-//                                }
-//                                textParams.pos = debugPos;
-//                                textParams.text = buffer;
-//                                DebugDraw::text(textParams);
-//                                debugPos.y -= 15.f * textParams.scale;
+                                debugPos.y -= 15.f * textParams.scale;
+
+                                s32 axesCount;
+                                const f32* axes = glfwGetJoystickAxes(GLFW_JOYSTICK_1, &axesCount);
+                                snprintf(buffer, sizeof(buffer), "Axes: ");
+                                for (s32 i = 0; i < axesCount; i++) {
+                                    char axisBuff[32];
+                                    snprintf(axisBuff, sizeof(axisBuff), " %d:%.3f", i, axes[i]);
+                                    strncat(buffer, axisBuff, Math::min(sizeof(buffer)-strlen(axisBuff), strlen(axisBuff)));
+                                }
+                                textParams.pos = debugPos;
+                                textParams.text = buffer;
+                                DebugDraw::text(textParams);
+                                debugPos.y -= 15.f * textParams.scale;
+
+                                s32 buttonCount;
+                                const u8* buttons = glfwGetJoystickButtons(GLFW_JOYSTICK_1, &buttonCount);
+                                snprintf(buffer, sizeof(buffer), "Buttons: ");
+                                for (s32 i = 0; i < buttonCount; i++) {
+                                    char buttonBuff[32];
+                                    snprintf(buttonBuff, sizeof(buttonBuff), " %d:%x", i, buttons[i]);
+                                    strncat(buffer, buttonBuff, Math::min(sizeof(buffer)-strlen(buttonBuff), strlen(buttonBuff)));
+                                }
+                                textParams.pos = debugPos;
+                                textParams.text = buffer;
+                                DebugDraw::text(textParams);
+                                debugPos.y -= 15.f * textParams.scale;
                             }
 						}
 						// Needed since GLFW_DOUBLEBUFFER is GL_TRUE
