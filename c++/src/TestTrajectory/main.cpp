@@ -399,7 +399,7 @@ int main(int argc, char** argv) {
         window.handle = glfwCreateWindow(
                                          window.width
                                          , window.height
-                                         , "smooth motion test"
+                                         , "Trajectory test"
                                          , nullptr /*monitor*/
                                          , nullptr /*share*/
                                          );
