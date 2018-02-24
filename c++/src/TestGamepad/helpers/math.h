@@ -20,9 +20,12 @@
     g(RT_PTT(min, __VA_ARGS__)) \
     g(RT_PTT(max, __VA_ARGS__)) \
     g(RT_PTTT(clamp, __VA_ARGS__))
-    #define MATH_TEMPLATES_R(g,s,...) \
+#define MATH_TEMPLATES_R(g,s,...) \
     s(RT_PT(sqrt, __VA_ARGS__)) \
-    g(RT_PT(expTaylor, __VA_ARGS__))
+    g(RT_PT(expTaylor, __VA_ARGS__)) \
+    g(RT_PT(bias, __VA_ARGS__)) \
+    g(RT_PT(unbias, __VA_ARGS__)) \
+    g(RT_PTTT(lerp, __VA_ARGS__))
 
 namespace Math {
     
@@ -87,6 +90,21 @@ namespace Math {
             default:
                 return (_T) pow(e<_T>, x);
         }
+    }
+    
+    template <typename _T>
+    _T bias(_T a) {
+        return (a + 1.f) * 0.5f;
+    }
+    
+    template <typename _T>
+    _T unbias(_T a) {
+        return a * 2.f - 1.f;
+    }
+    
+    template <typename _T>
+    _T lerp(_T t, _T a, _T b) {
+        return a + (b - a) * t;
     }
     
 INSTANTIATE_TEMPLATES(MATH_TEMPLATES, u8)

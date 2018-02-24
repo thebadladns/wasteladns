@@ -177,8 +177,8 @@ const ControllerVertex::Digital b_mapping_ps4[] = {
     ControllerVertex::Digital::Invalid,
     ControllerVertex::Digital::Tpad,
     ControllerVertex::Digital::Dpad_U,
-    ControllerVertex::Digital::Dpad_D,
     ControllerVertex::Digital::Dpad_R,
+    ControllerVertex::Digital::Dpad_D,
     ControllerVertex::Digital::Dpad_L
     
 };

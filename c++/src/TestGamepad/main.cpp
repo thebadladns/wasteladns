@@ -268,12 +268,13 @@ int main(int argc, char** argv) {
                                     }
                                     glPopMatrix();
                                 }
-                                const f32 triggerMovementMag = 1.f;
+                                const f32 triggerMovementMag = 20.f;
                                 for (u32 i = (s32)DynamicShape::TriggerStart; i < (s32)DynamicShape::TriggerEnd; i++) {
                                     
                                     const s32 offset_i = i - (s32)DynamicShape::TriggerStart;
                                     const RenderBuffer& buffer = controllerBuffers.dbuffers[i];
-                                    f32 yoffset = - (triggerMovementMag * (axisStates[(s32)trigger2analog_mapping[offset_i]] + 1.f));
+                                    f32 axis = Math::bias(axisStates[(s32)trigger2analog_mapping[offset_i]]);
+                                    f32 yoffset = - triggerMovementMag * axis;
                                     
                                     s32 primitive = GL_LINE_LOOP;
                                     if (buttonStates[(s32)shape2button_mapping[i]]) {
@@ -283,6 +284,7 @@ int main(int argc, char** argv) {
                                     glPushMatrix();
                                     {
                                         glTranslatef(0.f, yoffset, 0.f);
+                                        glScalef(1.f, Math::lerp(axis, 1.f, 0.5f), 1.f);
                                         glVertexPointer(3, GL_FLOAT, 0, buffer.vertex);
                                         glDrawArrays(primitive, 0, buffer.count);
                                     }
