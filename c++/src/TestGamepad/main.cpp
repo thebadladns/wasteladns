@@ -59,8 +59,8 @@ namespace Motion {
     struct Agent {
 
 		struct Config {
-			f32 maxBoost = 1.75f;
-			f32 maxSpeed = 220.f;
+			f32 maxBoost = 1.25f;
+			f32 maxSpeed = 200.f;
 
 			f32 accHorizon = 0.5f;
 			f32 accHorizonStop = 0.25f;
@@ -88,27 +88,28 @@ namespace Motion {
         State& pad = *params.pad;
         
         Vec2& inputDirWS = agent.inputDirWS;
-        f32 inputSpeed = 0.f;
+        f32 inputMag = 0.f;
+        f32 inputBoost = 1.f;
         
         // TODO: handle deadzone internally
-        const f32 deadzone = 0.05f;
+        const f32 deadzone = 0.075f;
         
         if (pad.active) {
             Vec2 axis_l(pad.analogs.values[Analog::AxisLH], -pad.analogs.values[Analog::AxisLV]);
-			inputSpeed = Vec::mag(axis_l);
-            if (inputSpeed > deadzone) {
-                inputDirWS = Vec::scale(axis_l, 1.f/ inputSpeed);
+			inputMag = Vec::mag(axis_l);
+            if (inputMag > deadzone) {
+                inputDirWS = Vec::scale(axis_l, 1.f/ inputMag);
             } else {
-				inputSpeed = 0.f;
+				inputMag = 0.f;
             }
-            inputSpeed = Math::min(1.f, inputSpeed);
+            inputMag = Math::min(1.f, inputMag);
             
             const f32 trigger_r = pad.analogs.values[Analog::Trigger_R];
             if (trigger_r != Analog::novalue) {
                 const f32 triggerNormalized = Math::bias(trigger_r);
-				inputSpeed *= (1.f + triggerNormalized * (agent.config.maxBoost - 1.f));
+				inputBoost = (1.f + triggerNormalized * (agent.config.maxBoost - 1.f));
             } else if (pad.buttons.down(Digital::R2)) {
-				inputSpeed *= agent.config.maxBoost;
+				inputBoost = agent.config.maxBoost;
             }
         
         } else { // TODO: fallback to keyboard?
@@ -120,17 +121,18 @@ namespace Motion {
 //            inputDirWS.y = Math<f32>::clamp(inputDirWS.y, -1.f, 1.f);
         }
         
-		f32 accHorizon = agent.config.accHorizon;
-		if (inputSpeed <= Math::eps<f32>) {
-			accHorizon = agent.config.accHorizonStop;
-		}
-		agent.speed = Math::eappr(agent.speed, inputSpeed * agent.config.maxSpeed, accHorizon, params.timeDelta);
-		
-		if (inputSpeed > 0.001f) {
+        f32 desiredSpeed = inputMag * agent.config.maxSpeed * inputBoost;
+        f32 accHorizon = agent.config.accHorizon;
+        if (inputMag <= Math::eps<f32>) {
+            accHorizon = agent.config.accHorizonStop;
+        }
+        
+        f32 currentOrientationLS = 0.f, inputOrientationLS = 0.f;
+		if (inputMag > 0.001f) {
 			f32 inputHeadingWS = Angle::orientation(inputDirWS);
 
-			f32 currentOrientationLS = 0.f;
-			f32 inputOrientationLS = Angle::subtractShort(inputHeadingWS, agent.orientation);
+			currentOrientationLS = 0.f;
+			inputOrientationLS = Angle::subtractShort(inputHeadingWS, agent.orientation);
 
 			currentOrientationLS = Math::eappr(currentOrientationLS, inputOrientationLS, agent.config.turnHorizon, params.timeDelta);
 			agent.orientation = Angle::wrap(agent.orientation + currentOrientationLS);
@@ -145,14 +147,20 @@ namespace Motion {
             f32 turnSpeedReduction = 1.f;
             if (angleDelta < maxReductionAngle1) {
                 turnFactor = Math::clamp((angleDelta - minReductionAngle1) / (maxReductionAngle1 - minReductionAngle1), 0.f, 1.f);
-                turnSpeedReduction = Math::lerp(turnFactor, 1.f, 0.75f);
+                turnSpeedReduction = Math::lerp(turnFactor, 1.f, 0.6f);
             } else {
                 turnFactor = Math::clamp((angleDelta - minReductionAngle2) / (maxReductionAngle2 - minReductionAngle2), 0.f, 1.f);
-                turnSpeedReduction = Math::lerp(turnFactor, 0.75f, 0.25f);
+                turnSpeedReduction = Math::lerp(turnFactor, 0.6f, 0.25f);
             }
 			
-			agent.speed *= turnSpeedReduction;
+			desiredSpeed *= turnSpeedReduction;
 		}
+        
+        agent.speed = Math::eappr(agent.speed, desiredSpeed, accHorizon, params.timeDelta);
+        
+        if (Math::abs(inputOrientationLS) * Angle::r2d<f32> > 150.f) {
+            agent.speed = 0.f;
+        }
         
         agent.pos = Vec::add(agent.pos, Vec::scale(agent.dir, agent.speed * params.timeDelta));
     }
