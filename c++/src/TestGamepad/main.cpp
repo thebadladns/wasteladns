@@ -57,10 +57,22 @@ namespace Hash {
 namespace Motion {
 
     struct Agent {
+
+		struct Config {
+			f32 maxBoost = 3.f;
+			f32 maxSpeed = 160.f;
+
+			f32 accHorizon = 0.5f;
+			f32 accHorizonStop = 0.25f;
+			f32 turnHorizon = 0.14f;
+		};
+
+		Config config;
         Vec2 pos;
         Vec2 dir;
         Vec2 inputDirWS;
         f32 orientation;
+		f32 speed;
     };
     
     struct UpdateMovementParams {
@@ -76,26 +88,26 @@ namespace Motion {
         State& pad = *params.pad;
         
         Vec2& inputDirWS = agent.inputDirWS;
-        f32 speed = 0.f;
+        f32 inputSpeed = 0.f;
         
         // TODO: handle deadzone internally
         const f32 deadzone = 0.05f;
         
         if (pad.active) {
             Vec2 axis_l(pad.analogs.values[Analog::AxisLH], -pad.analogs.values[Analog::AxisLV]);
-            speed = Vec::mag(axis_l);
-            if (speed > deadzone) {
-                inputDirWS = Vec::scale(axis_l, 1.f/speed);
+			inputSpeed = Vec::mag(axis_l);
+            if (inputSpeed > deadzone) {
+                inputDirWS = Vec::scale(axis_l, 1.f/ inputSpeed);
             } else {
-                speed = 0.f;
+				inputSpeed = 0.f;
             }
             
             const f32 trigger_r = pad.analogs.values[Analog::Trigger_R];
             if (trigger_r != Analog::novalue) {
                 const f32 triggerNormalized = Math::bias(trigger_r);
-                speed *= (1.f + triggerNormalized * 2.f);
+				inputSpeed *= (1.f + triggerNormalized * (agent.config.maxBoost - 1.f));
             } else if (pad.buttons.down(Digital::R2)) {
-                speed *= 3.f;
+				inputSpeed *= agent.config.maxBoost;
             }
         
         } else { // TODO: fallback to keyboard?
@@ -107,20 +119,30 @@ namespace Motion {
 //            inputDirWS.y = Math<f32>::clamp(inputDirWS.y, -1.f, 1.f);
         }
         
-        if (speed > Math::eps<f32>) {
-            f32 inputHeadingWS = Angle::orientation(inputDirWS);
-            
-            f32 currentOrientationLS = 0.f;
-            f32 inputOrientationLS = Angle::subtractShort(inputHeadingWS, agent.orientation);
-            
-            currentOrientationLS = Math::eappr(currentOrientationLS, inputOrientationLS, 0.14f, params.timeDelta);
-            
-            agent.orientation = Angle::wrap(agent.orientation + currentOrientationLS);
-            agent.dir = Angle::direction(agent.orientation);
-            speed *= 160.f;
-        }
+		f32 accHorizon = agent.config.accHorizon;
+		if (inputSpeed <= Math::eps<f32>) {
+			accHorizon = agent.config.accHorizonStop;
+		}
+		agent.speed = Math::eappr(agent.speed, inputSpeed * 160.f, accHorizon, params.timeDelta);
+		
+		if (inputSpeed > 0.001f) {
+			f32 inputHeadingWS = Angle::orientation(inputDirWS);
+
+			f32 currentOrientationLS = 0.f;
+			f32 inputOrientationLS = Angle::subtractShort(inputHeadingWS, agent.orientation);
+
+			currentOrientationLS = Math::eappr(currentOrientationLS, inputOrientationLS, agent.config.turnHorizon, params.timeDelta);
+			agent.orientation = Angle::wrap(agent.orientation + currentOrientationLS);
+			agent.dir = Angle::direction(agent.orientation);
+
+			const f32 minReductionAngle = 10.f * Angle::d2r<f32>;
+			const f32 maxReductionAngle = 120.f * Angle::d2r<f32>;
+			f32 turnFactor = Math::clamp((Math::abs(inputOrientationLS) - minReductionAngle) / (maxReductionAngle - minReductionAngle), 0.f, 1.f);
+			f32 turnSpeedReduction = Math::lerp(turnFactor, 1.f, 0.f);
+			agent.speed *= turnSpeedReduction;
+		}
         
-        agent.pos = Vec::add(agent.pos, Vec::scale(agent.dir, speed * params.timeDelta));
+        agent.pos = Vec::add(agent.pos, Vec::scale(agent.dir, agent.speed * params.timeDelta));
     }
 }
 
@@ -242,6 +264,7 @@ int main(int argc, char** argv) {
             // Scene set up
             game.player.motion.pos = Vec2(0.f, 0.f);
             game.player.motion.dir = game.player.motion.inputDirWS = Vec2(0.f, 0.f);
+			game.player.motion.speed = 0.f;
 
 			game.time.config.maxFrameLength = 0.1;
 			game.time.config.targetFramerate = 1.0 / 60.0;
