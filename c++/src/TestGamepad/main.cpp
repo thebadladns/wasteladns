@@ -59,8 +59,8 @@ namespace Motion {
     struct Agent {
 
 		struct Config {
-			f32 maxBoost = 3.f;
-			f32 maxSpeed = 160.f;
+			f32 maxBoost = 1.75f;
+			f32 maxSpeed = 220.f;
 
 			f32 accHorizon = 0.5f;
 			f32 accHorizonStop = 0.25f;
@@ -101,6 +101,7 @@ namespace Motion {
             } else {
 				inputSpeed = 0.f;
             }
+            inputSpeed = Math::min(1.f, inputSpeed);
             
             const f32 trigger_r = pad.analogs.values[Analog::Trigger_R];
             if (trigger_r != Analog::novalue) {
@@ -135,10 +136,21 @@ namespace Motion {
 			agent.orientation = Angle::wrap(agent.orientation + currentOrientationLS);
 			agent.dir = Angle::direction(agent.orientation);
 
-			const f32 minReductionAngle = 10.f * Angle::d2r<f32>;
-			const f32 maxReductionAngle = 120.f * Angle::d2r<f32>;
-			f32 turnFactor = Math::clamp((Math::abs(inputOrientationLS) - minReductionAngle) / (maxReductionAngle - minReductionAngle), 0.f, 1.f);
-			f32 turnSpeedReduction = Math::lerp(turnFactor, 1.f, 0.f);
+			const f32 minReductionAngle1 = 40.f * Angle::d2r<f32>;
+			const f32 maxReductionAngle1 = 120.f * Angle::d2r<f32>;
+            const f32 minReductionAngle2 = maxReductionAngle1;
+            const f32 maxReductionAngle2 = 150.f * Angle::d2r<f32>;
+            const f32 angleDelta = Math::abs(inputOrientationLS);
+            f32 turnFactor = 0.f;
+            f32 turnSpeedReduction = 1.f;
+            if (angleDelta < maxReductionAngle1) {
+                turnFactor = Math::clamp((angleDelta - minReductionAngle1) / (maxReductionAngle1 - minReductionAngle1), 0.f, 1.f);
+                turnSpeedReduction = Math::lerp(turnFactor, 1.f, 0.75f);
+            } else {
+                turnFactor = Math::clamp((angleDelta - minReductionAngle2) / (maxReductionAngle2 - minReductionAngle2), 0.f, 1.f);
+                turnSpeedReduction = Math::lerp(turnFactor, 0.75f, 0.25f);
+            }
+			
 			agent.speed *= turnSpeedReduction;
 		}
         
