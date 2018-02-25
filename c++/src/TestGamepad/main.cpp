@@ -124,7 +124,7 @@ namespace Motion {
 		if (inputSpeed <= Math::eps<f32>) {
 			accHorizon = agent.config.accHorizonStop;
 		}
-		agent.speed = Math::eappr(agent.speed, inputSpeed * 160.f, accHorizon, params.timeDelta);
+		agent.speed = Math::eappr(agent.speed, inputSpeed * agent.config.maxSpeed, accHorizon, params.timeDelta);
 		
 		if (inputSpeed > 0.001f) {
 			f32 inputHeadingWS = Angle::orientation(inputDirWS);
