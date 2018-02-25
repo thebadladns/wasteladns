@@ -166,7 +166,7 @@ int main(int argc, char** argv) {
 							glfwSetWindowShouldClose(app.mainWindow.handle, 1);
 						}
                         
-                        f32 axisStates[(s32) ControllerVertex::Analog::Count];
+						f32 axisStates[(s32)ControllerVertex::Analog::Count] = {};
                         bool buttonStates[(s32) ControllerVertex::Digital::Count] = {};
                         
                         const s32 joystickPresent = glfwJoystickPresent(GLFW_JOYSTICK_1);
@@ -188,7 +188,17 @@ int main(int argc, char** argv) {
                                 b_mappingCount = ControllerVertex::b_mapping_8bitdoCount;
                                 a_mapping = ControllerVertex::a_mapping_8bitdo;
                                 a_mappingCount = ControllerVertex::a_mapping_8bitdoCount;
-                            }
+                            } else if (name == ControllerVertex::mapping_winbluetoothwirelessName) {
+								b_mapping = ControllerVertex::b_mapping_winbluetoothwireless;
+								b_mappingCount = ControllerVertex::b_mapping_winbluetoothwirelessCount;
+								a_mapping = ControllerVertex::a_mapping_winbluetoothwireless;
+								a_mappingCount = ControllerVertex::a_mapping_winbluetoothwirelessCount;
+							} else if (name == ControllerVertex::mapping_xboxName) {
+								b_mapping = ControllerVertex::b_mapping_xbox;
+								b_mappingCount = ControllerVertex::b_mapping_xboxCount;
+								a_mapping = ControllerVertex::a_mapping_xbox;
+								a_mappingCount = ControllerVertex::a_mapping_xboxCount;
+							}
 
                             s32 axesCount;
                             const f32* axes = glfwGetJoystickAxes(GLFW_JOYSTICK_1, &axesCount);

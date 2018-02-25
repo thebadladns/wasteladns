@@ -180,11 +180,72 @@ const ControllerVertex::Digital b_mapping_ps4[] = {
     ControllerVertex::Digital::Dpad_R,
     ControllerVertex::Digital::Dpad_D,
     ControllerVertex::Digital::Dpad_L
-    
 };
 const u32 b_mapping_ps4Count = sizeof(b_mapping_ps4) / sizeof(b_mapping_ps4[0]);
 const u32 mapping_ps4Name = Hash::fnv("Wireless Controller");
-    
+   
+const ControllerVertex::Analog a_mapping_winbluetoothwireless[] = {
+	  ControllerVertex::Analog::Axis_LH
+	, ControllerVertex::Analog::Axis_LV
+	, ControllerVertex::Analog::Axis_LV
+	, ControllerVertex::Analog::Axis_RH
+	, ControllerVertex::Analog::Axis_RV
+	, ControllerVertex::Analog::Axis_RV
+};
+const u32 a_mapping_winbluetoothwirelessCount = sizeof(a_mapping_winbluetoothwireless) / sizeof(a_mapping_winbluetoothwireless[0]);
+const ControllerVertex::Digital b_mapping_winbluetoothwireless[] = {
+	ControllerVertex::Digital::Button_R,
+	ControllerVertex::Digital::Button_D,
+	ControllerVertex::Digital::Invalid,
+	ControllerVertex::Digital::Button_U,
+	ControllerVertex::Digital::Button_L,
+	ControllerVertex::Digital::Invalid,
+	ControllerVertex::Digital::L2,
+	ControllerVertex::Digital::R2,
+	ControllerVertex::Digital::L1,
+	ControllerVertex::Digital::R1,
+	ControllerVertex::Digital::Select,
+	ControllerVertex::Digital::Start,
+	ControllerVertex::Digital::Invalid,
+	ControllerVertex::Digital::Axis_L,
+	ControllerVertex::Digital::Axis_R,
+	ControllerVertex::Digital::Invalid,
+	ControllerVertex::Digital::Dpad_U,
+	ControllerVertex::Digital::Dpad_R,
+	ControllerVertex::Digital::Dpad_D,
+	ControllerVertex::Digital::Dpad_L
+};
+const u32 b_mapping_winbluetoothwirelessCount = sizeof(b_mapping_winbluetoothwireless) / sizeof(b_mapping_winbluetoothwireless[0]);
+const u32 mapping_winbluetoothwirelessName = Hash::fnv("Bluetooth Wireless Controller   "); // TODO: handle spaces
+
+const ControllerVertex::Analog a_mapping_xbox[] = {
+	  ControllerVertex::Analog::Axis_LH
+	, ControllerVertex::Analog::Axis_LV
+	, ControllerVertex::Analog::Axis_RH
+	, ControllerVertex::Analog::Axis_RV
+	, ControllerVertex::Analog::L2
+	, ControllerVertex::Analog::R2
+};
+const u32 a_mapping_xboxCount = sizeof(a_mapping_xbox) / sizeof(a_mapping_xbox[0]);
+const ControllerVertex::Digital b_mapping_xbox[] = {
+	ControllerVertex::Digital::Button_D,
+	ControllerVertex::Digital::Button_R,
+	ControllerVertex::Digital::Button_L,
+	ControllerVertex::Digital::Button_U,
+	ControllerVertex::Digital::L1,
+	ControllerVertex::Digital::R1,
+	ControllerVertex::Digital::Select,
+	ControllerVertex::Digital::Start,
+	ControllerVertex::Digital::Axis_L,
+	ControllerVertex::Digital::Axis_R,
+	ControllerVertex::Digital::Dpad_U,
+	ControllerVertex::Digital::Dpad_R,
+	ControllerVertex::Digital::Dpad_D,
+	ControllerVertex::Digital::Dpad_L
+};
+const u32 b_mapping_xboxCount = sizeof(b_mapping_xbox) / sizeof(b_mapping_xbox[0]);
+const u32 mapping_xboxName = Hash::fnv("Xbox Controller");
+
 typedef std::map<u32, std::string> SVGPaths;
     
 struct RenderBuffer {
@@ -422,6 +483,8 @@ void parsetree_svg(RenderBuffers& vertexBuffers, const char* svg_tree) {
     }
     
     Vec2 max, min;
+	max.x = max.y = -10000.f;
+	min.x = min.y = 10000.f;
     
     struct ShapeEntry {
         RenderBuffer* buffer;
