@@ -270,6 +270,7 @@ struct RenderBuffers {
         RenderBuffer buffers[(s32)StaticShape::Count + (s32)DynamicShape::Count];
     };
     
+    Vec2 max, min;
 };
 
 void parsenode_svg(RenderBuffer& vbuffer, const char* svg_path) {
@@ -482,7 +483,9 @@ void parsetree_svg(RenderBuffers& vertexBuffers, const char* svg_tree) {
         }
     }
     
-    Vec2 max, min;
+    Vec2& max = vertexBuffers.max;
+    Vec2& min = vertexBuffers.min;
+    
 	max.x = max.y = -10000.f;
 	min.x = min.y = 10000.f;
     
@@ -523,7 +526,9 @@ void parsetree_svg(RenderBuffers& vertexBuffers, const char* svg_tree) {
     }
     
     // Center all nodes and recompute min-max
-    Vec2 center = Vec::scale(Vec::add(max, min), 0.5f);
+    const Vec2 center = Vec::scale(Vec::add(max, min), 0.5f);
+    min.x = min.y = 10000.f;
+    max.x = max.y = -10000.f;
     for (ShapeEntry& entry : shapes) {
         
         Vec2& shapeMax = entry.buffer->max;
@@ -538,6 +543,8 @@ void parsetree_svg(RenderBuffers& vertexBuffers, const char* svg_tree) {
             shapeMax = Vec::max(shapeMax, pos);
             shapeMin = Vec::min(shapeMin, pos);
         }
+        max = Vec::max(max, shapeMax);
+        min = Vec::min(min, shapeMin);
     }
 }
     

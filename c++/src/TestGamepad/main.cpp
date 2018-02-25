@@ -233,7 +233,16 @@ int main(int argc, char** argv) {
 							glLoadIdentity();
 							glMultMatrixf(game.view.orthoTransformCM);
                             
+                            glMatrixMode(GL_MODELVIEW);
+                            glPushMatrix();
                             {
+                                const f32 scale = 0.4f;
+                                const f32 controllerHeight = controllerBuffers.max.y - controllerBuffers.min.y;
+                                const f32 scaledControllerHeight = scale * controllerHeight;
+                                const f32 ypadding = scale * 20.f;
+                                glTranslatef(0.0f, game.view.orthoParams.bottom + 0.5f * scaledControllerHeight + ypadding, 0.f);
+                                glScalef(scale, scale, 1.f);
+                                
                                 const Col padColor(1.0f, 1.0f, 1.0f, 1.0f);
                                 glColor4f(RGBA_PARAMS(padColor));
                                 
@@ -266,6 +275,7 @@ int main(int argc, char** argv) {
                                         primitive = GL_TRIANGLE_FAN;
                                     }
                                     
+                                    glMatrixMode(GL_MODELVIEW);
                                     glPushMatrix();
                                     {
                                         glTranslatef(xoffset, yoffset, 0.f);
@@ -288,6 +298,7 @@ int main(int argc, char** argv) {
                                         primitive = GL_TRIANGLE_FAN;
                                     }
                                     
+                                    glMatrixMode(GL_MODELVIEW);
                                     glPushMatrix();
                                     {
                                         f32 yscale = Math::lerp(axis, 1.f, 0.4f);
@@ -304,6 +315,7 @@ int main(int argc, char** argv) {
                                 }
                                 glDisableClientState(GL_VERTEX_ARRAY);
                             }
+                            glPopMatrix();
 
                             Vec3 debugPos = Vec3(game.view.orthoParams.left + 10.f, game.view.orthoParams.top - 10.f, -50);
                             const Col textColor(1.0f, 1.0f, 1.0f, 1.0f);
