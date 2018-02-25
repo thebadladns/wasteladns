@@ -25,6 +25,7 @@
     g(RT_PT(expTaylor, __VA_ARGS__)) \
     g(RT_PT(bias, __VA_ARGS__)) \
     g(RT_PT(unbias, __VA_ARGS__)) \
+    g(RT_PT(round, __VA_ARGS__)) \
     g(RT_PTTT(lerp, __VA_ARGS__))
 
 namespace Math {
@@ -100,6 +101,11 @@ namespace Math {
     template <typename _T>
     _T unbias(_T a) {
         return a * 2.f - 1.f;
+    }
+    
+    template <typename _T>
+    _T round(_T a) {
+        return ::round(a);
     }
     
     template <typename _T>

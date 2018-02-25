@@ -73,6 +73,7 @@ namespace Motion {
         Vec2 inputDirWS;
         f32 orientation;
 		f32 speed;
+        bool analog = true;
     };
     
     struct UpdateMovementParams {
@@ -99,10 +100,10 @@ namespace Motion {
 			inputMag = Vec::mag(axis_l);
             if (inputMag > deadzone) {
                 inputDirWS = Vec::scale(axis_l, 1.f/ inputMag);
+                agent.analog = true;
             } else {
 				inputMag = 0.f;
             }
-            inputMag = Math::min(1.f, inputMag);
             
             const f32 trigger_r = pad.analogs.values[Analog::Trigger_R];
             if (trigger_r != Analog::novalue) {
@@ -111,16 +112,27 @@ namespace Motion {
             } else if (pad.buttons.down(Digital::R2)) {
 				inputBoost = agent.config.maxBoost;
             }
-        
-        } else { // TODO: fallback to keyboard?
-//            inputDirWS.y -= 3 * input.pressed(DOWN) + input.down(DOWN) - input.released(DOWN);
-//            inputDirWS.y += 3 * input.pressed(UP) + input.down(UP) - input.released(UP);
-//            inputDirWS.x -= 3 * input.pressed(LEFT) + input.down(LEFT) - input.released(LEFT);
-//            inputDirWS.x += 3 * input.pressed(RIGHT) + input.down(RIGHT) - input.released(RIGHT);
-//            inputDirWS.x = Math<f32>::clamp(inputDirWS.x, -1.f, 1.f);
-//            inputDirWS.y = Math<f32>::clamp(inputDirWS.y, -1.f, 1.f);
         }
         
+        if (inputMag < deadzone) {
+
+            // Need to reset upong transition to analog: digital state depends on status of button presses
+            if (agent.analog) {
+                inputDirWS.x = 0.f;
+                inputDirWS.y = 0.f;
+                agent.analog = false;
+            }
+            
+            inputDirWS.y -= 3 * pad.buttons.pressed(Digital::D_D) + pad.buttons.down(Digital::D_D) - pad.buttons.released(Digital::D_D);
+            inputDirWS.y += 3 * pad.buttons.pressed(Digital::D_U) + pad.buttons.down(Digital::D_U) - pad.buttons.released(Digital::D_U);
+            inputDirWS.x -= 3 * pad.buttons.pressed(Digital::D_L) + pad.buttons.down(Digital::D_L) - pad.buttons.released(Digital::D_L);
+            inputDirWS.x += 3 * pad.buttons.pressed(Digital::D_R) + pad.buttons.down(Digital::D_R) - pad.buttons.released(Digital::D_R);
+            inputDirWS.x = Math::clamp(inputDirWS.x, -1.f, 1.f);
+            inputDirWS.y = Math::clamp(inputDirWS.y, -1.f, 1.f);
+            inputMag = Vec::mag(inputDirWS);
+        }
+        
+        inputMag = Math::min(1.f, inputMag);
         f32 desiredSpeed = inputMag * agent.config.maxSpeed * inputBoost;
         f32 accHorizon = agent.config.accHorizon;
         if (inputMag <= Math::eps<f32>) {
@@ -280,6 +292,8 @@ int main(int argc, char** argv) {
                 Math3D::Transform64& perspectiveTransformCM = game.view.frustumTransformCM;
                 Camera::computeProjectionMatrix(frustum, perspectiveTransformCM);
 			}
+            glEnable(GL_BLEND);
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
             
             // Scene set up
             game.player.motion.pos = Vec2(0.f, 0.f);
@@ -494,12 +508,30 @@ int main(int argc, char** argv) {
                                 glMatrixMode(GL_MODELVIEW);
                                 glPushMatrix();
                                 {
+                                    glRotatef(-10.f, 1.f, 0.f, 0.f);
+                                    glTranslatef(0.f, 0.f, -200.f);
+                                    
+                                    // Tiled floor
+                                    const f32 l = -200.;
+                                    const f32 r = -l;
+                                    const f32 b = -200.;
+                                    const f32 t = -b;
+                                    const f32 z = -0.f;
+                                    const f32 separation = 20.f;
+                                    const Col gridColor(1.0f, 1.0f, 1.0f, 0.25f);
+                                    for (f32 x = l; x < r + 0.001; x += separation) {
+                                        DebugDraw::segment(Vec3(x, b, z), Vec3(x, t, z), gridColor);
+                                    }
+                                    for (f32 y = b; y < t + 0.001; y += separation) {
+                                        DebugDraw::segment(Vec3(l, y, z), Vec3(r, y, z), gridColor);
+                                    }
+                                    
                                     Motion::Agent& motion = game.player.motion;
                                     
                                     f32 x = motion.pos.x;
                                     f32 y = motion.pos.y;
                                     
-                                    glTranslatef(x, y, -400.f);
+                                    glTranslatef(x, y, 0.f);
                                     glRotatef(motion.orientation * Angle::r2d<f32>, 0.f, 0.f, -1.f);
                                     
                                     f32 w = 5.f;
