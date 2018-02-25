@@ -33,6 +33,22 @@
 #define __WASTELADNS_DEBUGDRAW_TEXT__
 #include "helpers/debugdraw.h"
 #include "helpers/camera.h"
+
+// TODO: understand this and find a proper spot for this
+namespace Hash {
+    u32 fnv(const char* name) {
+        const u8* data = (const u8*)name;
+        u32 val = 3759247821;
+        while(*data){
+            val ^= *data++;
+            val *= 0x01000193;
+        }
+        val &= 0x7fffffff;
+        val |= val==0;
+        return val;
+    }
+}
+
 #include "helpers/input.h"
 #include "helpers/controller_render.h"
 
@@ -61,6 +77,7 @@ namespace Game {
 	struct Instance {
 		Time time;
 		View view;
+        Input::Gamepad::State pad;
 	};
 };
 
@@ -81,7 +98,7 @@ namespace App {
 	};
 
 	struct Input {
-		::Input::KeyboardState keyboardSet;
+        ::Input::DebugState debugSet;
 	};
 
 	struct Instance {
@@ -154,74 +171,17 @@ int main(int argc, char** argv) {
 					game.time.nextFrame = app.time.now + game.time.config.targetFramerate;
 
 					{
-//                        f32 timeDelta = (f32)game.time.config.targetFramerate;
-
 						using namespace Game;
 
+                        // Input
 						glfwPollEvents();
-						app.input.keyboardSet.pollState(window.handle);
+                        Input::pollState(app.input.debugSet, Input::DebugSet::mapping, window.handle);
+                        Input::pollState(game.pad, GLFW_JOYSTICK_1, window.handle);
 
 						// Logic
-						if (app.input.keyboardSet.released(GLFW_KEY_ESCAPE)) {
+                        if (app.input.debugSet.released(Input::DebugSet::Keys::ESC)) {
 							glfwSetWindowShouldClose(app.mainWindow.handle, 1);
 						}
-                        
-						f32 axisStates[(s32)ControllerVertex::Analog::Count] = {};
-                        bool buttonStates[(s32) ControllerVertex::Digital::Count] = {};
-                        
-                        const s32 joystickPresent = glfwJoystickPresent(GLFW_JOYSTICK_1);
-                        if (joystickPresent) {
-                            
-                            u32 name = Hash::fnv(glfwGetJoystickName(GLFW_JOYSTICK_1));
-                            const ControllerVertex::Digital* b_mapping = ControllerVertex::b_mapping_default;
-                            s32 b_mappingCount = ControllerVertex::b_mapping_defaultCount;
-                            const ControllerVertex::Analog* a_mapping = ControllerVertex::a_mapping_default;
-                            s32 a_mappingCount = ControllerVertex::a_mapping_defaultCount;
-                            
-                            if (name == ControllerVertex::mapping_ps4Name) {
-                                b_mapping = ControllerVertex::b_mapping_ps4;
-                                b_mappingCount = ControllerVertex::b_mapping_ps4Count;
-                                a_mapping = ControllerVertex::a_mapping_ps4;
-                                a_mappingCount = ControllerVertex::a_mapping_ps4Count;
-                            } else if (name == ControllerVertex::mapping_8bitdoName) {
-                                b_mapping = ControllerVertex::b_mapping_8bitdo;
-                                b_mappingCount = ControllerVertex::b_mapping_8bitdoCount;
-                                a_mapping = ControllerVertex::a_mapping_8bitdo;
-                                a_mappingCount = ControllerVertex::a_mapping_8bitdoCount;
-                            } else if (name == ControllerVertex::mapping_winbluetoothwirelessName) {
-								b_mapping = ControllerVertex::b_mapping_winbluetoothwireless;
-								b_mappingCount = ControllerVertex::b_mapping_winbluetoothwirelessCount;
-								a_mapping = ControllerVertex::a_mapping_winbluetoothwireless;
-								a_mappingCount = ControllerVertex::a_mapping_winbluetoothwirelessCount;
-							} else if (name == ControllerVertex::mapping_xboxName) {
-								b_mapping = ControllerVertex::b_mapping_xbox;
-								b_mappingCount = ControllerVertex::b_mapping_xboxCount;
-								a_mapping = ControllerVertex::a_mapping_xbox;
-								a_mappingCount = ControllerVertex::a_mapping_xboxCount;
-							}
-
-                            s32 axesCount;
-                            const f32* axes = glfwGetJoystickAxes(GLFW_JOYSTICK_1, &axesCount);
-                            for (s32 i = 0; i < axesCount; i++) {
-                                if (i < a_mappingCount) {
-                                    const ControllerVertex::Analog axisIndex = a_mapping[i];
-                                    if (axisIndex != ControllerVertex::Analog::Invalid) {
-                                        axisStates[(s32)axisIndex] = axes[i];
-                                    }
-                                }
-                            }
-                            
-                            s32 buttonCount;
-                            const u8* buttons = glfwGetJoystickButtons(GLFW_JOYSTICK_1, &buttonCount);
-                            for (s32 i = 0; i < buttonCount; i++) {
-                                if (i < b_mappingCount) {
-                                    const ControllerVertex::Digital buttonIndex = b_mapping[i];
-                                    if (buttonIndex != ControllerVertex::Digital::Invalid) {
-                                        buttonStates[(s32)buttonIndex] = buttons[i];
-                                    }
-                                }
-                            }
-                        }
 
 						// Render update
 						glClearColor(0.f, 0.f, 0.f, 1.f);
@@ -247,31 +207,37 @@ int main(int argc, char** argv) {
                                 glColor4f(RGBA_PARAMS(padColor));
                                 
                                 glEnableClientState(GL_VERTEX_ARRAY);
+                                
+                                // Main shape
                                 for (RenderBuffer& buffer : controllerBuffers.sbuffers) {
                                     glVertexPointer(2, GL_FLOAT, 0, buffer.vertex);
                                     glDrawArrays(GL_LINE_LOOP, 0, buffer.count);
                                 }
+                                
+                                // Digital buttons
                                 for (u32 i = 0; i < (s32) DynamicShape::ButtonEnd; i++) {
                                     const RenderBuffer& buffer = controllerBuffers.dbuffers[i];
 
                                     s32 primitive = GL_LINE_LOOP;
-                                    if (buttonStates[(s32)shape2button_mapping[i]]) {
+                                    if (game.pad.buttons.down(shape2button_mapping[i])) {
                                         primitive = GL_TRIANGLE_FAN;
                                     }
 
                                     glVertexPointer(2, GL_FLOAT, 0, buffer.vertex);
                                     glDrawArrays(primitive, 0, buffer.count);
                                 }
+                                
+                                // Axis
                                 const f32 axisMovementMag = 5.f;
                                 for (u32 i = (s32)DynamicShape::AxisStart; i < (s32)DynamicShape::AxisEnd; i++) {
                                     
                                     const s32 offset_i = i - (s32)DynamicShape::AxisStart;
                                     const RenderBuffer& buffer = controllerBuffers.dbuffers[i];
-                                    f32 xoffset = axisMovementMag * axisStates[(s32)axis2analog_mapping[offset_i]];
-                                    f32 yoffset = - axisMovementMag * axisStates[(s32)axis2analog_mapping[offset_i] + 1];
+                                    f32 xoffset = axisMovementMag * game.pad.analogs.values[(s32)axis2analog_mapping[offset_i]];
+                                    f32 yoffset = - axisMovementMag * game.pad.analogs.values[(s32)axis2analog_mapping[offset_i] + 1];
                                     
                                     s32 primitive = GL_LINE_LOOP;
-                                    if (buttonStates[(s32)shape2button_mapping[i]]) {
+                                    if (game.pad.buttons.down(shape2button_mapping[i])) {
                                         primitive = GL_TRIANGLE_FAN;
                                     }
                                     
@@ -285,16 +251,17 @@ int main(int argc, char** argv) {
                                     glPopMatrix();
                                 }
                                 
+                                // Triggers
                                 for (u32 i = (s32)DynamicShape::TriggerStart; i < (s32)DynamicShape::TriggerEnd; i++) {
 
                                     const s32 offset_i = i - (s32)DynamicShape::TriggerStart;
                                     const RenderBuffer& buffer = controllerBuffers.dbuffers[i];
                                     const Vec2 center = Vec::scale(Vec::add(buffer.min, buffer.max), 0.5f);
                                     
-                                    f32 axis = Math::bias(axisStates[(s32)trigger2analog_mapping[offset_i]]);
+                                    f32 axis = Math::bias(game.pad.analogs.values[(s32)trigger2analog_mapping[offset_i]]);
                                     
                                     s32 primitive = GL_LINE_LOOP;
-                                    if (buttonStates[(s32)shape2button_mapping[i]]) {
+                                    if (game.pad.buttons.down(shape2button_mapping[i])) {
                                         primitive = GL_TRIANGLE_FAN;
                                     }
                                     

@@ -1,22 +1,6 @@
 #ifndef __WASTELADNS_CONTROLLER_RENDER_H__
 #define __WASTELADNS_CONTROLLER_RENDER_H__
 
-namespace Hash {
-    
-    // TODO: understand this
-    u32 fnv(const char* name) {
-        const u8* data = (const u8*)name;
-        u32 val = 3759247821;
-        while(*data){
-            val ^= *data++;
-            val *= 0x01000193;
-        }
-        val &= 0x7fffffff;
-        val |= val==0;
-        return val;
-    }
-}
-
 namespace ControllerVertex {
 
 const u32 vertexMemMaxCount = 1000;
@@ -59,194 +43,37 @@ const char* svg = R"(
 enum class StaticShape { Base, AxisBase_L, AxisBase_R, Count };
 enum class DynamicShape { Tpad, Button_D, Button_L, Button_R, Button_U, Dpad_D, Dpad_L, Dpad_R, Dpad_U, Start, Select, L1, R1, Axis_L, Axis_R, L2, R2, Count, ButtonEnd = (s32)R1 + 1, AxisStart = Axis_L, AxisEnd = (s32)Axis_R + 1, TriggerStart = L2, TriggerEnd = (s32)R2 + 1 };
 
-enum class Digital { Tpad, Button_D, Button_L, Button_R, Button_U, Dpad_D, Dpad_L, Dpad_R, Dpad_U, Start, Select, L1, R1, Axis_L, Axis_R, L2, R2, Count, Invalid = -1 };
-enum class Analog { Axis_LH, Axis_LV, Axis_RH, Axis_RV, L2, R2, Count, Invalid = -1 };
-
-const ControllerVertex::Analog axis2analog_mapping[] = {
-      ControllerVertex::Analog::Axis_LH
-    , ControllerVertex::Analog::Axis_RH
-};
-
-const ControllerVertex::Analog trigger2analog_mapping[] = {
-      ControllerVertex::Analog::L2
-    , ControllerVertex::Analog::R2
-};
-    
-const ControllerVertex::Digital shape2button_mapping[] = {
-      ControllerVertex::Digital::Tpad
-    , ControllerVertex::Digital::Button_D
-    , ControllerVertex::Digital::Button_L
-    , ControllerVertex::Digital::Button_R
-    , ControllerVertex::Digital::Button_U
-    , ControllerVertex::Digital::Dpad_D
-    , ControllerVertex::Digital::Dpad_L
-    , ControllerVertex::Digital::Dpad_R
-    , ControllerVertex::Digital::Dpad_U
-    , ControllerVertex::Digital::Start
-    , ControllerVertex::Digital::Select
-    , ControllerVertex::Digital::L1
-    , ControllerVertex::Digital::R1
-    , ControllerVertex::Digital::Axis_L
-    , ControllerVertex::Digital::Axis_R
-    , ControllerVertex::Digital::L2
-    , ControllerVertex::Digital::R2
-};
-    
-const ControllerVertex::Analog a_mapping_default[] = {
-      ControllerVertex::Analog::Axis_LH
-    , ControllerVertex::Analog::Axis_LV
-    , ControllerVertex::Analog::Axis_RH
-    , ControllerVertex::Analog::Axis_RV
-    , ControllerVertex::Analog::L2
-    , ControllerVertex::Analog::R2
-};
-const u32 a_mapping_defaultCount = sizeof(a_mapping_default) / sizeof(a_mapping_default[0]);
-const ControllerVertex::Digital b_mapping_default[] = {
-    ControllerVertex::Digital::Button_R,
-    ControllerVertex::Digital::Button_D,
-    ControllerVertex::Digital::Button_U,
-    ControllerVertex::Digital::Button_L,
-    ControllerVertex::Digital::L2,
-    ControllerVertex::Digital::R2,
-    ControllerVertex::Digital::L1,
-    ControllerVertex::Digital::R1,
-    ControllerVertex::Digital::Select,
-    ControllerVertex::Digital::Start,
-    ControllerVertex::Digital::Axis_L,
-    ControllerVertex::Digital::Axis_R,
-    ControllerVertex::Digital::Dpad_U,
-    ControllerVertex::Digital::Dpad_R,
-    ControllerVertex::Digital::Dpad_D,
-    ControllerVertex::Digital::Dpad_L
-};
-const u32 b_mapping_defaultCount = sizeof(b_mapping_default) / sizeof(b_mapping_default[0]);
-    
-const ControllerVertex::Analog a_mapping_8bitdo[] = {
-      ControllerVertex::Analog::Axis_LH
-    , ControllerVertex::Analog::Axis_LV
-    , ControllerVertex::Analog::Axis_RH
-    , ControllerVertex::Analog::Axis_RV
-};
-const u32 a_mapping_8bitdoCount = sizeof(a_mapping_8bitdo) / sizeof(a_mapping_8bitdo[0]);
-const ControllerVertex::Digital b_mapping_8bitdo[] = {
-    ControllerVertex::Digital::Button_R,
-    ControllerVertex::Digital::Button_D,
-    ControllerVertex::Digital::Invalid,
-    ControllerVertex::Digital::Button_U,
-    ControllerVertex::Digital::Button_L,
-    ControllerVertex::Digital::Invalid,
-    ControllerVertex::Digital::L2,
-    ControllerVertex::Digital::R2,
-    ControllerVertex::Digital::L1,
-    ControllerVertex::Digital::R1,
-    ControllerVertex::Digital::Select,
-    ControllerVertex::Digital::Start,
-    ControllerVertex::Digital::Invalid,
-    ControllerVertex::Digital::Axis_L,
-    ControllerVertex::Digital::Axis_R,
-    ControllerVertex::Digital::Dpad_U,
-    ControllerVertex::Digital::Dpad_R,
-    ControllerVertex::Digital::Dpad_D,
-    ControllerVertex::Digital::Dpad_L
-};
-const u32 b_mapping_8bitdoCount = sizeof(b_mapping_8bitdo) / sizeof(b_mapping_8bitdo[0]);
-const u32 mapping_8bitdoName = Hash::fnv("8Bitdo NES30 Pro");
-
-const ControllerVertex::Analog a_mapping_ps4[] = {
-      ControllerVertex::Analog::Axis_LH
-    , ControllerVertex::Analog::Axis_LV
-    , ControllerVertex::Analog::Axis_RH
-    , ControllerVertex::Analog::L2
-    , ControllerVertex::Analog::R2
-    , ControllerVertex::Analog::Axis_RV
-};
-const u32 a_mapping_ps4Count = sizeof(a_mapping_ps4) / sizeof(a_mapping_ps4[0]);
-const ControllerVertex::Digital b_mapping_ps4[] = {
-    ControllerVertex::Digital::Button_L,
-    ControllerVertex::Digital::Button_D,
-    ControllerVertex::Digital::Button_R,
-    ControllerVertex::Digital::Button_U,
-    ControllerVertex::Digital::L1,
-    ControllerVertex::Digital::R1,
-    ControllerVertex::Digital::L2,
-    ControllerVertex::Digital::R2,
-    ControllerVertex::Digital::Select,
-    ControllerVertex::Digital::Start,
-    ControllerVertex::Digital::Axis_L,
-    ControllerVertex::Digital::Axis_R,
-    ControllerVertex::Digital::Invalid,
-    ControllerVertex::Digital::Tpad,
-    ControllerVertex::Digital::Dpad_U,
-    ControllerVertex::Digital::Dpad_R,
-    ControllerVertex::Digital::Dpad_D,
-    ControllerVertex::Digital::Dpad_L
-};
-const u32 b_mapping_ps4Count = sizeof(b_mapping_ps4) / sizeof(b_mapping_ps4[0]);
-const u32 mapping_ps4Name = Hash::fnv("Wireless Controller");
-   
-const ControllerVertex::Analog a_mapping_winbluetoothwireless[] = {
-	  ControllerVertex::Analog::Axis_LH
-	, ControllerVertex::Analog::Axis_LV
-	, ControllerVertex::Analog::Axis_LV
-	, ControllerVertex::Analog::Axis_RH
-	, ControllerVertex::Analog::Axis_RV
-	, ControllerVertex::Analog::Axis_RV
-};
-const u32 a_mapping_winbluetoothwirelessCount = sizeof(a_mapping_winbluetoothwireless) / sizeof(a_mapping_winbluetoothwireless[0]);
-const ControllerVertex::Digital b_mapping_winbluetoothwireless[] = {
-	ControllerVertex::Digital::Button_R,
-	ControllerVertex::Digital::Button_D,
-	ControllerVertex::Digital::Invalid,
-	ControllerVertex::Digital::Button_U,
-	ControllerVertex::Digital::Button_L,
-	ControllerVertex::Digital::Invalid,
-	ControllerVertex::Digital::L2,
-	ControllerVertex::Digital::R2,
-	ControllerVertex::Digital::L1,
-	ControllerVertex::Digital::R1,
-	ControllerVertex::Digital::Select,
-	ControllerVertex::Digital::Start,
-	ControllerVertex::Digital::Invalid,
-	ControllerVertex::Digital::Axis_L,
-	ControllerVertex::Digital::Axis_R,
-	ControllerVertex::Digital::Invalid,
-	ControllerVertex::Digital::Dpad_U,
-	ControllerVertex::Digital::Dpad_R,
-	ControllerVertex::Digital::Dpad_D,
-	ControllerVertex::Digital::Dpad_L
-};
-const u32 b_mapping_winbluetoothwirelessCount = sizeof(b_mapping_winbluetoothwireless) / sizeof(b_mapping_winbluetoothwireless[0]);
-const u32 mapping_winbluetoothwirelessName = Hash::fnv("Bluetooth Wireless Controller   "); // TODO: handle spaces
-
-const ControllerVertex::Analog a_mapping_xbox[] = {
-	  ControllerVertex::Analog::Axis_LH
-	, ControllerVertex::Analog::Axis_LV
-	, ControllerVertex::Analog::Axis_RH
-	, ControllerVertex::Analog::Axis_RV
-	, ControllerVertex::Analog::L2
-	, ControllerVertex::Analog::R2
-};
-const u32 a_mapping_xboxCount = sizeof(a_mapping_xbox) / sizeof(a_mapping_xbox[0]);
-const ControllerVertex::Digital b_mapping_xbox[] = {
-	ControllerVertex::Digital::Button_D,
-	ControllerVertex::Digital::Button_R,
-	ControllerVertex::Digital::Button_L,
-	ControllerVertex::Digital::Button_U,
-	ControllerVertex::Digital::L1,
-	ControllerVertex::Digital::R1,
-	ControllerVertex::Digital::Select,
-	ControllerVertex::Digital::Start,
-	ControllerVertex::Digital::Axis_L,
-	ControllerVertex::Digital::Axis_R,
-	ControllerVertex::Digital::Dpad_U,
-	ControllerVertex::Digital::Dpad_R,
-	ControllerVertex::Digital::Dpad_D,
-	ControllerVertex::Digital::Dpad_L
-};
-const u32 b_mapping_xboxCount = sizeof(b_mapping_xbox) / sizeof(b_mapping_xbox[0]);
-const u32 mapping_xboxName = Hash::fnv("Xbox Controller");
-
 typedef std::map<u32, std::string> SVGPaths;
+    
+const Input::Gamepad::Analog::Enum axis2analog_mapping[] = {
+  Input::Gamepad::Analog::AxisLH
+, Input::Gamepad::Analog::AxisRH
+};
+
+const Input::Gamepad::Digital::Enum shape2button_mapping[] = {
+  Input::Gamepad::Digital::T
+, Input::Gamepad::Digital::B_D
+, Input::Gamepad::Digital::B_L
+, Input::Gamepad::Digital::B_R
+, Input::Gamepad::Digital::B_U
+, Input::Gamepad::Digital::D_D
+, Input::Gamepad::Digital::D_L
+, Input::Gamepad::Digital::D_R
+, Input::Gamepad::Digital::D_U
+, Input::Gamepad::Digital::START
+, Input::Gamepad::Digital::SELECT
+, Input::Gamepad::Digital::L1
+, Input::Gamepad::Digital::R1
+, Input::Gamepad::Digital::A_L
+, Input::Gamepad::Digital::A_R
+, Input::Gamepad::Digital::L2
+, Input::Gamepad::Digital::R2
+};
+    
+const Input::Gamepad::Analog::Enum trigger2analog_mapping[] = {
+  Input::Gamepad::Analog::Trigger_L
+, Input::Gamepad::Analog::Trigger_R
+};
     
 struct RenderBuffer {
     Vec2* vertex;
