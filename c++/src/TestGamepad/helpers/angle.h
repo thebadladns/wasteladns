@@ -22,8 +22,10 @@
 #define ANGLE_TEMPLATES(g,s,...) \
     s(RT_PT(sin, __VA_ARGS__)) \
     s(RT_PT(cos, __VA_ARGS__)) \
+    g(RT_PT(wrap, __VA_ARGS__)) \
     s(RT_PTT(atan2, __VA_ARGS__)) \
     s(RT_PTT(mod, __VA_ARGS__)) \
+    g(RT_PTT(subtractShort, __VA_ARGS__)) \
     g(RT2_PT(direction, __VA_ARGS__)) \
     g(RT_PT2(orientation, __VA_ARGS__))
 
@@ -82,7 +84,7 @@ template <typename _T> _T orientation(const Vector2<_T>& v) {
 }
 
 // TODO: understand this
-template <typename _T> _T modpi(_T rad) {
+template <typename _T> _T wrap(_T rad) {
     rad = mod(rad + pi<_T>, twopi<_T>);
     if (rad < 0.f) {
         rad += twopi<_T>;
@@ -92,7 +94,7 @@ template <typename _T> _T modpi(_T rad) {
     
 template <typename _T> _T subtractShort(_T toRad, _T fromRad) {
     _T delta = toRad - fromRad;
-    return modpi(delta);
+    return wrap(delta);
 }
 
 INSTANTIATE_TEMPLATES(ANGLE_TEMPLATES, f32)

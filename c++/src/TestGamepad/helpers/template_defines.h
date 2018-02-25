@@ -8,6 +8,10 @@
     DECO type name DECOEND(type a, type b);
 #define RT_PTTT(name, type, DECO, DECOEND) \
     DECO type name DECOEND(type a, type b, type c);
+#define RT_PTTTT(name, type, DECO, DECOEND) \
+    DECO type name DECOEND(type a, type b, type c, type d);
+#define RT_PTTTTT(name, type, DECO, DECOEND) \
+    DECO type name DECOEND(type a, type b, type c, type d, type e);
 #define RT2_PT(name, type, DECO, DECOEND) \
     DECO Vector2<type> name DECOEND(type v);
 #define RT_PT2(name, type, DECO, DECOEND) \
