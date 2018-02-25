@@ -78,11 +78,16 @@ namespace Motion {
         Vec2& inputDirWS = agent.inputDirWS;
         f32 speed = 0.f;
         
+        // TODO: handle deadzone internally
+        const f32 deadzone = 0.05f;
+        
         if (pad.active) {
             Vec2 axis_l(pad.analogs.values[Analog::AxisLH], -pad.analogs.values[Analog::AxisLV]);
             speed = Vec::mag(axis_l);
-            if (speed > Math::eps<f32>) {
+            if (speed > deadzone) {
                 inputDirWS = Vec::scale(axis_l, 1.f/speed);
+            } else {
+                speed = 0.f;
             }
             
             const f32 trigger_r = pad.analogs.values[Analog::Trigger_R];
