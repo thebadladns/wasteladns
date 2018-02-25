@@ -232,9 +232,18 @@ int main(int argc, char** argv) {
                                 for (u32 i = (s32)DynamicShape::AxisStart; i < (s32)DynamicShape::AxisEnd; i++) {
                                     
                                     const s32 offset_i = i - (s32)DynamicShape::AxisStart;
+                                    const f32 axis_l = game.pad.analogs.values[(s32)axis2analog_mapping[offset_i]];
+                                    const f32 axis_r = game.pad.analogs.values[(s32)axis2analog_mapping[offset_i] + 1];
+                                    if (axis_l == Input::Gamepad::Analog::novalue) {
+                                        continue;
+                                    }
+                                    if (axis_r == Input::Gamepad::Analog::novalue) {
+                                        continue;
+                                    }
+                                    
                                     const RenderBuffer& buffer = controllerBuffers.dbuffers[i];
-                                    f32 xoffset = axisMovementMag * game.pad.analogs.values[(s32)axis2analog_mapping[offset_i]];
-                                    f32 yoffset = - axisMovementMag * game.pad.analogs.values[(s32)axis2analog_mapping[offset_i] + 1];
+                                    f32 xoffset = axisMovementMag * axis_l;
+                                    f32 yoffset = - axisMovementMag * axis_r;
                                     
                                     s32 primitive = GL_LINE_LOOP;
                                     if (game.pad.buttons.down(shape2button_mapping[i])) {
@@ -255,10 +264,15 @@ int main(int argc, char** argv) {
                                 for (u32 i = (s32)DynamicShape::TriggerStart; i < (s32)DynamicShape::TriggerEnd; i++) {
 
                                     const s32 offset_i = i - (s32)DynamicShape::TriggerStart;
+                                    const f32 trigger_raw = game.pad.analogs.values[(s32)trigger2analog_mapping[offset_i]];
+                                    f32 trigger = 0.f;
+                                    if (trigger_raw != Input::Gamepad::Analog::novalue) {
+                                        Math::bias(trigger_raw);
+                                    }
+                                    
                                     const RenderBuffer& buffer = controllerBuffers.dbuffers[i];
                                     const Vec2 center = Vec::scale(Vec::add(buffer.min, buffer.max), 0.5f);
                                     
-                                    f32 axis = Math::bias(game.pad.analogs.values[(s32)trigger2analog_mapping[offset_i]]);
                                     
                                     s32 primitive = GL_LINE_LOOP;
                                     if (game.pad.buttons.down(shape2button_mapping[i])) {
@@ -268,7 +282,7 @@ int main(int argc, char** argv) {
                                     glMatrixMode(GL_MODELVIEW);
                                     glPushMatrix();
                                     {
-                                        f32 yscale = Math::lerp(axis, 1.f, 0.4f);
+                                        f32 yscale = Math::lerp(trigger, 1.f, 0.4f);
                                         f32 height = buffer.max.y - buffer.min.y;
                                         f32 scaledHeight = yscale * height;
                                         glTranslatef(center.x, center.y, 0.f);

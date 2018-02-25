@@ -132,7 +132,7 @@ namespace Input {
             };
             
             
-            const f32 noValue = 404.f;
+            const f32 novalue = 404.f;
             const f32 pressedThreshold = 0.5f;
         };
         
@@ -358,7 +358,7 @@ namespace Input {
             
             // Analogs (axis and triggers)
             for (s32 i = 0; i < Gamepad::Analog::COUNT; i++) {
-                pad.analogs.values[i] = Gamepad::Analog::noValue;
+                pad.analogs.values[i] = Gamepad::Analog::novalue;
             }
             s32 axesCount;
             const f32* axes = glfwGetJoystickAxes(joyId, &axesCount);
@@ -395,7 +395,7 @@ namespace Input {
             // Manually set digital trigger values, if needed
             if (!digitalTrigger_L) {
                 const f32 trigger_l = pad.analogs.values[Gamepad::Analog::Trigger_L];
-                if (trigger_l != Gamepad::Analog::noValue) {
+                if (trigger_l != Gamepad::Analog::novalue) {
                     bool triggerPressed = trigger_l > Gamepad::Analog::pressedThreshold;
                     pad.buttons.current = (Gamepad::Digital::Enum) (pad.buttons.current | (triggerPressed << Gamepad::Digital::L2));
                     digitalTrigger_L = true;
@@ -403,7 +403,7 @@ namespace Input {
             }
             if (!digitalTrigger_R) {
                 const f32 trigger_r = pad.analogs.values[Gamepad::Analog::Trigger_R];
-                if (trigger_r != Gamepad::Analog::noValue) {
+                if (trigger_r != Gamepad::Analog::novalue) {
                     bool triggerPressed = trigger_r > Gamepad::Analog::pressedThreshold;
                     pad.buttons.current = (Gamepad::Digital::Enum) (pad.buttons.current | (triggerPressed << Gamepad::Digital::R2));
                     digitalTrigger_R = true;
