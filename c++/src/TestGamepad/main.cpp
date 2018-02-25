@@ -51,6 +51,8 @@ namespace Hash {
     }
 }
 
+#define CONTROLLER_LOAD_SVG_DATA 0
+#define CONTROLLER_PRINT_LOADED_SVG 0
 #include "helpers/input.h"
 #include "helpers/controller_render.h"
 
@@ -243,9 +245,12 @@ namespace App {
 
 App::Instance app;
 int main(int argc, char** argv) {
-
+    
+#if CONTROLLER_LOAD_SVG_DATA
     ControllerVertex::RenderBuffers controllerBuffers;
-    ControllerVertex::parsetree_svg(controllerBuffers, ControllerVertex::svg);
+    ControllerVertex::parsetree_svg(controllerBuffers, ControllerVertex::svg_ps4, "ps4");
+    ControllerVertex::currentBuffer = &controllerBuffers;
+#endif
     
 	if (glfwInit())
 	{
@@ -340,6 +345,7 @@ int main(int argc, char** argv) {
 						glClear(GL_COLOR_BUFFER_BIT);
 						{
                             // ORTHO
+                            if (ControllerVertex::currentBuffer)
                             {
                                 using namespace ControllerVertex;
                                 
@@ -351,7 +357,7 @@ int main(int argc, char** argv) {
                                 glPushMatrix();
                                 {
                                     const f32 scale = 0.4f;
-                                    const f32 controllerHeight = controllerBuffers.max.y - controllerBuffers.min.y;
+                                    const f32 controllerHeight = currentBuffer->max.y - currentBuffer->min.y;
                                     const f32 scaledControllerHeight = scale * controllerHeight;
                                     const f32 ypadding = scale * 20.f;
                                     glTranslatef(0.0f, game.view.orthoParams.bottom + 0.5f * scaledControllerHeight + ypadding, 0.f);
@@ -363,14 +369,14 @@ int main(int argc, char** argv) {
                                     glEnableClientState(GL_VERTEX_ARRAY);
                                     
                                     // Main shape
-                                    for (RenderBuffer& buffer : controllerBuffers.sbuffers) {
+                                    for (RenderBuffer& buffer : currentBuffer->sbuffers) {
                                         glVertexPointer(2, GL_FLOAT, 0, buffer.vertex);
                                         glDrawArrays(GL_LINE_LOOP, 0, buffer.count);
                                     }
                                     
                                     // Digital buttons
                                     for (u32 i = 0; i < (s32) DynamicShape::ButtonEnd; i++) {
-                                        const RenderBuffer& buffer = controllerBuffers.dbuffers[i];
+                                        const RenderBuffer& buffer = currentBuffer->dbuffers[i];
 
                                         s32 primitive = GL_LINE_LOOP;
                                         if (game.pad.buttons.down(shape2button_mapping[i])) {
@@ -395,7 +401,7 @@ int main(int argc, char** argv) {
                                             continue;
                                         }
                                         
-                                        const RenderBuffer& buffer = controllerBuffers.dbuffers[i];
+                                        const RenderBuffer& buffer = currentBuffer->dbuffers[i];
                                         f32 xoffset = axisMovementMag * axis_l;
                                         f32 yoffset = - axisMovementMag * axis_r;
                                         
@@ -424,9 +430,8 @@ int main(int argc, char** argv) {
                                             trigger = Math::bias(trigger_raw);
                                         }
                                         
-                                        const RenderBuffer& buffer = controllerBuffers.dbuffers[i];
+                                        const RenderBuffer& buffer = currentBuffer->dbuffers[i];
                                         const Vec2 center = Vec::scale(Vec::add(buffer.min, buffer.max), 0.5f);
-                                        
                                         
                                         s32 primitive = GL_LINE_LOOP;
                                         if (game.pad.buttons.down(shape2button_mapping[i])) {

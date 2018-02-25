@@ -1,6 +1,12 @@
 #ifndef __WASTELADNS_INPUT_H__
 #define __WASTELADNS_INPUT_H__
 
+namespace ControllerVertex {
+    struct RenderBuffers;
+    extern RenderBuffers* currentBuffer;
+    extern RenderBuffers ps4_buffers;
+}
+
 namespace Input {
 
 	namespace DebugSet {
@@ -314,24 +320,36 @@ namespace Input {
                 mapping.b_mappingCount = MappingPresets::b_mapping_ps4Count;
                 mapping.a_mapping = MappingPresets::a_mapping_ps4;
                 mapping.a_mappingCount = MappingPresets::a_mapping_ps4Count;
+#if CONTROLLER_LOAD_SVG_DATA == 0
+                ControllerVertex::currentBuffer = &ControllerVertex::ps4_buffers;
+#endif
                 return true;
             } else if (hash == MappingPresets::mapping_8bitdoName) {
                 mapping.b_mapping = MappingPresets::b_mapping_8bitdo;
                 mapping.b_mappingCount = MappingPresets::b_mapping_8bitdoCount;
                 mapping.a_mapping = MappingPresets::a_mapping_8bitdo;
                 mapping.a_mappingCount = MappingPresets::a_mapping_8bitdoCount;
+#if CONTROLLER_LOAD_SVG_DATA == 0
+                ControllerVertex::currentBuffer = &ControllerVertex::ps4_buffers;
+#endif
                 return true;
             } else if (hash == MappingPresets::mapping_winbluetoothwirelessName) {
                 mapping.b_mapping = MappingPresets::b_mapping_winbluetoothwireless;
                 mapping.b_mappingCount = MappingPresets::b_mapping_winbluetoothwirelessCount;
                 mapping.a_mapping = MappingPresets::a_mapping_winbluetoothwireless;
                 mapping.a_mappingCount = MappingPresets::a_mapping_winbluetoothwirelessCount;
+#if CONTROLLER_LOAD_SVG_DATA == 0
+                ControllerVertex::currentBuffer = &ControllerVertex::ps4_buffers;
+#endif
                 return true;
             } else if (hash == MappingPresets::mapping_xboxName) {
                 mapping.b_mapping = MappingPresets::b_mapping_xbox;
                 mapping.b_mappingCount = MappingPresets::b_mapping_xboxCount;
                 mapping.a_mapping = MappingPresets::a_mapping_xbox;
                 mapping.a_mappingCount = MappingPresets::a_mapping_xboxCount;
+#if CONTROLLER_LOAD_SVG_DATA == 0
+                ControllerVertex::currentBuffer = &ControllerVertex::ps4_buffers;
+#endif
                 return true;
             }
             
