@@ -344,7 +344,7 @@ void parsetree_svg(RenderBuffers& vertexBuffers, const char* svg_tree, const cha
         printf("\tVec2 %s[] = {\n", entry.name);
         for (s32 i = 0; i< entry.buffer->count; i++) {
             Vec2& v = entry.buffer->vertex[i];
-            printf("\t\t%s{ %f, %f }\n", (i > 0) ? ", " : "  ", v.x, v.y);
+            printf("\t\t%s{ %ff, %ff }\n", (i > 0) ? ", " : "  ", v.x, v.y);
         }
         printf("\t};\n");
     }
@@ -355,11 +355,11 @@ void parsetree_svg(RenderBuffers& vertexBuffers, const char* svg_tree, const cha
         ShapeEntry& entry = shapes[i];
         printf("%s", (i > 0) ? "" : "\t{\n");
         printf("\t\t  %s_vertex::%s\n", name, entry.name);
-        printf("\t\t, { %f, %f }, { %f, %f }\n", entry.buffer->max.x, entry.buffer->max.y, entry.buffer->min.x, entry.buffer->min.y);
+        printf("\t\t, { %ff, %ff }, { %ff, %ff }\n", entry.buffer->max.x, entry.buffer->max.y, entry.buffer->min.x, entry.buffer->min.y);
         printf("\t\t, %d\n", entry.buffer->count);
         printf("\t}%s", (i < (shapeCount - 1)) ? ", {\n" : "\n");
     }
-    printf("\t, { %f, %f }, { %f, %f }\n", max.x, max.y, min.x, min.y);
+    printf("\t, { %ff, %ff }, { %ff, %ff }\n", max.x, max.y, min.x, min.y);
     printf("};\n");
 #endif
 }
