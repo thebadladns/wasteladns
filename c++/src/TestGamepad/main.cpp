@@ -369,14 +369,16 @@ int main(int argc, char** argv) {
                                     glEnableClientState(GL_VERTEX_ARRAY);
                                     
                                     // Main shape
-                                    for (RenderBuffer& buffer : currentBuffer->sbuffers) {
+                                    const RenderBuffers::StaticBufferList& sbuffers = currentBuffer->sbuffers();
+                                    const RenderBuffers::DynamicBufferList& dbuffers = currentBuffer->dbuffers();
+                                    for (const RenderBuffer& buffer : sbuffers) {
                                         glVertexPointer(2, GL_FLOAT, 0, buffer.vertex);
                                         glDrawArrays(GL_LINE_LOOP, 0, buffer.count);
                                     }
                                     
                                     // Digital buttons
-                                    for (u32 i = 0; i < (s32) DynamicShape::ButtonEnd; i++) {
-                                        const RenderBuffer& buffer = currentBuffer->dbuffers[i];
+                                    for (u32 i = 0; i < DynamicShape::ButtonEnd; i++) {
+                                        const RenderBuffer& buffer = dbuffers[i];
 
                                         s32 primitive = GL_LINE_LOOP;
                                         if (game.pad.buttons.down(shape2button_mapping[i])) {
@@ -389,11 +391,11 @@ int main(int argc, char** argv) {
                                     
                                     // Axis
                                     const f32 axisMovementMag = 5.f;
-                                    for (u32 i = (s32)DynamicShape::AxisStart; i < (s32)DynamicShape::AxisEnd; i++) {
+                                    for (u32 i = DynamicShape::AxisStart; i < DynamicShape::AxisEnd; i++) {
                                         
-                                        const s32 offset_i = i - (s32)DynamicShape::AxisStart;
-                                        const f32 axis_l = game.pad.analogs.values[(s32)axis2analog_mapping[offset_i]];
-                                        const f32 axis_r = game.pad.analogs.values[(s32)axis2analog_mapping[offset_i] + 1];
+                                        const s32 offset_i = i - DynamicShape::AxisStart;
+                                        const f32 axis_l = game.pad.analogs.values[axis2analog_mapping[offset_i]];
+                                        const f32 axis_r = game.pad.analogs.values[axis2analog_mapping[offset_i] + 1];
                                         if (axis_l == Input::Gamepad::Analog::novalue) {
                                             continue;
                                         }
@@ -401,7 +403,7 @@ int main(int argc, char** argv) {
                                             continue;
                                         }
                                         
-                                        const RenderBuffer& buffer = currentBuffer->dbuffers[i];
+                                        const RenderBuffer& buffer = dbuffers[i];
                                         f32 xoffset = axisMovementMag * axis_l;
                                         f32 yoffset = - axisMovementMag * axis_r;
                                         
@@ -421,16 +423,16 @@ int main(int argc, char** argv) {
                                     }
                                     
                                     // Triggers
-                                    for (u32 i = (s32)DynamicShape::TriggerStart; i < (s32)DynamicShape::TriggerEnd; i++) {
+                                    for (u32 i = DynamicShape::TriggerStart; i < DynamicShape::TriggerEnd; i++) {
 
-                                        const s32 offset_i = i - (s32)DynamicShape::TriggerStart;
-                                        const f32 trigger_raw = game.pad.analogs.values[(s32)trigger2analog_mapping[offset_i]];
+                                        const s32 offset_i = i - DynamicShape::TriggerStart;
+                                        const f32 trigger_raw = game.pad.analogs.values[trigger2analog_mapping[offset_i]];
                                         f32 trigger = 0.f;
                                         if (trigger_raw != Input::Gamepad::Analog::novalue) {
                                             trigger = Math::bias(trigger_raw);
                                         }
                                         
-                                        const RenderBuffer& buffer = currentBuffer->dbuffers[i];
+                                        const RenderBuffer& buffer = dbuffers[i];
                                         const Vec2 center = Vec::scale(Vec::add(buffer.min, buffer.max), 0.5f);
                                         
                                         s32 primitive = GL_LINE_LOOP;

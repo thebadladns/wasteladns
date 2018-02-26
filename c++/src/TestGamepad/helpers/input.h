@@ -48,7 +48,7 @@ namespace Input {
     
     template<typename _Set>
     struct AnalogState {
-        f32 values[(s32)_Set::COUNT];
+        f32 values[_Set::COUNT];
     };
     
     template <typename _Set, typename _Buttons>
@@ -384,7 +384,7 @@ namespace Input {
                 if (i < pad.mapping.a_mappingCount) {
                     const Gamepad::Analog::Enum axisIndex = pad.mapping.a_mapping[i];
                     if (axisIndex != Gamepad::Analog::INVALID) {
-                        pad.analogs.values[(s32)axisIndex] = axes[i];
+                        pad.analogs.values[axisIndex] = axes[i];
                     }
                 }
             }

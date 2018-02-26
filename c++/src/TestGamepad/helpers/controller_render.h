@@ -3,8 +3,12 @@
 
 namespace ControllerVertex {
     
-enum class StaticShape { Base, AxisBase_L, AxisBase_R, Count };
-enum class DynamicShape { Tpad, Button_D, Button_L, Button_R, Button_U, Dpad_D, Dpad_L, Dpad_R, Dpad_U, Start, Select, L1, R1, Axis_L, Axis_R, L2, R2, Count, ButtonEnd = (s32)R1 + 1, AxisStart = Axis_L, AxisEnd = (s32)Axis_R + 1, TriggerStart = L2, TriggerEnd = (s32)R2 + 1 };
+namespace StaticShape {
+    enum Enum { Base, AxisBase_L, AxisBase_R, Count };
+}
+namespace DynamicShape {
+    enum Enum { Tpad, Button_D, Button_L, Button_R, Button_U, Dpad_D, Dpad_L, Dpad_R, Dpad_U, Start, Select, L1, R1, Axis_L, Axis_R, L2, R2, Count, ButtonEnd = R1 + 1, AxisStart = Axis_L, AxisEnd = Axis_R + 1, TriggerStart = L2, TriggerEnd = R2 + 1 };
+}
     
 const Input::Gamepad::Analog::Enum axis2analog_mapping[] = {
   Input::Gamepad::Analog::AxisLH
@@ -43,70 +47,26 @@ struct RenderBuffer {
 };
     
 struct RenderBuffers {
-
-    RenderBuffers() {}
-    RenderBuffers(
-          const RenderBuffer& base
-        , const RenderBuffer& axisbase_l
-        , const RenderBuffer& axisbase_r
-        , const RenderBuffer& tpad
-        , const RenderBuffer& button_d
-        , const RenderBuffer& button_l
-        , const RenderBuffer& button_r
-        , const RenderBuffer& button_u
-        , const RenderBuffer& dpad_d
-        , const RenderBuffer& dpad_l
-        , const RenderBuffer& dpad_r
-        , const RenderBuffer& dpad_u
-        , const RenderBuffer& start
-        , const RenderBuffer& select
-        , const RenderBuffer& l1
-        , const RenderBuffer& r1
-        , const RenderBuffer& axis_l
-        , const RenderBuffer& axis_r
-        , const RenderBuffer& l2
-        , const RenderBuffer& r2
-        , const Vec2& max
-        , const Vec2& min
-        ) {
-        this->base = base;
-        this->axisbase_l = axisbase_l;
-        this->axisbase_r = axisbase_r;
-        this->tpad = tpad;
-        this->button_d = button_d;
-        this->button_l = button_l;
-        this->button_r = button_r;
-        this->button_u = button_u;
-        this->dpad_d = dpad_d;
-        this->dpad_l = dpad_l;
-        this->dpad_r = dpad_r;
-        this->dpad_u = dpad_u;
-        this->start = start;
-        this->select = select;
-        this->l1 = l1;
-        this->r1 = r1;
-        this->axis_l = axis_l;
-        this->axis_r = axis_r;
-        this->l2 = l2;
-        this->r2 = r2;
-        this->max = max;
-        this->min = min;
-    }
     
-    union {
-        struct {
-            RenderBuffer base, axisbase_l, axisbase_r;
-            RenderBuffer tpad, button_d, button_l, button_r, button_u, dpad_d, dpad_l, dpad_r, dpad_u, start, select, l1, r1, axis_l, axis_r, l2, r2;
-        };
-        struct {
-            RenderBuffer sbuffers[(s32)StaticShape::Count];
-            RenderBuffer dbuffers[(s32)DynamicShape::Count];
-        };
-        RenderBuffer buffers[(s32)StaticShape::Count + (s32)DynamicShape::Count];
-    };
-    
+    RenderBuffer base, axisbase_l, axisbase_r;
+    RenderBuffer tpad, button_d, button_l, button_r, button_u, dpad_d, dpad_l, dpad_r, dpad_u, start, select, l1, r1, axis_l, axis_r, l2, r2;
     Vec2 max, min;
+    
+    typedef RenderBuffer StaticBufferList[StaticShape::Count];
+    typedef RenderBuffer DynamicBufferList[DynamicShape::Count];
+    typedef RenderBuffer CompleteBufferList[StaticShape::Count + DynamicShape::Count];
+    StaticBufferList& sbuffers() { return *(StaticBufferList*)(&base); }
+    DynamicBufferList& dbuffers() { return *(DynamicBufferList*)(&tpad); }
+    CompleteBufferList& buffers() { return *(CompleteBufferList*)(&base); }
 };
+    
+#if CONTROLLER_LOAD_SVG_DATA
+// Need to match the order in RenderBuffers
+const char* shape_ids[] = {
+  "base", "axis_l_base", "axis_r_base"
+, "tpad", "x", "s", "o", "t", "d", "l", "r", "u", "start", "select", "l1", "r1", "axis_l_mov", "axis_r_mov", "l2", "r2"
+};
+#endif //CONTROLLER_LOAD_SVG_DATA
     
 RenderBuffers* currentBuffer = nullptr;
     
@@ -338,28 +298,13 @@ void parsetree_svg(RenderBuffers& vertexBuffers, const char* svg_tree, const cha
         RenderBuffer* buffer;
         const char* name;
     };
-    ShapeEntry shapes[] = {
-          { &vertexBuffers.base, "base" }
-        , { &vertexBuffers.axisbase_l, "axis_l_base" }
-        , { &vertexBuffers.axisbase_r, "axis_r_base" }
-        , { &vertexBuffers.tpad, "tpad" }
-        , { &vertexBuffers.button_d, "x" }
-        , { &vertexBuffers.button_l, "s" }
-        , { &vertexBuffers.button_r, "o" }
-        , { &vertexBuffers.button_u, "t" }
-        , { &vertexBuffers.dpad_d, "d" }
-        , { &vertexBuffers.dpad_l, "l" }
-        , { &vertexBuffers.dpad_r, "r" }
-        , { &vertexBuffers.dpad_u, "u" }
-        , { &vertexBuffers.start, "start" }
-        , { &vertexBuffers.select, "select" }
-        , { &vertexBuffers.l1, "l1" }
-        , { &vertexBuffers.r1, "r1" }
-        , { &vertexBuffers.axis_l, "axis_l_mov" }
-        , { &vertexBuffers.axis_r, "axis_r_mov" }
-        , { &vertexBuffers.l2, "l2" }
-        , { &vertexBuffers.r2, "r2" }
-    };
+    RenderBuffers::CompleteBufferList& completeBufferList = vertexBuffers.buffers();
+    const u32 bufferCount = sizeof(completeBufferList) / sizeof(completeBufferList[0]);
+    ShapeEntry shapes[bufferCount];
+    for (s32 i = 0; i < bufferCount; i++) {
+        shapes[i].buffer = &completeBufferList[i];
+        shapes[i].name = shape_ids[i];
+    }
     
     for (ShapeEntry& entry : shapes) {
         auto search = rawPaths.find(Hash::fnv(entry.name));
