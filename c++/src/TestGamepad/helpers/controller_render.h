@@ -100,6 +100,7 @@ void parsenode_svg(RenderBuffer& vbuffer, const char* svg_path) {
         const char c = *svgptr;
         if (isspace(c)) {}
         else if (c == ',') {}
+		else if (c == 'Z') {}
         else if (c == 'M') {
             mode = Mode::Move;
             local = false;
@@ -124,8 +125,6 @@ void parsenode_svg(RenderBuffer& vbuffer, const char* svg_path) {
         } else if (c =='v') {
             mode = Mode::VLine;
             local = true;
-        } else if (c == 'Z') {
-            break;
         } else {
             
             Vec2* v = nullptr;
@@ -312,7 +311,11 @@ void parsetree_svg(RenderBuffers& vertexBuffers, const char* svg_tree, const cha
             parsenode_svg(*entry.buffer, search->second.c_str());
             max = Vec::max(max, entry.buffer->max);
             min = Vec::min(min, entry.buffer->min);
-        }
+		}
+		else {
+			entry.buffer->count = 0;
+			entry.buffer->vertex = nullptr;
+		}
     }
     
     // Center all nodes and recompute min-max
@@ -341,20 +344,27 @@ void parsetree_svg(RenderBuffers& vertexBuffers, const char* svg_tree, const cha
     const u32 shapeCount = sizeof(shapes) / sizeof(shapes[0]);
     printf("namespace %s_vertex {\n", name);
     for (ShapeEntry& entry : shapes) {
-        printf("\tVec2 %s[] = {\n", entry.name);
-        for (s32 i = 0; i< entry.buffer->count; i++) {
-            Vec2& v = entry.buffer->vertex[i];
-            printf("\t\t%s{ %ff, %ff }\n", (i > 0) ? ", " : "  ", v.x, v.y);
-        }
-        printf("\t};\n");
+		if (entry.buffer->vertex) {
+			printf("\tVec2 %s[] = {\n", entry.name);
+			for (u32 i = 0; i < entry.buffer->count; i++) {
+				Vec2& v = entry.buffer->vertex[i];
+				printf("\t\t%s{ %ff, %ff }\n", (i > 0) ? ", " : "  ", v.x, v.y);
+			}
+			printf("\t};\n");
+		}
     }
     printf("}\n");
     
     printf("RenderBuffers %s_buffers = {\n", name);
-    for (s32 i = 0; i < shapeCount; i++) {
+    for (u32 i = 0; i < shapeCount; i++) {
         ShapeEntry& entry = shapes[i];
         printf("%s", (i > 0) ? "" : "\t{\n");
-        printf("\t\t  %s_vertex::%s\n", name, entry.name);
+		if (entry.buffer->vertex) {
+			printf("\t\t  %s_vertex::%s\n", name, entry.name);
+		}
+		else {
+			printf("\t\t nullptr\n");
+		}
         printf("\t\t, { %ff, %ff }, { %ff, %ff }\n", entry.buffer->max.x, entry.buffer->max.y, entry.buffer->min.x, entry.buffer->min.y);
         printf("\t\t, %d\n", entry.buffer->count);
         printf("\t}%s", (i < (shapeCount - 1)) ? ", {\n" : "\n");

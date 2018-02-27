@@ -248,7 +248,7 @@ int main(int argc, char** argv) {
     
 #if CONTROLLER_LOAD_SVG_DATA
     ControllerVertex::RenderBuffers controllerBuffers;
-    ControllerVertex::parsetree_svg(controllerBuffers, ControllerVertex::svg_ps4, "ps4");
+    ControllerVertex::parsetree_svg(controllerBuffers, ControllerVertex::svg_nes8bitdo, "nes8bitdo");
     ControllerVertex::currentBuffer = &controllerBuffers;
 #endif
     
@@ -356,7 +356,7 @@ int main(int argc, char** argv) {
                                 glMatrixMode(GL_MODELVIEW);
                                 glPushMatrix();
                                 {
-                                    const f32 scale = 0.4f;
+                                    const f32 scale = 0.5f;
                                     const f32 controllerHeight = currentBuffer->max.y - currentBuffer->min.y;
                                     const f32 scaledControllerHeight = scale * controllerHeight;
                                     const f32 ypadding = scale * 20.f;

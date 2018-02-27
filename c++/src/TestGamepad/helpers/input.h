@@ -5,6 +5,7 @@ namespace ControllerVertex {
     struct RenderBuffers;
     extern RenderBuffers* currentBuffer;
     extern RenderBuffers ps4_buffers;
+	extern RenderBuffers nes8bitdo_buffers;
 }
 
 namespace Input {
@@ -330,7 +331,7 @@ namespace Input {
                 mapping.a_mapping = MappingPresets::a_mapping_8bitdo;
                 mapping.a_mappingCount = MappingPresets::a_mapping_8bitdoCount;
 #if CONTROLLER_LOAD_SVG_DATA == 0
-                ControllerVertex::currentBuffer = &ControllerVertex::ps4_buffers;
+                ControllerVertex::currentBuffer = &ControllerVertex::nes8bitdo_buffers;
 #endif
                 return true;
             } else if (hash == MappingPresets::mapping_winbluetoothwirelessName) {
@@ -339,7 +340,7 @@ namespace Input {
                 mapping.a_mapping = MappingPresets::a_mapping_winbluetoothwireless;
                 mapping.a_mappingCount = MappingPresets::a_mapping_winbluetoothwirelessCount;
 #if CONTROLLER_LOAD_SVG_DATA == 0
-                ControllerVertex::currentBuffer = &ControllerVertex::ps4_buffers;
+                ControllerVertex::currentBuffer = &ControllerVertex::nes8bitdo_buffers;
 #endif
                 return true;
             } else if (hash == MappingPresets::mapping_xboxName) {
