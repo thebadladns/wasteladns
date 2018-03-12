@@ -60,6 +60,40 @@ namespace Camera {
 		matrixCM[14] = -(params.far + params.near) / (params.far - params.near);
 		matrixCM[15] = 1.f;
 	}
+    
+    struct ProjectionConfig {
+        Camera::OrthoParams orthoParams;
+        Camera::FrustumParams frustumParams;
+        Math3D::Transform32 orthoTransformCM;
+        Math3D::Transform64 frustumTransformCM;
+    };
+    
+    struct Instance {
+        f32 matrixCM[16];
+    };
+    
+    struct UpdateCameraParams {
+        Instance* instance;
+        bool input_up;
+        bool input_down;
+        bool input_left;
+        bool input_right;
+    };
+    void UpdateCamera(UpdateCameraParams& params) {
+        
+        Instance& camera = *params.instance;
+        Vec3& pos = *((Vec3*)&camera.matrixCM[12]);
+        
+        if (params.input_left) {
+            pos.x += 4.f;
+        } else if (params.input_right) {
+            pos.x -= 4.f;
+        } else if (params.input_up) {
+            pos.y -= 4.f;
+        } else if (params.input_down) {
+            pos.y += 4.f;
+        }
+    }
 };
 
 #endif // __WASTELADNS_CAMERA_H__

@@ -186,20 +186,14 @@ namespace Game {
 		s64 frame;
 	};
 
-	struct View {
-		Camera::OrthoParams orthoParams;
-		Camera::FrustumParams frustumParams;
-		Math3D::Transform32 orthoTransformCM;
-		Math3D::Transform64 frustumTransformCM;
-	};
-    
     struct Player {
         Motion::Agent motion;
     };
 
 	struct Instance {
 		Time time;
-		View view;
+        Camera::ProjectionConfig projection;
+        Camera::Instance camera;
         Input::Gamepad::State pad;
         
         Player player;
@@ -222,15 +216,35 @@ namespace App {
 		bool fullscreen = false;
 	};
 
-	struct Input {
-        ::Input::DebugState debugSet;
+	namespace Input {
+        
+        struct Keys {
+            enum Enum {
+                  FLYCAM_UP
+                , FLYCAM_DOWN
+                , FLYCAM_LEFT
+                , FLYCAM_RIGHT
+                , ESC
+                , COUNT
+            };
+        };
+        typedef s32 Mapping[Keys::COUNT];
+        const Mapping mapping = {
+              GLFW_KEY_W
+            , GLFW_KEY_S
+            , GLFW_KEY_A
+            , GLFW_KEY_D
+            , GLFW_KEY_ESCAPE
+        };
+        
+        typedef ::Input::DigitalState<Keys::COUNT> DebugSet;
 	};
 
 	struct Instance {
 		Window mainWindow;
 		Time time;
 		Game::Instance game;
-		Input input;
+        Input::DebugSet input;
 	};
 };
 
@@ -267,25 +281,35 @@ int main(int argc, char** argv) {
     // Render setup
     glfwMakeContextCurrent(window.handle);
     glfwSwapInterval(1);
-    // Camera
+    // Projection
     {
-        Camera::OrthoParams& ortho = game.view.orthoParams;
+        Camera::OrthoParams& ortho = game.projection.orthoParams;
         ortho.right = app.mainWindow.width * 0.5f;
         ortho.top = app.mainWindow.height * 0.5f;
         ortho.left = -ortho.right;
         ortho.bottom = -ortho.top;
         ortho.near = -1.f;
         ortho.far = 200.f;
-        Math3D::Transform32& orthoTransformCM = game.view.orthoTransformCM;
+        Math3D::Transform32& orthoTransformCM = game.projection.orthoTransformCM;
         Camera::computeProjectionMatrix(ortho, orthoTransformCM);
 
-        Camera::FrustumParams& frustum = game.view.frustumParams;
+        Camera::FrustumParams& frustum = game.projection.frustumParams;
         frustum.fov = 60.0;
         frustum.aspect = 1.0;
         frustum.near = 1.0;
         frustum.far = 600.0;
-        Math3D::Transform64& perspectiveTransformCM = game.view.frustumTransformCM;
+        Math3D::Transform64& perspectiveTransformCM = game.projection.frustumTransformCM;
         Camera::computeProjectionMatrix(frustum, perspectiveTransformCM);
+    }
+    // Camera
+    {
+        glMatrixMode(GL_MODELVIEW);
+        glPushMatrix();
+        glLoadIdentity();
+        glRotatef(-10.f, 1.f, 0.f, 0.f);
+        glTranslatef(0.f, 0.f, -200.f);
+        glGetFloatv(GL_MODELVIEW_MATRIX, game.camera.matrixCM);
+        glPopMatrix();
     }
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -311,11 +335,11 @@ int main(int argc, char** argv) {
 
                 // Input
                 glfwPollEvents();
-                Input::pollState(app.input.debugSet, Input::DebugSet::mapping, window.handle);
+                Input::pollState(app.input, App::Input::mapping, window.handle);
                 Input::pollState(game.pad, GLFW_JOYSTICK_1, window.handle);
                 
                 // Logic
-                if (app.input.debugSet.released(Input::DebugSet::Keys::ESC)) {
+                if (app.input.released(App::Input::Keys::ESC)) {
                     glfwSetWindowShouldClose(app.mainWindow.handle, 1);
                 }
                 
@@ -364,6 +388,17 @@ int main(int argc, char** argv) {
                     }
                     updateMovement(motionParams);
                 }
+                
+                // Camera update
+                {
+                    Camera::UpdateCameraParams cameraParams;
+                    cameraParams.instance = &game.camera;
+                    cameraParams.input_up = app.input.down(App::Input::Keys::FLYCAM_UP);
+                    cameraParams.input_down = app.input.down(App::Input::Keys::FLYCAM_DOWN);
+                    cameraParams.input_left = app.input.down(App::Input::Keys::FLYCAM_LEFT);
+                    cameraParams.input_right = app.input.down(App::Input::Keys::FLYCAM_RIGHT);
+                    Camera::UpdateCamera(cameraParams);
+                }
 
                 // Render update
                 glClearColor(0.f, 0.f, 0.f, 1.f);
@@ -372,31 +407,33 @@ int main(int argc, char** argv) {
                     // ORTHO
                     {
                         glMatrixMode(GL_PROJECTION);
-                        glLoadIdentity();
-                        glMultMatrixf(game.view.orthoTransformCM);
+                        glLoadMatrixf(game.projection.orthoTransformCM);
 
-                        Vec3 debugPos = Vec3(game.view.orthoParams.left + 10.f, game.view.orthoParams.top - 10.f, -50);
-                        const Col textColor(1.0f, 1.0f, 1.0f, 1.0f);
-                        
                         DebugDraw::TextParams textParams;
                         textParams.scale = 1.f;
-                        textParams.pos = debugPos;
-                        textParams.text = "Camera data (TODO)";
+                        textParams.pos = Vec3(game.projection.orthoParams.left + 10.f, game.projection.orthoParams.top - 10.f, -50);
+                        textParams.text = "Camera data";
+                        textParams.color = Col(1.0f, 1.0f, 1.0f, 1.0f);
                         DebugDraw::text(textParams);
-                        debugPos.y -= 15.f * textParams.scale;
+                        textParams.pos.y -= 15.f * textParams.scale;
+                        
+                        char buff[128];
+                        Vec3 cameraPos = *((Vec3*)&game.camera.matrixCM[12]);
+                        snprintf(buff, sizeof(buff), "Pos " VEC3_FORMAT_LITE, VEC3_PARAMS(cameraPos));
+                        textParams.text = buff;
+                        DebugDraw::text(textParams);
+                        textParams.pos.y -= 15.f * textParams.scale;
                     }
                     
                     // PERSPECTIVE
                     {
                         glMatrixMode(GL_PROJECTION);
-                        glLoadIdentity();
-                        glMultMatrixd(game.view.frustumTransformCM);
+                        glLoadMatrixd(game.projection.frustumTransformCM);
                         
                         glMatrixMode(GL_MODELVIEW);
                         glPushMatrix();
                         {
-                            glRotatef(-10.f, 1.f, 0.f, 0.f);
-                            glTranslatef(0.f, 0.f, -200.f);
+                            glLoadMatrixf(game.camera.matrixCM);
                             
                             // Tiled floor
                             const f32 l = -200.;
