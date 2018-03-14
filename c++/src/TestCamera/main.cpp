@@ -393,10 +393,18 @@ int main(int argc, char** argv) {
                 {
                     Camera::UpdateCameraParams cameraParams;
                     cameraParams.instance = &game.camera;
-                    cameraParams.input_up = app.input.down(App::Input::Keys::FLYCAM_UP);
-                    cameraParams.input_down = app.input.down(App::Input::Keys::FLYCAM_DOWN);
-                    cameraParams.input_left = app.input.down(App::Input::Keys::FLYCAM_LEFT);
-                    cameraParams.input_right = app.input.down(App::Input::Keys::FLYCAM_RIGHT);
+                    cameraParams.input_up_down = app.input.down(App::Input::Keys::FLYCAM_UP);
+                    cameraParams.input_up_pressed = app.input.pressed(App::Input::Keys::FLYCAM_UP);
+                    cameraParams.input_up_released = app.input.released(App::Input::Keys::FLYCAM_UP);
+                    cameraParams.input_down_down = app.input.down(App::Input::Keys::FLYCAM_DOWN);
+                    cameraParams.input_down_pressed = app.input.pressed(App::Input::Keys::FLYCAM_DOWN);
+                    cameraParams.input_down_released = app.input.released(App::Input::Keys::FLYCAM_DOWN);
+                    cameraParams.input_left_down = app.input.down(App::Input::Keys::FLYCAM_LEFT);
+                    cameraParams.input_left_pressed = app.input.pressed(App::Input::Keys::FLYCAM_LEFT);
+                    cameraParams.input_left_released = app.input.released(App::Input::Keys::FLYCAM_LEFT);
+                    cameraParams.input_right_down = app.input.down(App::Input::Keys::FLYCAM_RIGHT);
+                    cameraParams.input_right_pressed = app.input.pressed(App::Input::Keys::FLYCAM_RIGHT);
+                    cameraParams.input_right_released = app.input.released(App::Input::Keys::FLYCAM_RIGHT);
                     Camera::UpdateCamera(cameraParams);
                 }
 

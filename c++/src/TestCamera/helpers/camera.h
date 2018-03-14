@@ -69,29 +69,44 @@ namespace Camera {
     };
     
     struct Instance {
+        Vec2 inputDirWS = {};
         f32 matrixCM[16];
     };
     
     struct UpdateCameraParams {
         Instance* instance;
-        bool input_up;
-        bool input_down;
-        bool input_left;
-        bool input_right;
+        bool input_up_down;
+        bool input_up_pressed;
+        bool input_up_released;
+        bool input_down_down;
+        bool input_down_pressed;
+        bool input_down_released;
+        bool input_left_down;
+        bool input_left_pressed;
+        bool input_left_released;
+        bool input_right_down;
+        bool input_right_pressed;
+        bool input_right_released;
     };
     void UpdateCamera(UpdateCameraParams& params) {
         
         Instance& camera = *params.instance;
         Vec3& pos = *((Vec3*)&camera.matrixCM[12]);
+        Vec2& inputDirWS = camera.inputDirWS;
         
-        if (params.input_left) {
-            pos.x += 4.f;
-        } else if (params.input_right) {
-            pos.x -= 4.f;
-        } else if (params.input_up) {
-            pos.y -= 4.f;
-        } else if (params.input_down) {
-            pos.y += 4.f;
+        inputDirWS.y -= 3 * params.input_down_pressed + params.input_down_down - params.input_down_released;
+        inputDirWS.y += 3 * params.input_up_pressed + params.input_up_down - params.input_up_released;
+        inputDirWS.x -= 3 * params.input_left_pressed + params.input_left_down - params.input_left_released;
+        inputDirWS.x += 3 * params.input_right_pressed + params.input_right_down - params.input_right_released;
+        inputDirWS.x = Math::clamp(inputDirWS.x, -1.f, 1.f);
+        inputDirWS.y = Math::clamp(inputDirWS.y, -1.f, 1.f);
+        
+        Vec2 movement = inputDirWS;
+        if (Vec::normalizeSafe(movement)) {
+            f32 speed = 4.f;
+            movement = Vec::scale(movement, speed);
+            pos.x -= movement.x;
+            pos.y -= movement.y;
         }
     }
 };
