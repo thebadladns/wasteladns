@@ -198,12 +198,14 @@ namespace App {
         
         struct Keys {
             enum Enum {
-                  FLYCAM_UP
-                , FLYCAM_DOWN
+                  FLYCAM_FORWARD
+                , FLYCAM_BACKWARD
                 , FLYCAM_LEFT
                 , FLYCAM_RIGHT
-                , FLYCAM_FORWARD
-                , FLYCAM_BACKWARD
+                , FLYCAM_UP
+                , FLYCAM_DOWN
+                , FLYCAM_ROT_L
+                , FLYCAM_ROT_R
                 , FLYCAM_LOOKAT
                 , CHAR_U
                 , CHAR_D
@@ -221,6 +223,8 @@ namespace App {
             , GLFW_KEY_D
             , GLFW_KEY_R
             , GLFW_KEY_F
+            , GLFW_KEY_Q
+            , GLFW_KEY_E
             , GLFW_KEY_SPACE
             , GLFW_KEY_I
             , GLFW_KEY_K
@@ -339,17 +343,21 @@ int main(int argc, char** argv) {
                     flyCamInputParams.minus_key = App::Input::Keys::FLYCAM_LEFT;
                     Input::digitalInputToAxis(flyCamInputParams);
                     flyCamInputParams.axis = &game.cameraDirControl.inputDir.y;
+                    flyCamInputParams.plus_key = App::Input::Keys::FLYCAM_FORWARD;
+                    flyCamInputParams.minus_key = App::Input::Keys::FLYCAM_BACKWARD;
+                    Input::digitalInputToAxis(flyCamInputParams);
+                    flyCamInputParams.axis = &game.cameraDirControl.inputDir.z;
                     flyCamInputParams.plus_key = App::Input::Keys::FLYCAM_UP;
                     flyCamInputParams.minus_key = App::Input::Keys::FLYCAM_DOWN;
                     Input::digitalInputToAxis(flyCamInputParams);
-                    flyCamInputParams.axis = &game.cameraDirControl.inputDir.z;
-                    flyCamInputParams.plus_key = App::Input::Keys::FLYCAM_FORWARD;
-                    flyCamInputParams.minus_key = App::Input::Keys::FLYCAM_BACKWARD;
+                    flyCamInputParams.axis = &game.cameraDirControl.inputDir.w;
+                    flyCamInputParams.plus_key = App::Input::Keys::FLYCAM_ROT_R;
+                    flyCamInputParams.minus_key = App::Input::Keys::FLYCAM_ROT_L;
                     Input::digitalInputToAxis(flyCamInputParams);
                     
                     Camera::UpdateCameraParams cameraParams;
                     cameraParams.instance = &game.camera;
-                    cameraParams.inputDir = game.cameraDirControl.inputDir;
+                    cameraParams.dirControl = &game.cameraDirControl;
                     cameraParams.lookat = app.input.pressed(App::Input::Keys::FLYCAM_LOOKAT);
                     Camera::UpdateCamera(cameraParams);
                 }

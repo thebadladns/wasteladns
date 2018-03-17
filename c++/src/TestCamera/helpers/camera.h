@@ -35,6 +35,31 @@ namespace Camera {
     Vec3 RIGHT_AXIS(1.f, 0.f, 0.f);
     Vec3 FRONT_AXIS(0.f, 1.f, 0.f);
     Vec3 UP_AXIS(0.f, 0.f, 1.f);
+    
+    void transformToRender(Mat4& renderMatrix, const Transform& t) {
+        // We are left-handed, negate front for opengl
+        renderMatrix.col0 = t.right;
+        renderMatrix.col1 = t.up;
+        renderMatrix.col2 = Vec::negate(t.front);
+        renderMatrix.col3 = t.pos;
+        renderMatrix.col0_w = 0.f;
+        renderMatrix.col1_w = 0.f;
+        renderMatrix.col2_w = 0.f;
+        renderMatrix.col3_w = 1.f;
+    }
+    
+    void transformFromFront(Transform& t, const Vec3& v) {
+        Vec3 tmpUp = UP_AXIS;
+        Vec3 right = Vec::cross(v, tmpUp);
+        if (!Vec::normalizeSafe(right)) {
+            right = RIGHT_AXIS;
+        }
+        Vec3 up = Vec::normalize(Vec::cross(right, v));
+        Vec3 front = Vec::cross(up, right);
+        t.front = front;
+        t.right = right;
+        t.up = up;
+    }
 
     void identity3x3(Transform& t) {
         t.right = RIGHT_AXIS;
@@ -142,7 +167,7 @@ namespace Camera {
     };
     
     struct DirControl {
-        Vec3 inputDir = {};
+        Vec4 inputDir = {};
     };
     
     struct Instance {
@@ -152,62 +177,47 @@ namespace Camera {
     
     struct UpdateCameraParams {
         Instance* instance;
-        Vec3 inputDir;
+        DirControl* dirControl;
         bool lookat;
     };
     void UpdateCamera(UpdateCameraParams& params) {
         Instance& camera = *params.instance;
         Vec3& posv = camera.transform.pos;
         
-        Vec3 movement = params.inputDir;
-        if (Vec::normalizeSafe(movement)) {
+        Vec4 movement = params.dirControl->inputDir;
+        if (Vec::normalizeSafe(movement.xyz)) {
             f32 speed = 4.f;
-            movement = Vec::scale(movement, speed);
+            Vec3 translation = Vec::scale(movement.xyz, speed);
             
             Vec3 front = camera.transform.front;
             Vec3 right = camera.transform.right;
             
-            posv = Vec::add(posv, Vec::scale(right, movement.x));
-            posv = Vec::add(posv, Vec::scale(front, movement.y));
-            posv.z += movement.z;
+            posv = Vec::add(posv, Vec::scale(right, translation.x));
+            posv = Vec::add(posv, Vec::scale(front, translation.y));
+            posv = Vec::add(posv, Vec::scale(UP_AXIS, translation.z));
         }
 
         if (params.lookat) {
             Vec3 lookAt(0.f, 0.f, 0.f);
             Vec3 toLookAt = Vec::subtract(lookAt, posv);
-            Vec3 tmpUp = UP_AXIS;
-            Vec3 right = Vec::cross(toLookAt, tmpUp);
-            if (!Vec::normalizeSafe(right)) {
-                right = RIGHT_AXIS;
-            }
-            Vec3 up = Vec::normalize(Vec::cross(right, toLookAt));
-            Vec3 front = Vec::cross(up, right);
-            camera.transform.front = front;
-            camera.transform.right = right;
-            camera.transform.up = up;
+            transformFromFront(camera.transform, toLookAt);
+        } else if (Math::abs(movement.w) > Math::eps<f32>){
+            Vec3 front = camera.transform.front;
+            const f32 angleIncrement = movement.w * 0.01f;
+            const f32 frontXYMag = Vec::mag(front.xy);
+            f32 frontXYOrientation = Angle::orientation(front.xy);
+            frontXYOrientation = Angle::wrap(frontXYOrientation + angleIncrement);
+            front.xy = Vecwwww::scale(Angle::direction(frontXYOrientation), frontXYMag);
+            transformFromFront(camera.transform, front);
         }
         
-        // We are left-handed, negate front for opengl
-        camera.renderMatrix.col2 = Vec::negate(camera.transform.front);
-        camera.renderMatrix.col0 = camera.transform.right;
-        camera.renderMatrix.col1 = camera.transform.up;
-        camera.renderMatrix.col3 = camera.transform.pos;
-        camera.renderMatrix.col0_w = 0.f;
-        camera.renderMatrix.col1_w = 0.f;
-        camera.renderMatrix.col2_w = 0.f;
-        camera.renderMatrix.col3_w = 1.f;
-        
+        transformToRender(camera.renderMatrix, camera.transform);
+        // Store the inverse transform for the renderer
         if (!Vec::inverse(camera.renderMatrix)) {
+            // Reset if something went wrong
             identity4x4(camera.transform);
-            // Render identity
-            // right
-            camera.renderMatrix.col0 = RIGHT_AXIS;
-            // up
-            camera.renderMatrix.col1 = UP_AXIS;
-            // front
-            camera.renderMatrix.col2 = Vec::negate(FRONT_AXIS);
-            // pos
-            camera.renderMatrix.col3 = Vec3(0.f, 0.f, 0.f);
+            transformToRender(camera.renderMatrix, camera.transform);
+            Vec::inverse(camera.renderMatrix);
         }
     }
 };
