@@ -69,7 +69,6 @@ namespace Motion {
 		Config config;
         Vec2 pos;
         Vec2 dir;
-        Vec2 inputDirWS;
         f32 orientation;
 		f32 speed;
         bool analog = true;
@@ -81,49 +80,15 @@ namespace Motion {
         f32 timeDelta;
         f32 analog_mag;
         f32 boost;
-        bool input_up_down;
-        bool input_up_released;
-        bool input_up_pressed;
-        bool input_down_down;
-        bool input_down_released;
-        bool input_down_pressed;
-        bool input_right_down;
-        bool input_right_released;
-        bool input_right_pressed;
-        bool input_left_down;
-        bool input_left_released;
-        bool input_left_pressed;
         bool analog;
     };
-    static void updateMovement(UpdateMovementParams& params) {
+    void updateMovement(UpdateMovementParams& params) {
         
         Agent& agent = *params.agent;
         
-        Vec2& inputDirWS = agent.inputDirWS;
-        f32 inputMag = 0.f;
+        Vec2 inputDirWS = params.analog_dir;
+        f32 inputMag = params.analog_mag;
         f32 inputBoost = (1.f + params.boost * (agent.config.maxBoost - 1.f));
-        
-        if (params.analog) {
-            inputDirWS = params.analog_dir;
-            inputMag = params.analog_mag;
-        } else {
-            // Need to reset upong transition to analog: digital state depends on status of button presses
-            if (agent.analog) {
-                inputDirWS.x = 0.f;
-                inputDirWS.y = 0.f;
-                agent.analog = false;
-            }
-            
-            inputDirWS.y -= 3 * params.input_down_pressed + params.input_down_down - params.input_down_released;
-            inputDirWS.y += 3 * params.input_up_pressed + params.input_up_down - params.input_up_released;
-            inputDirWS.x -= 3 * params.input_left_pressed + params.input_left_down - params.input_left_released;
-            inputDirWS.x += 3 * params.input_right_pressed + params.input_right_down - params.input_right_released;
-            
-            inputDirWS.x = Math::clamp(inputDirWS.x, -1.f, 1.f);
-            inputDirWS.y = Math::clamp(inputDirWS.y, -1.f, 1.f);
-            inputMag = Vec::mag(inputDirWS);
-        }
-        agent.analog = params.analog;
         
         inputMag = Math::min(1.f, inputMag);
         f32 desiredSpeed = inputMag * agent.config.maxSpeed * inputBoost;
@@ -185,9 +150,15 @@ namespace Game {
 		f64 nextFrame;
 		s64 frame;
 	};
+    
+    struct DirControl {
+        Vec2 inputDir = {};
+        bool analog = false;
+    };
 
     struct Player {
         Motion::Agent motion;
+        DirControl dirControl;
     };
 
 	struct Instance {
@@ -197,6 +168,8 @@ namespace Game {
         Input::Gamepad::State pad;
         
         Player player;
+        
+        Camera::DirControl cameraDirControl;
 	};
 };
 
@@ -224,6 +197,9 @@ namespace App {
                 , FLYCAM_DOWN
                 , FLYCAM_LEFT
                 , FLYCAM_RIGHT
+                , FLYCAM_FORWARD
+                , FLYCAM_BACKWARD
+                , FLYCAM_LOOKAT
                 , ESC
                 , COUNT
             };
@@ -234,6 +210,9 @@ namespace App {
             , GLFW_KEY_S
             , GLFW_KEY_A
             , GLFW_KEY_D
+            , GLFW_KEY_I
+            , GLFW_KEY_K
+            , GLFW_KEY_SPACE
             , GLFW_KEY_ESCAPE
         };
         
@@ -290,33 +269,28 @@ int main(int argc, char** argv) {
         ortho.bottom = -ortho.top;
         ortho.near = -1.f;
         ortho.far = 200.f;
-        Math3D::Transform32& orthoTransformCM = game.projection.orthoTransformCM;
-        Camera::computeProjectionMatrix(ortho, orthoTransformCM);
+        auto& orthoMatrix = game.projection.orthoMatrix;
+        Camera::computeProjectionMatrix(ortho, orthoMatrix);
 
         Camera::FrustumParams& frustum = game.projection.frustumParams;
         frustum.fov = 60.0;
         frustum.aspect = 1.0;
         frustum.near = 1.0;
         frustum.far = 600.0;
-        Math3D::Transform64& perspectiveTransformCM = game.projection.frustumTransformCM;
-        Camera::computeProjectionMatrix(frustum, perspectiveTransformCM);
+        auto& frustumTransform = game.projection.frustumMatrix;
+        Camera::computeProjectionMatrix(frustum, frustumTransform);
     }
     // Camera
     {
-        glMatrixMode(GL_MODELVIEW);
-        glPushMatrix();
-        glLoadIdentity();
-        glRotatef(-10.f, 1.f, 0.f, 0.f);
-        glTranslatef(0.f, 0.f, -200.f);
-        glGetFloatv(GL_MODELVIEW_MATRIX, game.camera.matrixCM);
-        glPopMatrix();
+        Camera::identity4x4(game.camera.transform);
+        game.camera.transform.pos = Vec3(0.f, -200.f, 200.f);
     }
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
             
     // Scene set up
     game.player.motion.pos = Vec2(0.f, 0.f);
-    game.player.motion.dir = game.player.motion.inputDirWS = Vec2(0.f, 0.f);
+    game.player.motion.dir = Vec2(0.f, 0.f);
     game.player.motion.speed = 0.f;
 
     game.time.config.maxFrameLength = 0.1;
@@ -357,22 +331,29 @@ int main(int argc, char** argv) {
                         motionParams.analog_mag = Vec::mag(motionParams.analog_dir);
                         motionParams.analog = motionParams.analog_mag > Math::eps<f32>;
                         if (motionParams.analog) {
-                            motionParams.analog_dir = Vec::scale(motionParams.analog_dir, 1.f/ motionParams.analog_mag);
+                            motionParams.analog_dir = Vec::scale(motionParams.analog_dir, 1.f / motionParams.analog_mag);
                         } else {
-                            const auto& buttons = game.pad.buttons;
-                            motionParams.input_up_down = buttons.down(Digital::D_U);
-                            motionParams.input_up_released = buttons.released(Digital::D_U);
-                            motionParams.input_up_pressed = buttons.pressed(Digital::D_U);
-                            motionParams.input_down_down = buttons.down(Digital::D_D);
-                            motionParams.input_down_released = buttons.released(Digital::D_D);
-                            motionParams.input_down_pressed = buttons.released(Digital::D_D);
-                            motionParams.input_right_down = buttons.down(Digital::D_R);
-                            motionParams.input_right_released = buttons.released(Digital::D_R);
-                            motionParams.input_right_pressed = buttons.pressed(Digital::D_R);
-                            motionParams.input_left_down = buttons.down(Digital::D_L);
-                            motionParams.input_left_released = buttons.released(Digital::D_L);
-                            motionParams.input_left_pressed = buttons.pressed(Digital::D_L);
+                            if (game.player.dirControl.analog) {
+                                game.player.dirControl.inputDir.x = 0.f;
+                                game.player.dirControl.inputDir.y = 0.f;
+                                game.player.dirControl.analog = false;
+                            }
+                            
+                            Input::DigitalInputToAxisParams<Digital::COUNT> locoInputParams;
+                            locoInputParams.input = &game.pad.buttons;
+                            locoInputParams.axis = &game.player.dirControl.inputDir.x;
+                            locoInputParams.plus_key = Digital::D_R;
+                            locoInputParams.minus_key = Digital::D_L;
+                            Input::digitalInputToAxis(locoInputParams);
+                            locoInputParams.axis = &game.player.dirControl.inputDir.y;
+                            locoInputParams.plus_key = Digital::D_U;
+                            locoInputParams.minus_key = Digital::D_D;
+                            Input::digitalInputToAxis(locoInputParams);
+                            
+                            motionParams.analog_dir = game.player.dirControl.inputDir;
+                            motionParams.analog_mag = Vec::mag(motionParams.analog_dir);
                         }
+                        game.player.dirControl.analog = motionParams.analog;
                         f32 trigger_r = game.pad.analogs.values[Analog::Trigger_R];
                         if (trigger_r != Analog::novalue) {
                             motionParams.boost = Math::bias(game.pad.analogs.values[Analog::Trigger_R]);
@@ -381,7 +362,7 @@ int main(int argc, char** argv) {
                         }
                     } else {
                         // Stop with current dir
-                        motionParams.analog_dir = game.player.motion.inputDirWS;
+                        motionParams.analog_dir = game.player.dirControl.inputDir;
                         motionParams.analog_mag = 0.f;
                         motionParams.analog = true;
                         motionParams.boost = 0.f;
@@ -391,20 +372,25 @@ int main(int argc, char** argv) {
                 
                 // Camera update
                 {
+                    Input::DigitalInputToAxisParams<App::Input::Keys::COUNT> flyCamInputParams;
+                    flyCamInputParams.input = &app.input;
+                    flyCamInputParams.axis = &game.cameraDirControl.inputDir.x;
+                    flyCamInputParams.plus_key = App::Input::Keys::FLYCAM_RIGHT;
+                    flyCamInputParams.minus_key = App::Input::Keys::FLYCAM_LEFT;
+                    Input::digitalInputToAxis(flyCamInputParams);
+                    flyCamInputParams.axis = &game.cameraDirControl.inputDir.y;
+                    flyCamInputParams.plus_key = App::Input::Keys::FLYCAM_UP;
+                    flyCamInputParams.minus_key = App::Input::Keys::FLYCAM_DOWN;
+                    Input::digitalInputToAxis(flyCamInputParams);
+                    flyCamInputParams.axis = &game.cameraDirControl.inputDir.z;
+                    flyCamInputParams.plus_key = App::Input::Keys::FLYCAM_FORWARD;
+                    flyCamInputParams.minus_key = App::Input::Keys::FLYCAM_BACKWARD;
+                    Input::digitalInputToAxis(flyCamInputParams);
+                    
                     Camera::UpdateCameraParams cameraParams;
                     cameraParams.instance = &game.camera;
-                    cameraParams.input_up_down = app.input.down(App::Input::Keys::FLYCAM_UP);
-                    cameraParams.input_up_pressed = app.input.pressed(App::Input::Keys::FLYCAM_UP);
-                    cameraParams.input_up_released = app.input.released(App::Input::Keys::FLYCAM_UP);
-                    cameraParams.input_down_down = app.input.down(App::Input::Keys::FLYCAM_DOWN);
-                    cameraParams.input_down_pressed = app.input.pressed(App::Input::Keys::FLYCAM_DOWN);
-                    cameraParams.input_down_released = app.input.released(App::Input::Keys::FLYCAM_DOWN);
-                    cameraParams.input_left_down = app.input.down(App::Input::Keys::FLYCAM_LEFT);
-                    cameraParams.input_left_pressed = app.input.pressed(App::Input::Keys::FLYCAM_LEFT);
-                    cameraParams.input_left_released = app.input.released(App::Input::Keys::FLYCAM_LEFT);
-                    cameraParams.input_right_down = app.input.down(App::Input::Keys::FLYCAM_RIGHT);
-                    cameraParams.input_right_pressed = app.input.pressed(App::Input::Keys::FLYCAM_RIGHT);
-                    cameraParams.input_right_released = app.input.released(App::Input::Keys::FLYCAM_RIGHT);
+                    cameraParams.inputDir = game.cameraDirControl.inputDir;
+                    cameraParams.lookat = app.input.down(App::Input::Keys::FLYCAM_LOOKAT);
                     Camera::UpdateCamera(cameraParams);
                 }
 
@@ -415,7 +401,7 @@ int main(int argc, char** argv) {
                     // ORTHO
                     {
                         glMatrixMode(GL_PROJECTION);
-                        glLoadMatrixf(game.projection.orthoTransformCM);
+                        glLoadMatrixf(game.projection.orthoMatrix.dataCM);
 
                         DebugDraw::TextParams textParams;
                         textParams.scale = 1.f;
@@ -426,8 +412,27 @@ int main(int argc, char** argv) {
                         textParams.pos.y -= 15.f * textParams.scale;
                         
                         char buff[128];
-                        Vec3 cameraPos = *((Vec3*)&game.camera.matrixCM[12]);
+                        
+                        Vec3 cameraPos = game.camera.transform.pos;
                         snprintf(buff, sizeof(buff), "Pos " VEC3_FORMAT_LITE, VEC3_PARAMS(cameraPos));
+                        textParams.text = buff;
+                        DebugDraw::text(textParams);
+                        textParams.pos.y -= 15.f * textParams.scale;
+                        
+                        Vec3 cameraRight = game.camera.transform.right;
+                        snprintf(buff, sizeof(buff), "Right " VEC3_FORMAT_LITE, VEC3_PARAMS(cameraRight));
+                        textParams.text = buff;
+                        DebugDraw::text(textParams);
+                        textParams.pos.y -= 15.f * textParams.scale;
+                        
+                        Vec3 cameraFront = game.camera.transform.front;
+                        snprintf(buff, sizeof(buff), "Front " VEC3_FORMAT_LITE, VEC3_PARAMS(cameraFront));
+                        textParams.text = buff;
+                        DebugDraw::text(textParams);
+                        textParams.pos.y -= 15.f * textParams.scale;
+                        
+                        Vec3 cameraUp = game.camera.transform.up;
+                        snprintf(buff, sizeof(buff), "Up " VEC3_FORMAT_LITE, VEC3_PARAMS(cameraUp));
                         textParams.text = buff;
                         DebugDraw::text(textParams);
                         textParams.pos.y -= 15.f * textParams.scale;
@@ -436,19 +441,19 @@ int main(int argc, char** argv) {
                     // PERSPECTIVE
                     {
                         glMatrixMode(GL_PROJECTION);
-                        glLoadMatrixd(game.projection.frustumTransformCM);
+                        glLoadMatrixd(game.projection.frustumMatrix.dataCM);
                         
                         glMatrixMode(GL_MODELVIEW);
                         glPushMatrix();
                         {
-                            glLoadMatrixf(game.camera.matrixCM);
+                            glLoadMatrixf(game.camera.renderMatrix.dataCM);
                             
                             // Tiled floor
                             const f32 l = -200.;
                             const f32 r = -l;
                             const f32 b = -200.;
                             const f32 t = -b;
-                            const f32 z = -0.f;
+                            const f32 z = 0.f;
                             const f32 separation = 20.f;
                             const Col gridColor(1.0f, 1.0f, 1.0f, 0.25f);
                             for (f32 x = l; x < r + 0.001; x += separation) {
@@ -456,6 +461,34 @@ int main(int argc, char** argv) {
                             }
                             for (f32 y = b; y < t + 0.001; y += separation) {
                                 DebugDraw::segment(Vec3(l, y, z), Vec3(r, y, z), gridColor);
+                            }
+                            
+                            // World axis
+                            {
+                                const Col axisX(0.8f, 0.15f, 0.25f, 0.7f);
+                                const Col axisY(0.25f, 0.8f, 0.15f, 0.7f);
+                                const Col axisZ(0.15f, 0.25f, 0.8f, 0.7f);
+                                const f32 axisSize = 300;
+                                const Vec3 pos = Vec3(0.f, 0.f, 0.f);
+                                DebugDraw::segment(pos, Vec::add(pos, Vec::scale(Vec3(1.f,0.f,0.f), axisSize)), axisX);
+                                DebugDraw::segment(pos, Vec::add(pos, Vec::scale(Vec3(0.f,1.f,0.f), axisSize)), axisY);
+                                DebugDraw::segment(pos, Vec::add(pos, Vec::scale(Vec3(0.f,0.f,1.f), axisSize)), axisZ);
+                            }
+                            
+                            // Camera axis
+                            {
+                                Camera::Instance& camera = game.camera;
+                                const Col axisRight(0.8f, 0.15f, 0.25f, 0.7f);
+                                const Col axisUp(0.25f, 0.8f, 0.15f, 0.7f);
+                                const Col axisFront(0.15f, 0.25f, 0.8f, 0.7f);
+                                const f32 axisSize = 60;
+                                Vec3 pos(0.f, 30.f, 30.f);
+                                Vec3 front = camera.transform.front;
+                                Vec3 right = camera.transform.right;
+                                Vec3 up = camera.transform.up;
+                                DebugDraw::segment(pos, Vec::add(pos, Vec::scale(right, axisSize)), axisFront);
+                                DebugDraw::segment(pos, Vec::add(pos, Vec::scale(up, axisSize)), axisUp);
+                                DebugDraw::segment(pos, Vec::add(pos, Vec::scale(front, axisSize)), axisFront);
                             }
                             
                             Motion::Agent& motion = game.player.motion;

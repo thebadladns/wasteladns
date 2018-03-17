@@ -60,7 +60,6 @@
 
 template <typename _T>
 struct Vector2 {
-    
     Vector2();
     Vector2(const _T x, const _T y);
     Vector2(const Vector2<_T>& v);
@@ -113,6 +112,38 @@ namespace Vector {
     DEFINE_TEMPLATES(VECTOR_TEMPLATES)
 }
 namespace Vec = Vector;
+
+// g=generic, s=specialized
+#define MATRIX44_TEMPLATES(g,s,...) \
+    g(RB_PT44(inverse, __VA_ARGS__))
+
+// Column Major
+// 0  4  8  12
+// 1  5  9  13
+// 2  6  10 14
+// 3  7  11 15
+template <typename _T>
+struct Matrix44 {
+    Matrix44();
+    Matrix44(const Matrix44<_T>& m);
+    
+    union {
+        struct {
+            Vector4<_T> fullcol0;
+            Vector4<_T> fullcol1;
+            Vector4<_T> fullcol2;
+            Vector4<_T> fullcol3;
+        };
+        struct {
+            Vector3<_T> col0; _T bottomRow0;
+            Vector3<_T> col1; _T bottomRow1;
+            Vector3<_T> col2; _T bottomRow2;
+            Vector3<_T> col3; _T bottomRow3;
+        };
+        _T dataCM[16];
+    };
+};
+typedef Matrix44<f32> Mat4;
 
 #endif // #define __WASTELADNS_VEC_H__
 
@@ -199,6 +230,13 @@ Vector4<_T>::Vector4(const Vector4<_T>& v) {
     y = v.y;
     z = v.z;
     w = v.w;
+}
+
+template <typename _T>
+Matrix44<_T>::Matrix44() {}
+template <typename _T>
+Matrix44<_T>::Matrix44(const Matrix44<_T>& m) {
+    memcpy(dataCM, m.dataCM, sizeof(_T) * 16);
 }
 
 namespace Vector {
@@ -386,6 +424,142 @@ Vector4<_T> min(const Vector4<_T>& a, const Vector4<_T>& b) {
 
 INSTANTIATE_TEMPLATES(VECTOR_TEMPLATES,f32);
 INSTANTIATE_TEMPLATES(VECTOR_TEMPLATES,f64);
+
+template <typename _T>
+bool inverse(Matrix44<_T>& m) {
+    
+    Matrix44<_T> prev = m;
+    memset(m.dataCM, 0.f, sizeof(_T) * 16);
+    
+    _T* prev_m = prev.dataCM;
+    _T* next_m = m.dataCM;
+    
+    next_m[0] = prev_m[5]    * prev_m[10]   * prev_m[15] -
+    prev_m[5]    * prev_m[11]   * prev_m[14] -
+    prev_m[9]    * prev_m[6]    * prev_m[15] +
+    prev_m[9]    * prev_m[7]    * prev_m[14] +
+    prev_m[13]   * prev_m[6]    * prev_m[11] -
+    prev_m[13]   * prev_m[7]    * prev_m[10];
+    
+    next_m[4] = -prev_m[4]  * prev_m[10]    * prev_m[15] +
+    prev_m[4]   * prev_m[11]    * prev_m[14] +
+    prev_m[8]   * prev_m[6]     * prev_m[15] -
+    prev_m[8]   * prev_m[7]     * prev_m[14] -
+    prev_m[12]  * prev_m[6]     * prev_m[11] +
+    prev_m[12]  * prev_m[7]     * prev_m[10];
+    
+    next_m[8] = prev_m[4]   * prev_m[9]     * prev_m[15] -
+    prev_m[4]   * prev_m[11]    * prev_m[13] -
+    prev_m[8]   * prev_m[5]     * prev_m[15] +
+    prev_m[8]   * prev_m[7]     * prev_m[13] +
+    prev_m[12]  * prev_m[5]     * prev_m[11] -
+    prev_m[12]  * prev_m[7]     * prev_m[9];
+    
+    next_m[12] = -prev_m[4] * prev_m[9]     * prev_m[14] +
+    prev_m[4]  * prev_m[10]    * prev_m[13] +
+    prev_m[8]  * prev_m[5]     * prev_m[14] -
+    prev_m[8]  * prev_m[6]     * prev_m[13] -
+    prev_m[12] * prev_m[5]     * prev_m[10] +
+    prev_m[12] * prev_m[6]     * prev_m[9];
+    
+    next_m[1] = -prev_m[1]  * prev_m[10]    * prev_m[15] +
+    prev_m[1]   * prev_m[11]    * prev_m[14] +
+    prev_m[9]   * prev_m[2]     * prev_m[15] -
+    prev_m[9]   * prev_m[3]     * prev_m[14] -
+    prev_m[13]  * prev_m[2]     * prev_m[11] +
+    prev_m[13]  * prev_m[3]     * prev_m[10];
+    
+    next_m[5] = prev_m[0]   * prev_m[10]    * prev_m[15] -
+    prev_m[0]   * prev_m[11]    * prev_m[14] -
+    prev_m[8]   * prev_m[2]     * prev_m[15] +
+    prev_m[8]   * prev_m[3]     * prev_m[14] +
+    prev_m[12]  * prev_m[2]     * prev_m[11] -
+    prev_m[12]  * prev_m[3]     * prev_m[10];
+    
+    next_m[9] = -prev_m[0]  * prev_m[9]     * prev_m[15] +
+    prev_m[0]   * prev_m[11]    * prev_m[13] +
+    prev_m[8]   * prev_m[1]     * prev_m[15] -
+    prev_m[8]   * prev_m[3]     * prev_m[13] -
+    prev_m[12]  * prev_m[1]     * prev_m[11] +
+    prev_m[12]  * prev_m[3]     * prev_m[9];
+    
+    next_m[13] = prev_m[0]  * prev_m[9]     * prev_m[14] -
+    prev_m[0]  * prev_m[10]    * prev_m[13] -
+    prev_m[8]  * prev_m[1]     * prev_m[14] +
+    prev_m[8]  * prev_m[2]     * prev_m[13] +
+    prev_m[12] * prev_m[1]     * prev_m[10] -
+    prev_m[12] * prev_m[2]     * prev_m[9];
+    
+    next_m[2] = prev_m[1]   * prev_m[6]     * prev_m[15] -
+    prev_m[1]   * prev_m[7]     * prev_m[14] -
+    prev_m[5]   * prev_m[2]     * prev_m[15] +
+    prev_m[5]   * prev_m[3]     * prev_m[14] +
+    prev_m[13]  * prev_m[2]     * prev_m[7] -
+    prev_m[13]  * prev_m[3]     * prev_m[6];
+    
+    next_m[6] = -prev_m[0]  * prev_m[6]     * prev_m[15] +
+    prev_m[0]   * prev_m[7]     * prev_m[14] +
+    prev_m[4]   * prev_m[2]     * prev_m[15] -
+    prev_m[4]   * prev_m[3]     * prev_m[14] -
+    prev_m[12]  * prev_m[2]     * prev_m[7] +
+    prev_m[12]  * prev_m[3]     * prev_m[6];
+    
+    next_m[10] = prev_m[0]  * prev_m[5]     * prev_m[15] -
+    prev_m[0]  * prev_m[7]     * prev_m[13] -
+    prev_m[4]  * prev_m[1]     * prev_m[15] +
+    prev_m[4]  * prev_m[3]     * prev_m[13] +
+    prev_m[12] * prev_m[1]     * prev_m[7] -
+    prev_m[12] * prev_m[3]     * prev_m[5];
+    
+    next_m[14] = -prev_m[0] * prev_m[5]     * prev_m[14] +
+    prev_m[0]  * prev_m[6]     * prev_m[13] +
+    prev_m[4]  * prev_m[1]     * prev_m[14] -
+    prev_m[4]  * prev_m[2]     * prev_m[13] -
+    prev_m[12] * prev_m[1]     * prev_m[6] +
+    prev_m[12] * prev_m[2]     * prev_m[5];
+    
+    next_m[3] = -prev_m[1]  * prev_m[6]     * prev_m[11] +
+    prev_m[1]   * prev_m[7]     * prev_m[10] +
+    prev_m[5]   * prev_m[2]     * prev_m[11] -
+    prev_m[5]   * prev_m[3]     * prev_m[10] -
+    prev_m[9]   * prev_m[2]     * prev_m[7] +
+    prev_m[9]   * prev_m[3]     * prev_m[6];
+    
+    next_m[7] = prev_m[0]   * prev_m[6]     * prev_m[11] -
+    prev_m[0]   * prev_m[7]     * prev_m[10] -
+    prev_m[4]   * prev_m[2]     * prev_m[11] +
+    prev_m[4]   * prev_m[3]     * prev_m[10] +
+    prev_m[8]   * prev_m[2]     * prev_m[7] -
+    prev_m[8]   * prev_m[3]     * prev_m[6];
+    
+    next_m[11] = -prev_m[0] * prev_m[5]     * prev_m[11] +
+    prev_m[0]  * prev_m[7]     * prev_m[9] +
+    prev_m[4]  * prev_m[1]     * prev_m[11] -
+    prev_m[4]  * prev_m[3]     * prev_m[9] -
+    prev_m[8]  * prev_m[1]     * prev_m[7] +
+    prev_m[8]  * prev_m[3]     * prev_m[5];
+    
+    next_m[15] = prev_m[0]  * prev_m[5]     * prev_m[10] -
+    prev_m[0]  * prev_m[6]     * prev_m[9] -
+    prev_m[4]  * prev_m[1]     * prev_m[10] +
+    prev_m[4]  * prev_m[2]     * prev_m[9] +
+    prev_m[8]  * prev_m[1]     * prev_m[6] -
+    prev_m[8]  * prev_m[2]     * prev_m[5];
+    
+    _T det = prev_m[0] * next_m[0] + prev_m[1] * next_m[4] + prev_m[2] * next_m[8] + prev_m[3] * next_m[12];
+    if (det == 0) {
+        return false;
+    }
+    
+    _T inv_det = 1.0f / det;
+    for (int i = 0; i < 16; i++)
+        next_m[i] = next_m[i] * inv_det;
+    
+    return true;
+}
+
+INSTANTIATE_TEMPLATES(MATRIX44_TEMPLATES,f32);
+INSTANTIATE_TEMPLATES(MATRIX44_TEMPLATES,f64);
 }
 
 template struct Vector2<f32>;
@@ -394,5 +568,8 @@ template struct Vector4<f32>;
 template struct Vector2<f64>;
 template struct Vector3<f64>;
 template struct Vector4<f64>;
+
+template struct Matrix44<f32>;
+template struct Matrix44<f64>;
 
 #endif // __WASTELADNS_VEC_IMPL__

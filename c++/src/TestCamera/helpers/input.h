@@ -18,7 +18,7 @@ namespace Input {
 		};
 	};
 
-	template<int _ButtonCount>
+	template<s32 _ButtonCount>
 	struct DigitalState {
 
         typedef typename std::conditional< _ButtonCount <= 8, u8
@@ -48,12 +48,12 @@ namespace Input {
 	};
     typedef DigitalState<DebugSet::Keys::COUNT> DebugState;
     
-    template<int _Count>
+    template<s32 _Count>
     struct AnalogState {
         f32 values[_Count];
     };
     
-    template <int _ButtonCount>
+    template <s32 _ButtonCount>
     void pollState(DigitalState<_ButtonCount>& set, const s32* mapping, GLFWwindow* window) {
         set.last = set.current;
         set.current = 0;
@@ -235,5 +235,6 @@ namespace Input {
 };
 
 #include "input_mappings.h"
+#include "input_helpers.h"
 
 #endif // __WASTELADNS_INPUT_H__

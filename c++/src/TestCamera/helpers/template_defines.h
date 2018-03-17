@@ -50,6 +50,8 @@
     DECO Vector3<type> name DECOEND(const Vector3<type>& a, const Vector3<type>& b);
 #define RT4_PT4T4(name, type, DECO, DECOEND) \
     DECO Vector4<type> name DECOEND(const Vector4<type>& a, const Vector4<type>& b);
+#define RB_PT44(name, type, DECO, DECOEND) \
+    DECO bool name DECOEND(Matrix44<type>& m);
 
 #define TEMPLATE_FILTER_ON(f) f
 #define TEMPLATE_FILTER_OFF(f)
