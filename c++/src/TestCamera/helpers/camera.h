@@ -207,12 +207,12 @@ namespace Camera {
             const f32 frontXYMag = Vec::mag(front.xy);
             f32 frontXYOrientation = Angle::orientation(front.xy);
             frontXYOrientation = Angle::wrap(frontXYOrientation + angleIncrement);
-            front.xy = Vecwwww::scale(Angle::direction(frontXYOrientation), frontXYMag);
+            front.xy = Vec::scale(Angle::direction(frontXYOrientation), frontXYMag);
             transformFromFront(camera.transform, front);
         }
         
         transformToRender(camera.renderMatrix, camera.transform);
-        // Store the inverse transform for the renderer
+        // Store the inverse modelview matrix for the renderer
         if (!Vec::inverse(camera.renderMatrix)) {
             // Reset if something went wrong
             identity4x4(camera.transform);

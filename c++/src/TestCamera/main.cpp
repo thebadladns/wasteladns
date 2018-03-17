@@ -541,20 +541,34 @@ int main(int argc, char** argv) {
                                 DebugDraw::sphere(posXY, 5.f, xyPos);
                             }
                             
-                            Motion::Agent& motion = game.player.motion;
-                            
-                            f32 x = motion.pos.x;
-                            f32 y = motion.pos.y;
-                            
-                            glTranslatef(x, y, 0.f);
-                            glRotatef(motion.orientation * Angle::r2d<f32>, 0.f, 0.f, -1.f);
-                            
-                            f32 w = 5.f;
-                            f32 h = 10.f;
-                            const Col playerColor(1.0f, 1.0f, 1.0f, 1.0f);
-                            DebugDraw::segment(Vec3(-w, -h, 0.f), Vec3(0.f, h, 0.f), playerColor);
-                            DebugDraw::segment(Vec3(0.f, h, 0.f), Vec3(w, -h, 0.f), playerColor);
-                            DebugDraw::segment(Vec3(w, -h, 0.f), Vec3(-w, -h, 0.f), playerColor);
+                            // Player
+                            glPushMatrix();
+                            {
+                                Motion::Agent& motion = game.player.motion;
+                                
+                                Camera::Transform transform;
+                                Camera::identity4x4(transform);
+                                Vec3 front(Angle::direction(motion.orientation), 0.f);
+                                Camera::transformFromFront(transform, front);
+                                transform.pos = Vec3(motion.pos, 0.f);
+                                
+                                glMultMatrixf(transform.dataCM);
+                                
+                                f32 w = 8.f;
+                                f32 h = 10.f;
+                                f32 t = 50.f;
+                                const Col playerColor(1.0f, 1.0f, 1.0f, 1.0f);
+                                DebugDraw::segment(Vec3(-w, -h, 0.f), Vec3(0.f, h, 0.f), playerColor);
+                                DebugDraw::segment(Vec3(0.f, h, 0.f), Vec3(w, -h, 0.f), playerColor);
+                                DebugDraw::segment(Vec3(w, -h, 0.f), Vec3(-w, -h, 0.f), playerColor);
+                                DebugDraw::segment(Vec3(-w, -h, t), Vec3(0.f, h, t), playerColor);
+                                DebugDraw::segment(Vec3(0.f, h, t), Vec3(w, -h, t), playerColor);
+                                DebugDraw::segment(Vec3(w, -h, t), Vec3(-w, -h, t), playerColor);
+                                DebugDraw::segment(Vec3(-w, -h, t), Vec3(-w, -h, 0.f), playerColor);
+                                DebugDraw::segment(Vec3(0.f, h, t), Vec3(0.f, h, 0.f), playerColor);
+                                DebugDraw::segment(Vec3(w, -h, t), Vec3(w, -h, 0.f), playerColor);
+                            }
+                            glPopMatrix();
                         }
                         glPopMatrix();
                     }
