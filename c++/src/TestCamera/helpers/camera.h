@@ -11,59 +11,71 @@ namespace Camera {
     // Left-handed (right is to the right of front)
     struct Transform {
         Transform() {}
+        Transform(const Transform& t) {
+            matrix = t.matrix;
+        }
         
         union {
             struct {
-                Vec3 right; f32 bottomRow0;
-                Vec3 up; f32 bottomRow1;
-                Vec3 front; f32 bottomRow2;
-                Vec3 pos; f32 bottomRow3;
+                Vec3 right; f32 right_w;
+                Vec3 front; f32 front_w;
+                Vec3 up; f32 up_w;
+                Vec3 pos; f32 pos_w;
+            };
+            struct {
+                Vec3 x; f32 x_w;
+                Vec3 y; f32 y_w;
+                Vec3 z; f32 z_w;
             };
             f32 dataCM[16];
             Mat4 matrix;
         };
     };
     
-    Vec3 UP_AXIS(0.f, 0.f, 1.f);
     Vec3 RIGHT_AXIS(1.f, 0.f, 0.f);
     Vec3 FRONT_AXIS(0.f, 1.f, 0.f);
+    Vec3 UP_AXIS(0.f, 0.f, 1.f);
 
     void identity3x3(Transform& t) {
         t.right = RIGHT_AXIS;
-        t.up = UP_AXIS;
         t.front = FRONT_AXIS;
+        t.up = UP_AXIS;
     }
     
     void identity4x4(Transform& t) {
         identity3x3(t);
         t.pos = {};
-        t.bottomRow0 = t.bottomRow1 = t.bottomRow3 = 0.f;
-        t.bottomRow3 = 1.f;
+        t.right_w = t.front_w = t.up_w = 0.f;
+        t.pos_w = 1.f;
     }
     
-    Vec2 untransform3x3(const Transform& t, const Vec2& v) {
-        // TODO: MAKE THIS NOT SHITTY!!!
-        Mat4 copy = t.matrix;
-        Vec::inverse(copy);
-        Vec2 out(
-                   copy.dataCM[0] * v.x + copy.dataCM[1] * v.y
-                 , copy.dataCM[8] * v.x + copy.dataCM[9] * v.y
-                 );
-        return out;
-    }
     Vec2 transform3x3(const Transform& t, const Vec2& v) {
         Vec2 out(
-              t.dataCM[0] * v.x + t.dataCM[1] * v.y
-            , t.dataCM[8] * v.x + t.dataCM[9] * v.y
+              t.x.x * v.x + t.y.x * v.y
+            , t.x.y * v.x + t.y.y * v.y
         );
         return out;
     }
     Vec3 transform3x3(const Transform& t, const Vec3& v) {
         Vec3 out(
-              t.dataCM[0] * v.x + t.dataCM[1] * v.y + t.dataCM[2] * v.z
-            , t.dataCM[8] * v.x + t.dataCM[9] * v.y + t.dataCM[10] * v.z
-            , t.dataCM[4] * v.x + t.dataCM[5] * v.y + t.dataCM[6] * v.z
+              t.x.x * v.x + t.y.x * v.y + t.z.x * v.z
+            , t.x.y * v.x + t.y.y * v.y + t.z.y * v.z
+            , t.x.z * v.x + t.y.z * v.y + t.z.z * v.z
         );
+        return out;
+    }
+    // TODO: probably will need to revise these when used
+    Vec2 untransform3x3(const Transform& t, const Vec2& v) {
+        Vec2 out = Vec::add(
+              Vec::scale(t.x.xy, Vec::dot(t.x.xy, v))
+            , Vec::scale(t.y.xy, Vec::dot(t.y.xy, v))
+        );
+        return out;
+    }
+    Vec3 untransform3x3(const Transform& t, const Vec3& v) {
+        Vec3 out = Vec::scale(t.x, Vec::dot(t.x, v));
+        out = Vec::add(out, Vec::scale(t.y, Vec::dot(t.y, v)));
+        out = Vec::add(out, Vec::scale(t.z, Vec::dot(t.z, v)));
         return out;
     }
     
@@ -173,8 +185,6 @@ namespace Camera {
             camera.transform.front = front;
             camera.transform.right = right;
             camera.transform.up = up;
-        } else {
-            identity3x3(camera.transform);
         }
         
         // We are left-handed, negate front for opengl
@@ -182,20 +192,20 @@ namespace Camera {
         camera.renderMatrix.col0 = camera.transform.right;
         camera.renderMatrix.col1 = camera.transform.up;
         camera.renderMatrix.col3 = camera.transform.pos;
-        camera.renderMatrix.bottomRow0 = 0.f;
-        camera.renderMatrix.bottomRow1 = 0.f;
-        camera.renderMatrix.bottomRow2 = 0.f;
-        camera.renderMatrix.bottomRow3 = 1.f;
+        camera.renderMatrix.col0_w = 0.f;
+        camera.renderMatrix.col1_w = 0.f;
+        camera.renderMatrix.col2_w = 0.f;
+        camera.renderMatrix.col3_w = 1.f;
         
         if (!Vec::inverse(camera.renderMatrix)) {
             identity4x4(camera.transform);
             // Render identity
             // right
-            camera.renderMatrix.col0 = Vec3(1.f, 0.f, 0.f);
+            camera.renderMatrix.col0 = RIGHT_AXIS;
             // up
-            camera.renderMatrix.col1 = Vec3(0.f, 0.f, 1.f);
+            camera.renderMatrix.col1 = UP_AXIS;
             // front
-            camera.renderMatrix.col2 = Vec3(0.f, -1.f, 0.f);
+            camera.renderMatrix.col2 = Vec::negate(FRONT_AXIS);
             // pos
             camera.renderMatrix.col3 = Vec3(0.f, 0.f, 0.f);
         }

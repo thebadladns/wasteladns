@@ -93,8 +93,8 @@ namespace Motion {
         f32 inputBoost = (1.f + params.boost * (agent.config.maxBoost - 1.f));
         
         inputMag = Math::min(1.f, inputMag);
-        
-        Vec2 inputDirWS = Camera::untransform3x3(*params.cameraTransform, inputDirLS);
+
+        Vec2 inputDirWS = Camera::transform3x3(*params.cameraTransform, inputDirLS);
         
         f32 desiredSpeed = inputMag * agent.config.maxSpeed * inputBoost;
         f32 accHorizon = agent.config.accHorizon;
@@ -350,7 +350,7 @@ int main(int argc, char** argv) {
                     Camera::UpdateCameraParams cameraParams;
                     cameraParams.instance = &game.camera;
                     cameraParams.inputDir = game.cameraDirControl.inputDir;
-                    cameraParams.lookat = app.input.down(App::Input::Keys::FLYCAM_LOOKAT);
+                    cameraParams.lookat = app.input.pressed(App::Input::Keys::FLYCAM_LOOKAT);
                     Camera::UpdateCamera(cameraParams);
                 }
                 
@@ -462,7 +462,7 @@ int main(int argc, char** argv) {
                         DebugDraw::text(textParams);
                         textParams.pos.y -= 15.f * textParams.scale;
                         
-                        Vec4 cameraBottom(game.camera.transform.dataCM[3], game.camera.transform.dataCM[7], game.camera.transform.dataCM[11], game.camera.transform.dataCM[15]);
+                        Vec4 cameraBottom(game.camera.transform.x_w, game.camera.transform.y_w, game.camera.transform.z_w, game.camera.transform.pos_w);
                         snprintf(buff, sizeof(buff), "Bottom row " VEC4_FORMAT_LITE, VEC4_PARAMS(cameraBottom));
                         textParams.text = buff;
                         DebugDraw::text(textParams);
@@ -492,6 +492,12 @@ int main(int argc, char** argv) {
                             }
                             for (f32 y = b; y < t + 0.001; y += separation) {
                                 DebugDraw::segment(Vec3(l, y, z), Vec3(r, y, z), gridColor);
+                            }
+                            for (f32 z = l; z < r + 0.001; z += separation) {
+                                DebugDraw::segment(Vec3(l, b, z), Vec3(l, t, z), gridColor);
+                                DebugDraw::segment(Vec3(r, b, z), Vec3(r, t, z), gridColor);
+                                DebugDraw::segment(Vec3(l, b, z), Vec3(r, b, z), gridColor);
+                                DebugDraw::segment(Vec3(l, t, z), Vec3(r, t, z), gridColor);
                             }
                             
                             // World axis

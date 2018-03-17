@@ -83,6 +83,9 @@ struct Vector3 {
     
     union {
         struct {
+            Vector2<_T> xy;
+        };
+        struct {
             _T x, y, z;
         };
         _T coords[3];
@@ -100,6 +103,12 @@ struct Vector4 {
     Vector4(const Vector4<_T>& v);
     
     union {
+        struct {
+            Vector2<_T> xy, zw;
+        };
+        struct {
+            Vector3<_T> xyz;
+        };
         struct {
             _T x, y, z, w;
         };
@@ -135,10 +144,10 @@ struct Matrix44 {
             Vector4<_T> fullcol3;
         };
         struct {
-            Vector3<_T> col0; _T bottomRow0;
-            Vector3<_T> col1; _T bottomRow1;
-            Vector3<_T> col2; _T bottomRow2;
-            Vector3<_T> col3; _T bottomRow3;
+            Vector3<_T> col0; _T col0_w;
+            Vector3<_T> col1; _T col1_w;
+            Vector3<_T> col2; _T col2_w;
+            Vector3<_T> col3; _T col3_w;
         };
         _T dataCM[16];
     };
