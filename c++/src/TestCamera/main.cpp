@@ -76,6 +76,7 @@ namespace Motion {
     
     struct UpdateMovementParams {
         Agent* agent;
+        const Camera::Transform* cameraTransform;
         Vec2 analog_dir;
         f32 timeDelta;
         f32 analog_mag;
@@ -86,11 +87,15 @@ namespace Motion {
         
         Agent& agent = *params.agent;
         
-        Vec2 inputDirWS = params.analog_dir;
+        // Input local to camera
+        Vec2 inputDirLS = params.analog_dir;
         f32 inputMag = params.analog_mag;
         f32 inputBoost = (1.f + params.boost * (agent.config.maxBoost - 1.f));
         
         inputMag = Math::min(1.f, inputMag);
+        
+        Vec2 inputDirWS = Camera::untransform3x3(*params.cameraTransform, inputDirLS);
+        
         f32 desiredSpeed = inputMag * agent.config.maxSpeed * inputBoost;
         f32 accHorizon = agent.config.accHorizon;
         if (inputMag <= Math::eps<f32>) {
@@ -200,6 +205,10 @@ namespace App {
                 , FLYCAM_FORWARD
                 , FLYCAM_BACKWARD
                 , FLYCAM_LOOKAT
+                , CHAR_U
+                , CHAR_D
+                , CHAR_L
+                , CHAR_R
                 , ESC
                 , COUNT
             };
@@ -210,9 +219,13 @@ namespace App {
             , GLFW_KEY_S
             , GLFW_KEY_A
             , GLFW_KEY_D
+            , GLFW_KEY_R
+            , GLFW_KEY_F
+            , GLFW_KEY_SPACE
             , GLFW_KEY_I
             , GLFW_KEY_K
-            , GLFW_KEY_SPACE
+            , GLFW_KEY_J
+            , GLFW_KEY_L
             , GLFW_KEY_ESCAPE
         };
         
@@ -275,15 +288,15 @@ int main(int argc, char** argv) {
         Camera::FrustumParams& frustum = game.projection.frustumParams;
         frustum.fov = 60.0;
         frustum.aspect = 1.0;
-        frustum.near = 1.0;
-        frustum.far = 600.0;
+        frustum.near = 100.0;
+        frustum.far = 1500.0;
         auto& frustumTransform = game.projection.frustumMatrix;
         Camera::computeProjectionMatrix(frustum, frustumTransform);
     }
     // Camera
     {
         Camera::identity4x4(game.camera.transform);
-        game.camera.transform.pos = Vec3(0.f, -200.f, 200.f);
+        game.camera.transform.pos = Vec3(0.f, -300.f, 300.f);
     }
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -317,6 +330,30 @@ int main(int argc, char** argv) {
                     glfwSetWindowShouldClose(app.mainWindow.handle, 1);
                 }
                 
+                // Camera update
+                {
+                    Input::DigitalInputToAxisParams<App::Input::Keys::COUNT> flyCamInputParams;
+                    flyCamInputParams.input = &app.input;
+                    flyCamInputParams.axis = &game.cameraDirControl.inputDir.x;
+                    flyCamInputParams.plus_key = App::Input::Keys::FLYCAM_RIGHT;
+                    flyCamInputParams.minus_key = App::Input::Keys::FLYCAM_LEFT;
+                    Input::digitalInputToAxis(flyCamInputParams);
+                    flyCamInputParams.axis = &game.cameraDirControl.inputDir.y;
+                    flyCamInputParams.plus_key = App::Input::Keys::FLYCAM_UP;
+                    flyCamInputParams.minus_key = App::Input::Keys::FLYCAM_DOWN;
+                    Input::digitalInputToAxis(flyCamInputParams);
+                    flyCamInputParams.axis = &game.cameraDirControl.inputDir.z;
+                    flyCamInputParams.plus_key = App::Input::Keys::FLYCAM_FORWARD;
+                    flyCamInputParams.minus_key = App::Input::Keys::FLYCAM_BACKWARD;
+                    Input::digitalInputToAxis(flyCamInputParams);
+                    
+                    Camera::UpdateCameraParams cameraParams;
+                    cameraParams.instance = &game.camera;
+                    cameraParams.inputDir = game.cameraDirControl.inputDir;
+                    cameraParams.lookat = app.input.down(App::Input::Keys::FLYCAM_LOOKAT);
+                    Camera::UpdateCamera(cameraParams);
+                }
+                
                 // Locomotion update
                 {
                     using namespace Motion;
@@ -327,12 +364,11 @@ int main(int argc, char** argv) {
                     motionParams.timeDelta = (f32)game.time.config.targetFramerate;
                     
                     if (game.pad.active) {
-                        motionParams.analog_dir = Vec2(game.pad.analogs.values[Analog::AxisLH], -game.pad.analogs.values[Analog::AxisLV]);
+                        game.player.dirControl.inputDir = Vec2(game.pad.analogs.values[Analog::AxisLH], -game.pad.analogs.values[Analog::AxisLV]);
+                        motionParams.analog_dir = game.player.dirControl.inputDir;
                         motionParams.analog_mag = Vec::mag(motionParams.analog_dir);
                         motionParams.analog = motionParams.analog_mag > Math::eps<f32>;
-                        if (motionParams.analog) {
-                            motionParams.analog_dir = Vec::scale(motionParams.analog_dir, 1.f / motionParams.analog_mag);
-                        } else {
+                        if (!motionParams.analog) {
                             if (game.player.dirControl.analog) {
                                 game.player.dirControl.inputDir.x = 0.f;
                                 game.player.dirControl.inputDir.y = 0.f;
@@ -361,37 +397,26 @@ int main(int argc, char** argv) {
                             motionParams.boost = game.pad.buttons.down(Digital::R2) ? 1.f : 0.f;
                         }
                     } else {
-                        // Stop with current dir
-                        motionParams.analog_dir = game.player.dirControl.inputDir;
-                        motionParams.analog_mag = 0.f;
-                        motionParams.analog = true;
+                        // Fallback to keyboard
+                        motionParams.analog = false;
                         motionParams.boost = 0.f;
+                        
+                        Input::DigitalInputToAxisParams<App::Input::Keys::COUNT> locoInputParams;
+                        locoInputParams.input = &app.input;
+                        locoInputParams.axis = &game.player.dirControl.inputDir.x;
+                        locoInputParams.plus_key = App::Input::Keys::CHAR_R;
+                        locoInputParams.minus_key = App::Input::Keys::CHAR_L;
+                        Input::digitalInputToAxis(locoInputParams);
+                        locoInputParams.axis = &game.player.dirControl.inputDir.y;
+                        locoInputParams.plus_key = App::Input::Keys::CHAR_U;
+                        locoInputParams.minus_key = App::Input::Keys::CHAR_D;                        Input::digitalInputToAxis(locoInputParams);
+                        
+                        motionParams.analog_dir = game.player.dirControl.inputDir;
+                        motionParams.analog_mag = Vec::mag(motionParams.analog_dir);
                     }
-                    updateMovement(motionParams);
-                }
-                
-                // Camera update
-                {
-                    Input::DigitalInputToAxisParams<App::Input::Keys::COUNT> flyCamInputParams;
-                    flyCamInputParams.input = &app.input;
-                    flyCamInputParams.axis = &game.cameraDirControl.inputDir.x;
-                    flyCamInputParams.plus_key = App::Input::Keys::FLYCAM_RIGHT;
-                    flyCamInputParams.minus_key = App::Input::Keys::FLYCAM_LEFT;
-                    Input::digitalInputToAxis(flyCamInputParams);
-                    flyCamInputParams.axis = &game.cameraDirControl.inputDir.y;
-                    flyCamInputParams.plus_key = App::Input::Keys::FLYCAM_UP;
-                    flyCamInputParams.minus_key = App::Input::Keys::FLYCAM_DOWN;
-                    Input::digitalInputToAxis(flyCamInputParams);
-                    flyCamInputParams.axis = &game.cameraDirControl.inputDir.z;
-                    flyCamInputParams.plus_key = App::Input::Keys::FLYCAM_FORWARD;
-                    flyCamInputParams.minus_key = App::Input::Keys::FLYCAM_BACKWARD;
-                    Input::digitalInputToAxis(flyCamInputParams);
                     
-                    Camera::UpdateCameraParams cameraParams;
-                    cameraParams.instance = &game.camera;
-                    cameraParams.inputDir = game.cameraDirControl.inputDir;
-                    cameraParams.lookat = app.input.down(App::Input::Keys::FLYCAM_LOOKAT);
-                    Camera::UpdateCamera(cameraParams);
+                    motionParams.cameraTransform = &game.camera.transform;
+                    updateMovement(motionParams);
                 }
 
                 // Render update
@@ -433,6 +458,12 @@ int main(int argc, char** argv) {
                         
                         Vec3 cameraUp = game.camera.transform.up;
                         snprintf(buff, sizeof(buff), "Up " VEC3_FORMAT_LITE, VEC3_PARAMS(cameraUp));
+                        textParams.text = buff;
+                        DebugDraw::text(textParams);
+                        textParams.pos.y -= 15.f * textParams.scale;
+                        
+                        Vec4 cameraBottom(game.camera.transform.dataCM[3], game.camera.transform.dataCM[7], game.camera.transform.dataCM[11], game.camera.transform.dataCM[15]);
+                        snprintf(buff, sizeof(buff), "Bottom row " VEC4_FORMAT_LITE, VEC4_PARAMS(cameraBottom));
                         textParams.text = buff;
                         DebugDraw::text(textParams);
                         textParams.pos.y -= 15.f * textParams.scale;
@@ -481,6 +512,7 @@ int main(int argc, char** argv) {
                                 const Col axisRight(0.8f, 0.15f, 0.25f, 0.7f);
                                 const Col axisUp(0.25f, 0.8f, 0.15f, 0.7f);
                                 const Col axisFront(0.15f, 0.25f, 0.8f, 0.7f);
+                                const Col xyPos(0.15f, 0.25f, 0.8f, 0.7f);
                                 const f32 axisSize = 60;
                                 Vec3 pos(0.f, 30.f, 30.f);
                                 Vec3 front = camera.transform.front;
@@ -489,6 +521,10 @@ int main(int argc, char** argv) {
                                 DebugDraw::segment(pos, Vec::add(pos, Vec::scale(right, axisSize)), axisFront);
                                 DebugDraw::segment(pos, Vec::add(pos, Vec::scale(up, axisSize)), axisUp);
                                 DebugDraw::segment(pos, Vec::add(pos, Vec::scale(front, axisSize)), axisFront);
+                                
+                                Vec3 posXY = camera.transform.pos;
+                                posXY.z = 0.f;
+                                DebugDraw::sphere(posXY, 5.f, xyPos);
                             }
                             
                             Motion::Agent& motion = game.player.motion;

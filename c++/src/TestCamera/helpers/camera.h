@@ -41,6 +41,32 @@ namespace Camera {
         t.bottomRow3 = 1.f;
     }
     
+    Vec2 untransform3x3(const Transform& t, const Vec2& v) {
+        // TODO: MAKE THIS NOT SHITTY!!!
+        Mat4 copy = t.matrix;
+        Vec::inverse(copy);
+        Vec2 out(
+                   copy.dataCM[0] * v.x + copy.dataCM[1] * v.y
+                 , copy.dataCM[8] * v.x + copy.dataCM[9] * v.y
+                 );
+        return out;
+    }
+    Vec2 transform3x3(const Transform& t, const Vec2& v) {
+        Vec2 out(
+              t.dataCM[0] * v.x + t.dataCM[1] * v.y
+            , t.dataCM[8] * v.x + t.dataCM[9] * v.y
+        );
+        return out;
+    }
+    Vec3 transform3x3(const Transform& t, const Vec3& v) {
+        Vec3 out(
+              t.dataCM[0] * v.x + t.dataCM[1] * v.y + t.dataCM[2] * v.z
+            , t.dataCM[8] * v.x + t.dataCM[9] * v.y + t.dataCM[10] * v.z
+            , t.dataCM[4] * v.x + t.dataCM[5] * v.y + t.dataCM[6] * v.z
+        );
+        return out;
+    }
+    
 	// frustum.fov = 60.0;
 	// frustum.aspect = 1.0;
 	// frustum.near = 1.0;
@@ -143,11 +169,10 @@ namespace Camera {
                 right = RIGHT_AXIS;
             }
             Vec3 up = Vec::normalize(Vec::cross(right, toLookAt));
-            Vec3 front = Vec::normalize(Vec::cross(up, right));
+            Vec3 front = Vec::cross(up, right);
             camera.transform.front = front;
             camera.transform.right = right;
             camera.transform.up = up;
-
         } else {
             identity3x3(camera.transform);
         }
