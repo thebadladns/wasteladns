@@ -29,6 +29,7 @@
 #include "helpers/angle.h"
 #define __WASTELADNS_VEC_IMPL__
 #include "helpers/vec.h"
+#include "helpers/transform.h"
 #define __WASTELADNS_COLOR_IMPL__
 #include "helpers/color.h"
 #define __WASTELADNS_DEBUGDRAW_IMPL__
@@ -79,7 +80,7 @@ namespace Motion {
             enum Enum { global, cameraRelative, playerRelative };
         };
         Agent* agent;
-        const Camera::Transform* cameraTransform;
+        const Vec::Transform* cameraTransform;
         Vec2 analog_dir;
         f32 timeDelta;
         f32 analog_mag;
@@ -100,7 +101,7 @@ namespace Motion {
 
         Vec2 inputDirWS = inputDirLS;
         if (params.movementType == UpdateParams::MovementType::cameraRelative) {
-            inputDirWS = Camera::transform3x3(*params.cameraTransform, inputDirLS);
+            inputDirWS = Vec::transform3x3(*params.cameraTransform, inputDirLS);
         }
         
         f32 desiredSpeed = inputMag * agent.config.maxSpeed * inputBoost;
@@ -175,7 +176,7 @@ namespace Game {
     struct Player {
         Motion::Agent motion;
         DirControl dirControl;
-        Camera::Transform transform;
+        Vec::Transform transform;
     };
 
 	struct Instance {
@@ -188,6 +189,13 @@ namespace Game {
         
         Camera::DirControl cameraDirControl;
 	};
+    
+    namespace Debug {
+        Camera::UpdateParams::MovementType::Enum cameraMovementType = Camera::UpdateParams::MovementType::orbit;
+        Motion::UpdateParams::MovementType::Enum playerMovementType = Motion::UpdateParams::MovementType::playerRelative;
+//        Camera::UpdateParams::MovementType::Enum cameraMovementType = Camera::UpdateParams::MovementType::lookat;
+//        Motion::UpdateParams::MovementType::Enum playerMovementType = Motion::UpdateParams::MovementType::cameraRelative;
+    };
 };
 
 namespace App {
@@ -311,11 +319,11 @@ int main(int argc, char** argv) {
     }
     // Camera
     {
-        Camera::identity4x4(game.camera.transform);
+        Vec::identity4x4(game.camera.transform);
         game.camera.transform.pos = Vec3(0.f, -115.f, 170.f);
         Vec3 lookAt(0.f, 0.f, 0.f);
         Vec3 lookAtDir = Vec::subtract(lookAt, game.camera.transform.pos);
-        Camera::transformFromFront(game.camera.transform, lookAtDir);
+        Vec::transformFromFront(game.camera.transform, lookAtDir);
     }
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -324,7 +332,7 @@ int main(int argc, char** argv) {
     game.player.motion.pos = Vec2(0.f, 0.f);
     game.player.motion.dir = Vec2(0.f, 0.f);
     game.player.motion.speed = 0.f;
-    Camera::identity4x4(game.player.transform);
+    Vec::identity4x4(game.player.transform);
 
     game.time.config.maxFrameLength = 0.1;
     game.time.config.targetFramerate = 1.0 / 60.0;
@@ -378,7 +386,7 @@ int main(int argc, char** argv) {
                     cameraParams.lookat = Vec3(game.player.motion.pos, 0.f);
                     cameraParams.orbit_center = Vec3(game.player.motion.pos, 0.f);
                     cameraParams.orbit_offsetLS = Vec3(0.f, -115.f, 170.f);
-                    cameraParams.movementType = Camera::UpdateParams::MovementType::orbit;
+                    cameraParams.movementType = Debug::cameraMovementType;
                     cameraParams.playerTransform = &game.player.transform;
                     Camera::update(cameraParams);
                 }
@@ -446,12 +454,11 @@ int main(int argc, char** argv) {
                     }
                     
                     motionParams.cameraTransform = &game.camera.transform;
-//                    motionParams.movementType = UpdateParams::MovementType::cameraRelative;
-                    motionParams.movementType = UpdateParams::MovementType::playerRelative;
+                    motionParams.movementType = Debug::playerMovementType;
                     update(motionParams);
                     
                     Vec3 front(Angle::direction(game.player.motion.orientation), 0.f);
-                    Camera::transformFromFront(game.player.transform, front);
+                    Vec::transformFromFront(game.player.transform, front);
                     game.player.transform.pos = Vec3(game.player.motion.pos, 0.f);
                 }
 
