@@ -285,12 +285,12 @@ int main(int argc, char** argv) {
         ortho.left = -ortho.right;
         ortho.bottom = -ortho.top;
         ortho.near = -1.f;
-        ortho.far = 200.f;
+        ortho.far = 800.f;
         auto& orthoMatrix = game.projection.orthoMatrix;
         Camera::computeProjectionMatrix(ortho, orthoMatrix);
 
         Camera::FrustumParams& frustum = game.projection.frustumParams;
-        frustum.fov = 60.0;
+        frustum.fov = 75.0;
         frustum.aspect = 1.0;
         frustum.near = 100.0;
         frustum.far = 1500.0;
@@ -300,11 +300,14 @@ int main(int argc, char** argv) {
     // Camera
     {
         Camera::identity4x4(game.camera.transform);
-        game.camera.transform.pos = Vec3(0.f, -300.f, 300.f);
+        game.camera.transform.pos = Vec3(0.f, -115.f, 170.f);
+        Vec3 lookAt(0.f, 0.f, 0.f);
+        Vec3 lookAtDir = Vec::subtract(lookAt, game.camera.transform.pos);
+        Camera::transformFromFront(game.camera.transform, lookAtDir);
     }
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-            
+
     // Scene set up
     game.player.motion.pos = Vec2(0.f, 0.f);
     game.player.motion.dir = Vec2(0.f, 0.f);
@@ -429,7 +432,7 @@ int main(int argc, char** argv) {
 
                 // Render update
                 glClearColor(0.f, 0.f, 0.f, 1.f);
-                glClear(GL_COLOR_BUFFER_BIT);
+                glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
                 {
                     // ORTHO
                     {
@@ -479,6 +482,7 @@ int main(int argc, char** argv) {
                     
                     // PERSPECTIVE
                     {
+                        glEnable(GL_DEPTH_TEST);
                         glMatrixMode(GL_PROJECTION);
                         glLoadMatrixd(game.projection.frustumMatrix.dataCM);
                         
@@ -545,32 +549,54 @@ int main(int argc, char** argv) {
                             glPushMatrix();
                             {
                                 Motion::Agent& motion = game.player.motion;
+
+                                f32 w = 4.f;
+                                f32 wf = w;
+                                f32 wb = w;
+                                f32 h = 5.f;
+                                f32 z = 20.f;
+                                f32 yoff = -2.f;
+                                f32 zoff = 10.f;
+                                // pyramid sides
+                                const Vec3 playerTriangles[] = {
+                                      { 0.f, yoff, -zoff}, { -wb, -h, z}, { -wf, h, z}
+                                    , { 0.f, yoff, -zoff}, { -wf, h, z}, { wf, h, z}
+                                    , { 0.f, yoff, -zoff}, { wf, h, z}, { wb, -h, z}
+                                    , { 0.f, yoff, -zoff}, { wb, -h, z}, { -wb, -h, z}
+                                };
+                                // pyramid top
+                                const Vec3 playerQuads[] = {
+                                    { -wb, -h, z}, { wb, -h, z}, { wf, h, z}, { -wf, h, z}
+                                };
+                                const u32 playerTriangleCount = sizeof(playerTriangles) / sizeof(playerTriangles[0]);
+                                const u32 playerQuadCount = sizeof(playerQuads) / sizeof(playerQuads[0]);
+                                const Col playerOutlineColor(1.0f, 1.0f, 1.0f, 1.0f);
+                                const Col playerSolidColor(0.0f, 0.0f, 0.0f, 1.0f);
                                 
                                 Camera::Transform transform;
                                 Camera::identity4x4(transform);
                                 Vec3 front(Angle::direction(motion.orientation), 0.f);
                                 Camera::transformFromFront(transform, front);
-                                transform.pos = Vec3(motion.pos, 0.f);
+                                transform.pos = Vec3(motion.pos, yoff);
                                 
                                 glMultMatrixf(transform.dataCM);
                                 
-                                f32 w = 8.f;
-                                f32 h = 10.f;
-                                f32 t = 50.f;
-                                const Col playerColor(1.0f, 1.0f, 1.0f, 1.0f);
-                                DebugDraw::segment(Vec3(-w, -h, 0.f), Vec3(0.f, h, 0.f), playerColor);
-                                DebugDraw::segment(Vec3(0.f, h, 0.f), Vec3(w, -h, 0.f), playerColor);
-                                DebugDraw::segment(Vec3(w, -h, 0.f), Vec3(-w, -h, 0.f), playerColor);
-                                DebugDraw::segment(Vec3(-w, -h, t), Vec3(0.f, h, t), playerColor);
-                                DebugDraw::segment(Vec3(0.f, h, t), Vec3(w, -h, t), playerColor);
-                                DebugDraw::segment(Vec3(w, -h, t), Vec3(-w, -h, t), playerColor);
-                                DebugDraw::segment(Vec3(-w, -h, t), Vec3(-w, -h, 0.f), playerColor);
-                                DebugDraw::segment(Vec3(0.f, h, t), Vec3(0.f, h, 0.f), playerColor);
-                                DebugDraw::segment(Vec3(w, -h, t), Vec3(w, -h, 0.f), playerColor);
+                                glPolygonMode( GL_FRONT_AND_BACK, GL_LINE );
+                                glEnableClientState(GL_VERTEX_ARRAY);
+                                glVertexPointer(3, GL_FLOAT, 0, playerTriangles);
+                                glEnable(GL_CULL_FACE);
+                                glColor4f(RGBA_PARAMS(playerOutlineColor));
+                                glDrawArrays(GL_TRIANGLES, 0, playerTriangleCount);
+                                glVertexPointer(3, GL_FLOAT, 0, playerQuads);
+                                glDrawArrays(GL_QUADS, 0, playerQuadCount);
+                                glDisableClientState(GL_VERTEX_ARRAY);
+                                glDisable(GL_CULL_FACE);
                             }
                             glPopMatrix();
                         }
                         glPopMatrix();
+                        
+                        glDisable(GL_DEPTH_TEST);
                     }
                     
                 }

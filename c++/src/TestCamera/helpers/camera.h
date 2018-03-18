@@ -193,7 +193,7 @@ namespace Camera {
             Vec3 right = camera.transform.right;
             
             posv = Vec::add(posv, Vec::scale(right, translation.x));
-            posv = Vec::add(posv, Vec::scale(front, translation.y));
+            posv = Vec::add(posv, Vec::scale(Vec3(front.xy, 0.f), translation.y));
             posv = Vec::add(posv, Vec::scale(UP_AXIS, translation.z));
         }
 
