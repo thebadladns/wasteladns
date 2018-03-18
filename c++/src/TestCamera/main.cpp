@@ -63,7 +63,7 @@ namespace Motion {
 
 			f32 accHorizon = 0.5f;
 			f32 accHorizonStop = 0.25f;
-			f32 turnHorizon = 0.14f;
+			f32 turnHorizon = 0.94f;//0.14f;
 		};
 
 		Config config;
@@ -74,7 +74,10 @@ namespace Motion {
         bool analog = true;
     };
     
-    struct UpdateMovementParams {
+    struct UpdateParams {
+        struct MovementType {
+            enum Enum { global, cameraRelative, playerRelative };
+        };
         Agent* agent;
         const Camera::Transform* cameraTransform;
         Vec2 analog_dir;
@@ -82,8 +85,9 @@ namespace Motion {
         f32 analog_mag;
         f32 boost;
         bool analog;
+        MovementType::Enum movementType;
     };
-    void updateMovement(UpdateMovementParams& params) {
+    void update(UpdateParams& params) {
         
         Agent& agent = *params.agent;
         
@@ -94,7 +98,10 @@ namespace Motion {
         
         inputMag = Math::min(1.f, inputMag);
 
-        Vec2 inputDirWS = Camera::transform3x3(*params.cameraTransform, inputDirLS);
+        Vec2 inputDirWS = inputDirLS;
+        if (params.movementType == UpdateParams::MovementType::cameraRelative) {
+            inputDirWS = Camera::transform3x3(*params.cameraTransform, inputDirLS);
+        }
         
         f32 desiredSpeed = inputMag * agent.config.maxSpeed * inputBoost;
         f32 accHorizon = agent.config.accHorizon;
@@ -107,7 +114,11 @@ namespace Motion {
 			f32 inputHeadingWS = Angle::orientation(inputDirWS);
 
 			currentOrientationLS = 0.f;
-			inputOrientationLS = Angle::subtractShort(inputHeadingWS, agent.orientation);
+            if (params.movementType == UpdateParams::MovementType::playerRelative) {
+                inputOrientationLS = inputHeadingWS;
+            } else {
+                inputOrientationLS = Angle::subtractShort(inputHeadingWS, agent.orientation);
+            }
 
 			currentOrientationLS = Math::eappr(currentOrientationLS, inputOrientationLS, agent.config.turnHorizon, params.timeDelta);
 			agent.orientation = Angle::wrap(agent.orientation + currentOrientationLS);
@@ -164,6 +175,7 @@ namespace Game {
     struct Player {
         Motion::Agent motion;
         DirControl dirControl;
+        Camera::Transform transform;
     };
 
 	struct Instance {
@@ -285,7 +297,7 @@ int main(int argc, char** argv) {
         ortho.left = -ortho.right;
         ortho.bottom = -ortho.top;
         ortho.near = -1.f;
-        ortho.far = 800.f;
+        ortho.far = 200.f;
         auto& orthoMatrix = game.projection.orthoMatrix;
         Camera::computeProjectionMatrix(ortho, orthoMatrix);
 
@@ -312,6 +324,7 @@ int main(int argc, char** argv) {
     game.player.motion.pos = Vec2(0.f, 0.f);
     game.player.motion.dir = Vec2(0.f, 0.f);
     game.player.motion.speed = 0.f;
+    Camera::identity4x4(game.player.transform);
 
     game.time.config.maxFrameLength = 0.1;
     game.time.config.targetFramerate = 1.0 / 60.0;
@@ -358,11 +371,16 @@ int main(int argc, char** argv) {
                     flyCamInputParams.minus_key = App::Input::Keys::FLYCAM_ROT_L;
                     Input::digitalInputToAxis(flyCamInputParams);
                     
-                    Camera::UpdateCameraParams cameraParams;
+                    Vec3 cameraLookat(game.player.motion.pos, 0.f);
+                    Camera::UpdateParams cameraParams;
                     cameraParams.instance = &game.camera;
                     cameraParams.dirControl = &game.cameraDirControl;
-                    cameraParams.lookat = app.input.pressed(App::Input::Keys::FLYCAM_LOOKAT);
-                    Camera::UpdateCamera(cameraParams);
+                    cameraParams.lookat = Vec3(game.player.motion.pos, 0.f);
+                    cameraParams.orbit_center = Vec3(game.player.motion.pos, 0.f);
+                    cameraParams.orbit_offsetLS = Vec3(0.f, -115.f, 170.f);
+                    cameraParams.movementType = Camera::UpdateParams::MovementType::orbit;
+                    cameraParams.playerTransform = &game.player.transform;
+                    Camera::update(cameraParams);
                 }
                 
                 // Locomotion update
@@ -370,7 +388,7 @@ int main(int argc, char** argv) {
                     using namespace Motion;
                     using namespace Input::Gamepad;
                     
-                    UpdateMovementParams motionParams;
+                    UpdateParams motionParams;
                     motionParams.agent = &game.player.motion;
                     motionParams.timeDelta = (f32)game.time.config.targetFramerate;
                     
@@ -420,19 +438,26 @@ int main(int argc, char** argv) {
                         Input::digitalInputToAxis(locoInputParams);
                         locoInputParams.axis = &game.player.dirControl.inputDir.y;
                         locoInputParams.plus_key = App::Input::Keys::CHAR_U;
-                        locoInputParams.minus_key = App::Input::Keys::CHAR_D;                        Input::digitalInputToAxis(locoInputParams);
+                        locoInputParams.minus_key = App::Input::Keys::CHAR_D;
+                        Input::digitalInputToAxis(locoInputParams);
                         
                         motionParams.analog_dir = game.player.dirControl.inputDir;
                         motionParams.analog_mag = Vec::mag(motionParams.analog_dir);
                     }
                     
                     motionParams.cameraTransform = &game.camera.transform;
-                    updateMovement(motionParams);
+//                    motionParams.movementType = UpdateParams::MovementType::cameraRelative;
+                    motionParams.movementType = UpdateParams::MovementType::playerRelative;
+                    update(motionParams);
+                    
+                    Vec3 front(Angle::direction(game.player.motion.orientation), 0.f);
+                    Camera::transformFromFront(game.player.transform, front);
+                    game.player.transform.pos = Vec3(game.player.motion.pos, 0.f);
                 }
 
                 // Render update
                 glClearColor(0.f, 0.f, 0.f, 1.f);
-                glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+                glClear(GL_COLOR_BUFFER_BIT);
                 {
                     // ORTHO
                     {
@@ -482,7 +507,6 @@ int main(int argc, char** argv) {
                     
                     // PERSPECTIVE
                     {
-                        glEnable(GL_DEPTH_TEST);
                         glMatrixMode(GL_PROJECTION);
                         glLoadMatrixd(game.projection.frustumMatrix.dataCM);
                         
@@ -548,15 +572,13 @@ int main(int argc, char** argv) {
                             // Player
                             glPushMatrix();
                             {
-                                Motion::Agent& motion = game.player.motion;
-
                                 f32 w = 4.f;
                                 f32 wf = w;
                                 f32 wb = w;
                                 f32 h = 5.f;
-                                f32 z = 20.f;
+                                f32 z = 30.f;
                                 f32 yoff = -2.f;
-                                f32 zoff = 10.f;
+                                f32 zoff = 0.f;
                                 // pyramid sides
                                 const Vec3 playerTriangles[] = {
                                       { 0.f, yoff, -zoff}, { -wb, -h, z}, { -wf, h, z}
@@ -573,30 +595,25 @@ int main(int argc, char** argv) {
                                 const Col playerOutlineColor(1.0f, 1.0f, 1.0f, 1.0f);
                                 const Col playerSolidColor(0.0f, 0.0f, 0.0f, 1.0f);
                                 
-                                Camera::Transform transform;
-                                Camera::identity4x4(transform);
-                                Vec3 front(Angle::direction(motion.orientation), 0.f);
-                                Camera::transformFromFront(transform, front);
-                                transform.pos = Vec3(motion.pos, yoff);
-                                
-                                glMultMatrixf(transform.dataCM);
+                                glMultMatrixf(game.player.transform.dataCM);
                                 
                                 glPolygonMode( GL_FRONT_AND_BACK, GL_LINE );
-                                glEnableClientState(GL_VERTEX_ARRAY);
-                                glVertexPointer(3, GL_FLOAT, 0, playerTriangles);
                                 glEnable(GL_CULL_FACE);
-                                glColor4f(RGBA_PARAMS(playerOutlineColor));
-                                glDrawArrays(GL_TRIANGLES, 0, playerTriangleCount);
-                                glVertexPointer(3, GL_FLOAT, 0, playerQuads);
-                                glDrawArrays(GL_QUADS, 0, playerQuadCount);
+                                glEnableClientState(GL_VERTEX_ARRAY);
+                                {
+                                    glColor4f(RGBA_PARAMS(playerOutlineColor));
+                                    glVertexPointer(3, GL_FLOAT, 0, playerTriangles);
+                                    glDrawArrays(GL_TRIANGLES, 0, playerTriangleCount);
+                                    glVertexPointer(3, GL_FLOAT, 0, playerQuads);
+                                    glDrawArrays(GL_QUADS, 0, playerQuadCount);
+                                }
                                 glDisableClientState(GL_VERTEX_ARRAY);
                                 glDisable(GL_CULL_FACE);
+                                glPolygonMode( GL_FRONT_AND_BACK, GL_FILL );
                             }
                             glPopMatrix();
                         }
                         glPopMatrix();
-                        
-                        glDisable(GL_DEPTH_TEST);
                     }
                     
                 }

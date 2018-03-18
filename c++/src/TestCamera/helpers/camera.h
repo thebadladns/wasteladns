@@ -175,32 +175,51 @@ namespace Camera {
         Mat4 renderMatrix;
     };
     
-    struct UpdateCameraParams {
+    struct UpdateParams {
+        struct MovementType {
+            enum Enum { manual, lookat, orbit };
+        };
         Instance* instance;
-        DirControl* dirControl;
-        bool lookat;
+        const DirControl* dirControl;
+        const Camera::Transform* playerTransform;
+        Vec3 lookat;
+        Vec3 orbit_center, orbit_offsetLS;
+        MovementType::Enum movementType = MovementType::manual;
     };
-    void UpdateCamera(UpdateCameraParams& params) {
+    void update(UpdateParams& params) {
         Instance& camera = *params.instance;
-        Vec3& posv = camera.transform.pos;
+        Vec3& pos = camera.transform.pos;
         
         Vec4 movement = params.dirControl->inputDir;
         if (Vec::normalizeSafe(movement.xyz)) {
             f32 speed = 4.f;
             Vec3 translation = Vec::scale(movement.xyz, speed);
             
-            Vec3 front = camera.transform.front;
+            Vec3 front = Vec3(camera.transform.front.xy, 0.f);
+            f32 front_mag = Vec::mag(front);
+            if (front_mag < 0.1f) {
+                front = Vec::normalize(Vec3(camera.transform.up.xy, 0.f));
+                translation.y = Math::min(translation.y, 0.f);
+            } else {
+                front = Vec::scale(front, 1 / front_mag);
+            }
+            
             Vec3 right = camera.transform.right;
             
-            posv = Vec::add(posv, Vec::scale(right, translation.x));
-            posv = Vec::add(posv, Vec::scale(Vec3(front.xy, 0.f), translation.y));
-            posv = Vec::add(posv, Vec::scale(UP_AXIS, translation.z));
+            pos = Vec::add(pos, Vec::scale(right, translation.x));
+            pos = Vec::add(pos, Vec::scale(front, translation.y));
+            pos = Vec::add(pos, Vec::scale(UP_AXIS, translation.z));
         }
 
-        if (params.lookat) {
-            Vec3 lookAt(0.f, 0.f, 0.f);
-            Vec3 toLookAt = Vec::subtract(lookAt, posv);
-            transformFromFront(camera.transform, toLookAt);
+        // Rotation
+        if (params.movementType == UpdateParams::MovementType::lookat) {
+            Vec3 lookatDir = Vec::subtract(params.lookat, pos);
+            transformFromFront(camera.transform, lookatDir);
+        } else if (params.movementType == UpdateParams::MovementType::orbit) {
+            Vec3 orbit_offsetWS = Camera::transform3x3(*params.playerTransform, params.orbit_offsetLS);
+            camera.transform.pos = Vec::add(params.orbit_center, orbit_offsetWS);
+            Vec3 lookatDir = Vec::subtract(params.orbit_center, camera.transform.pos);
+            transformFromFront(camera.transform, lookatDir);
         } else if (Math::abs(movement.w) > Math::eps<f32>){
             Vec3 front = camera.transform.front;
             const f32 angleIncrement = movement.w * 0.01f;
