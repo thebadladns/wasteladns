@@ -239,6 +239,7 @@ namespace App {
                 , FLYCAM_ROT_L
                 , FLYCAM_ROT_R
                 , PAUSE
+                , ALT_SPRING_MODE
                 , CHAR_U
                 , CHAR_D
                 , CHAR_L
@@ -258,6 +259,7 @@ namespace App {
             , GLFW_KEY_Q
             , GLFW_KEY_E
             , GLFW_KEY_SPACE
+            , GLFW_KEY_B
             , GLFW_KEY_I
             , GLFW_KEY_K
             , GLFW_KEY_J
@@ -348,6 +350,7 @@ int main(int argc, char** argv) {
     
     bool cameraUpdate = true;
     bool playerUpdate = true;
+    bool springClosedForm = true;
 
     game.time.config.maxFrameLength = 0.1;
     game.time.config.targetFramerate = 1.0 / 60.0;
@@ -376,6 +379,10 @@ int main(int argc, char** argv) {
                 if (app.input.released(App::Input::Keys::PAUSE)) {
                     cameraUpdate = !cameraUpdate;
                     playerUpdate = !playerUpdate;
+                }
+                
+                if (app.input.released(App::Input::Keys::ALT_SPRING_MODE)) {
+                    springClosedForm = !springClosedForm;
                 }
                 
                 // Locomotion update
@@ -483,6 +490,7 @@ int main(int argc, char** argv) {
                     cameraParams.debugBreak = app.input.pressed(App::Input::Keys::FLYCAM_UP);
                     cameraParams.playerSpeedNormalized = game.player.motion.speed / game.player.motion.config.maxSpeed;
                     cameraParams.playerPushing = Vec::mag(game.player.dirControl.inputDir) > 0.f;
+                    cameraParams.springClosedForm = springClosedForm;
                     Camera::update(cameraParams);
                 }
 
@@ -529,7 +537,7 @@ int main(int argc, char** argv) {
                         DebugDraw::text(textParams);
                         textParams.pos.y -= 15.f * textParams.scale;
                         
-                        snprintf(buff, sizeof(buff), "Offset " VEC3_FORMAT("%.3f") " speed " VEC3_FORMAT("%.3f") " target " VEC3_FORMAT("%.3f"), VEC3_PARAMS(game.camera.orbit.offset_spring.state.value), VEC3_PARAMS(game.camera.orbit.offset_spring.state.speed), VEC3_PARAMS(game.camera.orbit.targetOffset_linear));
+                        snprintf(buff, sizeof(buff), "Offset %s " VEC3_FORMAT("%.3f") " speed " VEC3_FORMAT("%.3f") " target " VEC3_FORMAT("%.3f"), springClosedForm ? "closed form" : "num integral", VEC3_PARAMS(game.camera.orbit.offset_spring.state.value), VEC3_PARAMS(game.camera.orbit.offset_spring.state.speed), VEC3_PARAMS(game.camera.orbit.targetOffset_linear));
                         textParams.text = buff;
                         DebugDraw::text(textParams);
                         textParams.pos.y -= 15.f * textParams.scale;

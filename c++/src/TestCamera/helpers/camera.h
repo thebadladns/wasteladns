@@ -266,6 +266,7 @@ namespace Camera {
         MovementType::Enum movementType = MovementType::manual;
         bool debugBreak = false;
         bool playerPushing;
+        bool springClosedForm;
     };
     void update(UpdateParams& params) {
         Instance& camera = *params.instance;
@@ -336,7 +337,19 @@ namespace Camera {
             
             
             if (params.playerPushing) {
-                Spring::damped_t(orbit.offset_spring, orbit.targetOffset_linear, params.dt);
+                
+                if (params.springClosedForm) {
+                    Spring::damped_t(orbit.offset_spring, orbit.targetOffset_linear, params.dt);
+                } else {
+                    f32 w = orbit.offset_spring.config.angularFrequency;
+                    Vec3& speed = orbit.offset_spring.state.speed;
+                    Vec3& pos = orbit.offset_spring.state.value;
+                    Vec3 delta = Vec::subtract(pos, orbit.targetOffset_linear);
+                    Vec3 acc = Vec::add(Vec::scale(delta, -w * w), Vec::scale(speed, -2.f * w));
+                    speed = Vec::add(speed, Vec::scale(acc, params.dt));
+                    pos = Vec::add(pos, Vec::scale(speed, params.dt));
+                }
+                
             } else {
                 
                 f32 speed = Vec::mag(orbit.offset_spring.state.speed);
