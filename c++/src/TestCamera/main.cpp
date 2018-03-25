@@ -537,7 +537,7 @@ int main(int argc, char** argv) {
                         DebugDraw::text(textParams);
                         textParams.pos.y -= 15.f * textParams.scale;
                         
-                        snprintf(buff, sizeof(buff), "Offset %s " VEC3_FORMAT("%.3f") " speed " VEC3_FORMAT("%.3f") " target " VEC3_FORMAT("%.3f"), springClosedForm ? "closed form" : "num integral", VEC3_PARAMS(game.camera.orbit.offset_spring.state.value), VEC3_PARAMS(game.camera.orbit.offset_spring.state.speed), VEC3_PARAMS(game.camera.orbit.targetOffset_linear));
+                        snprintf(buff, sizeof(buff), "Offset %s " VEC3_FORMAT("%.3f") " speed " VEC3_FORMAT("%.3f") " target " VEC3_FORMAT("%.3f"), springClosedForm ? "closed form" : "num integral", VEC3_PARAMS(game.camera.orbit.position_spring.state.value), VEC3_PARAMS(game.camera.orbit.position_spring.state.speed), VEC3_PARAMS(game.camera.orbit.targetOffset_linear));
                         textParams.text = buff;
                         DebugDraw::text(textParams);
                         textParams.pos.y -= 15.f * textParams.scale;

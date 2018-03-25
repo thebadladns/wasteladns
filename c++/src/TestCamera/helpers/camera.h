@@ -232,15 +232,16 @@ namespace Camera {
 
         struct Config {
             f32 yawLS = 0.f;
-            f32 pitchLS = 60 * Angle::d2r<f32>;
-            f32 distance = 200.f;
+            f32 pitchLS = 50 * Angle::d2r<f32>;
+            f32 distance = 150.f;
+            f32 zoffset = 50.f;
         };
         
         Config config;
         Vec::Transform targetTransform;
-        Spring::DampedConfig offset_springConfigAtMinSpeed;
-        Spring::DampedConfig offset_springConfigAtMaxSpeed;
-        Spring::DampedInstance<Spring::State_linearVec3> offset_spring;
+        Spring::DampedConfig position_springConfigAtMinSpeed;
+        Spring::DampedConfig position_springConfigAtMaxSpeed;
+        Spring::DampedInstance<Spring::State_linearVec3> position_spring;
         Vec3 targetOffset_linear;
         f32 targetSpeed;
         
@@ -306,21 +307,20 @@ namespace Camera {
                 printf("");
             }
             
-            Vec3 currOffset = Vec::subtract(camera.transform.pos, params.orbitTransform->pos);
             if (!orbit.active) {
                 // Init
-                Spring::spring_0(orbit.offset_spring.state, currOffset, Vec3(0.f, 0.f, 0.f));
-                orbit.offset_springConfigAtMinSpeed.dampingRatio = 1.f;
-                orbit.offset_springConfigAtMinSpeed.angularFrequency = 1.f;
-                orbit.offset_springConfigAtMaxSpeed.dampingRatio = 1.f;
-                orbit.offset_springConfigAtMaxSpeed.angularFrequency = 2.f;
+                Spring::spring_0(orbit.position_spring.state, camera.transform.pos, Vec3(0.f, 0.f, 0.f));
+                orbit.position_springConfigAtMinSpeed.dampingRatio = 1.f;
+                orbit.position_springConfigAtMinSpeed.angularFrequency = 0.5f;
+                orbit.position_springConfigAtMaxSpeed.dampingRatio = 1.f;
+                orbit.position_springConfigAtMaxSpeed.angularFrequency = 1.5f;
                 orbit.targetTransform = *params.orbitTransform;
                 orbit.targetSpeed = 0.f;
                 orbit.active = true;
             }
-            
-            orbit.offset_spring.config.angularFrequency = Math::lerp(params.playerSpeedNormalized, orbit.offset_springConfigAtMinSpeed.angularFrequency, orbit.offset_springConfigAtMaxSpeed.angularFrequency);
-            orbit.offset_spring.config.dampingRatio = Math::lerp(params.playerSpeedNormalized, orbit.offset_springConfigAtMinSpeed.dampingRatio, orbit.offset_springConfigAtMaxSpeed.dampingRatio);
+
+            orbit.position_spring.config.angularFrequency = Math::lerp(params.playerSpeedNormalized, orbit.position_springConfigAtMinSpeed.angularFrequency, orbit.position_springConfigAtMaxSpeed.angularFrequency);
+            orbit.position_spring.config.dampingRatio = Math::lerp(params.playerSpeedNormalized, orbit.position_springConfigAtMinSpeed.dampingRatio, orbit.position_springConfigAtMaxSpeed.dampingRatio);
             
             Vec3 centerVelocity = Vec::scale(Vec::subtract(params.orbitTransform->pos, orbit.targetTransform.pos), 1.f / params.dt);
             orbit.targetSpeed = Vec::mag(centerVelocity);
@@ -335,16 +335,18 @@ namespace Camera {
             orbit.targetOffset_linear.y = targetDistance * orbit.targetOffset_linear.y * effectivePitchSin;
             orbit.targetOffset_linear.z = targetDistance * Angle::cos(effectivePitch);
             
+            Vec3 lookatPos = Vec::add(params.orbitTransform->pos, Vec3(0.f, 0.f, config.zoffset));
+            Vec3 targetPos = Vec::add(lookatPos, orbit.targetOffset_linear);
             
             if (params.playerPushing) {
                 
                 if (params.springClosedForm) {
-                    Spring::damped_t(orbit.offset_spring, orbit.targetOffset_linear, params.dt);
+                    Spring::damped_t(orbit.position_spring, targetPos, params.dt);
                 } else {
-                    f32 w = orbit.offset_spring.config.angularFrequency;
-                    Vec3& speed = orbit.offset_spring.state.speed;
-                    Vec3& pos = orbit.offset_spring.state.value;
-                    Vec3 delta = Vec::subtract(pos, orbit.targetOffset_linear);
+                    f32 w = orbit.position_spring.config.angularFrequency;
+                    Vec3& speed = orbit.position_spring.state.speed;
+                    Vec3& pos = orbit.position_spring.state.value;
+                    Vec3 delta = Vec::subtract(pos, targetPos);
                     Vec3 acc = Vec::add(Vec::scale(delta, -w * w), Vec::scale(speed, -2.f * w));
                     speed = Vec::add(speed, Vec::scale(acc, params.dt));
                     pos = Vec::add(pos, Vec::scale(speed, params.dt));
@@ -352,28 +354,28 @@ namespace Camera {
                 
             } else {
                 
-                f32 speed = Vec::mag(orbit.offset_spring.state.speed);
+                f32 speed = Vec::mag(orbit.position_spring.state.speed);
                 if (speed > 0.1f) {
                     
                     f32 decc = 300.f;
-                    Vec3 speedDir = Vec::scale(orbit.offset_spring.state.speed, 1.f / speed);
+                    Vec3 speedDir = Vec::scale(orbit.position_spring.state.speed, 1.f / speed);
                     speed = Math::lappr(speed, 0.f, decc, params.dt);
-                    orbit.offset_spring.state.speed = Vec::scale(speedDir, speed);
+                    orbit.position_spring.state.speed = Vec::scale(speedDir, speed);
                     
                 } else {
                     speed = 0.f;
-                    orbit.offset_spring.state.speed = Vec3(0.f, 0.f, 0.f);
+                    orbit.position_spring.state.speed = Vec3(0.f, 0.f, 0.f);
                 }
                 
-                Vec3& offset = orbit.offset_spring.state.value;
-                offset = Vec::add(offset, Vec::scale(orbit.offset_spring.state.speed, params.dt));
+                Vec3& pos = orbit.position_spring.state.value;
+                pos = Vec::add(pos, Vec::scale(orbit.position_spring.state.speed, params.dt));
             }
             
             orbit.targetTransform = *params.orbitTransform;
 
             // Build camera transform
-            Vec3 cameraPos = Vec::add(params.orbitTransform->pos, orbit.offset_spring.state.value);
-            Vec3 lookatDir = Vec::subtract(params.orbitTransform->pos, cameraPos);
+            Vec3 cameraPos = orbit.position_spring.state.value;
+            Vec3 lookatDir = Vec::subtract(lookatPos, cameraPos);
             Vec::transformFromFront(camera.transform, lookatDir);
             camera.transform.pos = cameraPos;
             
