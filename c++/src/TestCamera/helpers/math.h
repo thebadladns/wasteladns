@@ -22,7 +22,8 @@
     g(RT_PTTT(clamp, __VA_ARGS__))
 #define MATH_TEMPLATES_R(g,s,...) \
     s(RT_PT(sqrt, __VA_ARGS__)) \
-    g(RT_PT(expTaylor, __VA_ARGS__)) \
+    g(RT_PT(square, __VA_ARGS__)) \
+    g(RT_PT(exp_taylor, __VA_ARGS__)) \
     g(RT_PT(bias, __VA_ARGS__)) \
     g(RT_PT(unbias, __VA_ARGS__)) \
     g(RT_PT(round, __VA_ARGS__)) \
@@ -79,7 +80,12 @@ namespace Math {
     }
     
     template <typename _T>
-    _T expTaylor(_T x) {
+    _T square(_T a) {
+        return a * a;
+    }
+    
+    template <typename _T>
+    _T exp_taylor(_T x) {
         const int order = 3;
         switch (order) {
             case 2:

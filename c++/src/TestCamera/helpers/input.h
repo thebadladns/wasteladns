@@ -183,7 +183,7 @@ namespace Input {
                     const Gamepad::Analog::Enum axisIndex = pad.mapping.a_mapping[i];
                     if (axisIndex != Gamepad::Analog::INVALID) {
                         f32 v = axes[i];
-                        const f32 deadzone = 0.025f;
+                        const f32 deadzone = 0.25f;
                         if (Math::abs(v) < deadzone) {
                             v = 0.f;
                         }

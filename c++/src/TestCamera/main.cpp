@@ -59,12 +59,12 @@ namespace Motion {
     struct Agent {
 
 		struct Config {
-			f32 maxBoost = 1.5f;
-			f32 maxSpeed = 200.f;
+			f32 maxBoost = 3.0f;
+			f32 maxSpeed = 75.f;
 
 			f32 accHorizon = 0.5f;
 			f32 accHorizonStop = 0.25f;
-			f32 turnHorizon = 0.94f;//0.14f;
+			f32 turnHorizon = 0.14f;
 		};
 
 		Config config;
@@ -77,12 +77,12 @@ namespace Motion {
     
     struct UpdateParams {
         struct MovementType {
-            enum Enum { global, cameraRelative, playerRelative };
+            enum Enum { global, cameraRelative, targetCameraRelative, playerRelative };
         };
         Agent* agent;
         const Vec::Transform* cameraTransform;
         Vec2 analog_dir;
-        f32 timeDelta;
+        f32 dt;
         f32 analog_mag;
         f32 boost;
         bool analog;
@@ -102,6 +102,16 @@ namespace Motion {
         Vec2 inputDirWS = inputDirLS;
         if (params.movementType == UpdateParams::MovementType::cameraRelative) {
             inputDirWS = Vec::transform3x3(*params.cameraTransform, inputDirLS);
+        } else if (params.movementType == UpdateParams::MovementType::targetCameraRelative) {
+            
+            Vec::Transform playerTransform;
+            Vec::Transform cameraTransform;
+            Vec3 playerFront(Angle::direction(agent.orientation), 0.f);
+            Vec::transformFromFront(playerTransform, playerFront);
+            Vec3 ortbit_offsetWS = Vec::transform3x3(playerTransform, Vec3(0.f, -115.f, 170.f));
+            Vec3 cameraFront = Vec::negate(ortbit_offsetWS);
+            Vec::transformFromFront(cameraTransform, cameraFront);
+            inputDirWS = Vec::transform3x3(cameraTransform, inputDirLS);
         }
         
         f32 desiredSpeed = inputMag * agent.config.maxSpeed * inputBoost;
@@ -121,7 +131,7 @@ namespace Motion {
                 inputOrientationLS = Angle::subtractShort(inputHeadingWS, agent.orientation);
             }
 
-			currentOrientationLS = Math::eappr(currentOrientationLS, inputOrientationLS, agent.config.turnHorizon, params.timeDelta);
+			currentOrientationLS = Math::eappr(currentOrientationLS, inputOrientationLS, agent.config.turnHorizon, params.dt);
 			agent.orientation = Angle::wrap(agent.orientation + currentOrientationLS);
 			agent.dir = Angle::direction(agent.orientation);
 
@@ -143,13 +153,13 @@ namespace Motion {
 			desiredSpeed *= turnSpeedReduction;
 		}
         
-        agent.speed = Math::eappr(agent.speed, desiredSpeed, accHorizon, params.timeDelta);
+        agent.speed = Math::eappr(agent.speed, desiredSpeed, accHorizon, params.dt);
         
         if (Math::abs(inputOrientationLS) * Angle::r2d<f32> > 150.f) {
             agent.speed = 0.f;
         }
         
-        agent.pos = Vec::add(agent.pos, Vec::scale(agent.dir, agent.speed * params.timeDelta));
+        agent.pos = Vec::add(agent.pos, Vec::scale(agent.dir, agent.speed * params.dt));
     }
 }
 
@@ -191,10 +201,12 @@ namespace Game {
 	};
     
     namespace Debug {
+//        Camera::UpdateParams::MovementType::Enum cameraMovementType = Camera::UpdateParams::MovementType::manual;
         Camera::UpdateParams::MovementType::Enum cameraMovementType = Camera::UpdateParams::MovementType::orbit;
-        Motion::UpdateParams::MovementType::Enum playerMovementType = Motion::UpdateParams::MovementType::playerRelative;
 //        Camera::UpdateParams::MovementType::Enum cameraMovementType = Camera::UpdateParams::MovementType::lookat;
-//        Motion::UpdateParams::MovementType::Enum playerMovementType = Motion::UpdateParams::MovementType::cameraRelative;
+//        Motion::UpdateParams::MovementType::Enum playerMovementType = Motion::UpdateParams::MovementType::playerRelative;
+        Motion::UpdateParams::MovementType::Enum playerMovementType = Motion::UpdateParams::MovementType::cameraRelative;
+//        Motion::UpdateParams::MovementType::Enum playerMovementType = Motion::UpdateParams::MovementType::global;
     };
 };
 
@@ -226,7 +238,7 @@ namespace App {
                 , FLYCAM_DOWN
                 , FLYCAM_ROT_L
                 , FLYCAM_ROT_R
-                , FLYCAM_LOOKAT
+                , PAUSE
                 , CHAR_U
                 , CHAR_D
                 , CHAR_L
@@ -312,7 +324,7 @@ int main(int argc, char** argv) {
         Camera::FrustumParams& frustum = game.projection.frustumParams;
         frustum.fov = 75.0;
         frustum.aspect = 1.0;
-        frustum.near = 100.0;
+        frustum.near = 1.0;
         frustum.far = 1500.0;
         auto& frustumTransform = game.projection.frustumMatrix;
         Camera::computeProjectionMatrix(frustum, frustumTransform);
@@ -333,6 +345,9 @@ int main(int argc, char** argv) {
     game.player.motion.dir = Vec2(0.f, 0.f);
     game.player.motion.speed = 0.f;
     Vec::identity4x4(game.player.transform);
+    
+    bool cameraUpdate = true;
+    bool playerUpdate = true;
 
     game.time.config.maxFrameLength = 0.1;
     game.time.config.targetFramerate = 1.0 / 60.0;
@@ -358,47 +373,20 @@ int main(int argc, char** argv) {
                     glfwSetWindowShouldClose(app.mainWindow.handle, 1);
                 }
                 
-                // Camera update
-                {
-                    Input::DigitalInputToAxisParams<App::Input::Keys::COUNT> flyCamInputParams;
-                    flyCamInputParams.input = &app.input;
-                    flyCamInputParams.axis = &game.cameraDirControl.inputDir.x;
-                    flyCamInputParams.plus_key = App::Input::Keys::FLYCAM_RIGHT;
-                    flyCamInputParams.minus_key = App::Input::Keys::FLYCAM_LEFT;
-                    Input::digitalInputToAxis(flyCamInputParams);
-                    flyCamInputParams.axis = &game.cameraDirControl.inputDir.y;
-                    flyCamInputParams.plus_key = App::Input::Keys::FLYCAM_FORWARD;
-                    flyCamInputParams.minus_key = App::Input::Keys::FLYCAM_BACKWARD;
-                    Input::digitalInputToAxis(flyCamInputParams);
-                    flyCamInputParams.axis = &game.cameraDirControl.inputDir.z;
-                    flyCamInputParams.plus_key = App::Input::Keys::FLYCAM_UP;
-                    flyCamInputParams.minus_key = App::Input::Keys::FLYCAM_DOWN;
-                    Input::digitalInputToAxis(flyCamInputParams);
-                    flyCamInputParams.axis = &game.cameraDirControl.inputDir.w;
-                    flyCamInputParams.plus_key = App::Input::Keys::FLYCAM_ROT_R;
-                    flyCamInputParams.minus_key = App::Input::Keys::FLYCAM_ROT_L;
-                    Input::digitalInputToAxis(flyCamInputParams);
-                    
-                    Vec3 cameraLookat(game.player.motion.pos, 0.f);
-                    Camera::UpdateParams cameraParams;
-                    cameraParams.instance = &game.camera;
-                    cameraParams.dirControl = &game.cameraDirControl;
-                    cameraParams.lookat = Vec3(game.player.motion.pos, 0.f);
-                    cameraParams.orbit_center = Vec3(game.player.motion.pos, 0.f);
-                    cameraParams.orbit_offsetLS = Vec3(0.f, -115.f, 170.f);
-                    cameraParams.movementType = Debug::cameraMovementType;
-                    cameraParams.playerTransform = &game.player.transform;
-                    Camera::update(cameraParams);
+                if (app.input.released(App::Input::Keys::PAUSE)) {
+                    cameraUpdate = !cameraUpdate;
+                    playerUpdate = !playerUpdate;
                 }
                 
                 // Locomotion update
+                if (playerUpdate)
                 {
                     using namespace Motion;
                     using namespace Input::Gamepad;
                     
                     UpdateParams motionParams;
                     motionParams.agent = &game.player.motion;
-                    motionParams.timeDelta = (f32)game.time.config.targetFramerate;
+                    motionParams.dt = (f32)game.time.config.targetFramerate;
                     
                     if (game.pad.active) {
                         game.player.dirControl.inputDir = Vec2(game.pad.analogs.values[Analog::AxisLH], -game.pad.analogs.values[Analog::AxisLV]);
@@ -461,6 +449,42 @@ int main(int argc, char** argv) {
                     Vec::transformFromFront(game.player.transform, front);
                     game.player.transform.pos = Vec3(game.player.motion.pos, 0.f);
                 }
+                
+                // Camera update
+                if (cameraUpdate)
+                {
+                    Input::DigitalInputToAxisParams<App::Input::Keys::COUNT> flyCamInputParams;
+                    flyCamInputParams.input = &app.input;
+                    flyCamInputParams.axis = &game.cameraDirControl.inputDir.x;
+                    flyCamInputParams.plus_key = App::Input::Keys::FLYCAM_RIGHT;
+                    flyCamInputParams.minus_key = App::Input::Keys::FLYCAM_LEFT;
+                    Input::digitalInputToAxis(flyCamInputParams);
+                    flyCamInputParams.axis = &game.cameraDirControl.inputDir.y;
+                    flyCamInputParams.plus_key = App::Input::Keys::FLYCAM_FORWARD;
+                    flyCamInputParams.minus_key = App::Input::Keys::FLYCAM_BACKWARD;
+                    Input::digitalInputToAxis(flyCamInputParams);
+                    flyCamInputParams.axis = &game.cameraDirControl.inputDir.z;
+                    flyCamInputParams.plus_key = App::Input::Keys::FLYCAM_UP;
+                    flyCamInputParams.minus_key = App::Input::Keys::FLYCAM_DOWN;
+                    Input::digitalInputToAxis(flyCamInputParams);
+                    flyCamInputParams.axis = &game.cameraDirControl.inputDir.w;
+                    flyCamInputParams.plus_key = App::Input::Keys::FLYCAM_ROT_R;
+                    flyCamInputParams.minus_key = App::Input::Keys::FLYCAM_ROT_L;
+                    Input::digitalInputToAxis(flyCamInputParams);
+                    
+                    Vec3 cameraLookat(game.player.motion.pos, 0.f);
+                    Camera::UpdateParams cameraParams;
+                    cameraParams.instance = &game.camera;
+                    cameraParams.dt = (f32)game.time.config.targetFramerate;
+                    cameraParams.dirControl = &game.cameraDirControl;
+                    cameraParams.lookat = Vec3(game.player.motion.pos, 0.f);
+                    cameraParams.movementType = Debug::cameraMovementType;
+                    cameraParams.orbitTransform = &game.player.transform;
+                    cameraParams.debugBreak = app.input.pressed(App::Input::Keys::FLYCAM_UP);
+                    cameraParams.playerSpeedNormalized = game.player.motion.speed / game.player.motion.config.maxSpeed;
+                    cameraParams.playerPushing = Vec::mag(game.player.dirControl.inputDir) > 0.f;
+                    Camera::update(cameraParams);
+                }
 
                 // Render update
                 glClearColor(0.f, 0.f, 0.f, 1.f);
@@ -482,31 +506,30 @@ int main(int argc, char** argv) {
                         char buff[128];
                         
                         Vec3 cameraPos = game.camera.transform.pos;
-                        snprintf(buff, sizeof(buff), "Pos " VEC3_FORMAT_LITE, VEC3_PARAMS(cameraPos));
+                        snprintf(buff, sizeof(buff), "Pos " VEC3_FORMAT("%.3f"), VEC3_PARAMS(cameraPos));
                         textParams.text = buff;
                         DebugDraw::text(textParams);
                         textParams.pos.y -= 15.f * textParams.scale;
                         
                         Vec3 cameraRight = game.camera.transform.right;
-                        snprintf(buff, sizeof(buff), "Right " VEC3_FORMAT_LITE, VEC3_PARAMS(cameraRight));
+                        snprintf(buff, sizeof(buff), "Right " VEC3_FORMAT("%.3f"), VEC3_PARAMS(cameraRight));
                         textParams.text = buff;
                         DebugDraw::text(textParams);
                         textParams.pos.y -= 15.f * textParams.scale;
                         
                         Vec3 cameraFront = game.camera.transform.front;
-                        snprintf(buff, sizeof(buff), "Front " VEC3_FORMAT_LITE, VEC3_PARAMS(cameraFront));
+                        snprintf(buff, sizeof(buff), "Front " VEC3_FORMAT("%.3f"), VEC3_PARAMS(cameraFront));
                         textParams.text = buff;
                         DebugDraw::text(textParams);
                         textParams.pos.y -= 15.f * textParams.scale;
                         
                         Vec3 cameraUp = game.camera.transform.up;
-                        snprintf(buff, sizeof(buff), "Up " VEC3_FORMAT_LITE, VEC3_PARAMS(cameraUp));
+                        snprintf(buff, sizeof(buff), "Up " VEC3_FORMAT("%.3f"), VEC3_PARAMS(cameraUp));
                         textParams.text = buff;
                         DebugDraw::text(textParams);
                         textParams.pos.y -= 15.f * textParams.scale;
                         
-                        Vec4 cameraBottom(game.camera.transform.x_w, game.camera.transform.y_w, game.camera.transform.z_w, game.camera.transform.pos_w);
-                        snprintf(buff, sizeof(buff), "Bottom row " VEC4_FORMAT_LITE, VEC4_PARAMS(cameraBottom));
+                        snprintf(buff, sizeof(buff), "Offset " VEC3_FORMAT("%.3f") " speed " VEC3_FORMAT("%.3f") " target " VEC3_FORMAT("%.3f"), VEC3_PARAMS(game.camera.orbit.offset_spring.state.value), VEC3_PARAMS(game.camera.orbit.offset_spring.state.speed), VEC3_PARAMS(game.camera.orbit.targetOffset_linear));
                         textParams.text = buff;
                         DebugDraw::text(textParams);
                         textParams.pos.y -= 15.f * textParams.scale;
@@ -522,10 +545,79 @@ int main(int argc, char** argv) {
                         {
                             glLoadMatrixf(game.camera.renderMatrix.dataCM);
                             
+                            f32 pw = 5.f;
+                            f32 pz = 500.f;
+                            Vec3 pillarQuads[] = {
+                                  { -pw, -pw, 0.f }
+                                , { pw, -pw, 0.f}
+                                , { pw, -pw, pz}
+                                , { -pw, -pw, pz}
+
+                                , { pw, -pw, 0.f }
+                                , { pw, pw, 0.f }
+                                , { pw, pw, pz }
+                                , { pw, -pw, pz }
+
+                                , { pw, pw, 0.f }
+                                , { -pw, pw, 0.f }
+                                , { -pw, pw, pz }
+                                , { pw, pw, pz }
+
+                                , { -pw, pw, 0.f }
+                                , { -pw, -pw, 0.f }
+                                , { -pw, -pw, pz }
+                                , { -pw, pw, pz }
+                            };
+                            const u32 pillarQuadCount = sizeof(pillarQuads) / sizeof(pillarQuads[0]);
+                            
+                            Vec2 pillarPos[] = {
+                                  { -80.f, -20.f }
+                                , { 80.f, -20.f }
+                                , { -160.f, -20.f }
+                                , { 160.f, -20.f }
+                                , { -240.f, -20.f }
+                                , { 240.f, -20.f }
+                                , { -300.f, -20.f }
+                                , { 300.f, -20.f }
+                                , { -80.f, -80.f }
+                                , { 80.f, -80.f }
+                                , { -160.f, -80.f }
+                                , { 160.f, -80.f }
+                                , { -240.f, -80.f }
+                                , { 240.f, -80.f }
+                                , { -300.f, -80.f }
+                                , { 300.f, -80.f }
+                                , { -20.f, 180.f }
+                                , { 20.f, 180.f }
+                                , { -100.f, 180.f }
+                                , { 100.f, 180.f }
+                                , { -200.f, 180.f }
+                                , { 200.f, 180.f }
+                                , { -300.f, 180.f }
+                                , { 300.f, 180.f }
+                            };
+                            
+                            glEnable(GL_CULL_FACE);
+                            glEnableClientState(GL_VERTEX_ARRAY);
+                            {
+                                const Col pillarColor(1.0f, 1.0f, 1.0f, 0.5f);
+                                glColor4f(RGBA_PARAMS(pillarColor));
+                                glVertexPointer(3, GL_FLOAT, 0, pillarQuads);
+                                
+                                for (Vec2& pos : pillarPos) {
+                                    glPushMatrix();
+                                    glTranslatef(pos.x, pos.y, 0.f);
+                                    glDrawArrays(GL_QUADS, 0, pillarQuadCount);
+                                    glPopMatrix();
+                                }
+                            }
+                            glDisableClientState(GL_VERTEX_ARRAY);
+                            glDisable(GL_CULL_FACE);
+                            
                             // Tiled floor
-                            const f32 l = -200.;
+                            const f32 l = -500.;
                             const f32 r = -l;
-                            const f32 b = -200.;
+                            const f32 b = -500.;
                             const f32 t = -b;
                             const f32 z = 0.f;
                             const f32 separation = 20.f;
@@ -570,10 +662,6 @@ int main(int argc, char** argv) {
                                 DebugDraw::segment(pos, Vec::add(pos, Vec::scale(right, axisSize)), axisFront);
                                 DebugDraw::segment(pos, Vec::add(pos, Vec::scale(up, axisSize)), axisUp);
                                 DebugDraw::segment(pos, Vec::add(pos, Vec::scale(front, axisSize)), axisFront);
-                                
-                                Vec3 posXY = camera.transform.pos;
-                                posXY.z = 0.f;
-                                DebugDraw::sphere(posXY, 5.f, xyPos);
                             }
                             
                             // Player

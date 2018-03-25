@@ -44,7 +44,7 @@ namespace Math {
     template <typename _T>
     _T eappr(_T curr, _T target, _T timeHorizon, _T timeDelta) {
         
-        curr = target + (curr - target) / Math::expTaylor( timeDelta * Math::e<_T> / timeHorizon );
+        curr = target + (curr - target) / Math::exp_taylor( timeDelta * Math::e<_T> / timeHorizon );
         
         return curr;
     };
@@ -56,10 +56,10 @@ namespace Math {
         
         _T t = 0.f;
         for (s32 i = 0; i < steps; i++) {
-            curr = target + (curr - target) / Math::expTaylor(stepTime * Math::e<_T> / (timeHorizon - t));
+            curr = target + (curr - target) / Math::exp_taylor(stepTime * Math::e<_T> / (timeHorizon - t));
             t += stepTime;
         }
-        curr = target + (curr - target) / Math::expTaylor((timeDelta - t) * Math::e<_T> / (timeHorizon - timeDelta));
+        curr = target + (curr - target) / Math::exp_taylor((timeDelta - t) * Math::e<_T> / (timeHorizon - timeDelta));
         
         return curr;
     };

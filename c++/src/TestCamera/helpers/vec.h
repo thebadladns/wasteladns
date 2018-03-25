@@ -48,12 +48,9 @@
     g(RT3_PT3T3(min, __VA_ARGS__)) \
     g(RT4_PT4T4(min, __VA_ARGS__))
 
-#define VEC2_FORMAT "(%f, %f)"
-#define VEC2_FORMAT_LITE "(%.3f, %.3f)"
-#define VEC3_FORMAT "(%f, %f, %f)"
-#define VEC3_FORMAT_LITE "(%.3f, %.3f, %.3f)"
-#define VEC4_FORMAT "(%.f, %f, %f, %f)"
-#define VEC4_FORMAT_LITE "(%.3f, %.3f, %.3f, %.3f)"
+#define VEC2_FORMAT(format) "(" format ", " format ")"
+#define VEC3_FORMAT(format) "(" format ", " format ", " format ")"
+#define VEC4_FORMAT(format) "(" format ", " format ", " format ", " format ")"
 #define VEC2_PARAMS(v) v.x, v.y
 #define VEC3_PARAMS(v) v.x, v.y, v.z
 #define VEC4_PARAMS(v) v.x, v.y, v.z, v.w
@@ -86,6 +83,10 @@ struct Vector3 {
             Vector2<_T> xy;
         };
         struct {
+            _T _padding;
+            Vector2<_T> yz;
+        };
+        struct {
             _T x, y, z;
         };
         _T coords[3];
@@ -107,7 +108,15 @@ struct Vector4 {
             Vector2<_T> xy, zw;
         };
         struct {
+            _T _padding0;
+            Vector2<_T> yz;
+        };
+        struct {
             Vector3<_T> xyz;
+        };
+        struct {
+            _T _padding1;
+            Vector3<_T> yzw;
         };
         struct {
             _T x, y, z, w;
