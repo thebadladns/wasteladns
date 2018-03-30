@@ -14,6 +14,9 @@
     g(RT_PT2(mag, __VA_ARGS__)) \
     g(RT_PT3(mag, __VA_ARGS__)) \
     g(RT_PT4(mag, __VA_ARGS__)) \
+    g(RT_PT2(magSq, __VA_ARGS__)) \
+    g(RT_PT3(magSq, __VA_ARGS__)) \
+    g(RT_PT4(magSq, __VA_ARGS__)) \
     g(RT2_PT2(normalize, __VA_ARGS__)) \
     g(RT3_PT3(normalize, __VA_ARGS__)) \
     g(RT4_PT4(normalize, __VA_ARGS__)) \
@@ -38,7 +41,7 @@
     g(RT2_PT2T2(subtract, __VA_ARGS__)) \
     g(RT3_PT3T3(subtract, __VA_ARGS__)) \
     g(RT4_PT4T4(subtract, __VA_ARGS__)) \
-    g(RT2_PT2T2(cross, __VA_ARGS__)) \
+    g(RT_PT2T2(cross, __VA_ARGS__)) \
     g(RT3_PT3T3(cross, __VA_ARGS__)) \
     g(RT4_PT4T4(cross, __VA_ARGS__)) \
     g(RT2_PT2T2(max, __VA_ARGS__)) \
@@ -272,6 +275,18 @@ _T mag(const Vector4<_T>& v) {
     return Math::sqrt(v.x * v.x + v.y * v.y + v.z * v.z + v.w * v.w);
 }
 template <typename _T>
+_T magSq(const Vector2<_T>& v) {
+    return v.x * v.x + v.y * v.y;
+}
+template <typename _T>
+_T magSq(const Vector3<_T>& v) {
+    return v.x * v.x + v.y * v.y + v.z * v.z;
+}
+template <typename _T>
+_T magSq(const Vector4<_T>& v) {
+    return v.x * v.x + v.y * v.y + v.z * v.z + v.w * v.w;
+}
+template <typename _T>
 Vector2<_T> normalize(const Vector2<_T>& v) {
     return invScale(v, mag(v));
 }
@@ -389,8 +404,8 @@ Vector4<_T> subtract(const Vector4<_T>& a, const Vector4<_T>& b) {
     return Vector4<_T>(a.x - b.x, a.y - b.y, a.z - b.z, a.w - b.w);
 }
 template <typename _T>
-Vector2<_T> cross(const Vector2<_T>& a, const Vector2<_T>& b) {
-    return Vector2<_T>(a.x * b.y, a.y - b.x);
+_T cross(const Vector2<_T>& a, const Vector2<_T>& b) {
+    return a.x * b.y - a.y * b.x;
 }
 template <typename _T>
 Vector3<_T> cross(const Vector3<_T>& a, const Vector3<_T>& b) {

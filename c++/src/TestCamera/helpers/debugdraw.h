@@ -20,6 +20,10 @@
 
 namespace DebugDraw
 {
+    void drawBatches();
+    void clearBatches();
+    void immediateMode(const bool b);
+    
     void segment(const Vec3& vStart, const Vec3& vEnd, const Col color);
     void ray(const Vec3& vStart, const Vec3& vDir, Col color);
     void openSegment(const Vec3& vStart, const Vec3& vDir, const Col color);
@@ -53,6 +57,9 @@ namespace DebugDraw
         Col color;
     };
     void graph(const GraphParams& params);
+    
+    f32* batchMemBuffer = nullptr;
+    s32 batchMemBufferSize = 0;
 };
 
 #endif // __WASTELADNS_DEBUGDRAW_H__
@@ -72,19 +79,90 @@ namespace DebugDraw
 #endif
 
 namespace DebugDraw {
+    
     namespace Private
     {
         const u8 kDebugCircleVertexCount = 98;
         const u8 kDebugSphereSectionCount = 98;
+        
+        struct BatchedVertex {
+            u32 color;
+            Vec3 pos;
+        };
+        u32 batchStride = sizeof(BatchedVertex) / sizeof(f32);
+        u32 batchMemWriteIdx = 0;
+        u32 batchMemCount = 0;
+        bool immediateMode = false;
+        bool batchOverflow = false;
     }
 }
 
+void DebugDraw::immediateMode(const bool b) {
+    Private::immediateMode = b;
+}
+
+void DebugDraw::drawBatches() {
+    
+    if (Private::batchOverflow) {
+        f64 prevProjectionMatrix[16];
+        glMatrixMode(GL_PROJECTION); glGetDoublev(GL_PROJECTION_MATRIX, prevProjectionMatrix);
+        {
+            glLoadIdentity(); glOrtho(-160.f, 160.f, -120.f, 120.f, -1.f, 1.f);
+            glMatrixMode(GL_MODELVIEW); glPushMatrix();
+            {
+                glLoadIdentity();
+                DebugDraw::TextParams textParams;
+                textParams.scale = 1.f;
+                textParams.pos = Vec3(-55.f, -20.f, 0.f);
+                textParams.text = "DEBUG DRAW OVERFLOW";
+                textParams.color = Col(1.0f, 1.0f, 1.0f, 1.0f);
+                DebugDraw::text(textParams);
+            }
+            glPopMatrix(); glMatrixMode(GL_PROJECTION);
+        }
+        glLoadMatrixd(prevProjectionMatrix); glMatrixMode(GL_MODELVIEW);
+    }
+    
+    glInterleavedArrays(GL_C4UB_V3F, 0, batchMemBuffer);
+    
+    glDrawArrays(GL_LINES, 0, Private::batchMemCount / Private::batchStride);
+    
+    // Disable client state implicitly set by glInterleavedArrays
+    glDisableClientState(GL_VERTEX_ARRAY);
+    glDisableClientState(GL_COLOR_ARRAY);
+}
+
+void DebugDraw::clearBatches() {
+    Private::batchMemCount = Private::batchMemWriteIdx = 0;
+}
+
 void DebugDraw::segment(const Vec3& vStart, const Vec3& vEnd, Col color) {
-    glBegin(GL_LINES);
-    glColor4f(RGBA_PARAMS(color));
-    glVertex3f(vStart.x, vStart.y, vStart.z);
-    glVertex3f(vEnd.x, vEnd.y, vEnd.z);
-    glEnd();
+    
+    if (Private::immediateMode) {
+        glBegin(GL_LINES);
+        glColor4f(RGBA_PARAMS(color));
+        glVertex3f(vStart.x, vStart.y, vStart.z);
+        glVertex3f(vEnd.x, vEnd.y, vEnd.z);
+        glEnd();
+    } else {
+        
+        if (Private::batchMemWriteIdx + 2 * Private::batchStride > batchMemBufferSize) {
+            Private::batchMemWriteIdx = 0;
+            Private::batchOverflow = true;
+        }
+        
+        Private::BatchedVertex* start = (Private::BatchedVertex*)&(batchMemBuffer[Private::batchMemWriteIdx]);
+        start->pos = vStart;
+        start->color = color.ABGR();
+        Private::batchMemWriteIdx += Private::batchStride;
+        
+        Private::BatchedVertex* end = (Private::BatchedVertex*)&(batchMemBuffer[Private::batchMemWriteIdx]);
+        end->pos = vEnd;
+        end->color = start->color;
+        Private::batchMemWriteIdx += Private::batchStride;
+        
+        Private::batchMemCount = Math::max(Private::batchMemWriteIdx, Private::batchMemCount);
+    }
 }
 
 void DebugDraw::ray(const Vec3& vStart, const Vec3& vDir, Col color) {

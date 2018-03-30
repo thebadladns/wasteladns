@@ -5,7 +5,7 @@ namespace Spring {
     
     struct State_linearf32 {
         f32 value;
-        f32 speed;
+        f32 velocity;
         
         typedef f32 Value;
         static f32 delta(f32 current, f32 target) {
@@ -26,7 +26,7 @@ namespace Spring {
     };
     struct State_angf32 {
         f32 value;
-        f32 speed;
+        f32 velocity;
         
         typedef f32 Value;
         static f32 delta(f32 current, f32 target) {
@@ -47,7 +47,7 @@ namespace Spring {
     };
     struct State_linearVec3 {
         Vec3 value;
-        Vec3 speed;
+        Vec3 velocity;
         
         typedef Vec3 Value;
         static Vec3 delta(const Vec3& current, const Vec3& target) {
@@ -79,9 +79,9 @@ namespace Spring {
     };
     
     template <typename _State>
-    void spring_0(_State& spring, const typename _State::Value value_0, const typename _State::Value speed_0) {
+    void spring_0(_State& spring, const typename _State::Value value_0, const typename _State::Value velocity_0) {
         spring.value = value_0;
-        spring.speed = speed_0;
+        spring.velocity = velocity_0;
     }
     
     /*  Linear, non-templated f32 version, for reference
@@ -100,19 +100,19 @@ namespace Spring {
             const f32 z2 = za + zb;
             const f32 expTerm1 = Math::exp_taylor(z1 * t);
             const f32 expTerm2 = Math::exp_taylor(z2 * t);
-            const f32 c1 = (spring.state.speed - delta * z2) / (-2.f * zb);
+            const f32 c1 = (spring.state.velocity - delta * z2) / (-2.f * zb);
             const f32 c2 = delta - c1;
 
             spring.state.value = targetValue + c1 * expTerm1 + c2 * expTerm2;
-            spring.state.speed = c1 * z1 * expTerm1 + c2 * z2 * expTerm2;
+            spring.state.velocity = c1 * z1 * expTerm1 + c2 * z2 * expTerm2;
         } else if (spring.config.dampingRatio <= 1.f + Math::eps<f32>) {
             const f32 expTerm = Math::exp_taylor( - spring.config.angularFrequency * t);
-            const f32 c1 = spring.state.speed + spring.config.angularFrequency * delta;
+            const f32 c1 = spring.state.velocity + spring.config.angularFrequency * delta;
             const f32 c2 = delta;
             const f32 c3 = (c1 * t + c2) * expTerm;
 
             spring.state.value = targetValue + c3;
-            spring.state.speed = c1 * expTerm - c3 * spring.config.angularFrequency;
+            spring.state.velocity = c1 * expTerm - c3 * spring.config.angularFrequency;
         }
     }
      */
@@ -131,20 +131,30 @@ namespace Spring {
             const f32 z2 = za + zb;
             const f32 expTerm1 = Math::exp_taylor(z1 * t);
             const f32 expTerm2 = Math::exp_taylor(z2 * t);
-            const typename _State::Value c1 = _State::delta_scale(_State::delta_subtract(spring.state.speed, _State::delta_scale(delta, z2)), 1.f / (-2.f * zb));
+            const typename _State::Value c1 = _State::delta_scale(_State::delta_subtract(spring.state.velocity, _State::delta_scale(delta, z2)), 1.f / (-2.f * zb));
             const typename _State::Value c2 = _State::delta_subtract(delta, c1);
             
             spring.state.value = _State::value_add(targetValue, _State::delta_add(_State::delta_scale(c1, expTerm1), _State::delta_scale(c2, expTerm2)));
-            spring.state.speed = _State::delta_add(_State::delta_scale(c1, z1 * expTerm1), _State::delta_scale(c2, z2 * expTerm2));
+            spring.state.velocity = _State::delta_add(_State::delta_scale(c1, z1 * expTerm1), _State::delta_scale(c2, z2 * expTerm2));
         } else if (spring.config.dampingRatio <= 1.f + Math::eps<f32>) {
             const f32 expTerm = Math::exp_taylor(-spring.config.angularFrequency * t);
-            const typename _State::Value c1 = _State::delta_add(spring.state.speed, _State::delta_scale(delta, spring.config.angularFrequency));
+            const typename _State::Value c1 = _State::delta_add(spring.state.velocity, _State::delta_scale(delta, spring.config.angularFrequency));
             const typename _State::Value c2 = delta;
             const typename _State::Value c3 = _State::delta_scale(( _State::delta_add(_State::delta_scale(c1, t), c2)), expTerm);
             
             spring.state.value = _State::value_add(targetValue, c3);
-            spring.state.speed = _State::delta_subtract(_State::delta_scale(c1, expTerm), _State::delta_scale(c3, spring.config.angularFrequency));
+            spring.state.velocity = _State::delta_subtract(_State::delta_scale(c1, expTerm), _State::delta_scale(c3, spring.config.angularFrequency));
         }
+    }
+    
+    template <typename _State>
+    void dampedNumericalVelocity_t(DampedInstance<_State>& spring, const typename _State::Value targetValue, const f32 t) {
+        f32 w = spring.config.angularFrequency;
+        typename _State::Value& velocity = spring.state.velocity;
+        typename _State::Value pos = spring.state.value;
+        typename _State::Value delta = _State::delta(pos, targetValue);
+        typename _State::Value acc = _State::delta_add(_State::delta_scale(delta, -w * w), _State::delta_scale(velocity, -2.f * w));
+        velocity = _State::delta_add(velocity, _State::delta_scale(acc, t));
     }
 }
 
@@ -233,7 +243,7 @@ namespace Camera {
         struct Config {
             f32 yawLS = 0.f;
             f32 pitchLS = 50 * Angle::d2r<f32>;
-            f32 distance = 150.f;
+            f32 distance = 100.f;
             f32 zoffset = 50.f;
         };
         
@@ -339,37 +349,25 @@ namespace Camera {
             Vec3 targetPos = Vec::add(lookatPos, orbit.targetOffset_linear);
             
             if (params.playerPushing) {
-                
-                if (params.springClosedForm) {
-                    Spring::damped_t(orbit.position_spring, targetPos, params.dt);
-                } else {
-                    f32 w = orbit.position_spring.config.angularFrequency;
-                    Vec3& speed = orbit.position_spring.state.speed;
-                    Vec3& pos = orbit.position_spring.state.value;
-                    Vec3 delta = Vec::subtract(pos, targetPos);
-                    Vec3 acc = Vec::add(Vec::scale(delta, -w * w), Vec::scale(speed, -2.f * w));
-                    speed = Vec::add(speed, Vec::scale(acc, params.dt));
-                    pos = Vec::add(pos, Vec::scale(speed, params.dt));
-                }
-                
+                Spring::dampedNumericalVelocity_t(orbit.position_spring, targetPos, params.dt);
             } else {
                 
-                f32 speed = Vec::mag(orbit.position_spring.state.speed);
+                f32 speed = Vec::mag(orbit.position_spring.state.velocity);
                 if (speed > 0.1f) {
                     
                     f32 decc = 300.f;
-                    Vec3 speedDir = Vec::scale(orbit.position_spring.state.speed, 1.f / speed);
+                    Vec3 velocitydDir = Vec::scale(orbit.position_spring.state.velocity, 1.f / speed);
                     speed = Math::lappr(speed, 0.f, decc, params.dt);
-                    orbit.position_spring.state.speed = Vec::scale(speedDir, speed);
+                    orbit.position_spring.state.velocity = Vec::scale(velocitydDir, speed);
                     
                 } else {
                     speed = 0.f;
-                    orbit.position_spring.state.speed = Vec3(0.f, 0.f, 0.f);
+                    orbit.position_spring.state.velocity = Vec3(0.f, 0.f, 0.f);
                 }
-                
-                Vec3& pos = orbit.position_spring.state.value;
-                pos = Vec::add(pos, Vec::scale(orbit.position_spring.state.speed, params.dt));
             }
+            
+            Vec3& pos = orbit.position_spring.state.value;
+            pos = Vec::add(pos, Vec::scale(orbit.position_spring.state.velocity, params.dt));
             
             orbit.targetTransform = *params.orbitTransform;
 

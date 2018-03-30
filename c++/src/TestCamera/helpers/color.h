@@ -32,8 +32,8 @@ struct Color {
     ValueType getBu() const;
     ValueType getAu() const;
     
-    u32 getABGR() const;
-    u32 getRGBA() const;
+    u32 ABGR() const;
+    u32 RGBA() const;
     
     void set(const f32 fR, const f32 fG, const f32 fB, const f32 fA = 1.f);
     void set(const ValueType uR, const ValueType uG, const ValueType uB, const ValueType uA = ((1 << alphaBitCount) - 1));
@@ -116,7 +116,7 @@ ValueType Color<ValueType, redBitCount, greenBitCount, blueBitCount, alphaBitCou
 }
 
 template<class ValueType, u8 redBitCount, u8 greenBitCount, u8 blueBitCount, u8 alphaBitCount>
-u32 Color<ValueType, redBitCount, greenBitCount, blueBitCount, alphaBitCount>::getABGR() const {
+u32 Color<ValueType, redBitCount, greenBitCount, blueBitCount, alphaBitCount>::ABGR() const {
     const ValueType uRedMask = (1 << redBitCount) - 1;
     const ValueType uGreenMask = (1 << greenBitCount) - 1;
     const ValueType uBlueMask = (1 << blueBitCount) - 1;
@@ -131,7 +131,7 @@ u32 Color<ValueType, redBitCount, greenBitCount, blueBitCount, alphaBitCount>::g
 }
                        
 template<class ValueType, u8 redBitCount, u8 greenBitCount, u8 blueBitCount, u8 alphaBitCount>
-u32 Color<ValueType, redBitCount, greenBitCount, blueBitCount, alphaBitCount>::getRGBA() const {
+u32 Color<ValueType, redBitCount, greenBitCount, blueBitCount, alphaBitCount>::RGBA() const {
    return color;
 }
 

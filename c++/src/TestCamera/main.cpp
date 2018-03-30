@@ -189,10 +189,13 @@ namespace Game {
         Vec::Transform transform;
     };
 
+    struct CameraTypes { enum Enum { GameCam, FlyCam, Count }; };
+    
 	struct Instance {
 		Time time;
         Camera::ProjectionConfig projection;
-        Camera::Instance camera;
+        Camera::Instance* activeCamera;
+        Camera::Instance cameras[CameraTypes::Count];
         Input::Gamepad::State pad;
         
         Player player;
@@ -201,12 +204,8 @@ namespace Game {
 	};
     
     namespace Debug {
-//        Camera::UpdateParams::MovementType::Enum cameraMovementType = Camera::UpdateParams::MovementType::manual;
         Camera::UpdateParams::MovementType::Enum cameraMovementType = Camera::UpdateParams::MovementType::orbit;
-//        Camera::UpdateParams::MovementType::Enum cameraMovementType = Camera::UpdateParams::MovementType::lookat;
-//        Motion::UpdateParams::MovementType::Enum playerMovementType = Motion::UpdateParams::MovementType::playerRelative;
         Motion::UpdateParams::MovementType::Enum playerMovementType = Motion::UpdateParams::MovementType::cameraRelative;
-//        Motion::UpdateParams::MovementType::Enum playerMovementType = Motion::UpdateParams::MovementType::global;
     };
 };
 
@@ -239,7 +238,7 @@ namespace App {
                 , FLYCAM_ROT_L
                 , FLYCAM_ROT_R
                 , PAUSE
-                , ALT_SPRING_MODE
+                , TOGGLE_CAM
                 , CHAR_U
                 , CHAR_D
                 , CHAR_L
@@ -259,7 +258,7 @@ namespace App {
             , GLFW_KEY_Q
             , GLFW_KEY_E
             , GLFW_KEY_SPACE
-            , GLFW_KEY_B
+            , GLFW_KEY_TAB
             , GLFW_KEY_I
             , GLFW_KEY_K
             , GLFW_KEY_J
@@ -302,6 +301,12 @@ int main(int argc, char** argv) {
     if (!window.handle) {
         return 0;
     }
+    
+    {
+        f32 debugDrawMemory[1 << 15];
+        DebugDraw::batchMemBuffer = debugDrawMemory;
+        DebugDraw::batchMemBufferSize = sizeof(debugDrawMemory) / sizeof(debugDrawMemory[0]);
+    }
         
     Game::Instance& game = app.game;
 
@@ -333,11 +338,14 @@ int main(int argc, char** argv) {
     }
     // Camera
     {
-        Vec::identity4x4(game.camera.transform);
-        game.camera.transform.pos = Vec3(0.f, -115.f, 170.f);
+        Camera::Instance& cam = game.cameras[Game::CameraTypes::GameCam];
+        Vec::identity4x4(cam.transform);
+        cam.transform.pos = Vec3(0.f, -115.f, 170.f);
         Vec3 lookAt(0.f, 0.f, 0.f);
-        Vec3 lookAtDir = Vec::subtract(lookAt, game.camera.transform.pos);
-        Vec::transformFromFront(game.camera.transform, lookAtDir);
+        Vec3 lookAtDir = Vec::subtract(lookAt, cam.transform.pos);
+        Vec::transformFromFront(cam.transform, lookAtDir);
+        
+        game.activeCamera = &cam;
     }
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -348,9 +356,7 @@ int main(int argc, char** argv) {
     game.player.motion.speed = 0.f;
     Vec::identity4x4(game.player.transform);
     
-    bool cameraUpdate = true;
-    bool playerUpdate = true;
-    bool springClosedForm = true;
+    bool pauseUpdate = false;
 
     game.time.config.maxFrameLength = 0.1;
     game.time.config.targetFramerate = 1.0 / 60.0;
@@ -363,30 +369,41 @@ int main(int argc, char** argv) {
             game.time.lastFrame = app.time.now;
             game.time.nextFrame = app.time.now + game.time.config.targetFramerate;
 
+            // Input
+            glfwPollEvents();
+            Input::pollState(app.input, App::Input::mapping, window.handle);
+            
+            // Always-on logic
             {
-                using namespace Game;
-
-                // Input
-                glfwPollEvents();
-                Input::pollState(app.input, App::Input::mapping, window.handle);
-                Input::pollState(game.pad, GLFW_JOYSTICK_1, window.handle);
-                
-                // Logic
                 if (app.input.released(App::Input::Keys::ESC)) {
                     glfwSetWindowShouldClose(app.mainWindow.handle, 1);
                 }
                 
                 if (app.input.released(App::Input::Keys::PAUSE)) {
-                    cameraUpdate = !cameraUpdate;
-                    playerUpdate = !playerUpdate;
+                    pauseUpdate = !pauseUpdate;
                 }
                 
-                if (app.input.released(App::Input::Keys::ALT_SPRING_MODE)) {
-                    springClosedForm = !springClosedForm;
+                if (app.input.pressed(App::Input::Keys::TOGGLE_CAM)) {
+                    Camera::Instance* gameCam = &game.cameras[Game::CameraTypes::GameCam];
+                    Camera::Instance* flyCam = &game.cameras[Game::CameraTypes::FlyCam];
+                    if (game.activeCamera == gameCam) {
+                        *flyCam = *gameCam;
+                        game.activeCamera = flyCam;
+                    } else {
+                        game.activeCamera = gameCam;
+                    }
                 }
+            }
+            
+            if (!pauseUpdate)
+            {
+                DebugDraw::clearBatches();
+                
+                using namespace Game;
+
+                Input::pollState(game.pad, GLFW_JOYSTICK_1, window.handle);
                 
                 // Locomotion update
-                if (playerUpdate)
                 {
                     using namespace Motion;
                     using namespace Input::Gamepad;
@@ -448,7 +465,7 @@ int main(int argc, char** argv) {
                         motionParams.analog_mag = Vec::mag(motionParams.analog_dir);
                     }
                     
-                    motionParams.cameraTransform = &game.camera.transform;
+                    motionParams.cameraTransform = &game.activeCamera->transform;
                     motionParams.movementType = Debug::playerMovementType;
                     update(motionParams);
                     
@@ -458,8 +475,21 @@ int main(int argc, char** argv) {
                 }
                 
                 // Camera update
-                if (cameraUpdate)
                 {
+                    Camera::UpdateParams cameraParams;
+                    cameraParams.debugBreak = app.input.pressed(App::Input::Keys::FLYCAM_UP);
+                    cameraParams.dt = (f32)game.time.config.targetFramerate;
+                    
+                    Vec3 cameraLookat(game.player.motion.pos, 0.f);
+                    cameraParams.instance = &game.cameras[CameraTypes::GameCam];
+                    cameraParams.dirControl = &game.cameraDirControl;
+                    cameraParams.lookat = Vec3(game.player.motion.pos, 0.f);
+                    cameraParams.movementType = Debug::cameraMovementType;
+                    cameraParams.orbitTransform = &game.player.transform;
+                    cameraParams.playerSpeedNormalized = game.player.motion.speed / game.player.motion.config.maxSpeed;
+                    cameraParams.playerPushing = Vec::mag(game.player.dirControl.inputDir) > 0.f;
+                    Camera::update(cameraParams);
+                    
                     Input::DigitalInputToAxisParams<App::Input::Keys::COUNT> flyCamInputParams;
                     flyCamInputParams.input = &app.input;
                     flyCamInputParams.axis = &game.cameraDirControl.inputDir.x;
@@ -479,18 +509,8 @@ int main(int argc, char** argv) {
                     flyCamInputParams.minus_key = App::Input::Keys::FLYCAM_ROT_L;
                     Input::digitalInputToAxis(flyCamInputParams);
                     
-                    Vec3 cameraLookat(game.player.motion.pos, 0.f);
-                    Camera::UpdateParams cameraParams;
-                    cameraParams.instance = &game.camera;
-                    cameraParams.dt = (f32)game.time.config.targetFramerate;
-                    cameraParams.dirControl = &game.cameraDirControl;
-                    cameraParams.lookat = Vec3(game.player.motion.pos, 0.f);
-                    cameraParams.movementType = Debug::cameraMovementType;
-                    cameraParams.orbitTransform = &game.player.transform;
-                    cameraParams.debugBreak = app.input.pressed(App::Input::Keys::FLYCAM_UP);
-                    cameraParams.playerSpeedNormalized = game.player.motion.speed / game.player.motion.config.maxSpeed;
-                    cameraParams.playerPushing = Vec::mag(game.player.dirControl.inputDir) > 0.f;
-                    cameraParams.springClosedForm = springClosedForm;
+                    cameraParams.instance = &game.cameras[CameraTypes::FlyCam];
+                    cameraParams.movementType = Camera::UpdateParams::MovementType::manual;
                     Camera::update(cameraParams);
                 }
 
@@ -502,7 +522,7 @@ int main(int argc, char** argv) {
                     {
                         glMatrixMode(GL_PROJECTION);
                         glLoadMatrixf(game.projection.orthoMatrix.dataCM);
-
+                        
                         DebugDraw::TextParams textParams;
                         textParams.scale = 1.f;
                         textParams.pos = Vec3(game.projection.orthoParams.left + 10.f, game.projection.orthoParams.top - 10.f, -50);
@@ -513,31 +533,33 @@ int main(int argc, char** argv) {
                         
                         char buff[128];
                         
-                        Vec3 cameraPos = game.camera.transform.pos;
+                        Camera::Instance& cam = game.cameras[CameraTypes::GameCam];
+                        
+                        Vec3 cameraPos = cam.transform.pos;
                         snprintf(buff, sizeof(buff), "Pos " VEC3_FORMAT("%.3f"), VEC3_PARAMS(cameraPos));
                         textParams.text = buff;
                         DebugDraw::text(textParams);
                         textParams.pos.y -= 15.f * textParams.scale;
                         
-                        Vec3 cameraRight = game.camera.transform.right;
+                        Vec3 cameraRight = cam.transform.right;
                         snprintf(buff, sizeof(buff), "Right " VEC3_FORMAT("%.3f"), VEC3_PARAMS(cameraRight));
                         textParams.text = buff;
                         DebugDraw::text(textParams);
                         textParams.pos.y -= 15.f * textParams.scale;
                         
-                        Vec3 cameraFront = game.camera.transform.front;
+                        Vec3 cameraFront = cam.transform.front;
                         snprintf(buff, sizeof(buff), "Front " VEC3_FORMAT("%.3f"), VEC3_PARAMS(cameraFront));
                         textParams.text = buff;
                         DebugDraw::text(textParams);
                         textParams.pos.y -= 15.f * textParams.scale;
                         
-                        Vec3 cameraUp = game.camera.transform.up;
+                        Vec3 cameraUp = cam.transform.up;
                         snprintf(buff, sizeof(buff), "Up " VEC3_FORMAT("%.3f"), VEC3_PARAMS(cameraUp));
                         textParams.text = buff;
                         DebugDraw::text(textParams);
                         textParams.pos.y -= 15.f * textParams.scale;
                         
-                        snprintf(buff, sizeof(buff), "Offset %s " VEC3_FORMAT("%.3f") " speed " VEC3_FORMAT("%.3f") " target " VEC3_FORMAT("%.3f"), springClosedForm ? "closed form" : "num integral", VEC3_PARAMS(game.camera.orbit.position_spring.state.value), VEC3_PARAMS(game.camera.orbit.position_spring.state.speed), VEC3_PARAMS(game.camera.orbit.targetOffset_linear));
+                        snprintf(buff, sizeof(buff), "Offset " VEC3_FORMAT("%.3f") " speed " VEC3_FORMAT("%.3f") " target " VEC3_FORMAT("%.3f"), VEC3_PARAMS(cam.orbit.position_spring.state.value), VEC3_PARAMS(cam.orbit.position_spring.state.velocity), VEC3_PARAMS(cam.orbit.targetOffset_linear));
                         textParams.text = buff;
                         DebugDraw::text(textParams);
                         textParams.pos.y -= 15.f * textParams.scale;
@@ -551,7 +573,11 @@ int main(int argc, char** argv) {
                         glMatrixMode(GL_MODELVIEW);
                         glPushMatrix();
                         {
-                            glLoadMatrixf(game.camera.renderMatrix.dataCM);
+                            glLoadMatrixf(game.activeCamera->renderMatrix.dataCM);
+                            
+                            // Batched debug
+                            DebugDraw::drawBatches();
+                            DebugDraw::immediateMode(true);
                             
                             f32 pw = 5.f;
                             f32 pz = 500.f;
@@ -656,18 +682,19 @@ int main(int argc, char** argv) {
                             }
                             
                             // Camera axis
+                            if (game.activeCamera != &game.cameras[CameraTypes::GameCam])
                             {
-                                Camera::Instance& camera = game.camera;
+                                Camera::Instance& camera = game.cameras[CameraTypes::GameCam];
                                 const Col axisRight(0.8f, 0.15f, 0.25f, 0.7f);
                                 const Col axisUp(0.25f, 0.8f, 0.15f, 0.7f);
                                 const Col axisFront(0.15f, 0.25f, 0.8f, 0.7f);
                                 const Col xyPos(0.15f, 0.25f, 0.8f, 0.7f);
                                 const f32 axisSize = 60;
-                                Vec3 pos(0.f, 30.f, 30.f);
+                                Vec3 pos = camera.transform.pos;
                                 Vec3 front = camera.transform.front;
                                 Vec3 right = camera.transform.right;
                                 Vec3 up = camera.transform.up;
-                                DebugDraw::segment(pos, Vec::add(pos, Vec::scale(right, axisSize)), axisFront);
+                                DebugDraw::segment(pos, Vec::add(pos, Vec::scale(right, axisSize)), axisRight);
                                 DebugDraw::segment(pos, Vec::add(pos, Vec::scale(up, axisSize)), axisUp);
                                 DebugDraw::segment(pos, Vec::add(pos, Vec::scale(front, axisSize)), axisFront);
                             }
@@ -715,10 +742,11 @@ int main(int argc, char** argv) {
                                 glPolygonMode( GL_FRONT_AND_BACK, GL_FILL );
                             }
                             glPopMatrix();
+
+                            DebugDraw::immediateMode(false);
                         }
                         glPopMatrix();
                     }
-                    
                 }
                 // Needed since GLFW_DOUBLEBUFFER is GL_TRUE
                 glfwSwapBuffers(app.mainWindow.handle);
