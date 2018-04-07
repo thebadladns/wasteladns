@@ -15,8 +15,15 @@ namespace Input {
         const auto& input = *params.input;
         
         f32& axis = *params.axis;
-        axis -= 3 * input.pressed(params.minus_key) + input.down(params.minus_key) - input.released(params.minus_key);
-        axis += 3 * input.pressed(params.plus_key) + input.down(params.plus_key) - input.released(params.plus_key);
+        bool downMinusKey = input.down(params.minus_key);
+        bool downPlusKey = input.down(params.plus_key);
+        bool pressedMinusKey = input.pressed(params.minus_key);
+        bool pressedPlusKey = input.pressed(params.plus_key);
+        bool releasedMinusKey = axis < 0.f && !downMinusKey;
+        bool releasedPlusKey = axis > 0.f && !downPlusKey;
+        
+        axis -= 3 * pressedMinusKey + downMinusKey - releasedMinusKey;
+        axis += 3 * pressedPlusKey + downPlusKey - releasedPlusKey;
         axis = Math::clamp(*params.axis, -1.f, 1.f);
     }
 };

@@ -23,6 +23,12 @@ namespace Spring {
         static f32 delta_scale(f32 v, f32 s) {
             return v * s;
         }
+        static f32 delta_mag(f32 v) {
+            return v;
+        }
+        static f32 delta_min(f32 v, f32 max) {
+            return Math::min(v, max);
+        }
     };
     struct State_angf32 {
         f32 value;
@@ -44,6 +50,12 @@ namespace Spring {
         static f32 delta_scale(f32 v, f32 s) {
             return v * s;
         }
+        static f32 delta_mag(f32 v) {
+            return v;
+        }
+        static f32 delta_min(f32 v, f32 max) {
+            return Math::min(v, max);
+        }
     };
     struct State_linearVec3 {
         Vec3 value;
@@ -64,6 +76,20 @@ namespace Spring {
         }
         static Vec3 delta_scale(const Vec3& v, f32 s) {
             return Vec::scale(v, s);
+        }
+        static f32 delta_mag(const Vec3& v) {
+            return Vec::mag(v);
+        }
+        static Vec3 delta_min(const Vec3& v, const Vec3& max) {
+            const f32 max_x = Math::abs(max.x);
+            const f32 max_y = Math::abs(max.y);
+            const f32 max_z = Math::abs(max.z);
+            Vec3 copy(
+                  Math::clamp(v.x, -max_x, max_x)
+                , Math::clamp(v.y, -max_y, max_y)
+                , Math::clamp(v.z, -max_z, max_z)
+            );
+            return copy;
         }
     };
     
@@ -153,8 +179,10 @@ namespace Spring {
         typename _State::Value& velocity = spring.state.velocity;
         typename _State::Value pos = spring.state.value;
         typename _State::Value delta = _State::delta(pos, targetValue);
+        typename _State::Value maxVelocity = _State::delta_scale(delta, 1.f / t);
         typename _State::Value acc = _State::delta_add(_State::delta_scale(delta, -w * w), _State::delta_scale(velocity, -2.f * w));
         velocity = _State::delta_add(velocity, _State::delta_scale(acc, t));
+        velocity = _State::delta_min(velocity, maxVelocity);
     }
 }
 
@@ -243,8 +271,9 @@ namespace Camera {
         struct Config {
             f32 yawLS = 0.f;
             f32 pitchLS = 50 * Angle::d2r<f32>;
-            f32 distance = 100.f;
-            f32 zoffset = 50.f;
+            f32 distance = 200.f;
+            f32 maxLagXY = 25.f;
+            f32 zoffset = 80.f;
         };
         
         Config config;
@@ -252,7 +281,7 @@ namespace Camera {
         Spring::DampedConfig position_springConfigAtMinSpeed;
         Spring::DampedConfig position_springConfigAtMaxSpeed;
         Spring::DampedInstance<Spring::State_linearVec3> position_spring;
-        Vec3 targetOffset_linear;
+        Vec3 targetOffset_linear, targetPos;
         f32 targetSpeed;
         
         bool active = false;
@@ -317,13 +346,15 @@ namespace Camera {
                 printf("");
             }
             
+            Vec3 currentOffset = Vec::normalize(Vec::subtract(camera.transform.pos, params.orbitTransform->pos));
             if (!orbit.active) {
                 // Init
                 Spring::spring_0(orbit.position_spring.state, camera.transform.pos, Vec3(0.f, 0.f, 0.f));
                 orbit.position_springConfigAtMinSpeed.dampingRatio = 1.f;
-                orbit.position_springConfigAtMinSpeed.angularFrequency = 0.5f;
+                orbit.position_springConfigAtMinSpeed.angularFrequency = 5.f;
                 orbit.position_springConfigAtMaxSpeed.dampingRatio = 1.f;
-                orbit.position_springConfigAtMaxSpeed.angularFrequency = 1.5f;
+                orbit.position_springConfigAtMaxSpeed.angularFrequency = 10.f;
+                orbit.targetOffset_linear = currentOffset;
                 orbit.targetTransform = *params.orbitTransform;
                 orbit.targetSpeed = 0.f;
                 orbit.active = true;
@@ -334,8 +365,10 @@ namespace Camera {
             
             Vec3 centerVelocity = Vec::scale(Vec::subtract(params.orbitTransform->pos, orbit.targetTransform.pos), 1.f / params.dt);
             orbit.targetSpeed = Vec::mag(centerVelocity);
+            Vec3 prevPos = orbit.position_spring.state.value;
             
-            f32 targetYaw = Angle::wrap(config.yawLS + Angle::orientation(Vec::negate(params.orbitTransform->front.xy)));
+            f32 currentYaw = Angle::orientation(currentOffset.xy);
+            f32 targetYaw = currentYaw;
             f32 targetPitch = config.pitchLS;
             f32 targetDistance = config.distance;
             f32 effectivePitch = targetPitch;
@@ -347,27 +380,24 @@ namespace Camera {
             
             Vec3 lookatPos = Vec::add(params.orbitTransform->pos, Vec3(0.f, 0.f, config.zoffset));
             Vec3 targetPos = Vec::add(lookatPos, orbit.targetOffset_linear);
+            orbit.targetPos = targetPos;
             
-            if (params.playerPushing) {
+            {
                 Spring::dampedNumericalVelocity_t(orbit.position_spring, targetPos, params.dt);
-            } else {
-                
-                f32 speed = Vec::mag(orbit.position_spring.state.velocity);
-                if (speed > 0.1f) {
-                    
-                    f32 decc = 300.f;
-                    Vec3 velocitydDir = Vec::scale(orbit.position_spring.state.velocity, 1.f / speed);
-                    speed = Math::lappr(speed, 0.f, decc, params.dt);
-                    orbit.position_spring.state.velocity = Vec::scale(velocitydDir, speed);
-                    
-                } else {
-                    speed = 0.f;
-                    orbit.position_spring.state.velocity = Vec3(0.f, 0.f, 0.f);
-                }
+                Vec3& pos = orbit.position_spring.state.value;
+                pos = Vec::add(pos, Vec::scale(orbit.position_spring.state.velocity, params.dt));
+                orbit.position_spring.state.value = pos;
             }
             
-            Vec3& pos = orbit.position_spring.state.value;
-            pos = Vec::add(pos, Vec::scale(orbit.position_spring.state.velocity, params.dt));
+            // ensure min max dist
+            Vec3 fromPos = Vec::subtract(orbit.position_spring.state.value, targetPos);
+            f32 mag = Vec::mag(fromPos.xy);
+            if (mag > Math::eps<f32>) {
+                f32 clampedmag = Math::min(mag, config.maxLagXY);
+                fromPos.xy = Vec::scale(fromPos.xy, clampedmag / mag);
+                orbit.position_spring.state.value = Vec::add(targetPos, fromPos);
+                orbit.position_spring.state.velocity = Vec::scale(Vec::subtract(orbit.position_spring.state.value, prevPos), 1 / params.dt);
+            }
             
             orbit.targetTransform = *params.orbitTransform;
 

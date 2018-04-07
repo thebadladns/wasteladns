@@ -238,11 +238,13 @@ namespace App {
                 , FLYCAM_ROT_L
                 , FLYCAM_ROT_R
                 , PAUSE
+                , STEP
                 , TOGGLE_CAM
                 , CHAR_U
                 , CHAR_D
                 , CHAR_L
                 , CHAR_R
+                , CHAR_EXPLICIT_BOOST
                 , ESC
                 , COUNT
             };
@@ -258,11 +260,13 @@ namespace App {
             , GLFW_KEY_Q
             , GLFW_KEY_E
             , GLFW_KEY_SPACE
+            , GLFW_KEY_RIGHT
             , GLFW_KEY_TAB
             , GLFW_KEY_I
             , GLFW_KEY_K
             , GLFW_KEY_J
             , GLFW_KEY_L
+            , GLFW_KEY_Z
             , GLFW_KEY_ESCAPE
         };
         
@@ -340,7 +344,7 @@ int main(int argc, char** argv) {
     {
         Camera::Instance& cam = game.cameras[Game::CameraTypes::GameCam];
         Vec::identity4x4(cam.transform);
-        cam.transform.pos = Vec3(0.f, -115.f, 170.f);
+        cam.transform.pos = Vec3(0.f, -115.f, 210.f);
         Vec3 lookAt(0.f, 0.f, 0.f);
         Vec3 lookAtDir = Vec::subtract(lookAt, cam.transform.pos);
         Vec::transformFromFront(cam.transform, lookAtDir);
@@ -356,7 +360,7 @@ int main(int argc, char** argv) {
     game.player.motion.speed = 0.f;
     Vec::identity4x4(game.player.transform);
     
-    bool pauseUpdate = false;
+    bool pauseState = false;
 
     game.time.config.maxFrameLength = 0.1;
     game.time.config.targetFramerate = 1.0 / 60.0;
@@ -374,13 +378,19 @@ int main(int argc, char** argv) {
             Input::pollState(app.input, App::Input::mapping, window.handle);
             
             // Always-on logic
+            bool pauseUpdate = false;
             {
                 if (app.input.released(App::Input::Keys::ESC)) {
                     glfwSetWindowShouldClose(app.mainWindow.handle, 1);
                 }
                 
                 if (app.input.released(App::Input::Keys::PAUSE)) {
-                    pauseUpdate = !pauseUpdate;
+                    pauseState = !pauseState;
+                }
+                
+                pauseUpdate = pauseState;
+                if (pauseUpdate) {
+                    pauseUpdate = !app.input.pressed(App::Input::Keys::STEP);
                 }
                 
                 if (app.input.pressed(App::Input::Keys::TOGGLE_CAM)) {
@@ -448,7 +458,7 @@ int main(int argc, char** argv) {
                     } else {
                         // Fallback to keyboard
                         motionParams.analog = false;
-                        motionParams.boost = 0.f;
+                        motionParams.boost = app.input.down(App::Input::Keys::CHAR_EXPLICIT_BOOST) ? 1.f : 0.f;
                         
                         Input::DigitalInputToAxisParams<App::Input::Keys::COUNT> locoInputParams;
                         locoInputParams.input = &app.input;
@@ -559,7 +569,12 @@ int main(int argc, char** argv) {
                         DebugDraw::text(textParams);
                         textParams.pos.y -= 15.f * textParams.scale;
                         
-                        snprintf(buff, sizeof(buff), "Offset " VEC3_FORMAT("%.3f") " speed " VEC3_FORMAT("%.3f") " target " VEC3_FORMAT("%.3f"), VEC3_PARAMS(cam.orbit.position_spring.state.value), VEC3_PARAMS(cam.orbit.position_spring.state.velocity), VEC3_PARAMS(cam.orbit.targetOffset_linear));
+                        snprintf(buff, sizeof(buff), "Offset " VEC3_FORMAT("%.3f") " speed " VEC3_FORMAT("%.3f") " target " VEC3_FORMAT("%.3f"), VEC3_PARAMS(cam.orbit.position_spring.state.value), VEC3_PARAMS(cam.orbit.position_spring.state.velocity), VEC3_PARAMS(cam.orbit.targetPos));
+                        textParams.text = buff;
+                        DebugDraw::text(textParams);
+                        textParams.pos.y -= 15.f * textParams.scale;
+                        
+                        snprintf(buff, sizeof(buff), "Delta " VEC3_FORMAT("%.3f") , VEC3_PARAMS(Vec::subtract(cam.orbit.targetPos, cam.orbit.position_spring.state.value)));
                         textParams.text = buff;
                         DebugDraw::text(textParams);
                         textParams.pos.y -= 15.f * textParams.scale;
