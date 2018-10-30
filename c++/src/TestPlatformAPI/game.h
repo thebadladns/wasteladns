@@ -62,20 +62,22 @@ namespace Game
         controlChange.y = pad.pressed(Input::UP) * 1.f + pad.pressed(Input::DOWN) * -1.f;
         
         Vec2 localInput;
+        const bool downr = pad.down(Input::RIGHT), downl = pad.down(Input::LEFT);
         if (controlChange.x != 0.f && currentControl.x != controlChange.x) {
             localInput.x = controlChange.x;
-        } else if (pad.down(Input::RIGHT)) {
+        } else if (downr && (currentControl.x > 0.f || !downl)) {
             localInput.x = 1.f;
-        } else if (pad.down(Input::LEFT)) {
+        } else if (downl && (currentControl.x < 0.f || !downr)) {
             localInput.x = -1.f;
         } else {
             localInput.x = 0.f;
         }
+        const bool downu = pad.down(Input::UP), downd = pad.down(Input::DOWN);
         if (controlChange.y != 0.f && currentControl.y != controlChange.y) {
             localInput.y = controlChange.y;
-        } else if (pad.down(Input::UP)) {
+        } else if (downu && (currentControl.y > 0.f || !downd)) {
             localInput.y = 1.f;
-        } else if (pad.down(Input::DOWN)) {
+        } else if (downd && (currentControl.y < 0.f || !downu)) {
             localInput.y = -1.f;
         } else {
             localInput.y = 0.f;
