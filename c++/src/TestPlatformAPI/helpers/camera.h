@@ -7,12 +7,12 @@
 #include "transform.h"
 #endif
 
+struct Camera {
+	Transform transform;
+	Mat4 modelviewMatrix;
+};
+
 namespace CameraSystem {
-    
-    struct Camera {
-        Transform transform;
-        Mat4 modelviewMatrix;
-    };
     
     void generateModelViewMatrix(Mat4& modelview, const Transform& t) {
         // We are left-handed, negate front for opengl

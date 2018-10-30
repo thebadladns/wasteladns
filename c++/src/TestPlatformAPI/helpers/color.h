@@ -9,6 +9,7 @@
 
 template<typename ValueType, u8 redBitCount, u8 greenBitCount, u8 blueBitCount, u8 alphaBitCount>
 struct Color {
+	Color();
     Color(const f32 fR, const f32 fG, const f32 fB, const f32 fA = 1.f);
     Color(const ValueType uR, const ValueType uG, const ValueType uB, const ValueType a = ((1 << alphaBitCount) - 1));
     ~Color();
@@ -38,6 +39,11 @@ struct Color {
 extern template struct Color<u32, 8, 8, 8, 8>;
 typedef Color<u32, 8, 8, 8, 8> Col32;
 typedef Col32 Col;
+
+template<typename ValueType, u8 redBitCount, u8 greenBitCount, u8 blueBitCount, u8 alphaBitCount>
+Color<ValueType, redBitCount, greenBitCount, blueBitCount, alphaBitCount>::Color() {
+	set((ValueType)0, (ValueType)0, (ValueType)0, (ValueType)0);
+}
 
 template<typename ValueType, u8 redBitCount, u8 greenBitCount, u8 blueBitCount, u8 alphaBitCount>
 Color<ValueType, redBitCount, greenBitCount, blueBitCount, alphaBitCount>::Color(const f32 fR, const f32 fG, const f32 fB, const f32 fA) {

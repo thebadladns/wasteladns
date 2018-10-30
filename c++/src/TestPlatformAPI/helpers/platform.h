@@ -19,7 +19,7 @@ namespace Platform
     }; };
     
     struct GameConfig {
-        f32 nextFrame;
+        f64 nextFrame;
         RequestFlags::Enum requestFlags;
         bool quit;
     };
@@ -40,7 +40,7 @@ namespace Platform
     struct Input {
         ::Input::Keyboard::State keyboard;
         ::Input::Gamepad::State* pads;
-        s32 padCount;
+        u32 padCount;
     };
     
     struct State {

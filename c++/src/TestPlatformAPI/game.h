@@ -54,8 +54,8 @@ namespace Game
         const Vec2 prevLocalInput = control.localInput;
         
         Vec2 currentControl;
-        currentControl.x = round(prevLocalInput.x);
-        currentControl.y = round(prevLocalInput.y);
+        currentControl.x = roundf(prevLocalInput.x);
+        currentControl.y = roundf(prevLocalInput.y);
         
         Vec2 controlChange;
         controlChange.x = pad.pressed(Input::RIGHT) * 1.f + pad.pressed(Input::LEFT) * -1.f;
@@ -125,8 +125,8 @@ namespace Game
     
     struct CameraManager {
         enum { FlyCam, CamCount };
-        CameraSystem::Camera cameras[CamCount];
-        CameraSystem::Camera* activeCam;
+        Camera cameras[CamCount];
+        Camera* activeCam;
     };
     
     struct Instance {
@@ -219,11 +219,11 @@ namespace Game
 
         if (step)
         {
-            f32 dt = game.time.lastFrameDelta;
+            f32 dt = (f32) game.time.lastFrameDelta;
             
             using namespace Game;
             
-            const CameraSystem::Camera* activeCam = game.cameraMgr.activeCam;
+            const Camera* activeCam = game.cameraMgr.activeCam;
             process(game.player.control, pad, dt);
             process(game.player.worldData, game.player.control, activeCam->transform, dt);
         }
@@ -409,23 +409,11 @@ namespace Game
             {
                 glMatrixMode(GL_PROJECTION);
                 glLoadMatrixd(mgr.perspProjection.matrix.dataCM);
-                glMatrixMode(GL_MODELVIEW);
-                glPushMatrix();
-                {
-                    glLoadMatrixf(game.cameraMgr.activeCam->modelviewMatrix.dataCM);
-                    Immediate::present3d(mgr.immediateBuffer);
-                }
-                glPopMatrix();
-                
+                Immediate::present3d(mgr.immediateBuffer, *game.cameraMgr.activeCam);
                 glMatrixMode(GL_PROJECTION);
                 glLoadMatrixf(mgr.orthoProjection.matrix.dataCM);
-                glMatrixMode(GL_MODELVIEW);
-                glPushMatrix();
-                {
-                    Immediate::present2d(mgr.immediateBuffer);
-                    Immediate::clear(mgr.immediateBuffer);
-                }
-                glPopMatrix();
+                Immediate::present2d(mgr.immediateBuffer);
+                Immediate::clear(mgr.immediateBuffer);
             }
         }
     }

@@ -18,6 +18,8 @@ target_compile_definitions(app-glfw PUBLIC PLATFORM_GLFW=1)
 #add_executable(app-directx-placeholder WIN32 "src/main.cpp" "src")
 #target_compile_definitions(app-directx-placeholder PUBLIC PLATFORM_DIRECTX_SOMETHING=1)
 
+set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT app-glfw)
+
 if(WIN32)
 	set(LIBS opengl32 ${GLFW_LIBRARIES})
 elseif(UNIX AND NOT APPLE)

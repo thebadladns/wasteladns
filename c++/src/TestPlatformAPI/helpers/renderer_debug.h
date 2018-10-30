@@ -30,8 +30,8 @@ namespace Immediate
         static constexpr u32 kMaxCharVertexCount = 1 << 14;
         u8 charVertexMemory[kMaxCharVertexCount];
         
-        u32 charVertexIndex;
         u32 vertexIndex;
+		u32 charVertexIndex;
     };
     
     constexpr u8 kTextVertexSize = 2;
@@ -154,7 +154,7 @@ namespace Immediate
         TextParams params;
         params.pos = pos;
         params.text = data;
-        params.scale = 1.f;
+        params.scale = 1;
         text2d(buffer, params);
     }
 #endif // __WASTELADNS_DEBUG_TEXT__

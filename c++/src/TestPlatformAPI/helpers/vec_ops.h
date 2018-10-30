@@ -11,7 +11,7 @@ template <typename _T>
 bool inverse(Matrix44<_T>& m) {
     
     Matrix44<_T> prev = m;
-    memset(m.dataCM, 0.f, sizeof(_T) * 16);
+    memset(m.dataCM, 0, sizeof(_T) * 16);
     
     _T* prev_m = prev.dataCM;
     _T* next_m = m.dataCM;
