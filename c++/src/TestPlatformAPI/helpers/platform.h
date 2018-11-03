@@ -57,5 +57,6 @@ namespace Platform
     template <typename _GameData>
     void update(_GameData& game, GameConfig& config, const State& platform);
 }
+namespace OS = Platform;
 
 #endif // __WASTELADNS_PLATFORM_H__
