@@ -14,7 +14,6 @@ namespace GLFW {
             return 0;
         }
         
-        ::Platform::Screen screen;
         GLFWwindow* windowHandle;
         
         Platform::State platform = {};
