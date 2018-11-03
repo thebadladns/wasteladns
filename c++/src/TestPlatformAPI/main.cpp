@@ -161,6 +161,7 @@ namespace Platform {
 };
 
 namespace Input {
+
 namespace Keyboard
 {
     // Use an explicit state queue in case message handling needs
@@ -168,6 +169,41 @@ namespace Keyboard
     struct Queue {
         bool keyStates[Input::Keyboard::Keys::COUNT];
     };
+};
+
+namespace Gamepad {
+
+    struct KeyboardMapping {
+        Keyboard::Keys::Enum mapping[Keys::COUNT];
+    };
+
+    void load(KeyboardMapping& mapping) {
+        memset(mapping.mapping, Keyboard::Keys::INVALID, sizeof(s32) * Keys::COUNT);
+        // Hardcoded for now
+        mapping.mapping[Keys::B_U] = Keyboard::Keys::I;
+        mapping.mapping[Keys::B_D] = Keyboard::Keys::K;
+        mapping.mapping[Keys::B_L] = Keyboard::Keys::J;
+        mapping.mapping[Keys::B_R] = Keyboard::Keys::L;
+    }
+
+    void pollState(State& pad, const Keyboard::Queue& queue, const KeyboardMapping& mapping) {
+        pad.active = true;
+        pad.keys.last = pad.keys.current;
+        pad.keys.current = 0;
+        for (int i = 0; i < Keys::COUNT; i++) {
+            Keyboard::Keys::Enum keyId = mapping.mapping[i];
+            if (keyId != Keyboard::Keys::INVALID) {
+                bool keyState = queue.keyStates[keyId];
+                pad.keys.current = pad.keys.current | ((s32)keyState << i);
+            }
+        }
+
+        // TODO: handle analog only if requested?
+    }
+}
+
+namespace Keyboard
+{
     struct Mapping {
         ::Input::Keyboard::Keys::Enum mapping[512];
     };
@@ -419,6 +455,12 @@ namespace Platform {
 
             if (d3ddev != NULL) {
 
+                ::Input::Gamepad::State pads[1];
+                ::Input::Gamepad::KeyboardMapping keyboardPadMappings[1];
+                platform.input.padCount = 1;
+                platform.input.pads = pads;
+                ::Input::Gamepad::load(keyboardPadMappings[0]);
+
                 ::Input::Keyboard::PollData keyboardPollData;
                 ::Input::Keyboard::load(keyboardPollData.mapping);
                 keyboardPollData.queue = {};
@@ -448,17 +490,21 @@ namespace Platform {
                         if ((config.requestFlags & (Platform::RequestFlags::PollKeyboard)) != 0) {
                             ::Input::Keyboard::pollState(platform.input.keyboard, keyboardPollData.queue);
                         }
+                        for (u32 i = 0; i < platform.input.padCount; i++) {
+                            ::Input::Gamepad::pollState(platform.input.pads[i], keyboardPollData.queue, keyboardPadMappings[i]);
+                        }
 
                         Platform::update<_GameData>(game, config, platform);
                     
                         // Render update
-                        if (platform.input.keyboard.pressed(::Input::Keyboard::Keys::G)) {
+                        ::Input::Gamepad::State pad = platform.input.pads[0];
+                        if (pad.pressed(::Input::Gamepad::Keys::B_U)) {
                             d3ddev->Clear(0, NULL, D3DCLEAR_TARGET, D3DCOLOR_XRGB(255, 0, 0), 1.0f, 0);
                         }
-                        else if (platform.input.keyboard.released(::Input::Keyboard::Keys::G)) {
+                        else if (pad.released (::Input::Gamepad::Keys::B_U)) {
                             d3ddev->Clear(0, NULL, D3DCLEAR_TARGET, D3DCOLOR_XRGB(0, 255, 0), 1.0f, 0);
                         }
-                        else if (platform.input.keyboard.down(::Input::Keyboard::Keys::G)) {
+                        else if (pad.down(::Input::Gamepad::Keys::B_U)) {
                             d3ddev->Clear(0, NULL, D3DCLEAR_TARGET, D3DCOLOR_XRGB(0, 0, 255), 1.0f, 0);
                         }
                         else {
