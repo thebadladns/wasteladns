@@ -10,7 +10,7 @@ namespace Platform {
     void printf(const char* format, ...) {
         va_list va;
         va_start(va, format);
-        vprintf_s(format, va);
+        vprintf(format, va);
         va_end(va);
     }
 }
