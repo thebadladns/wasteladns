@@ -133,6 +133,35 @@ namespace DIRECTX9 {
             Platform::GameConfig config;
             Platform::start<_GameData>(game, config, platform);
 
+            // temp scene hack init
+            struct CustomVertex {
+                enum { fvf = D3DFVF_XYZ | D3DFVF_DIFFUSE };
+                FLOAT x, y, z;  // from the D3DFVF_XYZ flag
+                DWORD color;    // from the D3DFVF_DIFFUSE flag
+            };
+            LPDIRECT3DVERTEXBUFFER9 v_buffer = NULL;
+            {
+                CustomVertex vertices[] = {
+                    { 3.0f, 0.0f, -3.0f, D3DCOLOR_XRGB(0, 0, 255), },
+                    { 0.0f, 0.0f, 3.0f, D3DCOLOR_XRGB(0, 255, 0), },
+                    { -3.0f, 0.0f, -3.0f, D3DCOLOR_XRGB(255, 0, 0), },
+                };
+
+                d3ddev->CreateVertexBuffer(
+                    3 * sizeof(CustomVertex)
+                    , 0 /*Usage*/
+                    , CustomVertex::fvf
+                    , D3DPOOL_MANAGED
+                    , &v_buffer
+                    , nullptr /*pSharedHandle*/
+                );
+                void* pVoid;
+                v_buffer->Lock(0, 0, (void**)&pVoid, 0);
+                memcpy(pVoid, vertices, sizeof(vertices));
+                v_buffer->Unlock();
+            }
+            d3ddev->SetRenderState(D3DRS_LIGHTING, FALSE);
+
             MSG msg;
 
             do {
@@ -153,22 +182,36 @@ namespace DIRECTX9 {
 
                     Platform::update<_GameData>(game, config, platform);
 
-                    // Render update
-                    ::Input::Gamepad::State pad = platform.input.pads[0];
-                    if (pad.pressed(::Input::Gamepad::Keys::B_U)) {
-                        d3ddev->Clear(0, NULL, D3DCLEAR_TARGET, D3DCOLOR_XRGB(255, 0, 0), 1.0f, 0);
-                    }
-                    else if (pad.released(::Input::Gamepad::Keys::B_U)) {
-                        d3ddev->Clear(0, NULL, D3DCLEAR_TARGET, D3DCOLOR_XRGB(0, 255, 0), 1.0f, 0);
-                    }
-                    else if (pad.down(::Input::Gamepad::Keys::B_U)) {
-                        d3ddev->Clear(0, NULL, D3DCLEAR_TARGET, D3DCOLOR_XRGB(0, 0, 255), 1.0f, 0);
-                    }
-                    else {
-                        d3ddev->Clear(0, NULL, D3DCLEAR_TARGET, D3DCOLOR_XRGB(0, 0, 0), 1.0f, 0);
-                    }
+                    // temp scene hack update
+                    d3ddev->Clear(0, NULL, D3DCLEAR_TARGET, D3DCOLOR_XRGB(0, 0, 0), 1.0f, 0);
                     d3ddev->BeginScene();
+                    {
+                        d3ddev->SetTransform(D3DTS_VIEW, (D3DMATRIX*)&game.cameraMgr.activeCam->modelviewMatrix.dataCM);
 
+                        f32 fovDeg = 45.f;
+                        f32 aspect = platform.screen.width / (f32)platform.screen.height;
+                        f32 near = 1.f;
+                        f32 far = 100.f;
+                        
+                        f32 halfFovRad = fovDeg * 0.5f * Math::d2r<f32>;
+                        f32 height = Math::cos(halfFovRad) / Math::sin(halfFovRad);
+                        f32 width = height / aspect;
+                        f32 range = far / (far - near);
+
+                        // TODO: sort this out properly
+                        f32 perspectiveMatrix[16] = {};
+                        perspectiveMatrix[0] = width;
+                        perspectiveMatrix[5] = height;
+                        perspectiveMatrix[10] = range;
+                        perspectiveMatrix[11] = 1.f;
+                        perspectiveMatrix[14] = -range * near;
+
+                        d3ddev->SetTransform(D3DTS_PROJECTION, (D3DMATRIX*)&perspectiveMatrix);
+
+                        d3ddev->SetFVF(CustomVertex::fvf);
+                        d3ddev->SetStreamSource(0, v_buffer, 0, sizeof(CustomVertex));
+                        d3ddev->DrawPrimitive(D3DPT_TRIANGLELIST, 0, 1);
+                    }
                     d3ddev->EndScene();
                     d3ddev->Present(NULL, NULL, NULL, NULL);
 
@@ -182,7 +225,6 @@ namespace DIRECTX9 {
                 platform.time.now = now / (f64)frequency;
                 platform.time.running = platform.time.now - platform.time.start;
             } while (msg.message != WM_QUIT);
-
 
             RemovePropA(hWnd, "KeyboardPollData");
             d3ddev->Release();

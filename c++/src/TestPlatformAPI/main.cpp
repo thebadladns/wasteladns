@@ -75,6 +75,10 @@ int main(int argc, char** argv) {
 #include "helpers/directx9/main.h"
 #include "helpers/directx9/io.h"
 
+#define __WASTELADNS_DEBUG_TEXT__
+#include "helpers/renderer_debug.h"
+#include "helpers/renderer.h"
+
 struct Time {
     struct Config {
         f64 targetFramerate;
@@ -89,8 +93,15 @@ struct Time {
     bool paused;
     float far;
 };
+struct CameraManager {
+    enum { FlyCam, CamCount };
+    Camera cameras[CamCount];
+    Camera* activeCam;
+};
 struct Game {
     Time time;
+    CameraManager cameraMgr;
+    Renderer::Instance renderMgr;
 };
 
 void start(Game& game, Platform::GameConfig& config, const Platform::State& platform) {
@@ -103,6 +114,53 @@ void start(Game& game, Platform::GameConfig& config, const Platform::State& plat
     config.nextFrame = platform.time.now;
     config.requestFlags = Platform::RequestFlags::PollKeyboard;
 
+    game.renderMgr = {};
+    {
+        Renderer::Instance& mgr = game.renderMgr;
+        using namespace Renderer;
+
+        OrthoProjection::Config& ortho = mgr.orthoProjection.config;
+        ortho.right = platform.screen.width * 0.5f;
+        ortho.top = platform.screen.height * 0.5f;
+        ortho.left = -ortho.right;
+        ortho.bottom = -ortho.top;
+        ortho.near = -1.f;
+        ortho.far = 200.f;
+        generateMatrix(mgr.orthoProjection.matrix, ortho);
+
+        //PerspProjection::Config& frustum = mgr.perspProjection.config;
+        //frustum.fov = 75.0;
+        //frustum.aspect = 1.0;
+        //frustum.near = 1.0;
+        //frustum.far = 1500.0;
+        //generateMatrix(mgr.perspProjection.matrix, frustum);
+
+        PerspProjection::Config& frustum = mgr.perspProjection.config;
+        frustum.fov = 45.0;
+        frustum.aspect = (FLOAT)platform.screen.width / (FLOAT)platform.screen.height;
+        frustum.near = 1.0;
+        frustum.far = 100.0;
+        generateMatrix(mgr.perspProjection.matrix, frustum);
+    }
+
+    game.cameraMgr = {};
+    {
+        CameraManager& mgr = game.cameraMgr;
+        using namespace CameraSystem;
+
+        Camera& cam = mgr.cameras[CameraManager::FlyCam];
+        Math::identity4x4(cam.transform);
+        cam.transform.pos = Vec3(0.f, -10.f, 0.f);
+        Vec3 lookAt(0.f, 0.f, 0.f);
+        Vec3 lookAtDir = Math::subtract(lookAt, cam.transform.pos);
+        Transform33 tmp = Math::fromFront(lookAtDir);
+        cam.transform.right = tmp.right;
+        cam.transform.front = tmp.front;
+        cam.transform.up = tmp.up;
+        generateModelViewMatrix(cam.modelviewMatrix, cam.transform);
+
+        mgr.activeCam = &cam;
+    }
 };
 void update(Game& game, Platform::GameConfig& config, const Platform::State& platform) {
 

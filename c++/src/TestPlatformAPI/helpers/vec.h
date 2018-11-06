@@ -85,13 +85,15 @@ struct Vector4 {
 typedef Vector4<f32> Vec4;
 
 // Column Major
-// 0  4  8
-// 1  5  9
-// 2  6  10
+// 0  3  6
+// 1  4  7
+// 2  5  8
 template <typename _T>
 struct Matrix33 {
-    Matrix33();
-    Matrix33(const Matrix33<_T>& m);
+    Matrix33() {};
+    Matrix33(const Matrix33<_T>& m) {
+        memcpy(dataCM, m.dataCM, sizeof(_T) * 9);
+    }
     
     union {
         struct {
@@ -111,8 +113,10 @@ typedef Matrix33<f32> Mat33;
 // 3  7  11 15
 template <typename _T>
 struct Matrix44 {
-    Matrix44();
-    Matrix44(const Matrix44<_T>& m);
+    Matrix44() {}
+    Matrix44(const Matrix44<_T>& m) {
+        memcpy(dataCM, m.dataCM, sizeof(_T) * 16);
+    }
     
     union {
         struct {
@@ -208,20 +212,6 @@ Vector4<_T>::Vector4(const Vector4<_T>& v) {
     y = v.y;
     z = v.z;
     w = v.w;
-}
-
-template <typename _T>
-Matrix33<_T>::Matrix33() {}
-template <typename _T>
-Matrix33<_T>::Matrix33(const Matrix33<_T>& m) {
-    memcpy(dataCM, m.dataCM, sizeof(_T) * 9);
-}
-
-template <typename _T>
-Matrix44<_T>::Matrix44() {}
-template <typename _T>
-Matrix44<_T>::Matrix44(const Matrix44<_T>& m) {
-    memcpy(dataCM, m.dataCM, sizeof(_T) * 16);
 }
 
 namespace Math {

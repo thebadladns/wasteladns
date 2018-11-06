@@ -48,7 +48,7 @@ struct Transform {
 
 namespace Math {
     
-    Vec3 RIGHT_AXIS(1.f, 0.f, 0.f);
+    Vec3 RIGHT_AXIS(-1.f, 0.f, 0.f);
     Vec3 FRONT_AXIS(0.f, 1.f, 0.f);
     Vec3 UP_AXIS(0.f, 0.f, 1.f);
     
@@ -57,8 +57,7 @@ namespace Math {
         t.front = front;
         t.up = Math::normalize(up);
         t.right = Math::cross(t.front, t.up);
-        if (!Math::normalizeSafe(t.right))
-        {
+        if (!Math::normalizeSafe(t.right)) {
             t.right = RIGHT_AXIS;
         }
         t.front = Math::normalize(Math::cross(t.up, t.right));
@@ -70,17 +69,32 @@ namespace Math {
         Transform33 t = fromUpTowardsFront(up, FRONT_AXIS);
         return t;
     }
-    
+
+    Transform33 fromFrontAndUpLH(const Vec3& front, const Vec3& up) {
+        Transform33 t;
+        t.up = up;
+        t.front = Math::normalize(front);
+        t.right = Math::cross(t.up, t.front);
+        if (!Math::normalizeSafe(t.right)) {
+            t.up = Math::normalize(Math::cross(t.front, RIGHT_AXIS));
+            t.right = Math::cross(t.up, t.front);
+        } else {
+            t.up = Math::normalize(Math::cross(t.front, t.right));
+        }
+        return t;
+    }
+
     Transform33 fromFront(const Vec3& front) {
         Transform33 t;
         t.up = UP_AXIS;
         t.front = Math::normalize(front);
         t.right = Math::cross(t.front, t.up);
         if (!Math::normalizeSafe(t.right)) {
-            t.right = RIGHT_AXIS;
+            t.up = Math::normalize(Math::cross(RIGHT_AXIS, t.front));
+            t.right = Math::cross(t.front, t.up);
+        } else {
+            t.up = Math::normalize(Math::cross(t.right, t.front));
         }
-        t.up = Math::normalize(Math::cross(t.right, t.front));
-        t.front = Math::cross(t.up, t.right);
         return t;
     }
     
