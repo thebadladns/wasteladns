@@ -34,6 +34,15 @@ template <> f64 cos(const f64 v) {
     return ::cos(v);
 }
 
+template <typename _T> _T tan(const _T v);
+
+template <> f32 tan(const f32 v) {
+    return ::tanf(v);
+}
+template <> f64 tan(const f64 v) {
+    return ::tan(v);
+}
+
 template <typename _T> _T atan2(const _T a, const _T b);
 
 template <> f32 atan2(const f32 a, const f32 b) {

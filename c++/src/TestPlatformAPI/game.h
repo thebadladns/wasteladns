@@ -164,10 +164,10 @@ namespace Game
             generateMatrix(mgr.orthoProjection.matrix, ortho);
 
             PerspProjection::Config& frustum = mgr.perspProjection.config;
-            frustum.fov = 75.0;
-            frustum.aspect = 1.0;
-            frustum.near = 1.0;
-            frustum.far = 1500.0;
+            frustum.fov = 45.f;
+            frustum.aspect = platform.screen.width / (f32)platform.screen.height;
+            frustum.near = 1.f;
+            frustum.far = 1000.f;
             generateMatrix(mgr.perspProjection.matrix, frustum);
             
             glEnable(GL_BLEND);
@@ -186,7 +186,7 @@ namespace Game
             Vec3 lookAt(0.f, 0.f, 0.f);
             Vec3 lookAtDir = Math::subtract(lookAt, cam.transform.pos);
             Math::fromFront(cam.transform, lookAtDir);
-            generateModelViewMatrix(cam.modelviewMatrix, cam.transform);
+            Renderer::generateModelViewMatrix(cam.viewMatrix, cam.transform);
             
             mgr.activeCam = &cam;
         }
@@ -194,7 +194,7 @@ namespace Game
         game.player = {};
         {
             Math::identity4x4(game.player.worldData.transform);
-            game.player.worldData.transform.pos = Vec3(0.f, 0.f, 0.f);
+            game.player.worldData.transform.pos = Vec3(50.f, 0.f, 0.f);
         }
     }
     
@@ -240,12 +240,12 @@ namespace Game
             // PERSPECTIVE
             {
                 glMatrixMode(GL_PROJECTION);
-                glLoadMatrixd(mgr.perspProjection.matrix.dataCM);
+                glLoadMatrixf(mgr.perspProjection.matrix.dataCM);
                 
                 glMatrixMode(GL_MODELVIEW);
                 glPushMatrix();
                 {
-                    glLoadMatrixf(game.cameraMgr.activeCam->modelviewMatrix.dataCM);
+                    glLoadMatrixf(game.cameraMgr.activeCam->viewMatrix.dataCM);
                     
                     f32 pw = 5.f;
                     f32 pz = 500.f;
@@ -299,7 +299,6 @@ namespace Game
                         , { 300.f, 180.f }
                     };
                     
-                    glEnable(GL_CULL_FACE);
                     glEnableClientState(GL_VERTEX_ARRAY);
                     {
                         const Col pillarColor(1.0f, 1.0f, 1.0f, 0.5f);
@@ -314,7 +313,6 @@ namespace Game
                         }
                     }
                     glDisableClientState(GL_VERTEX_ARRAY);
-                    glDisable(GL_CULL_FACE);
                     
                     // Tiled floor
                     const f32 l = -500.;
@@ -410,8 +408,8 @@ namespace Game
             // Batched debug
             {
                 glMatrixMode(GL_PROJECTION);
-                glLoadMatrixd(mgr.perspProjection.matrix.dataCM);
-                Immediate::present3d(mgr.immediateBuffer, *game.cameraMgr.activeCam);
+                glLoadMatrixf(mgr.perspProjection.matrix.dataCM);
+                Immediate::present3d(mgr.immediateBuffer, game.cameraMgr.activeCam->viewMatrix);
                 glMatrixMode(GL_PROJECTION);
                 glLoadMatrixf(mgr.orthoProjection.matrix.dataCM);
                 Immediate::present2d(mgr.immediateBuffer);

@@ -13,11 +13,11 @@ namespace Renderer
 {
     namespace Immediate
     {
-        void present3d(Buffer& buffer, const Camera& camera) {
+        void present3d(Buffer& buffer, const Mat4& viewMatrix) {
 			glMatrixMode(GL_MODELVIEW);
 			glPushMatrix();
 			{
-				glLoadMatrixf(camera.modelviewMatrix.dataCM);
+				glLoadMatrixf(viewMatrix.dataCM);
 				// Vertex
 				glInterleavedArrays(GL_C4UB_V3F, 0, buffer.vertexMemory);
 				glDrawArrays(GL_LINES, 0, buffer.vertexIndex);

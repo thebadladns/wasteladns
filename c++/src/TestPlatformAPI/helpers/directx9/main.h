@@ -112,6 +112,11 @@ namespace DIRECTX9 {
 
         if (d3ddev != NULL) {
 
+            d3ddev->SetRenderState(D3DRS_ALPHABLENDENABLE, TRUE);
+            d3ddev->SetRenderState(D3DRS_SRCBLEND, D3DBLEND_SRCALPHA);
+            d3ddev->SetRenderState(D3DRS_DESTBLEND, D3DBLEND_INVSRCALPHA);
+            d3ddev->SetRenderState(D3DRS_BLENDOP, D3DBLENDOP_ADD);
+
             ::Input::Gamepad::State pads[1];
             ::Input::Gamepad::KeyboardMapping keyboardPadMappings[1];
             platform.input.padCount = 1;
@@ -134,33 +139,90 @@ namespace DIRECTX9 {
             Platform::start<_GameData>(game, config, platform);
 
             // temp scene hack init
-            struct CustomVertex {
+            struct CustomVertex1 {
                 enum { fvf = D3DFVF_XYZ | D3DFVF_DIFFUSE };
-                FLOAT x, y, z;  // from the D3DFVF_XYZ flag
-                DWORD color;    // from the D3DFVF_DIFFUSE flag
+                f32 x, y, z;  // from the D3DFVF_XYZ flag
+                u32 color;    // from the D3DFVF_DIFFUSE flag
             };
-            LPDIRECT3DVERTEXBUFFER9 v_buffer = NULL;
+            struct CustomVertex2 {
+                enum { fvf = D3DFVF_XYZ };
+                f32 x, y, z;  // from the D3DFVF_XYZ flag
+            };
+            LPDIRECT3DVERTEXBUFFER9 v_buffer1 = NULL;
+            u32 buffer1tris;
             {
-                CustomVertex vertices[] = {
-                    { 3.0f, 0.0f, -3.0f, D3DCOLOR_XRGB(0, 0, 255), },
-                    { 0.0f, 0.0f, 3.0f, D3DCOLOR_XRGB(0, 255, 0), },
-                    { -3.0f, 0.0f, -3.0f, D3DCOLOR_XRGB(255, 0, 0), },
+                CustomVertex1 vertices[] = {
+                    { 3.0f, -3.0f, 0.0f, D3DCOLOR_XRGB(0, 0, 255), },
+                    { 0.0f, 3.0f, 0.0f, D3DCOLOR_XRGB(0, 255, 0), },
+                    { -3.0f, -3.0f, 0.0f, D3DCOLOR_XRGB(255, 0, 0), },
                 };
-
+                buffer1tris = (sizeof(vertices) / sizeof(vertices[0])) / 3;
+                d3ddev->SetRenderState(D3DRS_CULLMODE, D3DCULL_CW);
+                d3ddev->SetRenderState(D3DRS_LIGHTING, FALSE);
                 d3ddev->CreateVertexBuffer(
-                    3 * sizeof(CustomVertex)
+                      sizeof(vertices)
                     , 0 /*Usage*/
-                    , CustomVertex::fvf
+                    , CustomVertex1::fvf
                     , D3DPOOL_MANAGED
-                    , &v_buffer
+                    , &v_buffer1
                     , nullptr /*pSharedHandle*/
                 );
                 void* pVoid;
-                v_buffer->Lock(0, 0, (void**)&pVoid, 0);
+                v_buffer1->Lock(0, 0, (void**)&pVoid, 0);
                 memcpy(pVoid, vertices, sizeof(vertices));
-                v_buffer->Unlock();
+                v_buffer1->Unlock();
             }
-            d3ddev->SetRenderState(D3DRS_LIGHTING, FALSE);
+
+            LPDIRECT3DVERTEXBUFFER9 v_buffer2 = NULL;
+            u32 buffer2tris;
+            {
+                f32 pw = 5.f;
+                f32 pz = 500.f;
+                CustomVertex2 vertices[] = {
+                      { -pw, -pw, 0.f }
+                    , { pw, -pw, 0.f }
+                    , { pw, -pw, pz }
+                    , { pw, -pw, pz }
+                    , { -pw, -pw, pz }
+                    , { -pw, -pw, 0.f }
+
+                    , { pw, -pw, 0.f }
+                    , { pw, pw, 0.f }
+                    , { pw, pw, pz }
+                    , { pw, pw, pz }
+                    , { pw, -pw, pz }
+                    , { pw, -pw, 0.f }
+
+                    , { pw, pw, 0.f }
+                    , { -pw, pw, 0.f }
+                    , { -pw, pw, pz }
+                    , { -pw, pw, pz }
+                    , { pw, pw, pz }
+                    , { pw, pw, 0.f }
+
+                    , { -pw, pw, 0.f }
+                    , { -pw, -pw, 0.f }
+                    , { -pw, -pw, pz }
+                    , { -pw, -pw, pz }
+                    , { -pw, pw, pz }
+                    , { -pw, pw, 0.f }
+                };
+                buffer2tris = (sizeof(vertices) / sizeof(vertices[0])) / 3;
+                d3ddev->SetRenderState(D3DRS_CULLMODE, D3DCULL_CW);
+                d3ddev->SetRenderState(D3DRS_LIGHTING, FALSE);
+                d3ddev->CreateVertexBuffer(
+                      sizeof(vertices)
+                    , 0 /*Usage*/
+                    , CustomVertex2::fvf
+                    , D3DPOOL_MANAGED
+                    , &v_buffer2
+                    , nullptr /*pSharedHandle*/
+                );
+                void* pVoid;
+                v_buffer2->Lock(0, 0, (void**)&pVoid, 0);
+                memcpy(pVoid, vertices, sizeof(vertices));
+                v_buffer2->Unlock();
+            }
 
             MSG msg;
 
@@ -186,31 +248,33 @@ namespace DIRECTX9 {
                     d3ddev->Clear(0, NULL, D3DCLEAR_TARGET, D3DCOLOR_XRGB(0, 0, 0), 1.0f, 0);
                     d3ddev->BeginScene();
                     {
-                        d3ddev->SetTransform(D3DTS_VIEW, (D3DMATRIX*)&game.cameraMgr.activeCam->modelviewMatrix.dataCM);
+                        d3ddev->SetTransform(D3DTS_VIEW, (D3DMATRIX*)&game.cameraMgr.activeCam->viewMatrix.dataCM);
+                        d3ddev->SetTransform(D3DTS_PROJECTION, (D3DMATRIX*)&game.renderMgr.perspProjection.matrix.dataCM);
 
-                        f32 fovDeg = 45.f;
-                        f32 aspect = platform.screen.width / (f32)platform.screen.height;
-                        f32 near = 1.f;
-                        f32 far = 100.f;
-                        
-                        f32 halfFovRad = fovDeg * 0.5f * Math::d2r<f32>;
-                        f32 height = Math::cos(halfFovRad) / Math::sin(halfFovRad);
-                        f32 width = height / aspect;
-                        f32 range = far / (far - near);
+                        Transform t;
+                        Math::identity4x4(t);
+                        t.pos = { 0.f, 0.f, 0.f };
+                        d3ddev->SetTransform(D3DTS_WORLD, (D3DMATRIX*)&t.dataCM);
+                        d3ddev->SetFVF(CustomVertex1::fvf);
+                        d3ddev->SetStreamSource(0, v_buffer1, 0, sizeof(CustomVertex1));
+                        d3ddev->DrawPrimitive(D3DPT_TRIANGLELIST, 0, buffer1tris);
 
-                        // TODO: sort this out properly
-                        f32 perspectiveMatrix[16] = {};
-                        perspectiveMatrix[0] = width;
-                        perspectiveMatrix[5] = height;
-                        perspectiveMatrix[10] = range;
-                        perspectiveMatrix[11] = 1.f;
-                        perspectiveMatrix[14] = -range * near;
-
-                        d3ddev->SetTransform(D3DTS_PROJECTION, (D3DMATRIX*)&perspectiveMatrix);
-
-                        d3ddev->SetFVF(CustomVertex::fvf);
-                        d3ddev->SetStreamSource(0, v_buffer, 0, sizeof(CustomVertex));
-                        d3ddev->DrawPrimitive(D3DPT_TRIANGLELIST, 0, 1);
+                        const Col pillarColor(1.0f, 1.0f, 1.0f, 0.5f);
+                        // Note that OpenGL accepts either float rgba or a u32 abgr -- will have to split this, probably
+                        d3ddev->SetTextureStageState(0, D3DTSS_CONSTANT, D3DCOLOR_ARGB(pillarColor.getAu(), pillarColor.getRu(), pillarColor.getGu(), pillarColor.getBu()));
+                        d3ddev->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_SELECTARG1);
+                        d3ddev->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_SELECTARG1);
+                        d3ddev->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_CONSTANT);
+                        d3ddev->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTA_CONSTANT);
+                        t.pos = { 50.f, 0.f, 0.f };
+                        d3ddev->SetTransform(D3DTS_WORLD, (D3DMATRIX*)&t.dataCM);
+                        d3ddev->SetFVF(CustomVertex2::fvf);
+                        d3ddev->SetStreamSource(0, v_buffer2, 0, sizeof(CustomVertex2));
+                        d3ddev->DrawPrimitive(D3DPT_TRIANGLELIST, 0, buffer2tris);
+                        d3ddev->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_DISABLE);
+                        d3ddev->SetTextureStageState(0, D3DTSS_ALPHAOP, D3DTOP_DISABLE);
+                        d3ddev->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTOP_DISABLE);
+                        d3ddev->SetTextureStageState(0, D3DTSS_ALPHAARG1, D3DTOP_DISABLE);
                     }
                     d3ddev->EndScene();
                     d3ddev->Present(NULL, NULL, NULL, NULL);

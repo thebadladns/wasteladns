@@ -128,18 +128,11 @@ void start(Game& game, Platform::GameConfig& config, const Platform::State& plat
         ortho.far = 200.f;
         generateMatrix(mgr.orthoProjection.matrix, ortho);
 
-        //PerspProjection::Config& frustum = mgr.perspProjection.config;
-        //frustum.fov = 75.0;
-        //frustum.aspect = 1.0;
-        //frustum.near = 1.0;
-        //frustum.far = 1500.0;
-        //generateMatrix(mgr.perspProjection.matrix, frustum);
-
         PerspProjection::Config& frustum = mgr.perspProjection.config;
         frustum.fov = 45.0;
         frustum.aspect = (FLOAT)platform.screen.width / (FLOAT)platform.screen.height;
         frustum.near = 1.0;
-        frustum.far = 100.0;
+        frustum.far = 1000.0;
         generateMatrix(mgr.perspProjection.matrix, frustum);
     }
 
@@ -150,14 +143,11 @@ void start(Game& game, Platform::GameConfig& config, const Platform::State& plat
 
         Camera& cam = mgr.cameras[CameraManager::FlyCam];
         Math::identity4x4(cam.transform);
-        cam.transform.pos = Vec3(0.f, -10.f, 0.f);
+        cam.transform.pos = Vec3(100.f, -115.f, 210.f);
         Vec3 lookAt(0.f, 0.f, 0.f);
         Vec3 lookAtDir = Math::subtract(lookAt, cam.transform.pos);
-        Transform33 tmp = Math::fromFront(lookAtDir);
-        cam.transform.right = tmp.right;
-        cam.transform.front = tmp.front;
-        cam.transform.up = tmp.up;
-        generateModelViewMatrix(cam.modelviewMatrix, cam.transform);
+        Math::fromFront(cam.transform, lookAtDir);
+        Renderer::generateModelViewMatrix(cam.viewMatrix, cam.transform);
 
         mgr.activeCam = &cam;
     }

@@ -38,16 +38,16 @@ struct Vector3 {
     
     union {
         struct {
+            _T x, y, z;
+        };
+        _T coords[3];
+        struct {
             Vector2<_T> xy;
         };
         struct {
             _T _padding;
             Vector2<_T> yz;
         };
-        struct {
-            _T x, y, z;
-        };
-        _T coords[3];
     };
 };
 typedef Vector3<f32> Vec3;
@@ -63,6 +63,10 @@ struct Vector4 {
     
     union {
         struct {
+            _T x, y, z, w;
+        };
+        _T coords[4];
+        struct {
             Vector2<_T> xy, zw;
         };
         struct {
@@ -76,10 +80,6 @@ struct Vector4 {
             _T _padding1;
             Vector3<_T> yzw;
         };
-        struct {
-            _T x, y, z, w;
-        };
-        _T coords[4];
     };
 };
 typedef Vector4<f32> Vec4;

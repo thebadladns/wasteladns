@@ -48,7 +48,7 @@ struct Transform {
 
 namespace Math {
     
-    Vec3 RIGHT_AXIS(-1.f, 0.f, 0.f);
+    Vec3 RIGHT_AXIS(1.f, 0.f, 0.f);
     Vec3 FRONT_AXIS(0.f, 1.f, 0.f);
     Vec3 UP_AXIS(0.f, 0.f, 1.f);
     
