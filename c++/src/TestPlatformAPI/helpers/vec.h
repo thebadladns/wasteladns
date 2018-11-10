@@ -15,9 +15,8 @@
 
 template <typename _T>
 struct Vector2 {
-    Vector2();
-    Vector2(const _T x, const _T y);
-    Vector2(const Vector2<_T>& v);
+    constexpr Vector2() = default;
+    constexpr Vector2(const _T x, const _T y);
     
     union {
         struct {
@@ -30,11 +29,10 @@ typedef Vector2<f32> Vec2;
 
 template <typename _T>
 struct Vector3 {
-    Vector3();
-    Vector3(const _T x, const _T y, const _T z);
-    Vector3(const _T x, const Vector2<_T>& yz);
-    Vector3(const Vector2<_T>& xy, const _T z);
-    Vector3(const Vector3<_T>& v);
+    constexpr Vector3() = default;
+    constexpr Vector3(const _T x, const _T y, const _T z);
+    constexpr Vector3(const _T x, const Vector2<_T>& yz);
+    constexpr Vector3(const Vector2<_T>& xy, const _T z);
     
     union {
         struct {
@@ -54,13 +52,12 @@ typedef Vector3<f32> Vec3;
 
 template <typename _T>
 struct Vector4 {
-    Vector4();
-    Vector4(const _T x, const _T y, const _T z, const _T w);
-    Vector4(const _T x, const Vector3<_T>& yzw);
-    Vector4(const Vector3<_T>& xyz, const _T w);
-    Vector4(const Vector2<_T>& xy, const Vector2<_T>& yz);
-    Vector4(const Vector4<_T>& v);
-    
+    constexpr Vector4() = default;
+    constexpr Vector4(const _T x, const _T y, const _T z, const _T w);
+    constexpr Vector4(const _T x, const Vector3<_T>& yzw);
+    constexpr Vector4(const Vector3<_T>& xyz, const _T w);
+    constexpr Vector4(const Vector2<_T>& xy, const Vector2<_T>& yz);
+
     union {
         struct {
             _T x, y, z, w;
@@ -90,11 +87,8 @@ typedef Vector4<f32> Vec4;
 // 2  5  8
 template <typename _T>
 struct Matrix33 {
-    Matrix33() {};
-    Matrix33(const Matrix33<_T>& m) {
-        memcpy(dataCM, m.dataCM, sizeof(_T) * 9);
-    }
-    
+    constexpr Matrix33() = default;
+
     union {
         struct {
             Vector3<_T> col0;
@@ -113,11 +107,8 @@ typedef Matrix33<f32> Mat33;
 // 3  7  11 15
 template <typename _T>
 struct Matrix44 {
-    Matrix44() {}
-    Matrix44(const Matrix44<_T>& m) {
-        memcpy(dataCM, m.dataCM, sizeof(_T) * 16);
-    }
-    
+    constexpr Matrix44() = default;
+
     union {
         struct {
             Vector4<_T> fullcol0;
@@ -137,81 +128,57 @@ struct Matrix44 {
 typedef Matrix44<f32> Mat4;
 
 template <typename _T>
-Vector2<_T>::Vector2() {}
-template <typename _T>
-Vector2<_T>::Vector2(const _T x, const _T y) {
+constexpr Vector2<_T>::Vector2(const _T x, const _T y) {
     this->x = x;
     this->y = y;
 }
-template <typename _T>
-Vector2<_T>::Vector2(const Vector2<_T>& v) {
-    x = v.x;
-    y = v.y;
-}
 
 template <typename _T>
-Vector3<_T>::Vector3() {}
-template <typename _T>
-Vector3<_T>::Vector3(const _T x, const _T y, const _T z) {
+constexpr Vector3<_T>::Vector3(const _T x, const _T y, const _T z) {
     this->x = x;
     this->y = y;
     this->z = z;
 }
 template <typename _T>
-Vector3<_T>::Vector3(const _T x, const Vector2<_T>& yz) {
+constexpr Vector3<_T>::Vector3(const _T x, const Vector2<_T>& yz) {
     this->x = x;
     this->y = yz.x;
     this->z = yz.y;
 }
 template <typename _T>
-Vector3<_T>::Vector3(const Vector2<_T>& xy, const _T z) {
+constexpr Vector3<_T>::Vector3(const Vector2<_T>& xy, const _T z) {
     this->x = xy.x;
     this->y = xy.y;
     this->z = z;
 }
-template <typename _T>
-Vector3<_T>::Vector3(const Vector3<_T>& v) {
-    x = v.x;
-    y = v.y;
-    z = v.z;
-}
 
 template <typename _T>
-Vector4<_T>::Vector4() {}
-template <typename _T>
-Vector4<_T>::Vector4(const _T x, const _T y, const _T z, const _T w) {
+constexpr Vector4<_T>::Vector4(const _T x, const _T y, const _T z, const _T w) {
     this->x = x;
     this->y = y;
     this->z = z;
     this->w = w;
 }
 template <typename _T>
-Vector4<_T>::Vector4(const _T x, const Vector3<_T>& yzw) {
+constexpr Vector4<_T>::Vector4(const _T x, const Vector3<_T>& yzw) {
     this->x = x;
     this->y = yzw.x;
     this->z = yzw.y;
     this->w = yzw.z;
 }
 template <typename _T>
-Vector4<_T>::Vector4(const Vector3<_T>& xyz, const _T w) {
+constexpr Vector4<_T>::Vector4(const Vector3<_T>& xyz, const _T w) {
     this->x = xyz.z;
     this->y = xyz.y;
     this->z = xyz.z;
     this->w = w;
 }
 template <typename _T>
-Vector4<_T>::Vector4(const Vector2<_T>& xy, const Vector2<_T>& yz) {
+constexpr Vector4<_T>::Vector4(const Vector2<_T>& xy, const Vector2<_T>& yz) {
     x = xy.x;
     y = xy.y;
     z = yz.x;
     w = yz.y;
-}
-template <typename _T>
-Vector4<_T>::Vector4(const Vector4<_T>& v) {
-    x = v.x;
-    y = v.y;
-    z = v.z;
-    w = v.w;
 }
 
 namespace Math {

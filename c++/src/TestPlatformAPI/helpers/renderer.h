@@ -57,50 +57,39 @@ namespace Renderer {
         matrixCM[14] = -(2.f * config.far * config.near) / (config.far - config.near);
     }
 
-    // Assumes input transform is right-handed, z-coordinate is up
-    // up = right x front
-    // front = up x right
-    // right = front x up
-    void generateModelViewMatrix(Mat4& modelview, const Transform& tRHwithZup) {
-
-        // Switching up to the y axis requires negating the front to retain right-handedness
-        Mat4 tRHwithYUp;
-        tRHwithYUp.col0 = tRHwithZup.right;
-        tRHwithYUp.col1 = tRHwithZup.up;
-        tRHwithYUp.col2 = Math::negate(tRHwithZup.front);
-        tRHwithYUp.col3 = tRHwithZup.pos;
-        tRHwithYUp.col0_w = 0.f;
-        tRHwithYUp.col1_w = 0.f;
-        tRHwithYUp.col2_w = 0.f;
-        tRHwithYUp.col3_w = 1.f;
-
+    template <CoordinateSystem::Enum _system>
+    void generateModelViewMatrix(Mat4& modelview, const TransformMatrix<_system>& t) {
+        
+        const TransformMatrix<CoordinateSystem::RH_Yup_Zfront> tRHwithYUp = Math::toEyeSpace(t);
+        const Mat4& mRHwithYUp = tRHwithYUp.matrix;
+        
         // Simplified inverse
         // https://www.gamedev.net/forums/topic/647149-d3dxmatrixlookatlh-internally/?tab=comments#comment-5089654
 
-        const f32 tx = -Math::dot(tRHwithYUp.col3, tRHwithYUp.col0);
-        const f32 ty = -Math::dot(tRHwithYUp.col3, tRHwithYUp.col1);
-        const f32 tz = -Math::dot(tRHwithYUp.col3, tRHwithYUp.col2);
+        const f32 tx = -Math::dot(mRHwithYUp.col3, mRHwithYUp.col0);
+        const f32 ty = -Math::dot(mRHwithYUp.col3, mRHwithYUp.col1);
+        const f32 tz = -Math::dot(mRHwithYUp.col3, mRHwithYUp.col2);
 
-        modelview.dataCM[0] = tRHwithYUp.col0.x;
-        modelview.dataCM[4] = tRHwithYUp.col0.y;
-        modelview.dataCM[8] = tRHwithYUp.col0.z;
+        modelview.dataCM[0] = mRHwithYUp.col0.x;
+        modelview.dataCM[4] = mRHwithYUp.col0.y;
+        modelview.dataCM[8] = mRHwithYUp.col0.z;
 
-        modelview.dataCM[1] = tRHwithYUp.col1.x;
-        modelview.dataCM[5] = tRHwithYUp.col1.y;
-        modelview.dataCM[9] = tRHwithYUp.col1.z;
+        modelview.dataCM[1] = mRHwithYUp.col1.x;
+        modelview.dataCM[5] = mRHwithYUp.col1.y;
+        modelview.dataCM[9] = mRHwithYUp.col1.z;
 
-        modelview.dataCM[2] = tRHwithYUp.col2.x;
-        modelview.dataCM[6] = tRHwithYUp.col2.y;
-        modelview.dataCM[10] = tRHwithYUp.col2.z;
+        modelview.dataCM[2] = mRHwithYUp.col2.x;
+        modelview.dataCM[6] = mRHwithYUp.col2.y;
+        modelview.dataCM[10] = mRHwithYUp.col2.z;
 
         modelview.dataCM[12] = tx;
         modelview.dataCM[13] = ty;
         modelview.dataCM[14] = tz;
 
-        modelview.dataCM[3] = tRHwithYUp.col0_w;
-        modelview.dataCM[7] = tRHwithYUp.col1_w;;
-        modelview.dataCM[11] = tRHwithYUp.col2_w;;
-        modelview.dataCM[15] = tRHwithYUp.col3_w;
+        modelview.dataCM[3] = mRHwithYUp.col0_w;
+        modelview.dataCM[7] = mRHwithYUp.col1_w;;
+        modelview.dataCM[11] = mRHwithYUp.col2_w;;
+        modelview.dataCM[15] = mRHwithYUp.col3_w;
     }
     
     struct Instance {

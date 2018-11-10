@@ -116,14 +116,16 @@ namespace Immediate
         
         static constexpr u32 kSectionCount = 12;
         const Col colorVariation(0.25f, 0.25f, 0.25f, 0.f);
-        const Vec3 up(0.f, 0.f, 1.f);
+        const Vec3 up = Math::upAxis();
+        const Vec3 front = Math::frontAxis();
+        const Vec3 right = Math::rightAxis();
         for (u8 i = 0; i < kSectionCount; i++) {
             
             const f32 angle = i * Math::pi<f32> / (f32) kSectionCount;
             const f32 s = Math::sin(angle);
             const f32 c = Math::cos(angle);
             
-            const Vec3 rotatedFront(c, s, 0.f);
+            const Vec3 rotatedFront = Math::add(Math::scale(right, c), Math::scale(front, s));
             circle(buffer, center, rotatedFront, radius, color);
             
             const f32 sectionRadius = radius * s;

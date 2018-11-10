@@ -181,9 +181,8 @@ namespace Game
             using namespace CameraSystem;
             
             Camera& cam = mgr.cameras[CameraManager::FlyCam];
-            Math::identity4x4(cam.transform);
             cam.transform.pos = Vec3(100.f, -115.f, 210.f);
-            Vec3 lookAt(0.f, 0.f, 0.f);
+            Vec3 lookAt = { 0.f, 0.f, 0.f };
             Vec3 lookAtDir = Math::subtract(lookAt, cam.transform.pos);
             Math::fromFront(cam.transform, lookAtDir);
             Renderer::generateModelViewMatrix(cam.viewMatrix, cam.transform);
