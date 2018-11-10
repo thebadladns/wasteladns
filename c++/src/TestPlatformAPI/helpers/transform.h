@@ -256,7 +256,7 @@ namespace Math {
     
     void identity4x4(Transform& t) {
         identity3x3(t);
-        t.x_w = t.x_w = t.z_w = 0.f;
+        t.x_w = t.y_w = t.z_w = 0.f;
         t.pos = {};
         t.pos_w = 1.f;
     }
