@@ -186,7 +186,7 @@ namespace Math {
     }
     template <CoordinateSystem::Enum _system>
     void fromFront(TransformMatrix<_system>& t, const Vec3& front) {
-        TransformMatrix33<_system> tmp = fromFront<_system>(front);
+        TransformMatrix33<_system> tmp = fromFrontTowardsUp<_system>(front, upAxis());
         t.x = tmp.x; t.y = tmp.y; t.z = tmp.z;
     }
 }
