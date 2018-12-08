@@ -41,6 +41,7 @@ namespace GLFW {
         }
 
         glfwMakeContextCurrent(windowHandle);
+        gladLoadGLLoader((GLADloadproc)glfwGetProcAddress);
         glfwSwapInterval(1);
         
         // Input setup
