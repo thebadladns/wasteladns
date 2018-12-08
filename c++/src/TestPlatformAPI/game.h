@@ -368,7 +368,6 @@ namespace Game
                 glLoadMatrixf(mgr.perspProjection.matrix.dataCM);
                 
                 glMatrixMode(GL_MODELVIEW);
-                glPushMatrix();
                 {
                     const Mat4 viewMatrix = game.cameraMgr.activeCam->viewMatrix;
 
@@ -431,8 +430,7 @@ namespace Game
                     {
                         Renderer::Immediate::TextParams textParams;
                         textParams.scale = 2;
-//                        textParams.pos = Vec3(game.renderMgr.orthoProjection.config.left + 10.f, game.renderMgr.orthoProjection.config.top - 10.f, -50);
-                        textParams.pos = Vec3(150, 150, -50);
+                        textParams.pos = Vec3(game.renderMgr.orthoProjection.config.left + 10.f, game.renderMgr.orthoProjection.config.top - 10.f, -50);
                         textParams.text = "Text\ntest";
                         textParams.color = Col(1.0f, 1.0f, 0.0f, 1.0f);
                         Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParams);
@@ -440,7 +438,6 @@ namespace Game
                         Renderer::Immediate::sphere(game.renderMgr.immediateBuffer, Vec3(-170.f, 40.f, 0.f), 100.f, Col(1.0f, 1.0f, 1.0f, 0.4f));
                     }
                 }
-                glPopMatrix();
             } // perspective
             
             // Batched debug
@@ -449,9 +446,12 @@ namespace Game
                 glLoadMatrixf(mgr.perspProjection.matrix.dataCM);
                 Immediate::present3d(mgr.immediateBuffer, game.cameraMgr.activeCam->viewMatrix);
                 glMatrixMode(GL_PROJECTION);
+                glDisable(GL_CULL_FACE);
+                glPolygonMode( GL_FRONT_AND_BACK, GL_FILL);
                 glLoadMatrixf(mgr.orthoProjection.matrix.dataCM);
                 Immediate::present2d(mgr.immediateBuffer);
                 Immediate::clear(mgr.immediateBuffer);
+                glEnable(GL_CULL_FACE);
             }
         }
     }

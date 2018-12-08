@@ -32,6 +32,7 @@ namespace Renderer
 			glMatrixMode(GL_MODELVIEW);
 			glPushMatrix();
 			{
+                glLoadIdentity();
 				// Reverse stb_easy_font y axis
 				glScalef(1.f, -1.f, 1.f);
 				glEnableClientState(GL_VERTEX_ARRAY);
