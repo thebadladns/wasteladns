@@ -119,10 +119,38 @@ namespace Game
         }
     }
     
-    struct Player
-    {
+    struct RenderInstance {
+        Transform transform;
+    };
+    struct RenderDescription {
+        Col color;
+        u32 vertexBuffer;
+        u32 indexBuffer;
+        u32 indexCount;
+        bool fill;
+    };
+    struct RenderGroup {
+        RenderInstance instanceBuffer[128];
+        RenderDescription desc;
+        u32 instanceCount;
+        RenderInstance* begin() { return &instanceBuffer[0]; }
+        RenderInstance* end() { return &instanceBuffer[instanceCount]; }
+    };
+    struct RenderScene {
+        RenderGroup groupBuffer[16];
+        u32 groupCount;
+        RenderGroup* begin() { return &groupBuffer[0]; }
+        RenderGroup* end() { return &groupBuffer[groupCount]; }
+    };
+    struct RenderInstanceHandle {
+        u32 desc;
+        u32 inst;
+    };
+    
+    struct Player {
         WorldData worldData;
         Control control;
+        RenderInstanceHandle renderInst;
     };
     
     struct CameraManager {
@@ -135,6 +163,7 @@ namespace Game
         Time time;
         CameraManager cameraMgr;
         Renderer::Instance renderMgr;
+        RenderScene renderScene;
         Player player;
     };
     
@@ -175,6 +204,100 @@ namespace Game
             glEnable(GL_CULL_FACE);
         }
         
+        RenderInstanceHandle playerRenderInst;
+        game.renderScene = {};
+        {
+            {
+                f32 pw = 5.f;
+                f32 pz = 500.f;
+                Vec3 pillarVertices[] = {
+                    { -pw, -pw, 0.f }, { pw, -pw, 0.f}, { pw, -pw, pz}, { -pw, -pw, pz} // +y quad
+                    , { pw, pw, 0.f }, { -pw, pw, 0.f }, { -pw, pw, pz }, { pw, pw, pz } // -y quad
+                };
+                u16 pillarIndexes[] = {
+                    0, 1, 2, 3, 0, 2, // +y tris
+                    4, 5, 6, 7, 4, 6, // -y tris
+                    1, 4, 7, 2, 1, 7, // +x tris
+                    5, 0, 3, 6, 5, 3, // -x tris
+                };
+                const u32 pillarIndexCount = sizeof(pillarIndexes) / sizeof(pillarIndexes[0]);
+                const Col pillarColor(1.0f, 1.0f, 1.0f, 0.5f);
+                
+                Vec2 pillarPos[] = {
+                    { -80.f, -20.f }, { 80.f, -20.f }, { -160.f, -20.f }, { 160.f, -20.f }
+                    , { -240.f, -20.f }, { 240.f, -20.f }, { -300.f, -20.f }, { 300.f, -20.f }, { -80.f, -80.f }
+                    , { 80.f, -80.f }, { -160.f, -80.f }, { 160.f, -80.f }, { -240.f, -80.f }, { 240.f, -80.f }
+                    , { -300.f, -80.f }, { 300.f, -80.f }, { -20.f, 180.f }, { 20.f, 180.f }, { -100.f, 180.f }
+                    , { 100.f, 180.f }, { -200.f, 180.f }, { 200.f, 180.f }, { -300.f, 180.f }, { 300.f, 180.f }
+                };
+                
+                u32 vertexBuffer, indexBuffer;
+                glGenBuffers(1, &vertexBuffer);
+                glBindBuffer(GL_ARRAY_BUFFER, vertexBuffer);
+                glBufferData(GL_ARRAY_BUFFER, sizeof(pillarVertices), pillarVertices, GL_STATIC_DRAW);
+                glGenBuffers(1, &indexBuffer);
+                glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBuffer);
+                glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(pillarIndexes), pillarIndexes, GL_STATIC_DRAW);
+                glBindBuffer(GL_ARRAY_BUFFER, 0);
+                glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+                
+                RenderGroup& r = game.renderScene.groupBuffer[game.renderScene.groupCount++];
+                r.desc.vertexBuffer = vertexBuffer;
+                r.desc.indexBuffer = indexBuffer;
+                r.desc.indexCount = pillarIndexCount;
+                r.desc.color = pillarColor;
+                r.desc.fill = true;
+                for (Vec2& pos : pillarPos) {
+                    RenderInstance& i = r.instanceBuffer[r.instanceCount++];
+                    Math::identity4x4(i.transform);
+                    i.transform.pos = Vec3(pos, 0.f);
+                }
+            }
+            
+            {
+                f32 w = 4.f;
+                f32 wf = w;
+                f32 wb = w;
+                f32 h = 5.f;
+                f32 z = 30.f;
+                f32 yoff = -2.f;
+                f32 zoff = 0.f;
+                // pyramid sides
+                const Vec3 playerVertices[] = {
+                    { 0.f, yoff, -zoff} // pyramid tip
+                    , { -wb, -h, z}, { -wf, h, z}, { wf, h, z}, { wb, -h, z} // pyramid sides
+                };
+                const u16 playerIndices[] = {
+                    0, 1, 2, 0, 2, 3, 0, 3, 4, 0, 4, 1 // side tris
+                    , 1, 4, 3, 2, 1, 3 // top tris
+                };
+                const u32 playerIndexCount = sizeof(playerIndices) / sizeof(playerIndices[0]);
+                const Col playerOutlineColor(1.0f, 1.0f, 1.0f, 1.0f);
+        
+                u32 vertexBuffer, indexBuffer;
+                glGenBuffers(1, &vertexBuffer);
+                glBindBuffer(GL_ARRAY_BUFFER, vertexBuffer);
+                glBufferData(GL_ARRAY_BUFFER, sizeof(playerVertices), playerVertices, GL_STATIC_DRAW);
+                glGenBuffers(1, &indexBuffer);
+                glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBuffer);
+                glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(playerIndices), playerIndices, GL_STATIC_DRAW);
+                glBindBuffer(GL_ARRAY_BUFFER, 0);
+                glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+        
+                playerRenderInst.desc = game.renderScene.groupCount;
+                RenderGroup& r = game.renderScene.groupBuffer[game.renderScene.groupCount++];
+                r.desc.vertexBuffer = vertexBuffer;
+                r.desc.indexBuffer = indexBuffer;
+                r.desc.indexCount = playerIndexCount;
+                r.desc.color = playerOutlineColor;
+                r.desc.fill = false;
+        
+                playerRenderInst.inst = r.instanceCount;
+                RenderInstance& i = r.instanceBuffer[r.instanceCount++];
+                i.transform = game.player.worldData.transform;
+            }
+        }
+        
         game.cameraMgr = {};
         {
             CameraManager& mgr = game.cameraMgr;
@@ -194,6 +317,7 @@ namespace Game
         {
             Math::identity4x4(game.player.worldData.transform);
             game.player.worldData.transform.pos = Vec3(50.f, 0.f, 0.f);
+            game.player.renderInst = playerRenderInst;
         }
     }
     
@@ -227,6 +351,8 @@ namespace Game
             const Camera* activeCam = game.cameraMgr.activeCam;
             process(game.player.control, pad, dt);
             process(game.player.worldData, game.player.control, activeCam->transform, dt);
+            RenderInstance& i = game.renderScene.groupBuffer[game.player.renderInst.desc].instanceBuffer[game.player.renderInst.inst];
+            i.transform = game.player.worldData.transform;
         }
             
         // Render update
@@ -244,72 +370,26 @@ namespace Game
                 glMatrixMode(GL_MODELVIEW);
                 glPushMatrix();
                 {
-                    glLoadMatrixf(game.cameraMgr.activeCam->viewMatrix.dataCM);
-                    
-                    f32 pw = 5.f;
-                    f32 pz = 500.f;
-                    Vec3 pillarQuads[] = {
-                          { -pw, -pw, 0.f }
-                        , { pw, -pw, 0.f}
-                        , { pw, -pw, pz}
-                        , { -pw, -pw, pz}
-                        
-                        , { pw, -pw, 0.f }
-                        , { pw, pw, 0.f }
-                        , { pw, pw, pz }
-                        , { pw, -pw, pz }
-                        
-                        , { pw, pw, 0.f }
-                        , { -pw, pw, 0.f }
-                        , { -pw, pw, pz }
-                        , { pw, pw, pz }
-                        
-                        , { -pw, pw, 0.f }
-                        , { -pw, -pw, 0.f }
-                        , { -pw, -pw, pz }
-                        , { -pw, pw, pz }
-                    };
-                    const u32 pillarQuadCount = sizeof(pillarQuads) / sizeof(pillarQuads[0]);
-                    
-                    Vec2 pillarPos[] = {
-                          { -80.f, -20.f }
-                        , { 80.f, -20.f }
-                        , { -160.f, -20.f }
-                        , { 160.f, -20.f }
-                        , { -240.f, -20.f }
-                        , { 240.f, -20.f }
-                        , { -300.f, -20.f }
-                        , { 300.f, -20.f }
-                        , { -80.f, -80.f }
-                        , { 80.f, -80.f }
-                        , { -160.f, -80.f }
-                        , { 160.f, -80.f }
-                        , { -240.f, -80.f }
-                        , { 240.f, -80.f }
-                        , { -300.f, -80.f }
-                        , { 300.f, -80.f }
-                        , { -20.f, 180.f }
-                        , { 20.f, 180.f }
-                        , { -100.f, 180.f }
-                        , { 100.f, 180.f }
-                        , { -200.f, 180.f }
-                        , { 200.f, 180.f }
-                        , { -300.f, 180.f }
-                        , { 300.f, 180.f }
-                    };
-                    
+                    const Mat4 viewMatrix = game.cameraMgr.activeCam->viewMatrix;
+
                     glEnableClientState(GL_VERTEX_ARRAY);
-                    {
-                        const Col pillarColor(1.0f, 1.0f, 1.0f, 0.5f);
-                        glColor4f(RGBA_PARAMS(pillarColor));
-                        glVertexPointer(3, GL_FLOAT, 0, pillarQuads);
+                    for (RenderGroup& r : game.renderScene) {
+                        const RenderDescription& d = r.desc;
                         
-                        for (Vec2& pos : pillarPos) {
-                            glPushMatrix();
-                            glTranslatef(pos.x, pos.y, 0.f);
-                            glDrawArrays(GL_QUADS, 0, pillarQuadCount);
+                        glColor4f(RGBA_PARAMS(d.color));
+                        glPolygonMode( GL_FRONT_AND_BACK, d.fill ? GL_FILL : GL_LINE );
+                        glBindBuffer(GL_ARRAY_BUFFER, d.vertexBuffer);
+                        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, d.indexBuffer);
+                        glVertexPointer(3, GL_FLOAT, 0, nullptr);
+                        for (RenderInstance& i : r) {
+                            const Mat4 t = Math::mult(viewMatrix, i.transform.matrix);
+                            glLoadMatrixf(t.dataCM);
+                            glDrawElements(GL_TRIANGLES, d.indexCount, GL_UNSIGNED_SHORT, nullptr);
                             glPopMatrix();
                         }
+                        glBindBuffer(GL_ARRAY_BUFFER, 0);
+                        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+                        
                     }
                     glDisableClientState(GL_VERTEX_ARRAY);
                     
@@ -351,55 +431,14 @@ namespace Game
                     {
                         Renderer::Immediate::TextParams textParams;
                         textParams.scale = 2;
-                        textParams.pos = Vec3(game.renderMgr.orthoProjection.config.left + 10.f, game.renderMgr.orthoProjection.config.top - 10.f, -50);
+//                        textParams.pos = Vec3(game.renderMgr.orthoProjection.config.left + 10.f, game.renderMgr.orthoProjection.config.top - 10.f, -50);
+                        textParams.pos = Vec3(150, 150, -50);
                         textParams.text = "Text\ntest";
                         textParams.color = Col(1.0f, 1.0f, 0.0f, 1.0f);
                         Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParams);
                         
                         Renderer::Immediate::sphere(game.renderMgr.immediateBuffer, Vec3(-170.f, 40.f, 0.f), 100.f, Col(1.0f, 1.0f, 1.0f, 0.4f));
                     }
-                    
-                    // Player
-                    glPushMatrix();
-                    {
-                        f32 w = 4.f;
-                        f32 wf = w;
-                        f32 wb = w;
-                        f32 h = 5.f;
-                        f32 z = 30.f;
-                        f32 yoff = -2.f;
-                        f32 zoff = 0.f;
-                        // pyramid sides
-                        const Vec3 playerTriangles[] = {
-                              { 0.f, yoff, -zoff}, { -wb, -h, z}, { -wf, h, z}
-                            , { 0.f, yoff, -zoff}, { -wf, h, z}, { wf, h, z}
-                            , { 0.f, yoff, -zoff}, { wf, h, z}, { wb, -h, z}
-                            , { 0.f, yoff, -zoff}, { wb, -h, z}, { -wb, -h, z}
-                        };
-                        // pyramid top
-                        const Vec3 playerQuads[] = {
-                            { -wb, -h, z}, { wb, -h, z}, { wf, h, z}, { -wf, h, z}
-                        };
-                        const u32 playerTriangleCount = sizeof(playerTriangles) / sizeof(playerTriangles[0]);
-                        const u32 playerQuadCount = sizeof(playerQuads) / sizeof(playerQuads[0]);
-                        const Col playerOutlineColor(1.0f, 1.0f, 1.0f, 1.0f);
-                        const Col playerSolidColor(0.0f, 0.0f, 0.0f, 1.0f);
-
-                        glMultMatrixf(game.player.worldData.transform.matrix.dataCM);
-                        
-                        glPolygonMode( GL_FRONT_AND_BACK, GL_LINE );
-                        glEnableClientState(GL_VERTEX_ARRAY);
-                        {
-                            glColor4f(RGBA_PARAMS(playerOutlineColor));
-                            glVertexPointer(3, GL_FLOAT, 0, playerTriangles);
-                            glDrawArrays(GL_TRIANGLES, 0, playerTriangleCount);
-                            glVertexPointer(3, GL_FLOAT, 0, playerQuads);
-                            glDrawArrays(GL_QUADS, 0, playerQuadCount);
-                        }
-                        glDisableClientState(GL_VERTEX_ARRAY);
-                        glPolygonMode( GL_FRONT_AND_BACK, GL_FILL );
-                    }
-                    glPopMatrix();
                 }
                 glPopMatrix();
             } // perspective

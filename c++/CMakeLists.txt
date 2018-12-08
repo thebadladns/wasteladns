@@ -11,7 +11,7 @@ set(CMAKE_BINARY_DIR ${CMAKE_SOURCE_DIR}/bin)
 set(EXECUTABLE_OUTPUT_PATH ${CMAKE_BINARY_DIR})
 
 # run cmake rules for glfw
-add_subdirectory(glfw)
+add_subdirectory(glfw EXCLUDE_FROM_ALL)
 
 if (WIN32)
 # only add main; other files will be found in the Solution Explorer of Visual Studio

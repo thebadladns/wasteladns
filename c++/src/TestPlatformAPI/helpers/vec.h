@@ -111,16 +111,10 @@ struct Matrix44 {
 
     union {
         struct {
-            Vector4<_T> fullcol0;
-            Vector4<_T> fullcol1;
-            Vector4<_T> fullcol2;
-            Vector4<_T> fullcol3;
-        };
-        struct {
-            Vector3<_T> col0; _T col0_w;
-            Vector3<_T> col1; _T col1_w;
-            Vector3<_T> col2; _T col2_w;
-            Vector3<_T> col3; _T col3_w;
+            Vector4<_T> col0;
+            Vector4<_T> col1;
+            Vector4<_T> col2;
+            Vector4<_T> col3;
         };
         _T dataCM[16];
     };
@@ -386,6 +380,35 @@ Vector4<_T> min(const Vector4<_T>& a, const Vector4<_T>& b) {
                        Math::min(a.y,b.y),
                        Math::min(a.z,b.z),
                        Math::min(a.w,b.w));
+}
+    
+template <typename _T>
+Matrix33<_T> mult(const Matrix33<_T>& a, const Matrix33<_T>& b) {
+    Vector3<_T> a_r0 ( a.dataCM[0], a.dataCM[3], a.dataCM[6] );
+    Vector3<_T> a_r1 ( a.dataCM[1], a.dataCM[4], a.dataCM[7] );
+    Vector3<_T> a_r2 ( a.dataCM[2], a.dataCM[5], a.dataCM[8] );
+    
+    Matrix33<_T> o;
+    o.dataCM[0] = dot(a_r0, b.col0); o.dataCM[3] = dot(a_r0, b.col1); o.dataCM[6] = dot(a_r0, b.col2);
+    o.dataCM[1] = dot(a_r1, b.col0); o.dataCM[4] = dot(a_r1, b.col1); o.dataCM[7] = dot(a_r1, b.col2);
+    o.dataCM[2] = dot(a_r2, b.col0); o.dataCM[5] = dot(a_r2, b.col1); o.dataCM[8] = dot(a_r2, b.col2);
+    
+    return o;
+}
+template <typename _T>
+Matrix44<_T> mult(const Matrix44<_T>& a, const Matrix44<_T>& b) {
+    Vector4<_T> a_r0 ( a.dataCM[0], a.dataCM[4], a.dataCM[8], a.dataCM[12] );
+    Vector4<_T> a_r1 ( a.dataCM[1], a.dataCM[5], a.dataCM[9], a.dataCM[13] );
+    Vector4<_T> a_r2 ( a.dataCM[2], a.dataCM[6], a.dataCM[10], a.dataCM[14] );
+    Vector4<_T> a_r3 ( a.dataCM[3], a.dataCM[7], a.dataCM[11], a.dataCM[15] );
+    
+    Matrix44<_T> o;
+    o.dataCM[0] = dot(a_r0, b.col0); o.dataCM[4] = dot(a_r0, b.col1); o.dataCM[8] = dot(a_r0, b.col2); o.dataCM[12] = dot(a_r0, b.col3);
+    o.dataCM[1] = dot(a_r1, b.col0); o.dataCM[5] = dot(a_r1, b.col1); o.dataCM[9] = dot(a_r1, b.col2); o.dataCM[13] = dot(a_r1, b.col3);
+    o.dataCM[2] = dot(a_r2, b.col0); o.dataCM[6] = dot(a_r2, b.col1); o.dataCM[10] = dot(a_r2, b.col2); o.dataCM[14] = dot(a_r2, b.col3);
+    o.dataCM[3] = dot(a_r3, b.col0); o.dataCM[7] = dot(a_r3, b.col1); o.dataCM[11] = dot(a_r3, b.col2); o.dataCM[15] = dot(a_r3, b.col3);
+    
+    return o;
 }
 
 }

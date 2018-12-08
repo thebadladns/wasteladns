@@ -86,10 +86,10 @@ namespace Renderer {
         modelview.dataCM[13] = ty;
         modelview.dataCM[14] = tz;
 
-        modelview.dataCM[3] = mRHwithYUp.col0_w;
-        modelview.dataCM[7] = mRHwithYUp.col1_w;;
-        modelview.dataCM[11] = mRHwithYUp.col2_w;;
-        modelview.dataCM[15] = mRHwithYUp.col3_w;
+        modelview.dataCM[3] = mRHwithYUp.col0.w;
+        modelview.dataCM[7] = mRHwithYUp.col1.w;;
+        modelview.dataCM[11] = mRHwithYUp.col2.w;
+        modelview.dataCM[15] = mRHwithYUp.col3.w;
     }
     
     struct Instance {
