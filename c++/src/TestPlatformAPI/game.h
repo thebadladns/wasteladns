@@ -211,7 +211,7 @@ namespace Game
                 f32 pw = 5.f;
                 f32 pz = 500.f;
                 Vec3 pillarVertices[] = {
-                    { -pw, -pw, 0.f }, { pw, -pw, 0.f}, { pw, -pw, pz}, { -pw, -pw, pz} // +y quad
+                      { -pw, -pw, 0.f }, { pw, -pw, 0.f}, { pw, -pw, pz}, { -pw, -pw, pz} // +y quad
                     , { pw, pw, 0.f }, { -pw, pw, 0.f }, { -pw, pw, pz }, { pw, pw, pz } // -y quad
                 };
                 u16 pillarIndexes[] = {
@@ -224,7 +224,7 @@ namespace Game
                 const Col pillarColor(1.0f, 1.0f, 1.0f, 0.5f);
                 
                 Vec2 pillarPos[] = {
-                    { -80.f, -20.f }, { 80.f, -20.f }, { -160.f, -20.f }, { 160.f, -20.f }
+                      { -80.f, -20.f }, { 80.f, -20.f }, { -160.f, -20.f }, { 160.f, -20.f }
                     , { -240.f, -20.f }, { 240.f, -20.f }, { -300.f, -20.f }, { 300.f, -20.f }, { -80.f, -80.f }
                     , { 80.f, -80.f }, { -160.f, -80.f }, { 160.f, -80.f }, { -240.f, -80.f }, { 240.f, -80.f }
                     , { -300.f, -80.f }, { 300.f, -80.f }, { -20.f, 180.f }, { 20.f, 180.f }, { -100.f, 180.f }

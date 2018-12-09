@@ -68,12 +68,12 @@ int main(int argc, char** argv) {
     returnValue = Platform::GLFW::main<Game::Instance>(argc, argv);
     return returnValue;
 }
-#elif PLATFORM_DIRECTX9
+#elif PLATFORM_DX11
 
-#include "helpers/directx9/core.h"
-#include "helpers/directx9/input.h"
-#include "helpers/directx9/main.h"
-#include "helpers/directx9/io.h"
+#include "helpers/dx11/core.h"
+#include "helpers/dx11/input.h"
+#include "helpers/dx11/main.h"
+#include "helpers/dx11/io.h"
 
 #define __WASTELADNS_DEBUG_TEXT__
 #include "helpers/renderer_debug.h"

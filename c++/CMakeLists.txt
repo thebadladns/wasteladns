@@ -23,10 +23,10 @@ endif (WIN32)
 
 add_executable(app-glfw ${SOURCES})
 target_compile_definitions(app-glfw PUBLIC PLATFORM_GLFW=1)
-add_executable(app-directx9 WIN32 ${SOURCES})
-target_compile_definitions(app-directx9 PUBLIC PLATFORM_DIRECTX9=1)
+add_executable(app-dx11 WIN32 ${SOURCES})
+target_compile_definitions(app-dx11 PUBLIC PLATFORM_DX11=1)
 if(${CMAKE_VERSION} VERSION_GREATER "3.6.0" OR ${CMAKE_VERSION} VERSION_EQUAL "3.6.0") 
-	set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT app-directx9)
+	set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT app-dx11)
 endif ()
 
 if(WIN32)
@@ -40,7 +40,7 @@ endif(WIN32)
 target_link_libraries(app-glfw glfw ${LIBS-GLFW})
 
 if(WIN32)
-	target_link_libraries(app-directx9 "d3d9.lib")
+	target_link_libraries(app-dx11 "d3d11.lib")
 endif(WIN32)
 
 add_custom_command(TARGET app-glfw PRE_BUILD

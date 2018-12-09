@@ -8,7 +8,12 @@
 #endif
 #define NOMINMAX
 #include <windef.h>
-#include <d3d9.h>
+#include <d3d11_1.h>
+
+// runtime shader compilation hack
+#include <d3dcompiler.h>
+#pragma comment(lib, "d3dcompiler.lib")
+
 #undef near
 #undef far
 #undef DELETE
