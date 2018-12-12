@@ -1,3 +1,4 @@
+// crljmb @20181211 switched to xy+color layout, flipped y axis
 // crljmb @20181028 added scale support
 
 // stb_easy_font.h - v1.0 - bitmap font for 3D rendering - public domain
@@ -176,14 +177,13 @@ static int stb_easy_font_draw_segs(float x, float y, unsigned char *segs, int nu
     for (i=0; i < num_segs; ++i) {
         float len = (segs[i] & 7) * scale;
         x += (float) ((segs[i] >> 3) & 1) * scale;
-        if (len && offset+64 <= vbuf_size) {
+        if (len && offset+48 <= vbuf_size) {
             float y0 = y + (float) (segs[i]>>4) * scale;
             for (j=0; j < 4; ++j) {
                 * (float *) (vbuf+offset+0) = x + (j==1 || j==2 ? (vertical ? scale : len) : 0);
-                * (float *) (vbuf+offset+4) = y0 + (j >= 2   ? (vertical ? len : scale) : 0);
-                * (float *) (vbuf+offset+8) = 0.f;
-                * (stb_easy_font_color *) (vbuf+offset+12) = c;
-                offset += 16;
+                * (float *) (vbuf+offset+4) = -(y0 + (j >= 2   ? (vertical ? len : scale) : 0));
+                * (stb_easy_font_color *) (vbuf+offset+8) = c;
+                offset += 12;
             }
         }
     }
@@ -226,7 +226,7 @@ static int stb_easy_font_print(float x, float y, float scale, char *text, unsign
         }
         ++text;
     }
-    return (unsigned) offset/64;
+    return (unsigned) offset/48;
 }
 
 int stb_easy_font_width(char *text)

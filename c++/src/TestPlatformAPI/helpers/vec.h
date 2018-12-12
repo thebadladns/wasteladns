@@ -122,58 +122,31 @@ struct Matrix44 {
 typedef Matrix44<f32> Mat4;
 
 template <typename _T>
-constexpr Vector2<_T>::Vector2(const _T x, const _T y) {
-    this->x = x;
-    this->y = y;
-}
+constexpr Vector2<_T>::Vector2(const _T _x, const _T _y)
+: x(_x), y(_y) {}
 
 template <typename _T>
-constexpr Vector3<_T>::Vector3(const _T x, const _T y, const _T z) {
-    this->x = x;
-    this->y = y;
-    this->z = z;
-}
+constexpr Vector3<_T>::Vector3(const _T _x, const _T _y, const _T _z)
+: x(_x), y(_y), z(_z) {}
 template <typename _T>
-constexpr Vector3<_T>::Vector3(const _T x, const Vector2<_T>& yz) {
-    this->x = x;
-    this->y = yz.x;
-    this->z = yz.y;
-}
+constexpr Vector3<_T>::Vector3(const _T _x, const Vector2<_T>& _yz)
+: x(_x), y(_yz.x), z(_yz.y) {}
 template <typename _T>
-constexpr Vector3<_T>::Vector3(const Vector2<_T>& xy, const _T z) {
-    this->x = xy.x;
-    this->y = xy.y;
-    this->z = z;
-}
+constexpr Vector3<_T>::Vector3(const Vector2<_T>& _xy, const _T _z)
+: x(_xy.x), y(_xy.y), z(_z) {}
 
 template <typename _T>
-constexpr Vector4<_T>::Vector4(const _T x, const _T y, const _T z, const _T w) {
-    this->x = x;
-    this->y = y;
-    this->z = z;
-    this->w = w;
-}
+constexpr Vector4<_T>::Vector4(const _T _x, const _T _y, const _T _z, const _T _w)
+: x(_x), y(_y), z(_z), w(_w) {}
 template <typename _T>
-constexpr Vector4<_T>::Vector4(const _T x, const Vector3<_T>& yzw) {
-    this->x = x;
-    this->y = yzw.x;
-    this->z = yzw.y;
-    this->w = yzw.z;
-}
+constexpr Vector4<_T>::Vector4(const _T _x, const Vector3<_T>& _yzw)
+: x(_x), y(_yzw.x), z(_yzw.y), w(_yzw.z) {}
 template <typename _T>
-constexpr Vector4<_T>::Vector4(const Vector3<_T>& xyz, const _T w) {
-    this->x = xyz.z;
-    this->y = xyz.y;
-    this->z = xyz.z;
-    this->w = w;
-}
+constexpr Vector4<_T>::Vector4(const Vector3<_T>& _xyz, const _T _w)
+: x(_xyz.x), y(_xyz.y), z(_xyz.z), w(_w) {}
 template <typename _T>
-constexpr Vector4<_T>::Vector4(const Vector2<_T>& xy, const Vector2<_T>& yz) {
-    x = xy.x;
-    y = xy.y;
-    z = yz.x;
-    w = yz.y;
-}
+constexpr Vector4<_T>::Vector4(const Vector2<_T>& _xy, const Vector2<_T>& _zw)
+: x(_xy.x), y(_xy.y), z(_zw.x), w(_zw.y) {}
 
 namespace Math {
     

@@ -4,75 +4,6 @@
 #include "input.h"
 #endif
 
-const char * vertexColorShaderStr = R"(
-
-    cbuffer ProjectionMatrixBuffer : register(b0) {
-        matrix projectionMatrix;
-    }
-    cbuffer ViewMatrixBuffer : register(b1) {
-        matrix viewMatrix;
-    }
-    cbuffer WorldMatrixBuffer : register(b2) {
-        matrix worldMatrix;
-    }
-    cbuffer ColorBuffer : register(b3) {
-        float4 bgcolor;
-    }
-    struct AppData {
-        float3 position : POSITION;
-    };
-    struct VertexOutput {
-        float4 color : COLOR;
-        float4 position : SV_POSITION;
-    };
-    VertexOutput VS(AppData IN) {
-        VertexOutput OUT;
-        matrix mvp = mul(projectionMatrix, mul(viewMatrix, worldMatrix));
-        OUT.position = mul(mvp, float4(IN.position, 1.f));
-        OUT.color = bgcolor;
-        return OUT;
-    }
-
-)";
-
-const char * vertexShaderStr = R"(
-
-    cbuffer ProjectionMatrixBuffer : register(b0) {
-        matrix projectionMatrix;
-    }
-    cbuffer ViewMatrixBuffer : register(b1) {
-        matrix viewMatrix;
-    }
-    cbuffer WorldMatrixBuffer : register(b2) {
-        matrix worldMatrix;
-    }
-    struct AppData {
-        float3 position : POSITION;
-        float3 color: COLOR;
-    };
-    struct VertexOutput {
-        float4 color : COLOR;
-        float4 position : SV_POSITION;
-    };
-    VertexOutput VS(AppData IN) {
-        VertexOutput OUT;
-        matrix mvp = mul(projectionMatrix, mul(viewMatrix, worldMatrix));
-        OUT.position = mul(mvp, float4(IN.position, 1.f));
-        OUT.color = float4(IN.color, 1.f);
-        return OUT;
-    }
-
-)";
-
-const char * pixelShaderStr = R"(
-    struct PixelIn {
-        float4 color : COLOR;
-    };
-    float4 PS(PixelIn IN) : SV_TARGET {
-        return IN.color;
-    }
-)";
-
 namespace Platform {
 namespace DIRECTX9 {
 
@@ -99,6 +30,42 @@ namespace DIRECTX9 {
         }
         return DefWindowProc(hWnd, message, wParam, lParam);
     }
+
+    typedef ID3D11Buffer* BufferHandle;
+    struct VertexShaderHandle {
+        ID3D11VertexShader* shader;
+        ID3D11InputLayout* layout;
+    };
+    typedef ID3D11PixelShader* PixelShaderHandle;
+
+    struct RenderInstance {
+        Transform transform;
+    };
+    struct RenderDescription {
+        BufferHandle vertexBuffer;
+        BufferHandle indexBuffer;
+        BufferHandle* cbuffers;
+        VertexShaderHandle vertexShader;
+        PixelShaderHandle pixelShader;
+        Col color;
+        u32 indexCount;
+        u32 cbufferCount;
+        u32 vertexStride;
+        bool fill;
+    };
+    struct RenderGroup {
+        RenderInstance instanceBuffer[128];
+        RenderDescription desc;
+        u32 instanceCount;
+        RenderInstance* begin() { return &instanceBuffer[0]; }
+        RenderInstance* end() { return &instanceBuffer[instanceCount]; }
+    };
+    struct RenderScene {
+        RenderGroup groupBuffer[16];
+        u32 groupCount;
+        RenderGroup* begin() { return &groupBuffer[0]; }
+        RenderGroup* end() { return &groupBuffer[groupCount]; }
+    };
 
     template <typename _GameData>
     int main(
@@ -201,8 +168,9 @@ namespace DIRECTX9 {
             swapchain->GetBuffer(0, __uuidof(ID3D11Texture2D), (void**) &backbuffer);
             d3ddev->CreateRenderTargetView(backbuffer, nullptr, &renderTarget);
 
-            ID3D11RasterizerState* rasterizerState;
-            D3D11_RASTERIZER_DESC rasterizerDesc = { 0 };
+            ID3D11RasterizerState* rasterizerStateFill;
+            ID3D11RasterizerState* rasterizerStateLine;
+            D3D11_RASTERIZER_DESC rasterizerDesc = {};
             rasterizerDesc.AntialiasedLineEnable = FALSE;
             rasterizerDesc.CullMode = D3D11_CULL_FRONT;
             rasterizerDesc.DepthBias = 0;
@@ -213,19 +181,20 @@ namespace DIRECTX9 {
             rasterizerDesc.MultisampleEnable = FALSE;
             rasterizerDesc.ScissorEnable = FALSE;
             rasterizerDesc.SlopeScaledDepthBias = 0.f;
-            d3ddev->CreateRasterizerState(&rasterizerDesc, &rasterizerState);
+            d3ddev->CreateRasterizerState(&rasterizerDesc, &rasterizerStateFill);
+            rasterizerDesc.FillMode = D3D11_FILL_WIREFRAME;
+            d3ddev->CreateRasterizerState(&rasterizerDesc, &rasterizerStateLine);
 
-            D3D11_VIEWPORT viewport = { 0 };
+            D3D11_VIEWPORT viewport = {};
             viewport.TopLeftX = 0;
             viewport.TopLeftY = 0;
             viewport.Width = (f32) platform.screen.width;
             viewport.Height = (f32)platform.screen.height;
 
-            d3dcontext->RSSetState(rasterizerState);
             d3dcontext->RSSetViewports(1, &viewport);
 
             ID3D11BlendState1* blendState;
-            D3D11_BLEND_DESC1 blendStateDesc = { 0 };
+            D3D11_BLEND_DESC1 blendStateDesc = {};
             blendStateDesc.RenderTarget[0].BlendEnable = TRUE;
             blendStateDesc.RenderTarget[0].SrcBlend = D3D11_BLEND_SRC_ALPHA;
             blendStateDesc.RenderTarget[0].DestBlend = D3D11_BLEND_INV_SRC_ALPHA;
@@ -260,78 +229,11 @@ namespace DIRECTX9 {
 
             // --------------------------------------------------------------
 
-            struct CustomVertex1 {
-                f32 x, y, z;
-                f32 r, g, b;
+            struct PerScene {
+                Mat4 projectionMatrix;
+                Mat4 viewMatrix;
             };
-            ID3D11Buffer* vertexBuffer1;
-            ID3D11Buffer* indexBuffer1;
-            u32 indexCount1;
-            {
-                D3D11_SUBRESOURCE_DATA resourceData = { 0 };
-
-                CustomVertex1 vertices[] = {
-                    { 3.0f, -3.0f, 0.0f, 0.f, 0.f, 1.f, },
-                    { 0.0f, 3.0f, 0.0f, 0.f, 1.f, 0.f, },
-                    { -3.0f, -3.0f, 0.0f, 1.f, 0.f, 0.f },
-                };
-                WORD indices[] = {
-                    0, 1, 2
-                };
-                indexCount1 = sizeof(indices) / sizeof(indices[0]);
-                D3D11_BUFFER_DESC vertexBufferDesc = { 0 };
-                vertexBufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
-                vertexBufferDesc.ByteWidth = sizeof(vertices);
-                vertexBufferDesc.CPUAccessFlags = 0;
-                vertexBufferDesc.Usage = D3D11_USAGE_DEFAULT;
-                resourceData = { vertices, 0, 0 };
-                d3ddev->CreateBuffer(&vertexBufferDesc, &resourceData, &vertexBuffer1);
-
-                D3D11_BUFFER_DESC indexBufferDesc = { 0 };
-                indexBufferDesc.BindFlags = D3D11_BIND_INDEX_BUFFER;
-                indexBufferDesc.ByteWidth = sizeof(indices);
-                indexBufferDesc.CPUAccessFlags = 0;
-                indexBufferDesc.Usage = D3D11_USAGE_DEFAULT;
-                resourceData.pSysMem = indices;
-                d3ddev->CreateBuffer(&indexBufferDesc, &resourceData, &indexBuffer1);
-            }
-            ID3D11Buffer* vertexBuffer2;
-            ID3D11Buffer* indexBuffer2;
-            u32 indexCount2;
-            {
-                D3D11_SUBRESOURCE_DATA resourceData = { 0 };
-
-                f32 pw = 5.f;
-                f32 pz = 500.f;
-                Vec3 pillarVertices[] = {
-                      { -pw, -pw, 0.f },{ pw, -pw, 0.f },{ pw, -pw, pz },{ -pw, -pw, pz } // +y quad
-                    , { pw, pw, 0.f },{ -pw, pw, 0.f },{ -pw, pw, pz },{ pw, pw, pz } // -y quad
-                };
-                u16 pillarIndexes[] = {
-                    0, 1, 2, 3, 0, 2, // +y tris
-                    4, 5, 6, 7, 4, 6, // -y tris
-                    1, 4, 7, 2, 1, 7, // +x tris
-                    5, 0, 3, 6, 5, 3, // -x tris
-                };
-                indexCount2 = sizeof(pillarIndexes) / sizeof(pillarIndexes[0]);
-                D3D11_BUFFER_DESC vertexBufferDesc = { 0 };
-                vertexBufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
-                vertexBufferDesc.ByteWidth = sizeof(pillarVertices);
-                vertexBufferDesc.CPUAccessFlags = 0;
-                vertexBufferDesc.Usage = D3D11_USAGE_DEFAULT;
-                resourceData = { pillarVertices, 0, 0 };
-                d3ddev->CreateBuffer(&vertexBufferDesc, &resourceData, &vertexBuffer2);
-
-                D3D11_BUFFER_DESC indexBufferDesc = { 0 };
-                indexBufferDesc.BindFlags = D3D11_BIND_INDEX_BUFFER;
-                indexBufferDesc.ByteWidth = sizeof(pillarIndexes);
-                indexBufferDesc.CPUAccessFlags = 0;
-                indexBufferDesc.Usage = D3D11_USAGE_DEFAULT;
-                resourceData.pSysMem = pillarIndexes;
-                d3ddev->CreateBuffer(&indexBufferDesc, &resourceData, &indexBuffer2);
-            }
-
-            struct ConstantBuffer { enum { ProjectionMatrix, ViewMatrix, WorldMatrix, Color, Count }; };
+            struct ConstantBuffer { enum { PerScene, WorldMatrix, Color, Count }; };
             ID3D11Buffer* cbuffers[ConstantBuffer::Count];
             {
                 D3D11_BUFFER_DESC constantBufferDesc = { 0 };
@@ -340,8 +242,6 @@ namespace DIRECTX9 {
                 constantBufferDesc.CPUAccessFlags = 0;
                 constantBufferDesc.Usage = D3D11_USAGE_DEFAULT;
 
-                d3ddev->CreateBuffer(&constantBufferDesc, nullptr, &cbuffers[ConstantBuffer::ProjectionMatrix]);
-                d3ddev->CreateBuffer(&constantBufferDesc, nullptr, &cbuffers[ConstantBuffer::ViewMatrix]);
                 d3ddev->CreateBuffer(&constantBufferDesc, nullptr, &cbuffers[ConstantBuffer::WorldMatrix]);
 
                 D3D11_BUFFER_DESC constantBufferDesc2 = { 0 };
@@ -350,7 +250,19 @@ namespace DIRECTX9 {
                 constantBufferDesc2.CPUAccessFlags = 0;
                 constantBufferDesc2.Usage = D3D11_USAGE_DEFAULT;
                 d3ddev->CreateBuffer(&constantBufferDesc2, nullptr, &cbuffers[ConstantBuffer::Color]);
+
+                D3D11_BUFFER_DESC constantBufferDesc3 = { 0 };
+                constantBufferDesc3.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+                constantBufferDesc3.ByteWidth = sizeof(PerScene);
+                constantBufferDesc3.CPUAccessFlags = 0;
+                constantBufferDesc3.Usage = D3D11_USAGE_DEFAULT;
+                d3ddev->CreateBuffer(&constantBufferDesc3, nullptr, &cbuffers[ConstantBuffer::PerScene]);
             }
+
+            struct CustomVertex1 {
+                f32 x, y, z;
+                f32 r, g, b;
+            };
 
             ID3D11VertexShader* vertexShader = nullptr;
             ID3D11InputLayout* vertexInputLayout = nullptr;
@@ -358,7 +270,7 @@ namespace DIRECTX9 {
                 ID3DBlob* pShaderBlob = nullptr;
                 ID3DBlob* pErrorBlob = nullptr;
                 HRESULT hr = D3DCompile(
-                      vertexShaderStr, strlen(vertexShaderStr), "VS"
+                    vertexShaderStr, strlen(vertexShaderStr), "VS"
                     , nullptr // defines
                     , D3D_COMPILE_STANDARD_FILE_INCLUDE
                     , "VS"
@@ -377,7 +289,7 @@ namespace DIRECTX9 {
                     , { "COLOR", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, offsetof(CustomVertex1, r), D3D11_INPUT_PER_VERTEX_DATA, 0 }
                 };
                 d3ddev->CreateInputLayout(vertexLayoutDesc, ARRAYSIZE(vertexLayoutDesc), pShaderBlob->GetBufferPointer(), pShaderBlob->GetBufferSize(), &vertexInputLayout);
-                
+
                 if (pShaderBlob) pShaderBlob->Release();
                 if (pErrorBlob) pErrorBlob->Release();
             }
@@ -387,7 +299,7 @@ namespace DIRECTX9 {
                 ID3DBlob* pShaderBlob = nullptr;
                 ID3DBlob* pErrorBlob = nullptr;
                 HRESULT hr = D3DCompile(
-                      vertexColorShaderStr, strlen(vertexColorShaderStr), "VS"
+                    vertexColorShaderStr, strlen(vertexColorShaderStr), "VS"
                     , nullptr // defines
                     , D3D_COMPILE_STANDARD_FILE_INCLUDE
                     , "VS"
@@ -415,7 +327,7 @@ namespace DIRECTX9 {
                 ID3DBlob* pShaderBlob = nullptr;
                 ID3DBlob* pErrorBlob = nullptr;
                 HRESULT hr = D3DCompile(
-                      pixelShaderStr, strlen(pixelShaderStr), "PS"
+                    pixelShaderStr, strlen(pixelShaderStr), "PS"
                     , nullptr // defines
                     , D3D_COMPILE_STANDARD_FILE_INCLUDE
                     , "PS"
@@ -430,6 +342,117 @@ namespace DIRECTX9 {
                 }
                 if (pShaderBlob) pShaderBlob->Release();
                 if (pErrorBlob) pErrorBlob->Release();
+            }
+
+            RenderScene renderScene = {};
+            {
+                ID3D11Buffer* vertexBuffer1;
+                ID3D11Buffer* indexBuffer1;
+                u32 indexCount1;
+                D3D11_SUBRESOURCE_DATA resourceData = { 0 };
+
+                CustomVertex1 vertices[] = {
+                    { 3.0f, -3.0f, 0.0f, 0.f, 0.f, 1.f, },
+                    { 0.0f, 3.0f, 0.0f, 0.f, 1.f, 0.f, },
+                    { -3.0f, -3.0f, 0.0f, 1.f, 0.f, 0.f },
+                };
+                u8 indices[] = {
+                    0, 1, 2
+                };
+                indexCount1 = sizeof(indices) / sizeof(indices[0]);
+                D3D11_BUFFER_DESC vertexBufferDesc = { 0 };
+                vertexBufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+                vertexBufferDesc.ByteWidth = sizeof(vertices);
+                vertexBufferDesc.CPUAccessFlags = 0;
+                vertexBufferDesc.Usage = D3D11_USAGE_DEFAULT;
+                resourceData = { vertices, 0, 0 };
+                d3ddev->CreateBuffer(&vertexBufferDesc, &resourceData, &vertexBuffer1);
+
+                D3D11_BUFFER_DESC indexBufferDesc = { 0 };
+                indexBufferDesc.BindFlags = D3D11_BIND_INDEX_BUFFER;
+                indexBufferDesc.ByteWidth = sizeof(indices);
+                indexBufferDesc.CPUAccessFlags = 0;
+                indexBufferDesc.Usage = D3D11_USAGE_DEFAULT;
+                resourceData.pSysMem = indices;
+                d3ddev->CreateBuffer(&indexBufferDesc, &resourceData, &indexBuffer1);
+
+                RenderGroup& r = renderScene.groupBuffer[renderScene.groupCount++];
+                r.desc.vertexBuffer = vertexBuffer1;
+                r.desc.vertexStride = sizeof(CustomVertex1);
+                r.desc.indexBuffer = indexBuffer1;
+                r.desc.vertexShader.shader = vertexShader;
+                r.desc.vertexShader.layout = vertexInputLayout;
+                r.desc.pixelShader = pixelShader;
+                r.desc.indexCount = indexCount1;
+                r.desc.cbuffers = cbuffers;
+                r.desc.cbufferCount = ConstantBuffer::Count;
+                r.desc.fill = false;
+
+                RenderInstance& i = r.instanceBuffer[r.instanceCount++];
+                Math::identity4x4(i.transform);
+            }
+
+            RenderDescription desc = {};
+            {
+                ID3D11Buffer* vertexBuffer2;
+                ID3D11Buffer* indexBuffer2;
+                u32 indexCount2;
+                D3D11_SUBRESOURCE_DATA resourceData = { 0 };
+
+                f32 pw = 5.f;
+                f32 pz = 500.f;
+                Vec3 pillarVertices[] = {
+                      { -pw, -pw, 0.f },{ pw, -pw, 0.f },{ pw, -pw, pz },{ -pw, -pw, pz } // +y quad
+                    , { pw, pw, 0.f },{ -pw, pw, 0.f },{ -pw, pw, pz },{ pw, pw, pz } // -y quad
+                };
+                u8 pillarIndexes[] = {
+                    0, 1, 2, 3, 0, 2, // +y tris
+                    4, 5, 6, 7, 4, 6, // -y tris
+                    1, 4, 7, 2, 1, 7, // +x tris
+                    5, 0, 3, 6, 5, 3, // -x tris
+                };
+                indexCount2 = sizeof(pillarIndexes) / sizeof(pillarIndexes[0]);
+                D3D11_BUFFER_DESC vertexBufferDesc = { 0 };
+                vertexBufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+                vertexBufferDesc.ByteWidth = sizeof(pillarVertices);
+                vertexBufferDesc.CPUAccessFlags = 0;
+                vertexBufferDesc.Usage = D3D11_USAGE_DEFAULT;
+                resourceData = { pillarVertices, 0, 0 };
+                d3ddev->CreateBuffer(&vertexBufferDesc, &resourceData, &vertexBuffer2);
+
+                D3D11_BUFFER_DESC indexBufferDesc = { 0 };
+                indexBufferDesc.BindFlags = D3D11_BIND_INDEX_BUFFER;
+                indexBufferDesc.ByteWidth = sizeof(pillarIndexes);
+                indexBufferDesc.CPUAccessFlags = 0;
+                indexBufferDesc.Usage = D3D11_USAGE_DEFAULT;
+                resourceData.pSysMem = pillarIndexes;
+                d3ddev->CreateBuffer(&indexBufferDesc, &resourceData, &indexBuffer2);
+
+                RenderGroup& r = renderScene.groupBuffer[renderScene.groupCount++];
+                r.desc.color = Col(1.f, 1.f, 1.f, 0.5f);
+                r.desc.vertexBuffer = vertexBuffer2;
+                r.desc.vertexStride = sizeof(Vec3);
+                r.desc.indexBuffer = indexBuffer2;
+                r.desc.vertexShader.shader = vertexColorShader;
+                r.desc.vertexShader.layout = vertexColorInputLayout;
+                r.desc.pixelShader = pixelShader;
+                r.desc.indexCount = indexCount2;
+                r.desc.cbuffers = cbuffers;
+                r.desc.cbufferCount = ConstantBuffer::Count;
+                r.desc.fill = true;
+
+                Vec2 pillarPos[] = {
+                    { -80.f, -20.f },{ 80.f, -20.f },{ -160.f, -20.f },{ 160.f, -20.f }
+                    ,{ -240.f, -20.f },{ 240.f, -20.f },{ -300.f, -20.f },{ 300.f, -20.f },{ -80.f, -80.f }
+                    ,{ 80.f, -80.f },{ -160.f, -80.f },{ 160.f, -80.f },{ -240.f, -80.f },{ 240.f, -80.f }
+                    ,{ -300.f, -80.f },{ 300.f, -80.f },{ -20.f, 180.f },{ 20.f, 180.f },{ -100.f, 180.f }
+                    ,{ 100.f, 180.f },{ -200.f, 180.f },{ 200.f, 180.f },{ -300.f, 180.f },{ 300.f, 180.f }
+                };
+                for (Vec2& pos : pillarPos) {
+                    RenderInstance& i = r.instanceBuffer[r.instanceCount++];
+                    Math::identity4x4(i.transform);
+                    i.transform.pos.xy = pos;
+                }
             }
 
             MSG msg;
@@ -459,54 +482,29 @@ namespace DIRECTX9 {
                     d3dcontext->ClearRenderTargetView(renderTarget, color);
 
 
-                    // Update perspective projection matrix in the constant buffer
-                    d3dcontext->UpdateSubresource(cbuffers[ConstantBuffer::ProjectionMatrix], 0, nullptr, game.renderMgr.perspProjection.matrix.dataCM, 0, 0);
-                    // Camera view
-                    d3dcontext->UpdateSubresource(cbuffers[ConstantBuffer::ViewMatrix], 0, nullptr, game.cameraMgr.activeCam->viewMatrix.dataCM, 0, 0);
+                    // Update perspective projection as well as camera matrix in the constant buffer
+                    PerScene ps;
+                    ps.projectionMatrix = game.renderMgr.perspProjection.matrix;
+                    ps.viewMatrix = game.cameraMgr.activeCam->viewMatrix;
+                    d3dcontext->UpdateSubresource(cbuffers[ConstantBuffer::PerScene], 0, nullptr, &ps, 0, 0);
                     {
-                        // Buffer1
-                        {
-                            u32 vertexStride = sizeof(CustomVertex1);
-                            u32 offset = 0;
-                            Transform t;
-                            Math::identity4x4(t);
-                            d3dcontext->UpdateSubresource(cbuffers[ConstantBuffer::WorldMatrix], 0, nullptr, t.dataCM, 0, 0);
-                            d3dcontext->IASetVertexBuffers(0, 1, &vertexBuffer1, &vertexStride, &offset);
-                            d3dcontext->IASetInputLayout(vertexInputLayout);
-                            d3dcontext->IASetIndexBuffer(indexBuffer1, DXGI_FORMAT_R16_UINT, 0);
-                            d3dcontext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-                            d3dcontext->VSSetShader(vertexShader, nullptr, 0);
-                            d3dcontext->VSSetConstantBuffers(0, ConstantBuffer::Count, cbuffers);
-                            d3dcontext->PSSetShader(pixelShader, nullptr, 0);
-                            d3dcontext->OMSetBlendState(blendState, 0, 0xffffffff);
-                            d3dcontext->DrawIndexed(indexCount1, 0, 0);
-                        }
+                        for (RenderGroup& r : renderScene) {
+                            RenderDescription& desc = r.desc;
 
-                        {
-                            u32 vertexStride = sizeof(Vec3);
                             u32 offset = 0;
-                            Transform t;
-                            Math::identity4x4(t);
-                            Vec4 colorbg = { 1.f, 1.f, 1.f, 0.5f };
-                            d3dcontext->UpdateSubresource(cbuffers[ConstantBuffer::Color], 0, nullptr, &colorbg, 0, 0);
-                            d3dcontext->IASetVertexBuffers(0, 1, &vertexBuffer2, &vertexStride, &offset);
-                            d3dcontext->IASetInputLayout(vertexColorInputLayout);
-                            d3dcontext->IASetIndexBuffer(indexBuffer2, DXGI_FORMAT_R16_UINT, 0);
+                            Vec4 color = desc.color.RGBAv4();
+                            d3dcontext->RSSetState(desc.fill ? rasterizerStateFill : rasterizerStateLine);
+                            d3dcontext->UpdateSubresource(cbuffers[ConstantBuffer::Color], 0, nullptr, &color, 0, 0);
+                            d3dcontext->IASetVertexBuffers(0, 1, &desc.vertexBuffer, &desc.vertexStride, &offset);
+                            d3dcontext->IASetInputLayout(desc.vertexShader.layout);
+                            d3dcontext->IASetIndexBuffer(desc.indexBuffer, DXGI_FORMAT_R8_UINT, 0);
                             d3dcontext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-                            d3dcontext->VSSetShader(vertexColorShader, nullptr, 0);
-                            d3dcontext->VSSetConstantBuffers(0, ConstantBuffer::Count, cbuffers);
-                            d3dcontext->PSSetShader(pixelShader, nullptr, 0);
-                            Vec2 pillarPos[] = {
-                                 { -80.f, -20.f },{ 80.f, -20.f },{ -160.f, -20.f },{ 160.f, -20.f }
-                                ,{ -240.f, -20.f },{ 240.f, -20.f },{ -300.f, -20.f },{ 300.f, -20.f },{ -80.f, -80.f }
-                                ,{ 80.f, -80.f },{ -160.f, -80.f },{ 160.f, -80.f },{ -240.f, -80.f },{ 240.f, -80.f }
-                                ,{ -300.f, -80.f },{ 300.f, -80.f },{ -20.f, 180.f },{ 20.f, 180.f },{ -100.f, 180.f }
-                                ,{ 100.f, 180.f },{ -200.f, 180.f },{ 200.f, 180.f },{ -300.f, 180.f },{ 300.f, 180.f }
-                            };
-                            for (Vec2& pos : pillarPos) {
-                                t.pos.xy = pos;
-                                d3dcontext->UpdateSubresource(cbuffers[ConstantBuffer::WorldMatrix], 0, nullptr, t.dataCM, 0, 0);
-                                d3dcontext->DrawIndexed(indexCount2, 0, 0);
+                            d3dcontext->VSSetShader(desc.vertexShader.shader, nullptr, 0);
+                            d3dcontext->VSSetConstantBuffers(0, desc.cbufferCount, desc.cbuffers);
+                            d3dcontext->PSSetShader(desc.pixelShader, nullptr, 0);
+                            for (RenderInstance& i : r) {
+                                d3dcontext->UpdateSubresource(cbuffers[ConstantBuffer::WorldMatrix], 0, nullptr, i.transform.dataCM, 0, 0);
+                                d3dcontext->DrawIndexed(desc.indexCount, 0, 0);
                             }
                         }
                     }

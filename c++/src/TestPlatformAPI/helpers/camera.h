@@ -7,8 +7,8 @@
 #endif
 
 struct Camera {
-	Transform transform;
-	Mat4 viewMatrix;
+    Transform transform;
+    Mat4 viewMatrix;
 };
 
 namespace CameraSystem {

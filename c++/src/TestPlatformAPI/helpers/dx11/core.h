@@ -1,5 +1,5 @@
-#ifndef __WASTELADNS_CORE_DIRECTX9_H__
-#define __WASTELADNS_CORE_DIRECTX9_H__
+#ifndef __WASTELADNS_CORE_DX11_H__
+#define __WASTELADNS_CORE_DX11_H__
 
 #define _X86_
 #if defined _M_X64 || defined _M_AMD64
@@ -18,4 +18,4 @@
 #undef far
 #undef DELETE
 
-#endif // __WASTELADNS_CORE_DIRECTX9_H__
+#endif // __WASTELADNS_CORE_DX11_H__

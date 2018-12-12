@@ -17,24 +17,35 @@ namespace Renderer
 namespace Immediate
 {
     struct Vertex {
-        u32 color;
         Vec3 pos;
+        u32 color;
     };
-    
+
+    struct CharVertex {
+        Vec2 pos;
+        u32 color;
+    };
     struct Buffer {
         static constexpr u32 kMaxVertexCount = 1 << 14;
         Vertex vertexMemory[kMaxVertexCount];
         
-        // 16 byte stride: equivalent to struct { Vec3 pos; u32 color };
+        // 16 byte stride: equivalent to struct { Vec3 pos; u32 color; };
         // z is ignored
         static constexpr u32 kMaxCharVertexCount = 1 << 14;
         u8 charVertexMemory[kMaxCharVertexCount];
+        u32 charIndexVertexMemory[ kMaxCharVertexCount / sizeof(CharVertex) ];
         
         u32 vertexIndex;
-		u32 charVertexIndex;
+        u32 charVertexIndex;
+
+        u32 vertexBufferIndex;
+        u32 layoutBufferIndex;
+        u32 charVertexBufferIndex;
+        u32 charIndexBufferIndex;
+        u32 charLayoutBufferIndex;
+        u32 shader;
     };
     
-    constexpr u8 kTextVertexSize = 2;
     struct TextParams {
         TextParams()
         : color(1.f, 1.f, 1.f, 1.f)
@@ -42,13 +53,9 @@ namespace Immediate
         {}
         
         Vec3 pos;
-        const char* text;
         Col color;
         u8 scale;
     };
-    
-    // Platform dependent function
-    void present(Buffer& buffer);
     
     void clear(Buffer& buffer) {
         buffer.vertexIndex = 0;
@@ -136,8 +143,11 @@ namespace Immediate
     }
     
 #ifdef __WASTELADNS_DEBUG_TEXT__
-    void text2d(Buffer& buffer, const TextParams& params) {
+    void text2d(Buffer& buffer, const TextParams& params, const char* format, va_list argList) {
         
+        char text[256];
+        vsnprintf(text, 256, format, argList);
+
         // Too many chars pushed during immediate mode
         // Bump Buffer::kMaxCharVertexCount
         assert(buffer.charVertexIndex < Buffer::kMaxCharVertexCount);
@@ -148,16 +158,38 @@ namespace Immediate
         color[2] = params.color.getBu();
         color[3] = params.color.getAu();
         u8* vertexBuffer = &buffer.charVertexMemory[buffer.charVertexIndex];
-        u32 quadCount = stb_easy_font_print(params.pos.x, -params.pos.y, params.scale, const_cast<char*>(params.text), color, vertexBuffer, Buffer::kMaxCharVertexCount - buffer.charVertexIndex);
-        buffer.charVertexIndex += quadCount * 4 * kTextVertexSize;
+        u32 quadCount = stb_easy_font_print(params.pos.x, -params.pos.y, params.scale, text, color, vertexBuffer, Buffer::kMaxCharVertexCount - buffer.charVertexIndex);
+        buffer.charVertexIndex += quadCount * 4 * sizeof(CharVertex);
+
+        for(u32 i = 0; i < quadCount; i++) {
+            const u32 vertexIndex = i * 4;
+            const u32 indexIndex = i * 6;
+            buffer.charIndexVertexMemory[indexIndex] = vertexIndex+3;
+            buffer.charIndexVertexMemory[indexIndex+1] = vertexIndex+2;
+            buffer.charIndexVertexMemory[indexIndex+2] = vertexIndex+1;
+
+            buffer.charIndexVertexMemory[indexIndex+3] = vertexIndex+1;
+            buffer.charIndexVertexMemory[indexIndex+4] = vertexIndex+0;
+            buffer.charIndexVertexMemory[indexIndex+5] = vertexIndex+3;
+        }
+    }
+
+    void text2d(Buffer& buffer, const TextParams& params, const char* format, ...) {
+        va_list va;
+        va_start(va, format);
+        text2d(buffer, params, format, va);
+        va_end(va);
     }
     
-    void text2d(Buffer& buffer, const Vec3& pos, const char* data) {
+    void text2d(Buffer& buffer, const Vec3& pos, const char* format, ...) {
         TextParams params;
         params.pos = pos;
-        params.text = data;
         params.scale = 1;
-        text2d(buffer, params);
+
+        va_list va;
+        va_start(va, format);
+        text2d(buffer, params, format, va);
+        va_end(va);
     }
 #endif // __WASTELADNS_DEBUG_TEXT__
 }

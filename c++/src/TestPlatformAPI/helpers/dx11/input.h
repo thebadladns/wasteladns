@@ -1,5 +1,5 @@
-#ifndef __WASTELADNS_INPUT_DIRECTX_H__
-#define __WASTELADNS_INPUT_DIRECTX_H__
+#ifndef __WASTELADNS_INPUT_DX11_H__
+#define __WASTELADNS_INPUT_DX11_H__
 
 #ifndef UNITYBUILD
 #include <cstring>
@@ -189,4 +189,4 @@ namespace Keyboard {
     }
 };
 };
-#endif // __WASTELADNS_INPUT_DIRECTX_H__
+#endif // __WASTELADNS_INPUT_DX11_H__

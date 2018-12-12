@@ -118,6 +118,17 @@ namespace Game
             world.transform.pos = pos;
         }
     }
+
+    typedef u32 VertexShaderHandle;
+    typedef u32 PixelShaderHandle;
+    typedef u32 ShaderHandle;
+    typedef u32 BufferHandle;
+    struct InputLayout {
+        u32 mvp;
+        u32 perScene;
+        u32 perRenderGroup;
+        u32 perRenderInstance;
+    };
     
     struct RenderInstance {
         Transform transform;
@@ -125,6 +136,7 @@ namespace Game
     struct RenderDescription {
         Col color;
         u32 vertexBuffer;
+        u32 layoutBuffer;
         u32 indexBuffer;
         u32 indexCount;
         bool fill;
@@ -136,9 +148,25 @@ namespace Game
         RenderInstance* begin() { return &instanceBuffer[0]; }
         RenderInstance* end() { return &instanceBuffer[instanceCount]; }
     };
+    struct CBuffer {
+        enum { PerScene, PerRenderGroup, PerRenderInstance, Count };
+        struct SceneData {
+            Mat4 projectionMatrix;
+            Mat4 viewMatrix;
+        };
+        struct RenderGroupData {
+            Vec4 color;
+        };
+        struct RenderInstanceData {
+            Mat4 worldMatrix;
+        };
+    };
     struct RenderScene {
         RenderGroup groupBuffer[16];
+        BufferHandle cbuffers[CBuffer::Count];
         u32 groupCount;
+        ShaderHandle shader;
+        InputLayout layout;
         RenderGroup* begin() { return &groupBuffer[0]; }
         RenderGroup* end() { return &groupBuffer[groupCount]; }
     };
@@ -146,7 +174,7 @@ namespace Game
         u32 desc;
         u32 inst;
     };
-    
+
     struct Player {
         WorldData worldData;
         Control control;
@@ -168,7 +196,7 @@ namespace Game
     };
     
     void start(Instance& game, Platform::GameConfig& config, const Platform::State& platform) {
-        
+
         game.time = {};
         game.time.config.maxFrameLength = 0.1;
         game.time.config.targetFramerate = 1.0 / 60.0;
@@ -202,11 +230,103 @@ namespace Game
             glEnable(GL_BLEND);
             glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
             glEnable(GL_CULL_FACE);
+            //glFrontFace(GL_CW);
         }
         
+        ShaderHandle shader = {};
+        InputLayout layout = {};
+        {
+            VertexShaderHandle vertexShader;
+            PixelShaderHandle pixelShader;
+
+            s32 compiled, infoLogLength;
+
+            vertexShader = glCreateShader(GL_VERTEX_SHADER);
+            glShaderSource(vertexShader, 1, &vertexShaderStr, nullptr);
+            glCompileShader(vertexShader);
+            glGetShaderiv(vertexShader, GL_COMPILE_STATUS, &compiled);
+            if (compiled) {
+                pixelShader = glCreateShader(GL_FRAGMENT_SHADER);
+                glShaderSource(pixelShader, 1, &pixelShaderStr, nullptr);
+                glCompileShader(pixelShader);
+                glGetShaderiv(pixelShader, GL_COMPILE_STATUS, &compiled);
+                if (compiled) {
+                    shader = glCreateProgram();
+                    glAttachShader(shader, vertexShader);
+                    glAttachShader(shader, pixelShader);
+                    glLinkProgram(shader);
+
+                    glGetProgramiv(shader, GL_LINK_STATUS, &compiled);
+                    if (compiled) {
+                        layout.perScene = glGetUniformBlockIndex(shader, "PerScene");
+                        layout.perRenderGroup = glGetUniformBlockIndex(shader, "PerRenderGroup");
+                        layout.perRenderInstance = glGetUniformBlockIndex(shader, "PerRenderInstance");
+
+                        glUniformBlockBinding(shader, layout.perScene, CBuffer::PerScene);
+                        glUniformBlockBinding(shader, layout.perRenderGroup, CBuffer::PerRenderGroup);
+                        glUniformBlockBinding(shader, layout.perRenderInstance, CBuffer::PerRenderInstance);
+                    } else {
+                        glGetProgramiv(shader, GL_INFO_LOG_LENGTH, &infoLogLength);
+                        if (infoLogLength) {
+                            char error[128];
+                            glGetProgramInfoLog(shader, Math::min(infoLogLength, 128), nullptr, &error[0]);
+                            Platform::printf("link: %s", error);
+                        }
+                    }
+                    glDetachShader(shader, vertexShader);
+                    glDetachShader(shader, pixelShader);
+                } else {
+                    glGetShaderiv(pixelShader, GL_INFO_LOG_LENGTH, &infoLogLength);
+                    if (infoLogLength) {
+                        char error[128];
+                        glGetShaderInfoLog(pixelShader, Math::min(infoLogLength, 128), nullptr, &error[0]);
+                        Platform::printf("PS: %s", error);
+                    }
+                }
+                glDeleteShader(pixelShader);
+            } else {
+                glGetShaderiv(vertexShader, GL_INFO_LOG_LENGTH, &infoLogLength);
+                if (infoLogLength) {
+                    char error[128];
+                    glGetShaderInfoLog(vertexShader, Math::min(infoLogLength, 128), nullptr, &error[0]);
+                    Platform::printf("VS: %s", error);
+                }
+            }
+            glDeleteShader(vertexShader);
+        }
+
+        BufferHandle cbuffers[CBuffer::Count];
+        {
+            glGenBuffers(CBuffer::Count, cbuffers);
+            glBindBuffer(GL_UNIFORM_BUFFER, cbuffers[CBuffer::PerScene]);
+            glBufferData(GL_UNIFORM_BUFFER, sizeof(CBuffer::SceneData), nullptr, GL_STATIC_DRAW);
+            glBindBufferBase(GL_UNIFORM_BUFFER, CBuffer::PerScene, cbuffers[CBuffer::PerScene]);
+
+            glBindBuffer(GL_UNIFORM_BUFFER, cbuffers[CBuffer::PerRenderGroup]);
+            glBufferData(GL_UNIFORM_BUFFER, sizeof(CBuffer::RenderGroupData), nullptr, GL_STATIC_DRAW);
+            glBindBufferBase(GL_UNIFORM_BUFFER, CBuffer::PerRenderGroup, cbuffers[CBuffer::PerRenderGroup]);
+
+            glBindBuffer(GL_UNIFORM_BUFFER, cbuffers[CBuffer::PerRenderInstance]);
+            glBufferData(GL_UNIFORM_BUFFER, sizeof(CBuffer::RenderInstanceData), nullptr, GL_STATIC_DRAW);
+            glBindBufferBase(GL_UNIFORM_BUFFER, CBuffer::PerRenderInstance, cbuffers[CBuffer::PerRenderInstance]);
+            
+            glBindBuffer(GL_UNIFORM_BUFFER, 0);
+        }
+
+        Renderer::Immediate::load(game.renderMgr.immediateBuffer);
+
         RenderInstanceHandle playerRenderInst;
         game.renderScene = {};
+        game.renderScene.shader = shader;
+        game.renderScene.layout = layout;
         {
+            {
+                u32 count = 0;
+                for (BufferHandle handle : cbuffers) {
+                    game.renderScene.cbuffers[count++] = handle;
+                }
+            }
+
             {
                 f32 pw = 5.f;
                 f32 pz = 500.f;
@@ -222,7 +342,7 @@ namespace Game
                 };
                 const u32 pillarIndexCount = sizeof(pillarIndexes) / sizeof(pillarIndexes[0]);
                 const Col pillarColor(1.0f, 1.0f, 1.0f, 0.5f);
-                
+
                 Vec2 pillarPos[] = {
                       { -80.f, -20.f }, { 80.f, -20.f }, { -160.f, -20.f }, { 160.f, -20.f }
                     , { -240.f, -20.f }, { 240.f, -20.f }, { -300.f, -20.f }, { 300.f, -20.f }, { -80.f, -80.f }
@@ -230,19 +350,29 @@ namespace Game
                     , { -300.f, -80.f }, { 300.f, -80.f }, { -20.f, 180.f }, { 20.f, 180.f }, { -100.f, 180.f }
                     , { 100.f, 180.f }, { -200.f, 180.f }, { 200.f, 180.f }, { -300.f, 180.f }, { 300.f, 180.f }
                 };
-                
-                u32 vertexBuffer, indexBuffer;
+
+                u32 vertexBuffer, indexBuffer, layoutBuffer;
+
+                // Vertex buffer binding is not part of the VAO state
                 glGenBuffers(1, &vertexBuffer);
                 glBindBuffer(GL_ARRAY_BUFFER, vertexBuffer);
                 glBufferData(GL_ARRAY_BUFFER, sizeof(pillarVertices), pillarVertices, GL_STATIC_DRAW);
-                glGenBuffers(1, &indexBuffer);
-                glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBuffer);
-                glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(pillarIndexes), pillarIndexes, GL_STATIC_DRAW);
+                glGenVertexArrays(1, &layoutBuffer);
+                glBindVertexArray(layoutBuffer);
+                {
+                    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vec3), (void*)0);
+                    glEnableVertexAttribArray(0);
+
+                    glGenBuffers(1, &indexBuffer);
+                    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBuffer);
+                    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(pillarIndexes), pillarIndexes, GL_STATIC_DRAW);
+                }
+                glBindVertexArray(0);
                 glBindBuffer(GL_ARRAY_BUFFER, 0);
-                glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
-                
+
                 RenderGroup& r = game.renderScene.groupBuffer[game.renderScene.groupCount++];
                 r.desc.vertexBuffer = vertexBuffer;
+                r.desc.layoutBuffer = layoutBuffer;
                 r.desc.indexBuffer = indexBuffer;
                 r.desc.indexCount = pillarIndexCount;
                 r.desc.color = pillarColor;
@@ -253,7 +383,7 @@ namespace Game
                     i.transform.pos = Vec3(pos, 0.f);
                 }
             }
-            
+
             {
                 f32 w = 4.f;
                 f32 wf = w;
@@ -264,34 +394,44 @@ namespace Game
                 f32 zoff = 0.f;
                 // pyramid sides
                 const Vec3 playerVertices[] = {
-                    { 0.f, yoff, -zoff} // pyramid tip
+                      { 0.f, yoff, -zoff} // pyramid tip
                     , { -wb, -h, z}, { -wf, h, z}, { wf, h, z}, { wb, -h, z} // pyramid sides
                 };
                 const u16 playerIndices[] = {
-                    0, 1, 2, 0, 2, 3, 0, 3, 4, 0, 4, 1 // side tris
+                      0, 1, 2, 0, 2, 3, 0, 3, 4, 0, 4, 1 // side tris
                     , 1, 4, 3, 2, 1, 3 // top tris
                 };
                 const u32 playerIndexCount = sizeof(playerIndices) / sizeof(playerIndices[0]);
                 const Col playerOutlineColor(1.0f, 1.0f, 1.0f, 1.0f);
-        
-                u32 vertexBuffer, indexBuffer;
+
+                u32 vertexBuffer, indexBuffer, layoutBuffer;
+
+                // Vertex buffer binding is not part of the VAO state
                 glGenBuffers(1, &vertexBuffer);
                 glBindBuffer(GL_ARRAY_BUFFER, vertexBuffer);
                 glBufferData(GL_ARRAY_BUFFER, sizeof(playerVertices), playerVertices, GL_STATIC_DRAW);
-                glGenBuffers(1, &indexBuffer);
-                glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBuffer);
-                glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(playerIndices), playerIndices, GL_STATIC_DRAW);
+                glGenVertexArrays(1, &layoutBuffer);
+                glBindVertexArray(layoutBuffer);
+                {
+                    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vec3), (void*)0);
+                    glEnableVertexAttribArray(0);
+
+                    glGenBuffers(1, &indexBuffer);
+                    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBuffer);
+                    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(playerIndices), playerIndices, GL_STATIC_DRAW);
+                }
+                glBindVertexArray(0);
                 glBindBuffer(GL_ARRAY_BUFFER, 0);
-                glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
-        
+
                 playerRenderInst.desc = game.renderScene.groupCount;
                 RenderGroup& r = game.renderScene.groupBuffer[game.renderScene.groupCount++];
                 r.desc.vertexBuffer = vertexBuffer;
+                r.desc.layoutBuffer = layoutBuffer;
                 r.desc.indexBuffer = indexBuffer;
                 r.desc.indexCount = playerIndexCount;
                 r.desc.color = playerOutlineColor;
                 r.desc.fill = false;
-        
+
                 playerRenderInst.inst = r.instanceCount;
                 RenderInstance& i = r.instanceBuffer[r.instanceCount++];
                 i.transform = game.player.worldData.transform;
@@ -361,37 +501,44 @@ namespace Game
         {
             Renderer::Instance& mgr = game.renderMgr;
             using namespace Renderer;
-            
+
+
             // PERSPECTIVE
             {
-                glMatrixMode(GL_PROJECTION);
-                glLoadMatrixf(mgr.perspProjection.matrix.dataCM);
-                
-                glMatrixMode(GL_MODELVIEW);
                 {
-                    const Mat4 viewMatrix = game.cameraMgr.activeCam->viewMatrix;
+                    glUseProgram(game.renderScene.shader);
+   
+                    CBuffer::SceneData cbufferPerScene;
+                    cbufferPerScene.projectionMatrix = mgr.perspProjection.matrix;
+                    cbufferPerScene.viewMatrix = game.cameraMgr.activeCam->viewMatrix;
+                    glBindBuffer(GL_UNIFORM_BUFFER, game.renderScene.cbuffers[CBuffer::PerScene]);
+                    glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(CBuffer::SceneData), &cbufferPerScene);
+                    glBindBuffer(GL_UNIFORM_BUFFER, 0);
 
-                    glEnableClientState(GL_VERTEX_ARRAY);
                     for (RenderGroup& r : game.renderScene) {
                         const RenderDescription& d = r.desc;
-                        
-                        glColor4f(RGBA_PARAMS(d.color));
+
+                        CBuffer::RenderGroupData cbufferPerRenderGroup = {};
+                        cbufferPerRenderGroup.color = d.color.RGBAv4();
+                        glBindBuffer(GL_UNIFORM_BUFFER, game.renderScene.cbuffers[CBuffer::PerRenderGroup]);
+                        glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(CBuffer::RenderGroupData), &cbufferPerRenderGroup);
+                        glBindBuffer(GL_UNIFORM_BUFFER, 0);
+
                         glPolygonMode( GL_FRONT_AND_BACK, d.fill ? GL_FILL : GL_LINE );
-                        glBindBuffer(GL_ARRAY_BUFFER, d.vertexBuffer);
-                        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, d.indexBuffer);
-                        glVertexPointer(3, GL_FLOAT, 0, nullptr);
+                        glBindVertexArray(d.layoutBuffer);
                         for (RenderInstance& i : r) {
-                            const Mat4 t = Math::mult(viewMatrix, i.transform.matrix);
-                            glLoadMatrixf(t.dataCM);
+
+                            CBuffer::RenderInstanceData cbufferPerRenderInstance;
+                            cbufferPerRenderInstance.worldMatrix = i.transform.matrix;
+                            glBindBuffer(GL_UNIFORM_BUFFER, game.renderScene.cbuffers[CBuffer::PerRenderInstance]);
+                            glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(CBuffer::RenderInstanceData), &cbufferPerRenderInstance);
+                            glBindBuffer(GL_UNIFORM_BUFFER, 0);
                             glDrawElements(GL_TRIANGLES, d.indexCount, GL_UNSIGNED_SHORT, nullptr);
-                            glPopMatrix();
                         }
-                        glBindBuffer(GL_ARRAY_BUFFER, 0);
-                        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
-                        
+                        glBindVertexArray(0);
                     }
-                    glDisableClientState(GL_VERTEX_ARRAY);
-                    
+                    glUseProgram(0);
+
                     // Tiled floor
                     const f32 l = -500.;
                     const f32 r = -l;
@@ -412,29 +559,28 @@ namespace Game
                         Immediate::segment(mgr.immediateBuffer, Vec3(l, b, z), Vec3(r, b, z), gridColor);
                         Immediate::segment(mgr.immediateBuffer, Vec3(l, t, z), Vec3(r, t, z), gridColor);
                     }
-                    
+
                     // World axis
                     {
                         const Col axisX(0.8f, 0.15f, 0.25f, 0.7f);
                         const Col axisY(0.25f, 0.8f, 0.15f, 0.7f);
                         const Col axisZ(0.15f, 0.25f, 0.8f, 0.7f);
-                        const f32 axisSize = 300;
+                        const f32 axisSize = 300.f;
                         const Vec3 pos = Vec3(0.f, 0.f, 0.f);
 
                         Immediate::segment(mgr.immediateBuffer, pos, Math::add(pos, Math::scale(Vec3(1.f,0.f,0.f), axisSize)), axisX);
                         Immediate::segment(mgr.immediateBuffer, pos, Math::add(pos, Math::scale(Vec3(0.f,1.f,0.f), axisSize)), axisY);
                         Immediate::segment(mgr.immediateBuffer, pos, Math::add(pos, Math::scale(Vec3(0.f,0.f,1.f), axisSize)), axisZ);
                     }
-                    
+
                     // Some debug decoration
                     {
                         Renderer::Immediate::TextParams textParams;
                         textParams.scale = 2;
                         textParams.pos = Vec3(game.renderMgr.orthoProjection.config.left + 10.f, game.renderMgr.orthoProjection.config.top - 10.f, -50);
-                        textParams.text = "Text\ntest";
                         textParams.color = Col(1.0f, 1.0f, 0.0f, 1.0f);
-                        Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParams);
-                        
+                        Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParams, "API tests\n=========\n%s", Platform::name);
+
                         Renderer::Immediate::sphere(game.renderMgr.immediateBuffer, Vec3(-170.f, 40.f, 0.f), 100.f, Col(1.0f, 1.0f, 1.0f, 0.4f));
                     }
                 }
@@ -442,16 +588,9 @@ namespace Game
             
             // Batched debug
             {
-                glMatrixMode(GL_PROJECTION);
-                glLoadMatrixf(mgr.perspProjection.matrix.dataCM);
-                Immediate::present3d(mgr.immediateBuffer, game.cameraMgr.activeCam->viewMatrix);
-                glMatrixMode(GL_PROJECTION);
-                glDisable(GL_CULL_FACE);
-                glPolygonMode( GL_FRONT_AND_BACK, GL_FILL);
-                glLoadMatrixf(mgr.orthoProjection.matrix.dataCM);
-                Immediate::present2d(mgr.immediateBuffer);
+                Immediate::present3d(mgr.immediateBuffer, mgr.perspProjection.matrix, game.cameraMgr.activeCam->viewMatrix, game.renderScene.cbuffers);
+                Immediate::present2d(mgr.immediateBuffer, mgr.orthoProjection.matrix, game.renderScene.cbuffers);
                 Immediate::clear(mgr.immediateBuffer);
-                glEnable(GL_CULL_FACE);
             }
         }
     }

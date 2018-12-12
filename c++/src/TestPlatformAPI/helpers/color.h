@@ -9,7 +9,7 @@
 
 template<typename ValueType, u8 redBitCount, u8 greenBitCount, u8 blueBitCount, u8 alphaBitCount>
 struct Color {
-	Color();
+    Color();
     Color(const f32 fR, const f32 fG, const f32 fB, const f32 fA = 1.f);
     Color(const ValueType uR, const ValueType uG, const ValueType uB, const ValueType a = ((1 << alphaBitCount) - 1));
     ~Color();
@@ -26,6 +26,7 @@ struct Color {
     
     u32 ABGR() const;
     u32 RGBA() const;
+    Vec4 RGBAv4() const;
     
     void set(const f32 fR, const f32 fG, const f32 fB, const f32 fA = 1.f);
     void set(const ValueType uR, const ValueType uG, const ValueType uB, const ValueType uA = ((1 << alphaBitCount) - 1));
@@ -42,7 +43,7 @@ typedef Col32 Col;
 
 template<typename ValueType, u8 redBitCount, u8 greenBitCount, u8 blueBitCount, u8 alphaBitCount>
 Color<ValueType, redBitCount, greenBitCount, blueBitCount, alphaBitCount>::Color() {
-	set((ValueType)0, (ValueType)0, (ValueType)0, (ValueType)0);
+    set((ValueType)0, (ValueType)0, (ValueType)0, (ValueType)0);
 }
 
 template<typename ValueType, u8 redBitCount, u8 greenBitCount, u8 blueBitCount, u8 alphaBitCount>
@@ -125,6 +126,11 @@ u32 Color<ValueType, redBitCount, greenBitCount, blueBitCount, alphaBitCount>::A
 template<class ValueType, u8 redBitCount, u8 greenBitCount, u8 blueBitCount, u8 alphaBitCount>
 u32 Color<ValueType, redBitCount, greenBitCount, blueBitCount, alphaBitCount>::RGBA() const {
    return color;
+}
+
+template<class ValueType, u8 redBitCount, u8 greenBitCount, u8 blueBitCount, u8 alphaBitCount>
+Vec4 Color<ValueType, redBitCount, greenBitCount, blueBitCount, alphaBitCount>::RGBAv4() const {
+    return Vec4(getRf(), getGf(), getBf(), getAf());
 }
 
 template<typename ValueType, u8 redBitCount, u8 greenBitCount, u8 blueBitCount, u8 alphaBitCount>

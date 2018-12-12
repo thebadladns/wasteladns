@@ -36,8 +36,9 @@
 #if PLATFORM_GLFW
 #include "helpers/glfw/core.h"
 #include "helpers/glfw/input.h"
-#include "helpers/glfw/main.h"
 #include "helpers/glfw/io.h"
+#include "helpers/glfw/main.h"
+#include "helpers/glfw/shaders.h"
 
 #define __WASTELADNS_DEBUG_TEXT__
 #include "helpers/renderer_debug.h"
@@ -72,6 +73,7 @@ int main(int argc, char** argv) {
 
 #include "helpers/dx11/core.h"
 #include "helpers/dx11/input.h"
+#include "helpers/dx11/shaders.h"
 #include "helpers/dx11/main.h"
 #include "helpers/dx11/io.h"
 
