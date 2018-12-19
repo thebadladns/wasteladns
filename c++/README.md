@@ -1,4 +1,4 @@
 welcome to the wasteladns
 ====================
 
-GLFW-based workshop to explore different aspects of gamedev.
+Workshop to explore different aspects of gamedev. Initially GLFW-based, eventually dx11 pops up.
