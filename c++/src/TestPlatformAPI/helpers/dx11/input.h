@@ -28,6 +28,10 @@ namespace Gamepad {
         mapping.mapping[Keys::B_D] = Keyboard::Keys::K;
         mapping.mapping[Keys::B_L] = Keyboard::Keys::J;
         mapping.mapping[Keys::B_R] = Keyboard::Keys::L;
+        mapping.mapping[Keys::D_U] = Keyboard::Keys::W;
+        mapping.mapping[Keys::D_D] = Keyboard::Keys::S;
+        mapping.mapping[Keys::D_L] = Keyboard::Keys::A;
+        mapping.mapping[Keys::D_R] = Keyboard::Keys::D;
     }
 
     void pollState(State& pad, const Keyboard::Queue& queue, const KeyboardMapping& mapping) {

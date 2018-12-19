@@ -8,15 +8,13 @@ const char * vertexShaderStr = R"(
         mat4 projectionMatrix;
         mat4 viewMatrix;
     };
-    layout (std140) uniform PerRenderGroup {
+    layout (std140) uniform PerGroup {
+        mat4 worldView[64];
         vec4 bgcolor;
-    };
-    layout (std140) uniform PerRenderInstance {
-        mat4 worldView;
     };
     out vec4 fragmentColor;
     void main() {
-        mat4 mvp = projectionMatrix * viewMatrix * worldView;
+        mat4 mvp = projectionMatrix * viewMatrix * worldView[gl_InstanceID];
         gl_Position = mvp * vec4(vertexPosition_modelspace,1.f);
         fragmentColor = bgcolor;
     }
@@ -26,7 +24,7 @@ const char * coloredVertexShaderStr = R"(
     #version 330 core
     layout(location = 0) in vec3 vertexPosition_modelspace;
     layout(location = 1) in vec4 color;
-    layout (std140) uniform PerRenderGroup {
+    layout (std140) uniform PerGroup {
         mat4 MVP;
     };
     out vec4 fragmentColor;

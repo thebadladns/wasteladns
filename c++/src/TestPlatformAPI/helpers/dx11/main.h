@@ -131,7 +131,7 @@ namespace DIRECTX9 {
             nullptr,
             D3D_DRIVER_TYPE_HARDWARE,
             nullptr,
-            0,
+            D3D11_CREATE_DEVICE_DEBUG,
             nullptr,
             0,
             D3D11_SDK_VERSION,
@@ -356,7 +356,7 @@ namespace DIRECTX9 {
                     { 0.0f, 3.0f, 0.0f, 0.f, 1.f, 0.f, },
                     { -3.0f, -3.0f, 0.0f, 1.f, 0.f, 0.f },
                 };
-                u8 indices[] = {
+                u16 indices[] = {
                     0, 1, 2
                 };
                 indexCount1 = sizeof(indices) / sizeof(indices[0]);
@@ -405,7 +405,7 @@ namespace DIRECTX9 {
                       { -pw, -pw, 0.f },{ pw, -pw, 0.f },{ pw, -pw, pz },{ -pw, -pw, pz } // +y quad
                     , { pw, pw, 0.f },{ -pw, pw, 0.f },{ -pw, pw, pz },{ pw, pw, pz } // -y quad
                 };
-                u8 pillarIndexes[] = {
+                u16 pillarIndexes[] = {
                     0, 1, 2, 3, 0, 2, // +y tris
                     4, 5, 6, 7, 4, 6, // -y tris
                     1, 4, 7, 2, 1, 7, // +x tris
@@ -497,7 +497,7 @@ namespace DIRECTX9 {
                             d3dcontext->UpdateSubresource(cbuffers[ConstantBuffer::Color], 0, nullptr, &color, 0, 0);
                             d3dcontext->IASetVertexBuffers(0, 1, &desc.vertexBuffer, &desc.vertexStride, &offset);
                             d3dcontext->IASetInputLayout(desc.vertexShader.layout);
-                            d3dcontext->IASetIndexBuffer(desc.indexBuffer, DXGI_FORMAT_R8_UINT, 0);
+                            d3dcontext->IASetIndexBuffer(desc.indexBuffer, DXGI_FORMAT_R16_UINT, 0);
                             d3dcontext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
                             d3dcontext->VSSetShader(desc.vertexShader.shader, nullptr, 0);
                             d3dcontext->VSSetConstantBuffers(0, desc.cbufferCount, desc.cbuffers);

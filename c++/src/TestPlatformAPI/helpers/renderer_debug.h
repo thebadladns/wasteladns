@@ -16,33 +16,27 @@ namespace Renderer
 {
 namespace Immediate
 {
-    struct Vertex {
-        Vec3 pos;
-        u32 color;
-    };
-
-    struct CharVertex {
-        Vec2 pos;
-        u32 color;
-    };
     struct Buffer {
-        static constexpr u32 kMaxVertexCount = 1 << 14;
-        Vertex vertexMemory[kMaxVertexCount];
+        static constexpr u32 kMaxVertexCount = 1 << 12;
+        Layout_Vec3Color4B vertexMemory[kMaxVertexCount];
         
-        // 16 byte stride: equivalent to struct { Vec3 pos; u32 color; };
-        // z is ignored
-        static constexpr u32 kMaxCharVertexCount = 1 << 14;
+        // Todo: there seems to be an array overrun here, please check
+        static constexpr u32 kMaxCharVertexCount = 100 << 7;
         u8 charVertexMemory[kMaxCharVertexCount];
-        u32 charIndexVertexMemory[ kMaxCharVertexCount / sizeof(CharVertex) ];
+        u32 charIndexVertexMemory[ kMaxCharVertexCount / sizeof(Layout_Vec2Color4B) ];
+        
+        Driver::RscBuffer<Layout_Vec3Color4B> perspVertex;
+        Driver::RscIndexedBuffer<Layout_Vec2Color4B> orthoVertex;
+        Driver::RscShaderSet<Layout_Vec3Color4B, Layout_CBuffer_DebugScene::Buffers> shaderSetPersp;
+        Driver::RscShaderSet<Layout_Vec2Color4B, Layout_CBuffer_DebugScene::Buffers> shaderSetOrtho;
+        Driver::RscCBuffer cbuffers[Layout_CBuffer_DebugScene::Buffers::Count];
+        Driver::RscRasterizerState orthoRasterizerState;
         
         u32 vertexIndex;
         u32 charVertexIndex;
 
         u32 vertexBufferIndex;
         u32 layoutBufferIndex;
-        u32 charVertexBufferIndex;
-        u32 charIndexBufferIndex;
-        u32 charLayoutBufferIndex;
         u32 shader;
     };
     
@@ -69,10 +63,10 @@ namespace Immediate
         // complex primitives to avoid vertex usage
         assert(buffer.vertexIndex < Buffer::kMaxVertexCount);
         
-        Vertex& vertexStart = buffer.vertexMemory[buffer.vertexIndex];
-        Vertex& vertexEnd = buffer.vertexMemory[buffer.vertexIndex + 1];
+        Layout_Vec3Color4B& vertexStart = buffer.vertexMemory[buffer.vertexIndex];
+        Layout_Vec3Color4B& vertexEnd = buffer.vertexMemory[buffer.vertexIndex + 1];
         buffer.vertexIndex = buffer.vertexIndex + 2;
-        
+
         vertexStart.pos = v1;
         vertexStart.color = color.ABGR();
         vertexEnd.pos = v2;
@@ -150,7 +144,7 @@ namespace Immediate
 
         // Too many chars pushed during immediate mode
         // Bump Buffer::kMaxCharVertexCount
-        assert(buffer.charVertexIndex < Buffer::kMaxCharVertexCount);
+        assert(buffer.charVertexIndex + 4 * sizeof(Layout_Vec2Color4B) < Buffer::kMaxCharVertexCount);
         
         unsigned char color[4];
         color[0] = params.color.getRu();
@@ -159,7 +153,7 @@ namespace Immediate
         color[3] = params.color.getAu();
         u8* vertexBuffer = &buffer.charVertexMemory[buffer.charVertexIndex];
         u32 quadCount = stb_easy_font_print(params.pos.x, -params.pos.y, params.scale, text, color, vertexBuffer, Buffer::kMaxCharVertexCount - buffer.charVertexIndex);
-        buffer.charVertexIndex += quadCount * 4 * sizeof(CharVertex);
+        buffer.charVertexIndex += quadCount * 4 * sizeof(Layout_Vec2Color4B);
 
         for(u32 i = 0; i < quadCount; i++) {
             const u32 vertexIndex = i * 4;
@@ -192,11 +186,126 @@ namespace Immediate
         va_end(va);
     }
 #endif // __WASTELADNS_DEBUG_TEXT__
-}
-}
+    
+    void load(Buffer& buffer) {
+        
+        Driver::create<Layout_CBuffer_DebugScene::GroupData>(buffer.cbuffers[Layout_CBuffer_DebugScene::Buffers::GroupData], {});
+        
+        // 3d
+        {
+            Renderer::Driver::BufferParams bufferParams;
+            bufferParams.vertexData = nullptr;
+            bufferParams.vertexSize = sizeof(Buffer::vertexMemory);
+            bufferParams.memoryMode = Renderer::BufferMemoryMode::CPU;
+            bufferParams.type = Renderer::BufferTopologyType::Lines;
+            bufferParams.vertexCount = 0;
+            Driver::create(buffer.perspVertex, bufferParams);
+        }
+        // 2d
+        {
+            Renderer::Driver::IndexedBufferParams bufferParams;
+            bufferParams.vertexData = nullptr;
+            bufferParams.indexData = nullptr;
+            bufferParams.vertexSize = sizeof(Buffer::charVertexMemory);
+            bufferParams.indexSize = sizeof(Buffer::charIndexVertexMemory);
+            bufferParams.memoryMode = Renderer::BufferMemoryMode::CPU;
+            bufferParams.indexType = Renderer::BufferItemType::U32;
+            bufferParams.type = Renderer::BufferTopologyType::Triangles;
+            bufferParams.indexCount = 0;
+            Driver::create(buffer.orthoVertex, bufferParams);
+        }
+        
+        {
+            Renderer::Driver::RscVertexShader<Renderer::Layout_Vec3Color4B, Renderer::Layout_CBuffer_DebugScene::Buffers> rscVS;
+            Renderer::Driver::RscPixelShader rscPS;
+            Renderer::Driver::RscShaderSet<Renderer::Layout_Vec3Color4B, Renderer::Layout_CBuffer_DebugScene::Buffers> shaderSet;
+            Renderer::Driver::ShaderResult result = Renderer::Driver::create(rscVS, { coloredVertexShaderStr, (u32)strlen(coloredVertexShaderStr) });
+            if (result.compiled) {
+                result = Renderer::Driver::create(rscPS, { pixelShaderStr, (u32)strlen(pixelShaderStr) });
+                if (result.compiled) {
+                    result = Renderer::Driver::create(shaderSet, { rscVS, rscPS, buffer.cbuffers });
+                    if (result.compiled) {
+                        buffer.shaderSetPersp = shaderSet;
+                    }
+                    else {
+                        Platform::printf("link: %s", result.error);
+                    }
+                }
+                else {
+                    Platform::printf("PS: %s", result.error);
+                }
+            }
+            else {
+                Platform::printf("VS: %s", result.error);
+            }
+        }
+        {
+            Renderer::Driver::RscVertexShader<Renderer::Layout_Vec2Color4B, Renderer::Layout_CBuffer_DebugScene::Buffers> rscVS;
+            Renderer::Driver::RscPixelShader rscPS;
+            Renderer::Driver::RscShaderSet<Renderer::Layout_Vec2Color4B, Renderer::Layout_CBuffer_DebugScene::Buffers> shaderSet;
+            Renderer::Driver::ShaderResult result = Renderer::Driver::create(rscVS, { coloredVertexShaderStr, (u32)strlen(coloredVertexShaderStr) });
+            if (result.compiled) {
+                result = Renderer::Driver::create(rscPS, { pixelShaderStr, (u32)strlen(pixelShaderStr) });
+                if (result.compiled) {
+                    result = Renderer::Driver::create(shaderSet, { rscVS, rscPS, buffer.cbuffers });
+                    if (result.compiled) {
+                        buffer.shaderSetOrtho = shaderSet;
+                    }
+                    else {
+                        Platform::printf("link: %s", result.error);
+                    }
+                }
+                else {
+                    Platform::printf("PS: %s", result.error);
+                }
+            }
+            else {
+                Platform::printf("VS: %s", result.error);
+            }
+        }
+        
+        Renderer::Driver::create(buffer.orthoRasterizerState, { Renderer::RasterizerFillMode::Fill, true });
+    }
+    
+    void present3d(Buffer& buffer, const Mat4& projMatrix, const Mat4& viewMatrix) {
 
-#if PLATFORM_GLFW
-#include "glfw/renderer_debug.h"
-#endif
+        Driver::BufferUpdateParams bufferUpdateParams;
+        bufferUpdateParams.vertexData = &buffer.vertexMemory;
+        bufferUpdateParams.vertexSize = sizeof(Layout_Vec3Color4B) * buffer.vertexIndex;
+        bufferUpdateParams.vertexCount = buffer.vertexIndex;
+        Driver::update(buffer.perspVertex, bufferUpdateParams);
+
+        Mat4 mvp = Math::mult(projMatrix, viewMatrix);
+        Driver::update(buffer.cbuffers[Layout_CBuffer_DebugScene::Buffers::GroupData], mvp);
+
+        Driver::bind(buffer.shaderSetPersp);
+        Driver::bind(buffer.perspVertex);
+        Driver::bind(buffer.cbuffers, Layout_CBuffer_DebugScene::Buffers::Count);
+        Driver::draw(buffer.perspVertex);
+    }
+    
+    void present2d(Buffer& buffer, const Mat4& projMatrix) {
+        
+        Renderer::Driver::bind(buffer.orthoRasterizerState);
+
+        u32 indexCount = (6 * buffer.charVertexIndex / 4) / sizeof(Layout_Vec2Color4B);
+        Driver::IndexedBufferUpdateParams bufferUpdateParams;
+        bufferUpdateParams.vertexData = &buffer.charVertexMemory;
+        bufferUpdateParams.vertexSize = buffer.charVertexIndex;
+        bufferUpdateParams.indexData = &buffer.charIndexVertexMemory;
+        bufferUpdateParams.indexSize = indexCount * sizeof(u32);
+        bufferUpdateParams.indexCount = indexCount;
+        Driver::update(buffer.orthoVertex, bufferUpdateParams);
+
+        Driver::update(buffer.cbuffers[Layout_CBuffer_DebugScene::Buffers::GroupData], projMatrix);
+        
+        Driver::bind(buffer.shaderSetOrtho);
+        Driver::bind(buffer.orthoVertex);
+        Driver::bind(buffer.cbuffers, Layout_CBuffer_DebugScene::Buffers::Count);
+        Driver::draw(buffer.orthoVertex);
+    }
+    
+}
+}
 
 #endif // __WASTELADNS_DEBUGDRAW_H__

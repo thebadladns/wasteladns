@@ -26,6 +26,10 @@ namespace Gamepad {
         mapping.mapping[Keys::B_D] = GLFW_KEY_K;
         mapping.mapping[Keys::B_L] = GLFW_KEY_J;
         mapping.mapping[Keys::B_R] = GLFW_KEY_L;
+        mapping.mapping[Keys::D_U] = GLFW_KEY_W;
+        mapping.mapping[Keys::D_D] = GLFW_KEY_S;
+        mapping.mapping[Keys::D_L] = GLFW_KEY_A;
+        mapping.mapping[Keys::D_R] = GLFW_KEY_D;
     }
     
     void pollState(State& pad, GLFWwindow* window, const KeyboardMapping& mapping) {

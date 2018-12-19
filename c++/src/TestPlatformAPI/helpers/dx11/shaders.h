@@ -1,20 +1,19 @@
 #ifndef __WASTELADNS_SHADERS_DX11_H__
 #define __WASTELADNS_SHADERS_DX11_H__
 
-const char * vertexColorShaderStr = R"(
+const char * vertexShaderStr = R"(
 
-    cbuffer PerSceneBuffer : register(b0) {
+    cbuffer PerScene : register(b0) {
         matrix projectionMatrix;
         matrix viewMatrix;
     }
-    cbuffer WorldMatrixBuffer : register(b1) {
-        matrix worldMatrix;
-    }
-    cbuffer ColorBuffer : register(b2) {
+    cbuffer PerGroup : register(b1) {
+        matrix worldView[64];
         float4 bgcolor;
     }
     struct AppData {
         float3 position : POSITION;
+        uint instanceID : SV_InstanceID;
     };
     struct VertexOutput {
         float4 color : COLOR;
@@ -22,7 +21,7 @@ const char * vertexColorShaderStr = R"(
     };
     VertexOutput VS(AppData IN) {
         VertexOutput OUT;
-        matrix mvp = mul(projectionMatrix, mul(viewMatrix, worldMatrix));
+        matrix mvp = mul(projectionMatrix, mul(viewMatrix, worldView[IN.instanceID]));
         OUT.position = mul(mvp, float4(IN.position, 1.f));
         OUT.color = bgcolor;
         return OUT;
@@ -30,18 +29,14 @@ const char * vertexColorShaderStr = R"(
 
 )";
 
-const char * vertexShaderStr = R"(
+const char * coloredVertexShaderStr = R"(
 
-    cbuffer PerSceneBuffer : register(b0) {
-        matrix projectionMatrix;
-        matrix viewMatrix;
-    }
-    cbuffer WorldMatrixBuffer : register(b1) {
-        matrix worldMatrix;
+    cbuffer PerGroup : register(b0) {
+        matrix MVP;
     }
     struct AppData {
         float3 position : POSITION;
-        float3 color: COLOR;
+        float4 color : COLOR;
     };
     struct VertexOutput {
         float4 color : COLOR;
@@ -49,9 +44,8 @@ const char * vertexShaderStr = R"(
     };
     VertexOutput VS(AppData IN) {
         VertexOutput OUT;
-        matrix mvp = mul(projectionMatrix, mul(viewMatrix, worldMatrix));
-        OUT.position = mul(mvp, float4(IN.position, 1.f));
-        OUT.color = float4(IN.color, 1.f);
+        OUT.position = mul(MVP, float4(IN.position, 1.f));
+        OUT.color = IN.color.rgba;
         return OUT;
     }
 
