@@ -16,14 +16,16 @@ namespace Renderer
 {
 namespace Immediate
 {
+    constexpr u32 kMaxVertexCount = 1 << 12;
+    constexpr u32 kMaxCharVertexCount = 1 << 16;
+    // Chars vertex buffer stores quad: per 4 vertex quad, we store 6 indexes (2 tris) = 6 / 4 = 3 / 2
+    constexpr u32 vertexSizeToIndexCount(const u32 count) { return 3 * count / (2 * sizeof(Layout_Vec2Color4B)); }
+    
     struct Buffer {
-        static constexpr u32 kMaxVertexCount = 1 << 12;
         Layout_Vec3Color4B vertexMemory[kMaxVertexCount];
         
-        // Todo: there seems to be an array overrun here, please check
-        static constexpr u32 kMaxCharVertexCount = 100 << 7;
         u8 charVertexMemory[kMaxCharVertexCount];
-        u32 charIndexVertexMemory[ kMaxCharVertexCount / sizeof(Layout_Vec2Color4B) ];
+        u32 charIndexVertexMemory[ vertexSizeToIndexCount(kMaxCharVertexCount) ];
         
         Driver::RscBuffer<Layout_Vec3Color4B> perspVertex;
         Driver::RscIndexedBuffer<Layout_Vec2Color4B> orthoVertex;
@@ -33,6 +35,7 @@ namespace Immediate
         Driver::RscRasterizerState orthoRasterizerState;
         
         u32 vertexIndex;
+        u32 vertexSize;
         u32 charVertexIndex;
 
         u32 vertexBufferIndex;
@@ -53,6 +56,7 @@ namespace Immediate
     
     void clear(Buffer& buffer) {
         buffer.vertexIndex = 0;
+        buffer.vertexSize = 0;
         buffer.charVertexIndex = 0;
     }
     
@@ -61,11 +65,13 @@ namespace Immediate
         // Too many vertex pushed during immediate mode
         // Either bump Buffer::kMaxVertexCount or re-implement
         // complex primitives to avoid vertex usage
-        assert(buffer.vertexIndex < Buffer::kMaxVertexCount);
+        assert(buffer.vertexIndex < kMaxVertexCount);
+//        if (buffer.vertexIndex + 2 >= kMaxVertexCount) { buffer.vertexIndex = 0; }
         
         Layout_Vec3Color4B& vertexStart = buffer.vertexMemory[buffer.vertexIndex];
         Layout_Vec3Color4B& vertexEnd = buffer.vertexMemory[buffer.vertexIndex + 1];
         buffer.vertexIndex = buffer.vertexIndex + 2;
+        buffer.vertexSize = Math::min(buffer.vertexSize + 2, kMaxVertexCount);
 
         vertexStart.pos = v1;
         vertexStart.color = color.ABGR();
@@ -144,7 +150,11 @@ namespace Immediate
 
         // Too many chars pushed during immediate mode
         // Bump Buffer::kMaxCharVertexCount
-        assert(buffer.charVertexIndex + 4 * sizeof(Layout_Vec2Color4B) < Buffer::kMaxCharVertexCount);
+        // stb prevents array overflow so this assert is likely to never hit
+//        assert(buffer.charVertexIndex < kMaxCharVertexCount);
+        
+        u32 vertexCount = buffer.charVertexIndex / sizeof(Layout_Vec2Color4B);
+        u32 indexCount = vertexSizeToIndexCount(buffer.charVertexIndex);
         
         unsigned char color[4];
         color[0] = params.color.getRu();
@@ -152,12 +162,12 @@ namespace Immediate
         color[2] = params.color.getBu();
         color[3] = params.color.getAu();
         u8* vertexBuffer = &buffer.charVertexMemory[buffer.charVertexIndex];
-        u32 quadCount = stb_easy_font_print(params.pos.x, -params.pos.y, params.scale, text, color, vertexBuffer, Buffer::kMaxCharVertexCount - buffer.charVertexIndex);
+        u32 quadCount = stb_easy_font_print(params.pos.x, -params.pos.y, params.scale, text, color, vertexBuffer, kMaxCharVertexCount - buffer.charVertexIndex);
         buffer.charVertexIndex += quadCount * 4 * sizeof(Layout_Vec2Color4B);
 
         for(u32 i = 0; i < quadCount; i++) {
-            const u32 vertexIndex = i * 4;
-            const u32 indexIndex = i * 6;
+            const u32 vertexIndex = vertexCount + i * 4;
+            const u32 indexIndex = indexCount + i * 6;
             buffer.charIndexVertexMemory[indexIndex] = vertexIndex+3;
             buffer.charIndexVertexMemory[indexIndex+1] = vertexIndex+2;
             buffer.charIndexVertexMemory[indexIndex+2] = vertexIndex+1;
@@ -271,8 +281,8 @@ namespace Immediate
 
         Driver::BufferUpdateParams bufferUpdateParams;
         bufferUpdateParams.vertexData = &buffer.vertexMemory;
-        bufferUpdateParams.vertexSize = sizeof(Layout_Vec3Color4B) * buffer.vertexIndex;
-        bufferUpdateParams.vertexCount = buffer.vertexIndex;
+        bufferUpdateParams.vertexSize = sizeof(Layout_Vec3Color4B) * buffer.vertexSize;
+        bufferUpdateParams.vertexCount = buffer.vertexSize;
         Driver::update(buffer.perspVertex, bufferUpdateParams);
 
         Mat4 mvp = Math::mult(projMatrix, viewMatrix);
@@ -288,7 +298,7 @@ namespace Immediate
         
         Renderer::Driver::bind(buffer.orthoRasterizerState);
 
-        u32 indexCount = (6 * buffer.charVertexIndex / 4) / sizeof(Layout_Vec2Color4B);
+        u32 indexCount = vertexSizeToIndexCount(buffer.charVertexIndex);
         Driver::IndexedBufferUpdateParams bufferUpdateParams;
         bufferUpdateParams.vertexData = &buffer.charVertexMemory;
         bufferUpdateParams.vertexSize = buffer.charVertexIndex;

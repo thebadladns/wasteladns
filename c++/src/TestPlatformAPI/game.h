@@ -470,22 +470,24 @@ namespace Game
                     // Tiled floor
                     const f32 l = -500.;
                     const f32 r = -l;
-                    const f32 b = -500.;
-                    const f32 t = -b;
+                    const f32 d = -500.;
+                    const f32 u = -d;
                     const f32 z = 0.f;
+                    const f32 b = -200.f;
+                    const f32 t = 200.f;
                     const f32 separation = 20.f;
                     const Col gridColor(1.0f, 1.0f, 1.0f, 0.25f);
+                    for (f32 z = b; z < t + 0.001; z += separation) {
+                        Immediate::segment(mgr.immediateBuffer, Vec3(l, d, z), Vec3(l, u, z), gridColor);
+                        Immediate::segment(mgr.immediateBuffer, Vec3(r, d, z), Vec3(r, u, z), gridColor);
+                        Immediate::segment(mgr.immediateBuffer, Vec3(l, d, z), Vec3(r, d, z), gridColor);
+                        Immediate::segment(mgr.immediateBuffer, Vec3(l, u, z), Vec3(r, u, z), gridColor);
+                    }
                     for (f32 x = l; x < r + 0.001; x += separation) {
-                        Immediate::line(mgr.immediateBuffer, Vec3(x, (b + t)*0.5f, z), Vec3(0.f, 1.f, 0.f), gridColor);
+                        Immediate::line(mgr.immediateBuffer, Vec3(x, (d + u)*0.5f, z), Vec3(0.f, 1.f, 0.f), gridColor);
                     }
-                    for (f32 y = b; y < t + 0.001; y += separation) {
+                    for (f32 y = d; y < u + 0.001; y += separation) {
                         Immediate::line(mgr.immediateBuffer, Vec3((l + r)*0.5f, y, z), Vec3(1.f, 0.f, 0.f), gridColor);
-                    }
-                    for (f32 z = l; z < r + 0.001; z += separation) {
-                        Immediate::segment(mgr.immediateBuffer, Vec3(l, b, z), Vec3(l, t, z), gridColor);
-                        Immediate::segment(mgr.immediateBuffer, Vec3(r, b, z), Vec3(r, t, z), gridColor);
-                        Immediate::segment(mgr.immediateBuffer, Vec3(l, b, z), Vec3(r, b, z), gridColor);
-                        Immediate::segment(mgr.immediateBuffer, Vec3(l, t, z), Vec3(r, t, z), gridColor);
                     }
 
                     // World axis
@@ -508,7 +510,8 @@ namespace Game
                         textParams.pos = Vec3(game.renderMgr.orthoProjection.config.left + 10.f, game.renderMgr.orthoProjection.config.top - 10.f, -50);
                         textParams.color = Col(1.0f, 1.0f, 0.0f, 1.0f);
                         Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParams, "API tests\n=========\n%s", Platform::name);
-                        
+                        textParams.pos.y -= 120.f;
+                        Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParams, "test scene");
                         Renderer::Immediate::sphere(game.renderMgr.immediateBuffer, Vec3(-170.f, 40.f, 0.f), 100.f, Col(1.0f, 1.0f, 1.0f, 0.4f));
                     }
                 }
