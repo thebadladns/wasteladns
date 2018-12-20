@@ -42,7 +42,7 @@
 #include "helpers/dx11/core.h"
 #include "helpers/dx11/input.h"
 #include "helpers/dx11/io.h"
-#include "helpers/dx11/main-rev.h"
+#include "helpers/dx11/main.h"
 #include "helpers/dx11/shaders.h"
 #endif
 
