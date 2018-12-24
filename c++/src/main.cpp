@@ -6,8 +6,9 @@
 #define TEST_GAMEPAD 4
 #define TEST_CAMERA 5
 #define TEST_PLATFORMAPI 6
+#define TEST_ILLUMINATION 7
 
-#define COMPILE_TARGET TEST_PLATFORMAPI
+#define COMPILE_TARGET TEST_ILLUMINATION
 
 #if COMPILE_TARGET == TEST_WORKSPACE
 #include "workspace_main.cpp"
@@ -25,4 +26,6 @@
 #include "TestCamera/main.cpp"
 #elif COMPILE_TARGET == TEST_PLATFORMAPI
 #include "TestPlatformAPI/main.cpp"
+#elif COMPILE_TARGET == TEST_ILLUMINATION
+#include "TestIllumination/main.cpp"
 #endif
