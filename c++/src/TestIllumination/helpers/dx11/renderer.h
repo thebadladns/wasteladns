@@ -24,16 +24,124 @@ namespace Driver {
         ID3D11Texture2D* backbuffer;
         swapchain->GetBuffer(0, __uuidof(ID3D11Texture2D), (void**) &backbuffer);
         d3ddev->CreateRenderTargetView(backbuffer, nullptr, &targetView);
-
         rt.view = targetView;
+
+        // Make depth buffer a part of the main render target, for now
+        if (params.depth) {
+
+            ID3D11Texture2D* stencil = nullptr;
+            D3D11_TEXTURE2D_DESC stencilDesc = {};
+            stencilDesc.Width = params.width;
+            stencilDesc.Height = params.height;
+            stencilDesc.MipLevels = 1;
+            stencilDesc.ArraySize = 1;
+            stencilDesc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
+            stencilDesc.SampleDesc.Count = 1;
+            stencilDesc.SampleDesc.Quality = 0;
+            stencilDesc.Usage = D3D11_USAGE_DEFAULT;
+            stencilDesc.BindFlags = D3D11_BIND_DEPTH_STENCIL;
+            stencilDesc.CPUAccessFlags = 0;
+            stencilDesc.MiscFlags = 0;
+            d3ddev->CreateTexture2D(&stencilDesc, nullptr, &stencil);
+
+            // same format as texture, 0 minmap
+            D3D11_DEPTH_STENCIL_VIEW_DESC stencilViewDesc = {};
+            d3ddev->CreateDepthStencilView(stencil, nullptr, &rt.depthStencilView);
+
+            ID3D11DepthStencilState* stencilState;
+            D3D11_DEPTH_STENCIL_DESC stencilStateDesc = {};
+            stencilStateDesc.DepthEnable = true;
+            stencilStateDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ALL;
+            stencilStateDesc.DepthFunc = D3D11_COMPARISON_LESS;
+            stencilStateDesc.StencilEnable = false;
+            d3ddev->CreateDepthStencilState(&stencilStateDesc, &stencilState);
+
+            // Todo: eventually this may not belong here
+            d3dcontext->OMSetDepthStencilState(stencilState, 1);
+        }
     }
     void clear(const RscMainRenderTarget& rt, Col color) {
-        Col bg(0.01f, 0.021f, 0.06f);
-        d3dcontext->OMSetRenderTargets(1, &rt.view, nullptr);
         float colorv[] = { RGBA_PARAMS(color) };
         d3dcontext->ClearRenderTargetView(rt.view, colorv);
+        if (rt.depthStencilView) {
+            d3dcontext->ClearDepthStencilView(rt.depthStencilView, D3D11_CLEAR_DEPTH, 1.f, 0);
+        }
     }
-    
+    void bind(RscMainRenderTarget& rt) {
+        d3dcontext->OMSetRenderTargets(1, &rt.view, rt.depthStencilView);
+    }
+
+    void create(RscTexture& t, const TextureFromFileParams& params) {
+        s32 w, h, channels;
+        u8* data = stbi_load(params.path, &w, &h, &channels, 0);
+        if (data) {
+            DXGI_FORMAT format = DXGI_FORMAT_UNKNOWN;
+            u32 typeSize = 0;
+            switch (channels) {
+            case 1: format = DXGI_FORMAT_R32_FLOAT; typeSize = 4; break;
+            case 4: format = DXGI_FORMAT_R8G8B8A8_UNORM; typeSize = 4; break;
+            default: assert("unhandled texture format");
+            }
+
+            // Do not initialize data here, since we'll use auto mipmapss
+            ID3D11Texture2D* texture;
+            D3D11_TEXTURE2D_DESC texDesc = {};
+            texDesc.Width = w;
+            texDesc.Height = h;
+            texDesc.MipLevels = 0;
+            texDesc.ArraySize = 1;
+            texDesc.SampleDesc.Count = 1;
+            texDesc.SampleDesc.Quality = 0;
+            texDesc.Usage = D3D11_USAGE_DEFAULT;
+            texDesc.Format = format;
+            texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE|D3D11_BIND_RENDER_TARGET;
+            texDesc.CPUAccessFlags = 0;
+            texDesc.MiscFlags = D3D11_RESOURCE_MISC_GENERATE_MIPS;
+            d3ddev->CreateTexture2D(&texDesc, nullptr, &texture);
+
+            D3D11_SHADER_RESOURCE_VIEW_DESC texViewDesc = {};
+            texViewDesc.Format = format;
+            texViewDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+            texViewDesc.Texture2D.MipLevels = -1;
+            texViewDesc.Texture2D.MostDetailedMip = 0;
+            d3ddev->CreateShaderResourceView(texture, &texViewDesc, &t.view);
+            
+            // Initialize data and generate mips
+            d3dcontext->UpdateSubresource(texture, 0, nullptr, data, typeSize * w, typeSize * w * h);
+            d3dcontext->GenerateMips(t.view);
+
+            // Sampler tied to texture resource, for now
+            D3D11_SAMPLER_DESC samplerDesc = {};
+            samplerDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
+            samplerDesc.AddressU = D3D11_TEXTURE_ADDRESS_WRAP;
+            samplerDesc.AddressV = D3D11_TEXTURE_ADDRESS_WRAP;
+            samplerDesc.AddressW = D3D11_TEXTURE_ADDRESS_WRAP;
+            samplerDesc.MipLODBias = 0.0f;
+            samplerDesc.MaxAnisotropy = 1;
+            samplerDesc.ComparisonFunc = D3D11_COMPARISON_ALWAYS;
+            samplerDesc.BorderColor[0] = 0;
+            samplerDesc.BorderColor[1] = 0;
+            samplerDesc.BorderColor[2] = 0;
+            samplerDesc.BorderColor[3] = 0;
+            samplerDesc.MinLOD = 0;
+            samplerDesc.MaxLOD = D3D11_FLOAT32_MAX;
+
+            d3ddev->CreateSamplerState(&samplerDesc, &t.samplerState);
+            stbi_image_free(data);
+        }
+    }
+    void bind(const RscTexture* textures, const u32 count) {
+        // hack, don't care for templates, dynamic arrays or alloca for now
+        ID3D11ShaderResourceView* textureViews[16];
+        ID3D11SamplerState* samplers[16];
+        for (u32 i = 0; i < count; i++) {
+            textureViews[i] = textures[i].view;
+            samplers[i] = textures[i].samplerState;
+        }
+        d3dcontext->PSSetShaderResources(0, count, textureViews);
+        d3dcontext->PSSetSamplers(0, count, samplers);
+    }
+
     template <typename _vertexLayout, typename _cbufferLayout>
     ShaderResult create(RscVertexShader<_vertexLayout, _cbufferLayout>& vs, const VertexShaderRuntimeCompileParams& params) {
         ID3D11VertexShader* vertexShader = nullptr;
@@ -111,7 +219,7 @@ namespace Driver {
     }
     
     void create(RscBlendState& bs, const BlendStateParams& params) {
-        // Todo: understand and make parameters
+        // Todo: make parameters when needed
         ID3D11BlendState1* blendState;
         D3D11_BLEND_DESC1 blendStateDesc = {};
         blendStateDesc.RenderTarget[0].BlendEnable = params.enable ? TRUE : FALSE;
@@ -125,7 +233,6 @@ namespace Driver {
         d3ddev->CreateBlendState1(&blendStateDesc, &blendState);
 
         bs.bs = blendState;
-
     }
     void bind(const RscBlendState bs) {
         d3dcontext->OMSetBlendState(bs.bs, 0, 0xffffffff);
@@ -263,9 +370,14 @@ namespace Driver {
     void update(RscCBuffer& cb, const _layout& data) {
         d3dcontext->UpdateSubresource(cb.bufferObject, 0, nullptr, &data, 0, 0);
     }
-    void bind(const RscCBuffer* cb, const u32 count) {
-        // works because an array of RscCBuffer maps to an array of tightly packed bufferObject
-        d3dcontext->VSSetConstantBuffers(0, count, &(cb[0].bufferObject));
+    void bind(const RscCBuffer* cb, const u32 count, const CBufferBindParams& params) {
+        // this all works because an array of RscCBuffer maps to an array of tightly packed bufferObject
+        if (params.vertex) {
+            d3dcontext->VSSetConstantBuffers(0, count, &(cb[0].bufferObject));
+        }
+        if (params.pixel) {
+            d3dcontext->PSSetConstantBuffers(0, count, &(cb[0].bufferObject));
+        }
     }
 }
 }
@@ -279,6 +391,18 @@ namespace Driver {
         ID3D11InputLayout* inputLayout;
         D3D11_INPUT_ELEMENT_DESC vertexLayoutDesc[] = {
                 { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 }
+        };
+        d3ddev->CreateInputLayout(vertexLayoutDesc, ARRAYSIZE(vertexLayoutDesc), shaderBufferPointer, shaderBufferSize, &inputLayout);
+
+        vs.inputLayout = inputLayout;
+    }
+    template <typename _bufferLayout>
+    void createLayout(RscVertexShader<Layout_TexturedVec3, _bufferLayout>& vs, void* shaderBufferPointer, u32 shaderBufferSize) {
+        ID3D11InputLayout* inputLayout;
+        D3D11_INPUT_ELEMENT_DESC vertexLayoutDesc[] = {
+              { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, offsetof(Layout_TexturedVec3, pos), D3D11_INPUT_PER_VERTEX_DATA, 0 }
+            , { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, offsetof(Layout_TexturedVec3, uv), D3D11_INPUT_PER_VERTEX_DATA, 0 }
+            , { "NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, offsetof(Layout_TexturedVec3, normal), D3D11_INPUT_PER_VERTEX_DATA, 0 }
         };
         d3ddev->CreateInputLayout(vertexLayoutDesc, ARRAYSIZE(vertexLayoutDesc), shaderBufferPointer, shaderBufferSize, &inputLayout);
 

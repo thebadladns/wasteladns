@@ -83,10 +83,6 @@ in FragOut {
     vec3 normal;
     vec2 uv;
 } fragIn;
-layout (std140) uniform PerScene {
-    mat4 projectionMatrix;
-    mat4 viewMatrix;
-};
 layout(location = 0) out vec4 FragColor;
 
 uniform sampler2D albedoTex;

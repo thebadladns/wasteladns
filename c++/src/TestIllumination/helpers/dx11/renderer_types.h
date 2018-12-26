@@ -10,6 +10,12 @@ namespace Driver {
     
     struct RscMainRenderTarget {
         ID3D11RenderTargetView* view;
+        ID3D11DepthStencilView* depthStencilView;
+    };
+
+    struct RscTexture {
+        ID3D11ShaderResourceView* view;
+        ID3D11SamplerState* samplerState;
     };
 
     template <typename _vertexLayout, typename _cbufferLayout>

@@ -6,7 +6,7 @@
 
 namespace Platform {
 
-	const char* name = "DX11";
+    const char* name = "DX11";
 
     LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
 
@@ -90,17 +90,16 @@ namespace Platform {
         ID3D11Device1* d3ddev;
         ID3D11DeviceContext1* d3dcontext;
         IDXGISwapChain1* swapchain;
-        ID3D11RenderTargetView* renderTarget;
-		
+        
         u32 flags = 0;
         //flags = D3D11_CREATE_DEVICE_DEBUG;
         D3D11CreateDevice(
             nullptr,
             D3D_DRIVER_TYPE_HARDWARE,
             nullptr,
-			flags,
-			nullptr,
-			0,
+            flags,
+            nullptr,
+            0,
             D3D11_SDK_VERSION,
             (ID3D11Device**) &d3ddev,
             nullptr,
@@ -117,6 +116,8 @@ namespace Platform {
             dxgiAdapter->GetParent(__uuidof(IDXGIFactory2), (void**) &dxgiFactory);
 
             DXGI_SWAP_CHAIN_DESC1 scd = { 0 };
+            scd.Width = platform.screen.width;
+            scd.Height = platform.screen.height;
             scd.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
             scd.BufferCount = 2;
             scd.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
@@ -131,22 +132,20 @@ namespace Platform {
                 nullptr,
                 &swapchain);
 
-			// TODO: Handle more nicely
-			Renderer::Driver::d3ddev = d3ddev;
-			Renderer::Driver::d3dcontext = d3dcontext;
-			Renderer::Driver::swapchain = swapchain;
+            // TODO: Handle more nicely
+            Renderer::Driver::d3ddev = d3ddev;
+            Renderer::Driver::d3dcontext = d3dcontext;
+            Renderer::Driver::swapchain = swapchain;
 
-            ID3D11Texture2D* backbuffer;
-            swapchain->GetBuffer(0, __uuidof(ID3D11Texture2D), (void**) &backbuffer);
-            d3ddev->CreateRenderTargetView(backbuffer, nullptr, &renderTarget);
-
+            // TODO: assumes depth usage, should go inside game code (as driver resource)
             D3D11_VIEWPORT viewport = {};
             viewport.TopLeftX = 0;
             viewport.TopLeftY = 0;
             viewport.Width = (f32) platform.screen.width;
             viewport.Height = (f32)platform.screen.height;
+            viewport.MinDepth = 0.f;
+            viewport.MaxDepth = 1.f;
             d3dcontext->RSSetViewports(1, &viewport);
-
 
             ::Input::Gamepad::State pads[1];
             ::Input::Gamepad::KeyboardMapping keyboardPadMappings[1];

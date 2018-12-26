@@ -61,9 +61,13 @@ namespace Renderer {
         matrixCM[14] = config.near / (config.near - config.far);
         matrixCM[15] = 1.f;
     }
-    
+
     // Expects right-handed view matrix, z-coordinate point towards the viewer
-    void generateMatrix(Mat4& matrixRHwithYup, const PerspProjection::Config& config) {
+    template <typename _type = ProjTypeZ0to1>
+    void generateMatrix(Mat4& matrixRHwithYup, const PerspProjection::Config& config);
+
+    template <>
+    void generateMatrix<ProjTypeZMinus1to1>(Mat4& matrixRHwithYup, const PerspProjection::Config& config) {
         const f32 h = 1.f / Math::tan(config.fov * 0.5f * Math::d2r<f32>);
         const f32 w = h / config.aspect;
         
@@ -75,6 +79,21 @@ namespace Renderer {
         matrixCM[10] = -(config.far + config.near) / (config.far - config.near);
         matrixCM[11] = -1.f;
         matrixCM[14] = -(2.f * config.far * config.near) / (config.far - config.near);
+    }
+
+    template <>
+    void generateMatrix<ProjTypeZ0to1>(Mat4& matrixRHwithYup, const PerspProjection::Config& config) {
+        const f32 h = 1.f / Math::tan(config.fov * 0.5f * Math::d2r<f32>);
+        const f32 w = h / config.aspect;
+
+        // maps each xyz axis to [0,1] (left handed, y points up z moves away from the viewer)
+        f32(&matrixCM)[16] = matrixRHwithYup.dataCM;
+        memset(matrixCM, 0, sizeof(f32) * 16);
+        matrixCM[0] = w;
+        matrixCM[5] = h;
+        matrixCM[10] = config.far / (config.near - config.far);
+        matrixCM[11] = -1.f;
+        matrixCM[14] = config.far * config.near / (config.near - config.far);
     }
 
     template <CoordinateSystem::Enum _system>
@@ -123,9 +142,17 @@ namespace Renderer {
 namespace Driver {
     
     struct RenderTargetParams {
+        u32 width;
+        u32 height;
         bool depth;
     };
     void create(RscMainRenderTarget&, const RenderTargetParams&);
+    void bind(RscMainRenderTarget& rt);
+
+    struct TextureFromFileParams {
+        const char* path;
+    };
+    void create(RscTexture& t, const TextureFromFileParams& params);
 
     struct ShaderResult {
         char error[128];
@@ -219,7 +246,11 @@ namespace Driver {
     void create(RscCBuffer& cb, const CBufferCreateParams& params);
     template <typename _layout>
     void update(RscCBuffer& cb, const _layout& data);
-    void bind(const RscCBuffer* cb, u32 count);
+    struct CBufferBindParams {
+        bool vertex;
+        bool pixel;
+    };
+    void bind(const RscCBuffer* cb, const u32 count, const CBufferBindParams& params);
 
     template <typename _vertexLayout, typename _bufferLayout>
     void createLayout(RscVertexShader<_vertexLayout, _bufferLayout>& vs, void* shaderBufferPointer, u32 shaderBufferSize);

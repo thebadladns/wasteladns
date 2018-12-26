@@ -4,6 +4,7 @@
 namespace Renderer {
     namespace Driver {
         struct RscMainRenderTarget;
+        struct RscTexture;
         struct RscBlendState;
         struct RscRasterizerState;
         template <typename _vertexLayout, typename _cbufferLayout>

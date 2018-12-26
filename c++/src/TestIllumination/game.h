@@ -151,10 +151,6 @@ namespace Game
         RenderDescription desc;
         u32 instanceCount;
     };
-    struct PointLight {
-        Vec3 pos;
-        Vec3 color;
-    };
     struct RenderScene {
         RenderGroup groupBuffer[16];
         u32 groupCount;
@@ -164,7 +160,6 @@ namespace Game
         Renderer::Driver::RscMainRenderTarget mainRenderTarget;
         Renderer::Driver::RscShaderSet<Renderer::Layout_TexturedVec3, Renderer::Layout_CBuffer_3DScene::Buffers> shaderSet;
         Renderer::Driver::RscTexture albedo;
-        PointLight light;
         RenderGroup* begin() { return &groupBuffer[0]; }
         RenderGroup* end() { return &groupBuffer[groupCount]; }
     };
@@ -222,10 +217,11 @@ namespace Game
             ortho.top = platform.screen.height * 0.5f;
             ortho.left = -ortho.right;
             ortho.bottom = -ortho.top;
-            ortho.near = -1.f;
+            ortho.near = 0.f;
             ortho.far = 200.f;
             generateMatrix(mgr.orthoProjection.matrix, ortho);
-
+            
+            // Todo: consider whether precision needs special handling
             PerspProjection::Config& frustum = mgr.perspProjection.config;
             frustum.fov = 45.f;
             frustum.aspect = platform.screen.width / (f32)platform.screen.height;
@@ -234,13 +230,17 @@ namespace Game
             generateMatrix(mgr.perspProjection.matrix, frustum);
         }
 
-        Renderer::Immediate::load(game.renderMgr.immediateBuffer);
-
         RenderInstanceHandle playerRenderInst;
         game.renderMgr.renderScene = {};
         {
             RenderScene& rscene = game.renderMgr.renderScene;
             
+            Renderer::Driver::RenderTargetParams renderTargetParams = {};
+            renderTargetParams.depth = true;
+            renderTargetParams.width = platform.screen.width;
+            renderTargetParams.height = platform.screen.height;
+            Renderer::Driver::create(rscene.mainRenderTarget, renderTargetParams);
+
             Renderer::Driver::create(rscene.blendStateOn, { true });
             Renderer::Driver::bind(rscene.blendStateOn);
             
@@ -255,9 +255,9 @@ namespace Game
                 Renderer::Driver::RscPixelShader rscPS;
                 Renderer::Driver::RscShaderSet<Renderer::Layout_TexturedVec3, Renderer::Layout_CBuffer_3DScene::Buffers> shaderSet;
                 Renderer::Driver::ShaderResult result;
-                result = Renderer::Driver::create(rscVS, { texturedVShaderStr, (u32)strlen(vertexShaderStr) });
+                result = Renderer::Driver::create(rscVS, { texturedVShaderStr, (u32)strlen(texturedVShaderStr) });
                 if (result.compiled) {
-                    result = Renderer::Driver::create(rscPS, { texturedPShaderStr, (u32)strlen(pixelShaderStr) });
+                    result = Renderer::Driver::create(rscPS, { texturedPShaderStr, (u32)strlen(texturedPShaderStr) });
                     if (result.compiled) {
                         result = Renderer::Driver::create(shaderSet, { rscVS, rscPS, rscene.cbuffers });
                         if (result.compiled) {
@@ -275,8 +275,6 @@ namespace Game
                     Platform::printf("VS: %s", result.error);
                 }
             }
-            
-            Renderer::Driver::create(rscene.mainRenderTarget, { true });
             
             {
                 enum Normals { Y, NY, X, NX, Z, NZ};
@@ -363,7 +361,7 @@ namespace Game
                 f32 wb = w;
                 f32 h = 5.f;
                 f32 z = 30.f;
-                f32 yoff = 0.f;//-2.f;
+                f32 yoff = -2.f;
                 f32 zoff = 0.f;
                 
                 // pyramid sides
@@ -422,9 +420,9 @@ namespace Game
             }
             
             Renderer::Driver::create( rscene.albedo, { "assets/pbr/material01-albedo.png" } );
-            rscene.light = {};
-            rscene.light.color = { 0.6f, 0.9f, 0.2f };
         }
+
+        Renderer::Immediate::load(game.renderMgr.immediateBuffer);
 
         game.player = {};
         {
@@ -447,8 +445,6 @@ namespace Game
             
             mgr.activeCam = &cam;
         }
-        
-        // gl hacks
     }
     
     void update(Instance& game, Platform::GameConfig& config, const Platform::State& platform) {
@@ -504,6 +500,7 @@ namespace Game
             RenderScene& rscene = mgr.renderScene;
             using namespace Renderer;
 
+            Renderer::Driver::bind(rscene.mainRenderTarget);
             Renderer::Driver::clear(rscene.mainRenderTarget, Col(0.f, 0.f, 0.f, 1.f));
 
             // Scene
@@ -530,7 +527,7 @@ namespace Game
                         
                     Renderer::Driver::bind(d.rasterizerState);
                     Renderer::Driver::bind(d.buffer);
-                    Renderer::Driver::bind(rscene.cbuffers, Renderer::Layout_CBuffer_3DScene::Buffers::Count);
+                    Renderer::Driver::bind(rscene.cbuffers, Renderer::Layout_CBuffer_3DScene::Buffers::Count, { true, false });
                     drawInstances(d.buffer, r.instanceCount);
                 }
 
@@ -565,7 +562,7 @@ namespace Game
                         const Col axisY(0.25f, 0.8f, 0.15f, 0.7f);
                         const Col axisZ(0.15f, 0.25f, 0.8f, 0.7f);
                         const f32 axisSize = 300.f;
-                        const Vec3 pos = Vec3(0.f, 0.f, 0.f);
+                        const Vec3 pos = Vec3(0.f, 0.f, 0.1f);
 
                         Immediate::segment(mgr.immediateBuffer, pos, Math::add(pos, Math::scale(Vec3(1.f, 0.f, 0.f), axisSize)), axisX);
                         Immediate::segment(mgr.immediateBuffer, pos, Math::add(pos, Math::scale(Vec3(0.f, 1.f, 0.f), axisSize)), axisY);

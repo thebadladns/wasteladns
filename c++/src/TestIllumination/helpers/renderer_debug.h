@@ -290,7 +290,7 @@ namespace Immediate
 
         Driver::bind(buffer.shaderSetPersp);
         Driver::bind(buffer.perspVertex);
-        Driver::bind(buffer.cbuffers, Layout_CBuffer_DebugScene::Buffers::Count);
+        Driver::bind(buffer.cbuffers, Layout_CBuffer_DebugScene::Buffers::Count, { true, false });
         Driver::draw(buffer.perspVertex);
     }
     
@@ -311,7 +311,7 @@ namespace Immediate
         
         Driver::bind(buffer.shaderSetOrtho);
         Driver::bind(buffer.orthoVertex);
-        Driver::bind(buffer.cbuffers, Layout_CBuffer_DebugScene::Buffers::Count);
+        Driver::bind(buffer.cbuffers, Layout_CBuffer_DebugScene::Buffers::Count, { true, false });
         Driver::draw(buffer.orthoVertex);
     }
     

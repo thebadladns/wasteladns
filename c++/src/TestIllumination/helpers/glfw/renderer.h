@@ -24,40 +24,32 @@ namespace Driver {
         glClearColor( RGBA_PARAMS(color) );
         glClear(rt.mask);
     }
-    
-    struct TextureFromFileParams {
-        const char* path;
-    };
+    void bind(RscMainRenderTarget& rt) {
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    }
+
     void create(RscTexture& t, const TextureFromFileParams& params) {
         s32 w, h, channels;
         u8* data = stbi_load(params.path, &w, &h, &channels, 0);
         if (data) {
-            GLenum format;
+            GLenum format = 0;
+            GLenum type = 0;
             switch (channels) {
-                case 1: format = GL_RED; break;
-                case 3: format = GL_RGB; break;
-                case 4: format = GL_RGBA; break;
+            case 1: format = GL_RED; type = GL_FLOAT; break;
+            case 4: format = GL_RGBA; type = GL_UNSIGNED_BYTE;  break;
+            default: assert("unhandled texture format");
             }
             GLuint texId;
-            GLenum error = glGetError();
             
             glGenTextures(1, &texId);
-            error = glGetError();
             glBindTexture(GL_TEXTURE_2D, texId);
-            error = glGetError();
-            glTexImage2D(GL_TEXTURE_2D, 0, format, w, h, 0, format, GL_UNSIGNED_BYTE, data);
-            error = glGetError();
+            glTexImage2D(GL_TEXTURE_2D, 0, format, w, h, 0, format, type, data);
             glGenerateMipmap(GL_TEXTURE_2D);
-            error = glGetError();
             
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-            error = glGetError();
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-            error = glGetError();
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-            error = glGetError();
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-            error = glGetError();
             
             t.texId = texId;
             
@@ -66,7 +58,7 @@ namespace Driver {
     }
     void bind(const RscTexture* textures, const u32 count) {
         for (u32 i = 0; i < count; i++) {
-            glActiveTexture(GL_TEXTURE0);//toGLActiveTexture[i]);
+            glActiveTexture(toGLActiveTexture[i]);
             glBindTexture(GL_TEXTURE_2D, textures[i].texId);
         }
     }
@@ -294,8 +286,7 @@ namespace Driver {
         glBindBuffer(GL_UNIFORM_BUFFER, cb.bufferObject);
         glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(_layout), &data);
     }
-    void bind(const RscCBuffer* cb, u32 count) {}
-
+    void bind(const RscCBuffer* cb, const u32 count, const CBufferBindParams& params) {}
 }
 }
 
