@@ -34,6 +34,7 @@
 #include "helpers/input.h"
 #include "helpers/platform.h"
 #include "helpers/camera.h"
+#include "helpers/easing.h"
 
 #if PLATFORM_GLFW 
 #include "helpers/glfw/core.h"
@@ -50,13 +51,16 @@
 #endif
 
 #include "helpers/renderer_types.h"
-#include "helpers/renderer.h"
-
-#if PLATFORM_GLFW 
+#if PLATFORM_GLFW
 #include "helpers/glfw/renderer_types.h"
-#include "helpers/glfw/renderer.h"
 #elif PLATFORM_DX11
 #include "helpers/dx11/renderer_types.h"
+#endif
+
+#include "helpers/renderer.h"
+#if PLATFORM_GLFW
+#include "helpers/glfw/renderer.h"
+#elif PLATFORM_DX11
 #include "helpers/dx11/renderer.h"
 #endif
 

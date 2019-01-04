@@ -6,16 +6,26 @@
 #endif
 
 namespace Renderer {
+
+    constexpr ProjectionType::Enum defaultProjectionType = ProjectionType::Z0to1;
+
 namespace Driver {
     
     struct RscMainRenderTarget {
         ID3D11RenderTargetView* view;
         ID3D11DepthStencilView* depthStencilView;
     };
+    struct RscRenderTarget {
+        ID3D11RenderTargetView* views[8]; // hack, don't care for templates
+        ID3D11DepthStencilView* depthStencilView;
+        u32 viewCount;
+    };
 
     struct RscTexture {
+        ID3D11Texture2D* texture; // TODO: we can likely do without this
         ID3D11ShaderResourceView* view;
         ID3D11SamplerState* samplerState;
+        DXGI_FORMAT format;
     };
 
     template <typename _vertexLayout, typename _cbufferLayout>

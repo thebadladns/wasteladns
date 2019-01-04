@@ -88,8 +88,13 @@ namespace GLFW {
             glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
             glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
             glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-            glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
             
+            // TODO: add define on cmakelist
+#ifdef __APPLE__
+
+            glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
+#endif
+
             platform.screen.width = config.window_width;
             platform.screen.height = config.window_height;
             platform.screen.desiredRatio = platform.screen.width / (f32)platform.screen.height;
@@ -112,7 +117,7 @@ namespace GLFW {
 
         // Todo: only on windows
 //        LogData logLevel = {};
-//        logLevel.minLevel = LogLevel::Debug;
+//        logLevel.minLevel = LogLevel::Low;
 //        glEnable( GL_DEBUG_OUTPUT );
 //        glDebugMessageCallback( debugMessageCallback, &logLevel );
 
@@ -149,7 +154,6 @@ namespace GLFW {
 
                 Platform::update<_GameData>(game, config, platform);
                 
-                // Needed since GLFW_DOUBLEBUFFER is GL_TRUE
                 glfwSwapBuffers(windowHandle);
                 
                 if (config.quit) {

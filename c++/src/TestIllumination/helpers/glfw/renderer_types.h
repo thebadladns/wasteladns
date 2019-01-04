@@ -6,10 +6,19 @@
 #endif
 
 namespace Renderer {
+
+    constexpr ProjectionType::Enum defaultProjectionType = ProjectionType::Zminus1to1;
+
 namespace Driver {
-    
-    // empty for now
+
     struct RscMainRenderTarget {
+        u32 mask;
+    };
+    
+    struct RscRenderTarget {
+        GLuint buffer;
+        GLuint depthBuffer;
+        u32 width, height;
         u32 mask;
     };
     

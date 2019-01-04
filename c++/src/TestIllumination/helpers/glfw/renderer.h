@@ -6,28 +6,84 @@
 #endif
 
 namespace Renderer {
+
+    void create(RenderTargetTexturedQuad& q) {
+        // Generally we use uv=(0,0) as top left, but only
+        // for texture data which is interpreted by opengl
+        // as bottom-to-top (they are stored top-to-bottom)
+        // Render targets are drawn bottom-to-top, hence (0,0)
+        // being the bottom left here
+        Renderer::Layout_TexturedVec2* v = q.vertices;
+        u16* i = q.indices;
+        v[0] = { { -1.f, 1.f }, { 0.f, 1.f } };
+        v[1] = { { -1.f, -1.f }, { 0.f, 0.f } };
+        v[2] = { { 1.f, 1.f }, { 1.f, 1.f } };
+        v[3] = { { 1.f, -1.f }, { 1.f, 0.f } };
+        i[0] = 0; i[1] = 1; i[2] = 2;
+        i[3] = 2; i[4] = 1; i[5] = 3;
+    }
+
 namespace Driver {
-    GLenum toGLActiveTexture[] = { GL_TEXTURE0, GL_TEXTURE1, GL_TEXTURE3, GL_TEXTURE4 };
+    GLenum toGLType[] = { GL_FLOAT };
+    GLenum toGLInternalTextureFormat[] { GL_RGB16F };
+    GLenum toGLTextureFormat[] { GL_RGB };
     GLenum toGLRasterizerFillMode[] = { GL_FILL, GL_LINE };
     GLenum toGLBufferMemoryMode[] = { GL_STATIC_DRAW, GL_DYNAMIC_DRAW };
     GLenum toGLBufferItemType[] = { GL_UNSIGNED_SHORT, GL_UNSIGNED_INT };
     GLenum toGLBufferTopologyType[] = { GL_TRIANGLES, GL_LINES };
     
-    void create(RscMainRenderTarget& rt, const RenderTargetParams& params) {
+    void create(RscMainRenderTarget& rt, const MainRenderTargetParams& params) {
         rt.mask = GL_COLOR_BUFFER_BIT;
         if (params.depth) {
             rt.mask = rt.mask | GL_DEPTH_BUFFER_BIT;
             glEnable(GL_DEPTH_TEST);
         }
     }
-    void clear(const RscMainRenderTarget& rt, Col color) {
+    void clear(RscMainRenderTarget& rt, Col color) {
         glClearColor( RGBA_PARAMS(color) );
-        glClear(rt.mask);
+        glClear(rt.mask | GL_STENCIL_BUFFER_BIT);
     }
     void bind(RscMainRenderTarget& rt) {
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
     }
-
+    
+    void create(RscRenderTarget& rt, const RenderTargetParams& params) {
+        GLuint buffer;
+        glGenFramebuffers(1, &buffer);
+        glBindFramebuffer(GL_FRAMEBUFFER, buffer);
+        rt.buffer = buffer;
+        rt.mask = GL_COLOR_BUFFER_BIT;
+        rt.width = params.width;
+        rt.height = params.height;
+        if (params.depth) {
+            GLuint depthBuffer;
+            glGenRenderbuffers(1, &depthBuffer);
+            glBindRenderbuffer(GL_RENDERBUFFER, depthBuffer);
+            glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT, params.width, params.height);
+            glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, depthBuffer);
+            rt.depthBuffer = depthBuffer;
+            rt.mask = rt.mask | GL_DEPTH_BUFFER_BIT;
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        }
+    }
+    void bind(const RscRenderTarget& rt) {
+        glBindFramebuffer(GL_FRAMEBUFFER, rt.buffer);
+    }
+    void clear(const RscRenderTarget& rt) {
+        glClear(rt.mask | GL_STENCIL_BUFFER_BIT);
+    }
+    void copy(RscMainRenderTarget& dst, const RscRenderTarget& src, const RenderTargetCopyParams& params) {
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, src.buffer);
+        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+        // Todo: ensure matching formats?
+        GLuint flags = 0;
+        if (params.depth) {
+            flags = flags | GL_DEPTH_BUFFER_BIT;
+        }
+        glBlitFramebuffer(0, 0, src.width, src.height, 0, 0, src.width, src.height, flags, GL_NEAREST);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    }
+    
     void create(RscTexture& t, const TextureFromFileParams& params) {
         s32 w, h, channels;
         u8* data = stbi_load(params.path, &w, &h, &channels, 0);
@@ -41,6 +97,9 @@ namespace Driver {
             }
             GLuint texId;
             
+            // image data comes from top to bottom, but opengl will store it the other way
+            // (first element is assumed to be the bottom left, uv=(0,0))
+            // this reversal is fine: the rest of the code will assume uv=(0,0) is top right 
             glGenTextures(1, &texId);
             glBindTexture(GL_TEXTURE_2D, texId);
             glTexImage2D(GL_TEXTURE_2D, 0, format, w, h, 0, format, type, data);
@@ -50,17 +109,53 @@ namespace Driver {
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-            
+            glBindTexture(GL_TEXTURE_2D, 0);
+
             t.texId = texId;
             
             stbi_image_free(data);
         }
     }
+    void create(RscTexture& t, const TextureRenderTargetCreateParams& params) {
+        GLenum type = toGLType[params.type];
+        GLenum internalFormat = toGLInternalTextureFormat[params.format];
+        GLenum format = toGLTextureFormat[params.format];
+        
+        GLuint texId;
+        glGenTextures(1, &texId);
+        glBindTexture(GL_TEXTURE_2D, texId);
+        glTexImage2D(GL_TEXTURE_2D, 0, internalFormat, params.width, params.height, 0, format, type, nullptr);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glBindTexture(GL_TEXTURE_2D, 0);
+
+        t.texId = texId;
+    }
     void bind(const RscTexture* textures, const u32 count) {
         for (u32 i = 0; i < count; i++) {
-            glActiveTexture(toGLActiveTexture[i]);
+            glActiveTexture(GL_TEXTURE0 + i);
             glBindTexture(GL_TEXTURE_2D, textures[i].texId);
         }
+    }
+    template <typename _vertexLayout, typename _cbufferLayout>
+    void bind(RscShaderSet<_vertexLayout, _cbufferLayout>& ss, const char** params, const u32 count) {
+        glUseProgram(ss.shaderObject);
+        for (u32 i = 0; i < count; i++) {
+            const s32 samplerLoc = glGetUniformLocation(ss.shaderObject, params[i]);
+            glUniform1i(samplerLoc, i);
+        }
+    }
+    void bind(RscRenderTarget& b, const RscTexture* textures, const u32 count) {
+        GLuint attachments[16]; // hack
+        glBindFramebuffer(GL_FRAMEBUFFER, b.buffer);
+        for (u32 i = 0; i < count; i++) {
+            // todo: assert on incompatible size?
+            u32 colorAttachment = GL_COLOR_ATTACHMENT0 + i;
+            glFramebufferTexture2D(GL_FRAMEBUFFER, colorAttachment, GL_TEXTURE_2D, textures[i].texId, 0);
+            attachments[i] = colorAttachment;
+        }
+        glDrawBuffers(count, attachments);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
     }
     
     template <typename _vertexLayout, typename _cbufferLayout>
@@ -287,6 +382,7 @@ namespace Driver {
         glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(_layout), &data);
     }
     void bind(const RscCBuffer* cb, const u32 count, const CBufferBindParams& params) {}
+
 }
 }
 
@@ -300,13 +396,24 @@ namespace Driver {
         glEnableVertexAttribArray(0);
     }
     template <>
+    void bindLayout<Layout_TexturedVec2>() {
+        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(Layout_TexturedVec2), &(((Layout_TexturedVec2*)0)->pos));
+        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(Layout_TexturedVec2), &(((Layout_TexturedVec2*)0)->uv));
+        glEnableVertexAttribArray(0);
+        glEnableVertexAttribArray(1);
+    }
+    template <>
     void bindLayout<Layout_TexturedVec3>() {
         glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Layout_TexturedVec3), &(((Layout_TexturedVec3*)0)->pos));
         glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(Layout_TexturedVec3), &(((Layout_TexturedVec3*)0)->uv));
         glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(Layout_TexturedVec3), &(((Layout_TexturedVec3*)0)->normal));
+        glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, sizeof(Layout_TexturedVec3), &(((Layout_TexturedVec3*)0)->tangent));
+        glVertexAttribPointer(4, 3, GL_FLOAT, GL_FALSE, sizeof(Layout_TexturedVec3), &(((Layout_TexturedVec3*)0)->bitangent));
         glEnableVertexAttribArray(0);
         glEnableVertexAttribArray(1);
         glEnableVertexAttribArray(2);
+        glEnableVertexAttribArray(3);
+        glEnableVertexAttribArray(4);
     }
     template <>
     void bindLayout<Layout_Vec2Color4B>() {
@@ -322,6 +429,8 @@ namespace Driver {
         glEnableVertexAttribArray(0);
         glEnableVertexAttribArray(1);
     }
+    template <typename _vertexLayout>
+    void bindCBuffers(RscShaderSet<_vertexLayout, Layout_CNone::Buffers>& ss, const RscCBuffer* cbuffers) {}
     template <typename _vertexLayout>
     void bindCBuffers(RscShaderSet<_vertexLayout, Layout_CBuffer_3DScene::Buffers>& ss, const RscCBuffer* cbuffers) {
         GLuint perScene = glGetUniformBlockIndex(ss.shaderObject, "PerScene");
