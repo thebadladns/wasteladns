@@ -95,13 +95,11 @@ namespace GLFW {
             glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
 #endif
 
-            platform.screen.width = config.window_width;
-            platform.screen.height = config.window_height;
             platform.screen.desiredRatio = platform.screen.width / (f32)platform.screen.height;
             platform.screen.fullscreen = config.fullscreen;
             windowHandle = glfwCreateWindow(
-                  platform.screen.width
-                , platform.screen.height
+                  config.window_width
+                , config.window_height
                 , config.title
                 , nullptr /*monitor*/
                 , nullptr /*share*/
@@ -109,6 +107,10 @@ namespace GLFW {
             if (!windowHandle) {
                 return 0;
             }
+            s32 effectiveWidth, effectiveHeight;
+            glfwGetWindowSize(windowHandle, &effectiveWidth, &effectiveHeight);
+            platform.screen.width = effectiveWidth;
+            platform.screen.height = effectiveHeight;
         }
 
         glfwMakeContextCurrent(windowHandle);
@@ -116,10 +118,10 @@ namespace GLFW {
         glfwSwapInterval(1);
 
         // Todo: only on windows
-//        LogData logLevel = {};
-//        logLevel.minLevel = LogLevel::Low;
-//        glEnable( GL_DEBUG_OUTPUT );
-//        glDebugMessageCallback( debugMessageCallback, &logLevel );
+        //LogData logLevel = {};
+        //logLevel.minLevel = LogLevel::Debug;
+        //glEnable( GL_DEBUG_OUTPUT );
+        //glDebugMessageCallback( debugMessageCallback, &logLevel );
 
         // Input setup
         glfwSetInputMode(windowHandle, GLFW_STICKY_KEYS, 1);

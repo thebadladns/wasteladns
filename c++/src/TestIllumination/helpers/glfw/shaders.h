@@ -38,6 +38,7 @@ layout (std140) uniform PerScene {
 };
 layout (std140) uniform PerGroup {
     mat4 modelMatrices[64];
+    float depthTS;
 };
 out FragOut {
     vec3 posWS;
@@ -50,11 +51,9 @@ out FragOut {
 
 void main() {
     mat4 modelMatrix = modelMatrices[gl_InstanceID];
-    //mat3 normalModelMatrix = transpose(inverse(mat3(modelMatrix)));
     mat4 vp = projectionMatrix * viewMatrix;
     vec4 posWS = modelMatrix * vec4(posMS, 1.f);
     vec3 normalWS = normalize(modelMatrix * vec4(normalMS, 0.f)).xyz;
-    //vec3 normalWS = normalModelMatrix * normalMS;
     vec4 tangentWS = normalize(modelMatrix * vec4(tangentMS, 0.f));
     vec4 bitangentWS = normalize(modelMatrix * vec4(bitangentMS, 0.f));
     fragOut.tbnMatrix = mat3(tangentWS.xyz, bitangentWS.xyz, normalWS.xyz);
@@ -74,6 +73,10 @@ const char * geometryPassPShaderStr = R"(
 layout(location = 0) out vec3 gPos;
 layout(location = 1) out vec3 gNormal;
 layout(location = 2) out vec3 gDiffuse;
+layout (std140) uniform PerGroup {
+    mat4 modelMatrices[64];
+    float depthTS;
+};
 in FragOut {
     vec3 posWS;
     vec3 normalWS;
@@ -88,9 +91,9 @@ uniform sampler2D texNormal;
 uniform sampler2D texDepth;
 
 
-vec2 binaryPOM(vec2 uv, vec2 uvextents, float mindepth, float maxdepth, vec3 viewDir) {
+vec2 binaryPOM(vec2 uv, vec2 uvextents, float mindepth, float maxdepth) {
     vec2 curruv = uv;
-    for (int sampleCount = 0; sampleCount < 4; sampleCount++) {
+    for (int sampleCount = 0; sampleCount < 8; sampleCount++) {
         float depth = (mindepth + maxdepth) * 0.5f;
         curruv = uv - depth * uvextents;
         float currsampleddepth = texture(texDepth, curruv).r;
@@ -106,10 +109,9 @@ vec2 binaryPOM(vec2 uv, vec2 uvextents, float mindepth, float maxdepth, vec3 vie
 }
 
 vec2 POM(vec2 uv, vec3 viewDir) {
-    float heightTS = 0.1f;
     float layers = mix(32.f, 8.f, abs(dot(vec3(0.f, 0.f, 1.f), viewDir)));
     float depthstep = 1.f / layers;
-    vec2 uvextents = viewDir.xy * heightTS / viewDir.z;
+    vec2 uvextents = viewDir.xy * depthTS / viewDir.z;
     vec2 uvstep = uvextents * depthstep;
 
     vec2 curruv = uv;
@@ -129,13 +131,13 @@ vec2 POM(vec2 uv, vec3 viewDir) {
         nextdepth += depthstep;
 
     } while (currdepth < currsampleddepth);
-    
-    float prevdepthdelta = prevsampleddepth - prevdepth;
-    float currdepthdelta = currsampleddepth - currdepth;
-    float t = prevdepthdelta / (currdepthdelta - prevdepthdelta);
-    vec2 outuv = prevuv * t + curruv * (1 - t);
-    
-    return outuv;
+
+    return binaryPOM(uv, uvextents, prevdepth, currdepth);
+//    float prevdepthdelta = prevsampleddepth - prevdepth;
+//    float currdepthdelta = currsampleddepth - currdepth;
+//    float t = prevdepthdelta / (currdepthdelta - prevdepthdelta);
+//    vec2 outuv = prevuv * t + curruv * (1 - t);
+//    return outuv;
 }
 
 void main() {

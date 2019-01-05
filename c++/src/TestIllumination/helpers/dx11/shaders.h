@@ -66,6 +66,7 @@ cbuffer PerScene : register(b0) {
 }
 cbuffer PerGroup : register(b1) {
     matrix modelMatrices[64];
+    float depthTS;
 }
 struct AppData {
     float3 posMS : POSITION;
@@ -87,10 +88,8 @@ struct VertexOutput {
 VertexOutput VS(AppData IN) {
     VertexOutput OUT;
     matrix modelMatrix = modelMatrices[IN.instanceID];
-    //float3x3 normalModelMatrix = transpose((float3x3)inverse(modelMatrix));
     matrix mv = mul(projectionMatrix, viewMatrix);
     OUT.posWS = mul(modelMatrix, float4(IN.posMS, 1.f)).xyz;
-    //OUT.normalWS = mul(normalModelMatrix, IN.normalMS);
     OUT.normalWS = normalize(mul(modelMatrix, float4(IN.normalMS, 0.f))).xyz;
     float3 tangentWS = normalize(mul(modelMatrix, float4(IN.tangentMS, 0.f))).xyz;
     float3 bitangentWS = normalize(mul(modelMatrix, float4(IN.bitangentMS, 0.f))).xyz;
@@ -119,6 +118,11 @@ SamplerState texDiffuseSampler : register(s0);
 SamplerState texNormalSampler : register(s1);
 SamplerState texDepthSampler : register(s2);
 
+cbuffer PerGroup : register(b1) {
+    matrix modelMatrices[64];
+    float depthTS;
+}
+
 struct PixelIn {
     float3 posWS : POSITION;
     float3 normalWS : NORMAL;
@@ -134,9 +138,9 @@ struct PixelOut {
     float4 diffuse : SV_Target2;
 };
 
-float2 binaryPOM(float2 uv, float2 uvextents, float mindepth, float maxdepth, float3 viewDir) {
+float2 binaryPOM(float2 uv, float2 uvextents, float mindepth, float maxdepth) {
     float2 curruv = uv;
-    for (int sampleCount = 0; sampleCount < 4; sampleCount++) {
+    for (int sampleCount = 0; sampleCount < 16; sampleCount++) {
         float depth = (mindepth + maxdepth) * 0.5f;
         curruv = uv - depth * uvextents;
         // Compiler will unroll, no need to provide gradients
@@ -153,10 +157,9 @@ float2 binaryPOM(float2 uv, float2 uvextents, float mindepth, float maxdepth, fl
 }
 
 float2 POM(float2 uv, float3 viewDir) {
-    float heightTS = 0.1f;
     float layers = lerp(32.f, 8.f, abs(dot(float3(0.f, 0.f, 1.f), viewDir)));
     float depthstep = 1.f / layers;
-    float2 uvextents = viewDir.xy * heightTS / viewDir.z;
+    float2 uvextents = viewDir.xy * depthTS / viewDir.z;
     float2 uvstep = uvextents * depthstep;
 
     float2 curruv = uv;
@@ -177,13 +180,13 @@ float2 POM(float2 uv, float3 viewDir) {
         nextuv -= uvstep;
         nextdepth += depthstep;
     } while (currdepth < currsampleddepth);
-    
-    float prevdepthdelta = prevsampleddepth - prevdepth;
-    float currdepthdelta = currsampleddepth - currdepth;
-    float t = prevdepthdelta / (currdepthdelta - prevdepthdelta);
-    float2 outuv = prevuv * t + curruv * (1 - t);
-    
-    return outuv;
+
+    return binaryPOM(uv, uvextents, prevdepth, currdepth);
+//    float prevdepthdelta = prevsampleddepth - prevdepth;
+//    float currdepthdelta = currsampleddepth - currdepth;
+//    float t = prevdepthdelta / (currdepthdelta - prevdepthdelta);
+//    float2 outuv = prevuv * t + curruv * (1 - t);
+//    return outuv;
 }
 
 PixelOut PS(PixelIn IN) {

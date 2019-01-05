@@ -191,6 +191,7 @@ namespace Game
         Renderer::Driver::RscTexture albedo;
         Renderer::Driver::RscTexture normal;
         Renderer::Driver::RscTexture depth;
+        float depthTS;
     };
     struct RenderDescription {
         Renderer::Driver::RscIndexedBuffer<Renderer::Layout_TexturedVec3> buffer;
@@ -417,9 +418,10 @@ namespace Game
                 r.desc.buffer = rscBuffer;
                 r.desc.rasterizerState = rscene.rasterizerStateFill;
                 Material& material = r.desc.material;
-                Renderer::Driver::create(material.albedo, { "assets/pbr/material02-albedo.png" });
-                Renderer::Driver::create(material.normal, { "assets/pbr/material02-normal.png" });
-                Renderer::Driver::create(material.depth, { "assets/pbr/material02-depth.png" });
+                Renderer::Driver::create(material.albedo, { "assets/pbr/material04-albedo.png" });
+                Renderer::Driver::create(material.normal, { "assets/pbr/material04-normal.png" });
+                Renderer::Driver::create(material.depth, { "assets/pbr/material04-depth.png" });
+                material.depthTS = 0.1f;
                 for (Vec2& pos : pillarPos) {
                     RenderInstance& i = r.instanceBuffer[r.instanceCount++];
                     Math::identity4x4(i.transform);
@@ -452,6 +454,7 @@ namespace Game
                 Renderer::Driver::create(material.albedo, { "assets/pbr/material01-albedo.png" });
                 Renderer::Driver::create(material.normal, { "assets/pbr/material01-normal.png" });
                 Renderer::Driver::create(material.depth, { "assets/pbr/material01-depth.png" });
+                material.depthTS = 0.1f;
 
                 playerRenderInst.inst = r.instanceCount;
                 RenderInstance& i = r.instanceBuffer[r.instanceCount++];
@@ -587,11 +590,12 @@ namespace Game
                     for (u32 i = 0; i < r.instanceCount; i++) {
                         buffer.worldMatrix[i] = r.instanceBuffer[i].transform.matrix;
                     }
+                    buffer.depthTS = d.material.depthTS;
                     Renderer::Driver::update(rscene.cbuffers[Renderer::Layout_CBuffer_3DScene::Buffers::GroupData], buffer);
 
                     Renderer::Driver::bind(d.rasterizerState);
                     Renderer::Driver::bind(d.buffer);
-                    Renderer::Driver::bind(rscene.cbuffers, Renderer::Layout_CBuffer_3DScene::Buffers::Count, { true, false });
+                    Renderer::Driver::bind(rscene.cbuffers, Renderer::Layout_CBuffer_3DScene::Buffers::Count, { true, true });
                     drawInstances(d.buffer, r.instanceCount);
                 }
 

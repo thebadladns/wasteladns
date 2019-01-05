@@ -58,6 +58,8 @@ namespace Renderer {
         };
         struct GroupData {
             Mat4 worldMatrix[64];
+            float depthTS;
+            Vec3 padding;
         };
         struct Buffers { enum Enum { SceneData, GroupData, Count }; };
     };
