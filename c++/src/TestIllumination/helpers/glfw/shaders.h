@@ -93,7 +93,7 @@ uniform sampler2D texDepth;
 
 vec2 binaryPOM(vec2 uv, vec2 uvextents, float mindepth, float maxdepth) {
     vec2 curruv = uv;
-    for (int sampleCount = 0; sampleCount < 8; sampleCount++) {
+    for (int sampleCount = 0; sampleCount < 16; sampleCount++) {
         float depth = (mindepth + maxdepth) * 0.5f;
         curruv = uv - depth * uvextents;
         float currsampleddepth = texture(texDepth, curruv).r;
@@ -149,9 +149,13 @@ void main() {
     if(uv.x > 1.f || uv.y > 1.f || uv.x < 0.f || uv.y < 0.f) {
         discard;
     }
+    vec4 albedo = texture(texDiffuse, uv).rgba;
+    if (albedo.a < 0.9) {
+        discard;
+    }
 
+    gDiffuse = albedo.xyz;
     gPos = fragIn.posWS;
-    gDiffuse = texture(texDiffuse, uv).rgb;
     vec3 normal = texture(texNormal, uv).rgb;
     normal = normal * 2.f - 1.f;
     normal = normalize(fragIn.tbnMatrix * normal);

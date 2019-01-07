@@ -198,10 +198,14 @@ PixelOut PS(PixelIn IN) {
     if (uv.x > 1.f || uv.y > 1.f || uv.x < 0.f || uv.y < 0.f) {
         clip(-1);
     }
+    float4 albedo = texDiffuse.Sample(texDiffuseSampler, uv).rgba;
+    if (albedo.a < 0.9) {
+        discard;
+    }
 
     PixelOut OUT;
     OUT.posWS = float4(IN.posWS, 1.f);
-    OUT.diffuse = float4(texDiffuse.Sample(texDiffuseSampler, uv).rgb, 1.f);
+    OUT.diffuse = albedo;
     float3 normalWS = texNormal.Sample(texNormalSampler, uv).rgb;
     normalWS = normalWS * 2.f - 1.f;
     normalWS = normalize(mul(IN.tbnMatrix, normalWS));
