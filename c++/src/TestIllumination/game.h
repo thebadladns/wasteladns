@@ -208,12 +208,13 @@ namespace Game
         RenderGroup groupBuffer[16];
         u32 groupCount;
         Renderer::Driver::RscCBuffer cbuffers[Renderer::Layout_CBuffer_3DScene::Buffers::Count];
+        Renderer::Driver::RscCBuffer lightpass_cbuffers[Renderer::Layout_CBuffer_LightPass::Buffers::Count];
         Renderer::Driver::RscRasterizerState rasterizerStateFill, rasterizerStateLine;
         Renderer::Driver::RscBlendState blendStateOn;
         Renderer::Driver::RscBlendState blendStateOff;
         Renderer::Driver::RscMainRenderTarget mainRenderTarget;
         Renderer::Driver::RscShaderSet<Renderer::Layout_TexturedVec3, Renderer::Layout_CBuffer_3DScene::Buffers> geometryPassShader;
-        Renderer::Driver::RscShaderSet<Renderer::Layout_TexturedVec2, Renderer::Layout_CNone::Buffers> quadShader;
+        Renderer::Driver::RscShaderSet<Renderer::Layout_TexturedVec2, Renderer::Layout_CBuffer_LightPass::Buffers> quadShader;
         Renderer::Driver::RscTexture gPos;
         Renderer::Driver::RscTexture gNormal;
         Renderer::Driver::RscTexture gDiffuse;
@@ -310,6 +311,7 @@ namespace Game
 
             Renderer::Driver::create<Renderer::Layout_CBuffer_3DScene::SceneData>(rscene.cbuffers[Renderer::Layout_CBuffer_3DScene::Buffers::SceneData], {});
             Renderer::Driver::create<Renderer::Layout_CBuffer_3DScene::GroupData>(rscene.cbuffers[Renderer::Layout_CBuffer_3DScene::Buffers::GroupData], {});
+            Renderer::Driver::create<Renderer::Layout_CBuffer_LightPass::SceneData>(rscene.lightpass_cbuffers[Renderer::Layout_CBuffer_3DScene::Buffers::SceneData], {});
 
             {
                 Renderer::Driver::RscVertexShader<Renderer::Layout_TexturedVec3, Renderer::Layout_CBuffer_3DScene::Buffers> rscVS;
@@ -337,15 +339,15 @@ namespace Game
                 }
             }
             {
-                Renderer::Driver::RscVertexShader<Renderer::Layout_TexturedVec2, Renderer::Layout_CNone::Buffers> rscVS;
+                Renderer::Driver::RscVertexShader<Renderer::Layout_TexturedVec2, Renderer::Layout_CBuffer_LightPass::Buffers> rscVS;
                 Renderer::Driver::RscPixelShader rscPS;
-                Renderer::Driver::RscShaderSet<Renderer::Layout_TexturedVec2, Renderer::Layout_CNone::Buffers> shaderSet;
+                Renderer::Driver::RscShaderSet<Renderer::Layout_TexturedVec2, Renderer::Layout_CBuffer_LightPass::Buffers> shaderSet;
                 Renderer::Driver::ShaderResult result;
                 result = Renderer::Driver::create(rscVS, { quadVShaderStr, (u32)strlen(quadVShaderStr) });
                 if (result.compiled) {
                     result = Renderer::Driver::create(rscPS, { quadPShaderStr, (u32)strlen(quadPShaderStr) });
                     if (result.compiled) {
-                        result = Renderer::Driver::create(shaderSet, { rscVS, rscPS, nullptr });
+                        result = Renderer::Driver::create(shaderSet, { rscVS, rscPS, rscene.lightpass_cbuffers });
                         if (result.compiled) {
                             rscene.quadShader = shaderSet;
                         }
@@ -454,7 +456,7 @@ namespace Game
                 Renderer::Driver::create(material.albedo, { "assets/pbr/material01-albedo.png" });
                 Renderer::Driver::create(material.normal, { "assets/pbr/material01-normal.png" });
                 Renderer::Driver::create(material.depth, { "assets/pbr/material01-depth.png" });
-                material.depthTS = 0.1f;
+                material.depthTS = 0.5f;
 
                 playerRenderInst.inst = r.instanceCount;
                 RenderInstance& i = r.instanceBuffer[r.instanceCount++];
@@ -561,12 +563,14 @@ namespace Game
             RenderScene& rscene = mgr.renderScene;
             using namespace Renderer;
 
-            Camera* activeCam = game.cameraMgr.activeCam;
-            Renderer::Layout_CBuffer_3DScene::SceneData cbufferPerScene;
-            cbufferPerScene.projectionMatrix = mgr.perspProjection.matrix;
-            cbufferPerScene.viewMatrix = activeCam->viewMatrix;
-            cbufferPerScene.viewPos = activeCam->transform.pos;
-            Renderer::Driver::update(rscene.cbuffers[Renderer::Layout_CBuffer_3DScene::Buffers::SceneData], cbufferPerScene);
+            {
+                Camera* activeCam = game.cameraMgr.activeCam;
+                Renderer::Layout_CBuffer_3DScene::SceneData cbufferPerScene;
+                cbufferPerScene.projectionMatrix = mgr.perspProjection.matrix;
+                cbufferPerScene.viewMatrix = activeCam->viewMatrix;
+                cbufferPerScene.viewPos = activeCam->transform.pos;
+                Renderer::Driver::update(rscene.cbuffers[Renderer::Layout_CBuffer_3DScene::Buffers::SceneData], cbufferPerScene);
+            }
 
             // G buffer
             {
@@ -603,6 +607,14 @@ namespace Game
                 Renderer::Driver::bind(nullTex, sizeof(nullTex) / sizeof(nullTex[0]));
 
             }
+
+            {
+                Camera* activeCam = game.cameraMgr.activeCam;
+                Renderer::Layout_CBuffer_LightPass::SceneData cbufferPerScene;
+                cbufferPerScene.lightPosWS.xyz = Vec3(0.f, 0.f, 100.f);
+                cbufferPerScene.viewPosWS.xyz = activeCam->transform.pos;
+                Renderer::Driver::update(rscene.lightpass_cbuffers[Renderer::Layout_CBuffer_LightPass::Buffers::SceneData], cbufferPerScene);
+            }
             // buffer quad
             {
                 Renderer::Driver::bind(rscene.blendStateOn);
@@ -611,6 +623,7 @@ namespace Game
                 Renderer::Driver::clear(rscene.mainRenderTarget, Col(0.f, 0.f, 0.f, 1.f));
                 
                 Renderer::Driver::bind(rscene.quadShader);
+                Renderer::Driver::bind(rscene.lightpass_cbuffers, Renderer::Layout_CBuffer_3DScene::Buffers::Count, { false, true });
 
                 Renderer::Driver::RscTexture textures[] = {
                       rscene.gPos, rscene.gNormal, rscene.gDiffuse

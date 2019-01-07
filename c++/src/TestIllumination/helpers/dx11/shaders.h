@@ -233,6 +233,12 @@ VertexOutput VS(AppData IN) {
 )";
 
 const char * quadPShaderStr = R"(
+
+cbuffer PerScene : register(b0) {
+    float4 viewPosWS;
+    float4 lightPosWS;
+}
+
 Texture2D albedoTex;
 SamplerState samplerType;
 
@@ -250,19 +256,26 @@ struct PixelIn {
 };
 float4 PS(PixelIn IN) : SV_TARGET {
 
-    float3 lightPos = float3(0.f, 0.f, 100.f);
-    
+    float3 lightWS = lightPosWS.xyz;
     float3 albedo = gDiffuse.Sample(gDiffuseSampler, IN.uv).rgb;
     float3 posWS = gPos.Sample(gPosSampler, IN.uv).xyz;
-    float3 lightDir = normalize(lightPos - posWS);
+    float3 lightDir = normalize(lightWS - posWS);
     float3 normalWS = gNormal.Sample(gNormalSampler, IN.uv).xyz;
     
-    float diff = max(dot(lightDir, normalWS), 0.f);
+    // Aggressive gooch-like shading
+    float3 viewWS = viewPosWS.xyz;
+    float3 viewDirWS = normalize(viewWS - posWS);
+    float diff = dot(lightDir, normalWS);
+    float t = ( diff + 1.f ) * 0.5f;
+    float3 r = 2.f * diff * normalWS - lightDir;
+    float s = clamp(100.f * dot(r, viewDirWS) - 97.f, 0.f, 0.8f);
+    float3 ccool = float3(0.f, 0.f, 0.3f) * albedo;
+    float3 cwarm = clamp(float3(1.2f, 1.2f, 1.f) * albedo, 0.f, 1.f);
     float3 diffuse = 0.7f * diff * albedo;
     float3 ambient = 0.3f * albedo;
-    
-    float4 FragColor = float4(diffuse + ambient, 1.f);
-    return FragColor;
+
+    float4 fragcolor = float4(s * float3(1.f,1.f,1.f) + (1 - s)*(t*cwarm + (1 - t)*ccool), 1.f);
+    return fragcolor;
 }
 )";
 

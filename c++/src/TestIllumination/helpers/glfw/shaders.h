@@ -179,23 +179,35 @@ const char * quadPShaderStr = R"(
 #version 330 core
 in vec2 p_uv;
 layout(location = 0) out vec4 FragColor;
+layout (std140) uniform PerScene {
+    vec4 viewPosWS;
+    vec4 lightPosWS;
+};
 
 uniform sampler2D gPos;
 uniform sampler2D gNormal;
 uniform sampler2D gDiffuse;
 
 void main() {
-    vec3 lightPos = vec3(0.f, 0.f, 100.f);
+    vec3 lightWS = lightPosWS.xyz;
     vec3 albedo = texture(gDiffuse, p_uv).rgb;
     vec3 posWS = texture(gPos, p_uv).rgb;
-    vec3 lightDir = normalize(lightPos - posWS);
+    vec3 lightDir = normalize(lightWS - posWS);
     vec3 normalWS = texture(gNormal, p_uv).rgb;
-
-    float diff = max(dot(lightDir, normalWS), 0.f);
+    
+    // Aggressive gooch-like shading
+    vec3 viewWS = viewPosWS.xyz;
+    vec3 viewDirWS = normalize(viewWS - posWS);
+    float diff = dot(lightDir, normalWS);
+    float t = ( diff + 1.f ) * 0.5f;
+    vec3 r = 2.f * diff * normalWS - lightDir;
+    float s = clamp(100.f * dot(r, viewDirWS) - 97.f, 0.f, 0.8f);
+    vec3 ccool = vec3(0.f, 0.f, 0.3f) * albedo;
+    vec3 cwarm = clamp(vec3(1.2f, 1.2f, 1.f) * albedo, 0.f, 1.f);
     vec3 diffuse = 0.7f * diff * albedo;
     vec3 ambient = 0.3f * albedo;
 
-    FragColor = vec4(diffuse + ambient, 1.f);
+    FragColor = vec4(s * vec3(1.f,1.f,1.f) + (1 - s)*(t*cwarm + (1 - t)*ccool), 1.f);
 }
 )";
 

@@ -63,6 +63,13 @@ namespace Renderer {
         };
         struct Buffers { enum Enum { SceneData, GroupData, Count }; };
     };
+    namespace Layout_CBuffer_LightPass {
+        struct SceneData {
+            Vec4 viewPosWS;
+            Vec4 lightPosWS;
+        };
+        struct Buffers { enum Enum { SceneData, Count }; };
+    };
     namespace Layout_CBuffer_DebugScene {
         typedef Mat4 GroupData;
         struct Buffers { enum Enum { GroupData, Count }; } ;
