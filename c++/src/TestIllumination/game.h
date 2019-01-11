@@ -623,7 +623,7 @@ namespace Game
                 Renderer::Driver::clear(rscene.mainRenderTarget, Col(0.f, 0.f, 0.f, 1.f));
                 
                 Renderer::Driver::bind(rscene.quadShader);
-                Renderer::Driver::bind(rscene.lightpass_cbuffers, Renderer::Layout_CBuffer_3DScene::Buffers::Count, { false, true });
+                Renderer::Driver::bind(rscene.lightpass_cbuffers, Renderer::Layout_CBuffer_LightPass::Buffers::Count, { false, true });
 
                 Renderer::Driver::RscTexture textures[] = {
                       rscene.gPos, rscene.gNormal, rscene.gDiffuse
