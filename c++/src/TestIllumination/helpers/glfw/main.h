@@ -108,7 +108,7 @@ namespace GLFW {
                 return 0;
             }
             s32 effectiveWidth, effectiveHeight;
-            glfwGetWindowSize(windowHandle, &effectiveWidth, &effectiveHeight);
+            glfwGetFramebufferSize(windowHandle, &effectiveWidth, &effectiveHeight);
             platform.screen.width = effectiveWidth;
             platform.screen.height = effectiveHeight;
         }
