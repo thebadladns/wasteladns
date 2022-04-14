@@ -29,6 +29,6 @@
 #include "TestPlatformAPI/main.cpp"
 #elif COMPILE_TARGET == TEST_ILLUMINATION
 #include "TestIllumination/main.cpp"
-#elif COMPILE_TARGET == TEST_MESH
+#elif COMPILE_TARGET == TEST_SPATIAL
 #include "TestMesh/main.cpp"
 #endif
