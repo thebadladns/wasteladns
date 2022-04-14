@@ -7,8 +7,9 @@
 #define TEST_CAMERA 5
 #define TEST_PLATFORMAPI 6
 #define TEST_ILLUMINATION 7
+#define TEST_SPATIAL 8
 
-#define COMPILE_TARGET TEST_ILLUMINATION
+#define COMPILE_TARGET TEST_SPATIAL
 
 #if COMPILE_TARGET == TEST_WORKSPACE
 #include "workspace_main.cpp"
@@ -28,4 +29,6 @@
 #include "TestPlatformAPI/main.cpp"
 #elif COMPILE_TARGET == TEST_ILLUMINATION
 #include "TestIllumination/main.cpp"
+#elif COMPILE_TARGET == TEST_MESH
+#include "TestMesh/main.cpp"
 #endif
