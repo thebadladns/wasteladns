@@ -3,7 +3,7 @@
 
 #include <vector>
 #include <queue>
-#include <functional>
+#include <float.h>
 
 namespace BVH {
 
