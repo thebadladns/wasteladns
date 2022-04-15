@@ -30,5 +30,5 @@
 #elif COMPILE_TARGET == TEST_ILLUMINATION
 #include "TestIllumination/main.cpp"
 #elif COMPILE_TARGET == TEST_SPATIAL
-#include "TestMesh/main.cpp"
+#include "TestSpatial/main.cpp"
 #endif
