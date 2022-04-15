@@ -14,12 +14,12 @@ Vector4<_T> eulersToQuaterion(const Vector3<_T>& eulers)
     _T roll = eulers.x;
     _T pitch = eulers.y;
     _T yaw = eulers.z;
-    double cy = Math::cos(yaw * 0.5);
-    double sy = Math::sin(yaw * 0.5);
-    double cp = Math::cos(pitch * 0.5);
-    double sp = Math::sin(pitch * 0.5);
-    double cr = Math::cos(roll * 0.5);
-    double sr = Math::sin(roll * 0.5);
+    _T cy = Math::cos(yaw * 0.5f);
+    _T sy = Math::sin(yaw * 0.5f);
+    _T cp = Math::cos(pitch * 0.5f);
+    _T sp = Math::sin(pitch * 0.5f);
+    _T cr = Math::cos(roll * 0.5f);
+    _T sr = Math::sin(roll * 0.5f);
 
     Vector4<_T> q;
     q.w = cr * cp * cy + sr * sp * sy;
@@ -32,18 +32,18 @@ Vector4<_T> eulersToQuaterion(const Vector3<_T>& eulers)
 
 template<typename _T>
 Vector3<_T> quaternionToEulers(const Vector4<_T>& q) {
-    double sinr_cosp = 2 * (q.w * q.x + q.y * q.z);
-    double cosr_cosp = 1 - 2 * (q.x * q.x + q.y * q.y);
+    _T sinr_cosp = 2 * (q.w * q.x + q.y * q.z);
+    _T cosr_cosp = 1 - 2 * (q.x * q.x + q.y * q.y);
     _T roll = Math::atan2(sinr_cosp, cosr_cosp);
 
     _T pitch;
-    double sinp = 2 * (q.w * q.y - q.z * q.x);
+    _T sinp = 2 * (q.w * q.y - q.z * q.x);
     if (sinp > 1) pitch = Math::halfpi<_T>;
     else if (sinp < 1) pitch = -Math::halfpi<_T>;
     else pitch = Math::asin(sinp);
 
-    double siny_cosp = 2 * (q.w * q.z + q.x * q.y);
-    double cosy_cosp = 1 - 2 * (q.y * q.y + q.z * q.z);
+    _T siny_cosp = 2 * (q.w * q.z + q.x * q.y);
+    _T cosy_cosp = 1 - 2 * (q.y * q.y + q.z * q.z);
     _T yaw = Math::atan2(siny_cosp, cosy_cosp);
 
     Vector3<_T> eulers(roll, pitch, yaw);

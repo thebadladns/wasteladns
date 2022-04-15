@@ -3,7 +3,7 @@
 
 namespace Game
 {
-    const char* inputMeshPath = "assets/meshes/mesh_dense.obj";
+    const char* inputMeshPath = "assets/meshes/mesh_ona_quads.obj";
     const char* inputPoints = "assets/meshes/pts_1k.txt";
     const char* outputFilteredPoints = "assets/meshes/pts_1k_inside.txt";
     const char* outputFilteredProjectedPoints = "assets/meshes/pts_1k_projected.txt";
@@ -114,7 +114,6 @@ namespace Game
         MeshQuery meshQuery;
         DebugVis debugVis;
     };
-    
 	void start(Instance& game, Platform::GameConfig& config, const Platform::State& platform) {
 
 		game.time = {};
@@ -161,70 +160,83 @@ namespace Game
             // input mesh
             {
                 FILE* f;
-                f = fopen(inputMeshPath, "r");
-
-                char c;
-                do {
-                    c = fgetc(f);
-                    if (c == 'v')
-                    {
-                        f32 x, y, z;
-                        s32 r = fscanf(f, "%f%f%f", &x, &y, &z);
-                        if (r == 3) {
-                            vertices.push_back(x);
-                            vertices.push_back(y);
-                            vertices.push_back(z);
+                if (fopen_s(&f, inputMeshPath, "r") == 0) {
+                    char c;
+                    do {
+                        c = fgetc(f);
+                        if (c == 'v')
+                        {
+                            f32 x, y, z;
+                            s32 r = fscanf_s(f, "%f%f%f", &x, &y, &z);
+                            if (r == 3) {
+                                vertices.push_back(x);
+                                vertices.push_back(y);
+                                vertices.push_back(z);
+                            }
                         }
-                    }
-                    else if (c == 'f')
-                    {
-                        int a, b, c;
-                        s32 r = fscanf(f, "%d%d%d", &a, &b, &c);
-                        if (r == 3) {
-                            indices.push_back(a - 1);
-                            indices.push_back(b - 1);
-                            indices.push_back(c - 1);
+                        else if (c == 'f')
+                        {
+                            int a, b, c;
+                            s32 r = fscanf_s(f, "%d%d%d", &a, &b, &c);
+                            if (r == 3) {
+                                int d;
+                                r = fscanf_s(f, "%d", &d);
+                                if (r <= 0) {
+                                    // read three values: triangles
+                                    indices.push_back(a - 1);
+                                    indices.push_back(b - 1);
+                                    indices.push_back(c - 1);
+                                }
+                                else {
+                                    // read four values: divide quad in two triangles
+                                    indices.push_back(a - 1);
+                                    indices.push_back(b - 1);
+                                    indices.push_back(c - 1);
+                                    indices.push_back(a - 1);
+                                    indices.push_back(c - 1);
+                                    indices.push_back(d - 1);
+                                }
+                            }
                         }
-                    }
-                } while (c > 0);
-                fclose(f);
+                    } while (c > 0);
+                    fclose(f);
+                }
             }
 
             // query points
             {
                 FILE* f;
-                f = fopen(inputPoints, "r");
-
-                int r = 0;
-                do {
-                    Vec3 v;
-                    r = fscanf(f, "%f%f%f", &v.x, &v.y, &v.z);
-                    query.input.push_back(v);
-                } while (r > 0);
-                fclose(f);
+                if (fopen_s(&f, inputPoints, "r") == 0) {
+                    int r = 0;
+                    do {
+                        Vec3 v;
+                        r = fscanf_s(f, "%f%f%f", &v.x, &v.y, &v.z);
+                        query.input.push_back(v);
+                    } while (r > 0);
+                    fclose(f);
+                }
             }
 
             // perform query
             if (vertices.size() > 0 && indices.size() > 0)
             {
-                BVH::buildTree(query.bvh, &vertices[0], &indices[0], indices.size());
+                BVH::buildTree(query.bvh, &vertices[0], &indices[0], (u32)indices.size());
                 meshCentroid = {};
                 if (query.bvh.nodes.size() > 0) {
                     for (u32 i = 0; i < query.input.size(); i++) {
-                        {
-                            Vec3 closest;
-                            bool filterOutsidePoints = true;
-                            if (BVH::findClosestPoint(closest, query.bvh, query.input[i], filterOutsidePoints, &vertices[0], &indices[0], indices.size())) {
-                                query.outputInsideProjected.push_back(closest);
-                                query.outputInside.push_back(query.input[i]);
-                            }
-                        }
-                        {
-                            Vec3 closest;
-                            bool filterOutsidePoints = false;
-                            if (BVH::findClosestPoint(closest, query.bvh, query.input[i], filterOutsidePoints, &vertices[0], &indices[0], indices.size())) {
-                                query.inputProjected.push_back(closest);
-                            }
+
+                        // Find the projected point for every input point (this is not technically necessary, but we'll use it all for visualization anyway)
+                        Vec3 closest;
+                        BVH::findClosestPoint(closest, query.bvh, query.input[i], &vertices[0], &indices[0], (u32)indices.size());
+                        query.inputProjected.push_back(closest);
+                        // Determine whether the point is inside the mesh by casting a ray in any direction from it and counting the intersections
+                        // We'll use the direction opposite to the closest poinst, which is likely to not collide with as many bounding boxes
+                        Vec3 rayDirection = Math::subtract(query.input[i], closest);
+                        Math::normalizeSafe(rayDirection);
+                        std::vector<f32> closestTs;
+                        if (BVH::queryIsPointInside(closestTs, query.bvh, query.input[i], rayDirection, &vertices[0], &indices[0], (u32)indices.size())) {
+                            query.outputInsideProjected.push_back(closest);
+                            query.outputInside.push_back(query.input[i]);
                         }
                     }
                 }
@@ -251,19 +263,21 @@ namespace Game
             // output results
             {
                 FILE* f;
-                f = fopen(outputFilteredPoints, "w");
-                for (unsigned i = 0; i < query.outputInside.size(); i++) {
-                    fprintf(f, "%f %f %f\n", query.outputInside[i].x, query.outputInside[i].y, query.outputInside[i].z);
+                if (fopen_s(&f, outputFilteredPoints, "w") == 0) {
+                    for (unsigned i = 0; i < query.outputInside.size(); i++) {
+                        fprintf(f, "%f %f %f\n", query.outputInside[i].x, query.outputInside[i].y, query.outputInside[i].z);
+                    }
+                    fclose(f);
                 }
-                fclose(f);
             }
             {
                 FILE* f;
-                f = fopen(outputFilteredProjectedPoints, "w");
-                for (unsigned i = 0; i < query.outputInsideProjected.size(); i++) {
-                    fprintf(f, "%f %f %f\n", query.outputInsideProjected[i].x, query.outputInsideProjected[i].y, query.outputInsideProjected[i].z);
+                if (fopen_s(&f, outputFilteredProjectedPoints, "w") == 0) {
+                    for (unsigned i = 0; i < query.outputInsideProjected.size(); i++) {
+                        fprintf(f, "%f %f %f\n", query.outputInsideProjected[i].x, query.outputInsideProjected[i].y, query.outputInsideProjected[i].z);
+                    }
+                    fclose(f);
                 }
-                fclose(f);
             }
         }
 
@@ -337,10 +351,10 @@ namespace Game
 				Renderer::Driver::RscIndexedBuffer<Renderer::Layout_Vec3> rscBuffer;
 				Renderer::Driver::IndexedBufferParams bufferParams;
 				bufferParams.vertexData = &vertices[0];
-				bufferParams.vertexSize = vertices.size() * sizeof(vertices[0]);
+				bufferParams.vertexSize = (u32)vertices.size() * sizeof(vertices[0]);
 				bufferParams.indexData = &indices[0];
-				bufferParams.indexSize = indices.size() * sizeof(indices[0]);
-				bufferParams.indexCount = indices.size();
+				bufferParams.indexSize = (u32)indices.size() * sizeof(indices[0]);
+				bufferParams.indexCount = (u32)indices.size();
 				bufferParams.memoryMode = Renderer::BufferMemoryMode::GPU;
 				bufferParams.indexType = Renderer::BufferItemType::U16;
 				bufferParams.type = Renderer::BufferTopologyType::Triangles;
@@ -450,10 +464,11 @@ namespace Game
 			{
 				if (platform.input.mouse.down(::Input::Mouse::Keys::BUTTON_LEFT))
 				{
-					f32 rotationSpeed = 0.01;
+                    constexpr f32 rotationSpeed = 0.01f;
+                    constexpr f32 rotationEps = 0.01f;
                     f32 speedx = platform.input.mouse.dx * rotationSpeed;
                     f32 speedy = platform.input.mouse.dy * rotationSpeed;
-                    if (Math::abs(speedx) > 0.01 || Math::abs(speedy) > 0.01)
+                    if (Math::abs(speedx) > rotationEps || Math::abs(speedy) > rotationEps)
                     {
                         game.scene.rotationEulers.x = Math::wrap(game.scene.rotationEulers.x + speedx);
                         game.scene.rotationEulers.z = Math::wrap(game.scene.rotationEulers.z - speedy);
@@ -461,10 +476,11 @@ namespace Game
 				}
                 if (platform.input.mouse.down(::Input::Mouse::Keys::BUTTON_RIGHT))
                 {
-                    f32 rotationSpeed = 0.1;
-                    f32 speedx = platform.input.mouse.dx * rotationSpeed;
-                    f32 speedy = platform.input.mouse.dy * rotationSpeed;
-                    if (Math::abs(speedx) > 0.01 || Math::abs(speedy) > 0.01)
+                    constexpr f32 panSpeed = 0.1f;
+                    constexpr f32 panEps = 0.01f;
+                    f32 speedx = platform.input.mouse.dx * panSpeed;
+                    f32 speedy = platform.input.mouse.dy * panSpeed;
+                    if (Math::abs(speedx) > panEps || Math::abs(speedy) > panEps)
                     {
                         game.scene.offset.x -= speedx;
                         game.scene.offset.z += speedy;
@@ -576,16 +592,16 @@ namespace Game
                     Col inputCol(1.0f, 1.0f, 0.4f, 1.f);
                     Col projectedCol(0.4f, 1.f, 0.4f, 1.f);
                     if (game.meshQuery.input.size() > 0 && (game.debugVis.vismode == DebugVis::PointMode::AllInput || game.debugVis.vismode == DebugVis::PointMode::AllProjected)) {
-                        pointpass(&game.meshQuery.input[0], game.meshQuery.input.size(), inputCol);
+                        pointpass(&game.meshQuery.input[0], (u32)game.meshQuery.input.size(), inputCol);
                     }
                     if (game.meshQuery.inputProjected.size() > 0 && game.debugVis.vismode == DebugVis::PointMode::AllProjected) {
-                        pointpass(&game.meshQuery.inputProjected[0], game.meshQuery.inputProjected.size(), projectedCol);
+                        pointpass(&game.meshQuery.inputProjected[0], (u32)game.meshQuery.inputProjected.size(), projectedCol);
                     }
                     if (game.meshQuery.outputInside.size() > 0 && (game.debugVis.vismode == DebugVis::PointMode::Inside || game.debugVis.vismode == DebugVis::PointMode::InsideProjected)) {
-                        pointpass(&game.meshQuery.outputInside[0], game.meshQuery.outputInside.size(), inputCol);
+                        pointpass(&game.meshQuery.outputInside[0], (u32)game.meshQuery.outputInside.size(), inputCol);
                     }
                     if (game.meshQuery.outputInsideProjected.size() > 0 && game.debugVis.vismode == DebugVis::PointMode::InsideProjected) {
-                        pointpass(&game.meshQuery.outputInsideProjected[0], game.meshQuery.outputInsideProjected.size(), projectedCol);
+                        pointpass(&game.meshQuery.outputInsideProjected[0], (u32)game.meshQuery.outputInsideProjected.size(), projectedCol);
                     }
                 }
 
@@ -605,7 +621,7 @@ namespace Game
                         while (drawNodes.size() > 0) {
                             DrawNode n = drawNodes.front();
                             if (!game.meshQuery.bvh.nodes[n.nodeid].isLeaf) {
-                                if (n.depth >= game.debugVis.visBVHlod) {
+                                if (n.depth >= (u32)game.debugVis.visBVHlod) {
                                     Vec3 center = Math::scale(Math::add(game.meshQuery.bvh.nodes[n.nodeid].min, game.meshQuery.bvh.nodes[n.nodeid].max), 0.5f);
                                     Vec3 scale = Math::scale(Math::subtract(game.meshQuery.bvh.nodes[n.nodeid].max, game.meshQuery.bvh.nodes[n.nodeid].min), 0.5f);
                                     centers.push_back(center);
@@ -632,7 +648,7 @@ namespace Game
                         Renderer::Driver::bind(rscene.cbuffers, Renderer::Layout_CBuffer_3DScene::Buffers::Count, { true, false });
 
                         // round up, the last block will have less than or equal max elems
-                        u32 blockCount = (centers.size() + Layout_CBuffer_3DScene::max_instances - 1) / Layout_CBuffer_3DScene::max_instances;
+                        u32 blockCount = ((u32)centers.size() + Layout_CBuffer_3DScene::max_instances - 1) / Layout_CBuffer_3DScene::max_instances;
                         for (u32 blockId = 0; blockId < blockCount; blockId++) {
                             u32 begin = blockId * Layout_CBuffer_3DScene::max_instances;
                             u32 end = Math::min(begin + Layout_CBuffer_3DScene::max_instances, (u32)centers.size());
@@ -703,6 +719,7 @@ namespace Game
                     textParams.pos.y -= 15.f;
                     textParams.pos.x -= 30.f;
                     Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParams, "%.3lf fps", 1. / frameAvg);
+                    textParams.pos.y -= 15.f;
                 }
             }
 

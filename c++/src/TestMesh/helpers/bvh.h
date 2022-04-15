@@ -47,7 +47,7 @@ namespace BVH {
 			bvh.nodes[nodeId].triangleId = triangleIds[0];
 		}
 		else {
-			bvh.nodes[nodeId].lchildId = bvh.nodes.size();
+			bvh.nodes[nodeId].lchildId = (u32)bvh.nodes.size();
 
 			std::vector<u32> ltriangleIds;
 			std::vector<u32> rtriangleIds;
@@ -162,6 +162,108 @@ namespace BVH {
 		buildTreeRec(bvh, 0, context, triangleIds);
 	}
 
+	bool queryRayIntersectsWithTriangle(f32& t, const Vec3& p, const Vec3& dir, const Vec3& a, const Vec3& b, const Vec3& c) {
+		// using barycentric coordinates ( see https://www.scratchapixel.com/lessons/3d-basic-rendering/ray-tracing-rendering-a-triangle/moller-trumbore-ray-triangle-intersection )
+		Vec3 ba = Math::subtract(b, a);
+		Vec3 ca = Math::subtract(c, a);
+		Vec3 pa = Math::subtract(p, a);
+		Vec3 n = Math::cross(ba, ca);
+		Vec3 q = Math::cross(pa, dir);
+		f32 d = 1.f / Math::dot(dir, n);
+		f32 u = d * Math::dot(Math::negate(q), ca);
+		f32 v = d * Math::dot(q, ba);
+		t = d * Math::dot(Math::negate(n), pa);
+		if (u < 0.f || v < 0.f || (u + v) > 1.f) t = -1.f;
+		return t > 0.f;
+	}
+	bool queryRayIntersectsWithBox(f32& t, const Vec3& p, const Vec3& dir, const Vec3& min, const Vec3& max) {
+
+		// slab method: for each axis, find the minT and maxT of the ray across the two sides of the box
+		// by triangle proportionality, and because dir is normalized, minx-px/minTx = dirx/1, so minTx = minx-px/dirx;
+		Vec3 dirfrac;
+		dirfrac.x = 1.0f / dir.x;
+		dirfrac.y = 1.0f / dir.y;
+		dirfrac.z = 1.0f / dir.z;
+		float t1 = (min.x - p.x) * dirfrac.x;
+		float t2 = (max.x - p.x) * dirfrac.x;
+		float t3 = (min.y - p.y) * dirfrac.y;
+		float t4 = (max.y - p.y) * dirfrac.y;
+		float t5 = (min.z - p.z) * dirfrac.z;
+		float t6 = (max.z - p.z) * dirfrac.z;
+
+		// combine all intersections together
+		float minT = Math::max( Math::max( Math::min(t1, t2),  Math::min(t3, t4)),  Math::min(t5, t6));
+		float maxT = Math::min( Math::min( Math::max(t1, t2),  Math::max(t3, t4)),  Math::max(t5, t6));
+
+		// neg maxT: the ray starts past the box
+		if (maxT < 0.f) {
+			t = maxT;
+			return false;
+		}
+		// minT > maxT: the ray doesn't intersect
+		if (minT > maxT)
+		{
+			t = maxT;
+			return false;
+		}
+		// minT < 0: the ray starts inside the box, so maxT is the next hit
+		if (minT < 0) {
+			t = maxT;
+		} else {
+			t = minT;
+		}
+		return true;
+	}
+	struct InsideQueryNode {
+		u32 nodeId;
+	};
+	bool queryIsPointInside(std::vector<f32>& closestTs, const Tree& bvh, const Vec3& p, const Vec3& biasDir, f32* vertexPool, const u16* indexPool, const u32 indexCount) {
+		std::queue<InsideQueryNode> nodeQueue;
+		nodeQueue.push(InsideQueryNode{ 0 });
+		u32 intersections = 0;
+		Vec3 dir = biasDir;
+		while (nodeQueue.size() > 0) {
+			InsideQueryNode n = nodeQueue.front();
+			nodeQueue.pop();
+
+			// increase count if there's intersection with a leaf
+			if (bvh.nodes[n.nodeId].isLeaf) {
+				u32 triangleId = bvh.nodes[n.nodeId].triangleId;
+				Vec3 a(vertexPool[indexPool[triangleId * 3] * 3]
+					, vertexPool[indexPool[triangleId * 3] * 3 + 1]
+					, vertexPool[indexPool[triangleId * 3] * 3 + 2]);
+				Vec3 b(vertexPool[indexPool[triangleId * 3 + 1] * 3]
+					, vertexPool[indexPool[triangleId * 3 + 1] * 3 + 1]
+					, vertexPool[indexPool[triangleId * 3 + 1] * 3 + 2]);
+				Vec3 c(vertexPool[indexPool[triangleId * 3 + 2] * 3]
+					, vertexPool[indexPool[triangleId * 3 + 2] * 3 + 1]
+					, vertexPool[indexPool[triangleId * 3 + 2] * 3 + 2]);
+
+				f32 t;
+				if (queryRayIntersectsWithTriangle(t, p, dir, a, b, c)) {
+					intersections++;
+					closestTs.push_back(t);
+				}
+			}
+			else {
+				// check intersection with every child overlapping the ray
+				const Node& lchild = bvh.nodes[bvh.nodes[n.nodeId].lchildId];
+				const Node& rchild = bvh.nodes[bvh.nodes[n.nodeId].lchildId + 1];
+				f32 t;
+				if (queryRayIntersectsWithBox(t, p, dir, lchild.min, lchild.max)) {
+					nodeQueue.push(InsideQueryNode{ bvh.nodes[n.nodeId].lchildId });
+				}
+				if (queryRayIntersectsWithBox(t, p, dir, rchild.min, rchild.max)) {
+					nodeQueue.push(InsideQueryNode{ bvh.nodes[n.nodeId].lchildId + 1 });
+				}
+			}
+		}
+
+		// the point is inside if the number of intersections is odd
+		bool inside = intersections % 2;
+		return inside;
+	}
+
 	void closestPointOnTriangleSq(Vec3& closestPoint, f32& closestDistSq, const Vec3& p, const Vec3& a, const Vec3& b, const Vec3& c) {
 		Vec3 ba = Math::subtract(b, a);
 		Vec3 pa = Math::subtract(p, a);
@@ -205,27 +307,27 @@ namespace BVH {
 			}
 		}
 	}
-	f32 distanceToNodeSq(const Vec3& p, const Node& n) {
-		Vec3 clamped = Math::max(Math::min(n.max, p), n.min);
+	f32 distanceToBoxSq(const Vec3& p, const Vec3& min, const Vec3& max) {
+		Vec3 clamped = Math::max(Math::min(max, p), min);
 		return Math::magSq(Math::subtract(clamped, p));
 	}
-	struct QueryNode {
+	struct DistanceQueryNode {
 		u32 nodeId;
 		// distance to the node's bb (the minimum possible distance from the query point to a primitive inside the node)
 		f32 distanceSq;
 	};
-	bool findClosestPoint(Vec3& resultPoint, const Tree& bvh, const Vec3 p, const bool filterOutsidePoints, f32* vertexPool, const u16* indexPool, const u32 indexCount) {
+	void findClosestPoint(Vec3& resultPoint, const Tree& bvh, const Vec3& p, f32* vertexPool, const u16* indexPool, const u32 indexCount) {
 		// heap is sorted keeping the node with the shortest candidate distance on top
-		auto cmp = [](const QueryNode& a, const QueryNode& b) { return a.distanceSq > b.distanceSq; };
-		std::priority_queue<QueryNode, std::vector<QueryNode>, decltype(cmp)> nodeHeap(cmp);
-		nodeHeap.push(QueryNode{ 0, 0.f });
+		auto cmp = [](const DistanceQueryNode& a, const DistanceQueryNode& b) { return a.distanceSq > b.distanceSq; };
+		std::priority_queue<DistanceQueryNode, std::vector<DistanceQueryNode>, decltype(cmp)> nodeHeap(cmp);
+		nodeHeap.push(DistanceQueryNode{ 0, 0.f });
 		f32 closestDistanceSq = FLT_MAX;
 		Vec3 closestPoint = {};
 		u32 closestTriangleId = 0;
 
 		// traverse the heap until the node with the shortest minimum distance possible can't get any better than the current candidate distance
 		while (nodeHeap.size() > 0 && nodeHeap.top().distanceSq < closestDistanceSq) {
-			QueryNode n = nodeHeap.top();
+			DistanceQueryNode n = nodeHeap.top();
 			nodeHeap.pop();
 
 			// compute actual distance to leaf
@@ -253,42 +355,20 @@ namespace BVH {
 			else {
 				const Node& lchild = bvh.nodes[bvh.nodes[n.nodeId].lchildId];
 				const Node& rchild = bvh.nodes[bvh.nodes[n.nodeId].lchildId + 1];
-				const f32 ldistSq = distanceToNodeSq(p, lchild);
-				const f32 rdistSq = distanceToNodeSq(p, rchild);
+				const f32 ldistSq = distanceToBoxSq(p, lchild.min, lchild.max);
+				const f32 rdistSq = distanceToBoxSq(p, rchild.min, rchild.max);
 
 				// consider each child as long as their minimum possible distance is smaller than our candidate
 				if (ldistSq < closestDistanceSq) {
-					nodeHeap.push(QueryNode{ bvh.nodes[n.nodeId].lchildId, ldistSq });
+					nodeHeap.push(DistanceQueryNode{ bvh.nodes[n.nodeId].lchildId, ldistSq });
 				}
 				if (rdistSq < closestDistanceSq) {
-					nodeHeap.push(QueryNode{ bvh.nodes[n.nodeId].lchildId + 1, rdistSq });
+					nodeHeap.push(DistanceQueryNode{ bvh.nodes[n.nodeId].lchildId + 1, rdistSq });
 				}
 			}
 		}
 
 		resultPoint = closestPoint;
-		bool result = true;
-		if (filterOutsidePoints) {
-			bool inside = false;
-			{
-				Vec3 a(vertexPool[indexPool[closestTriangleId * 3] * 3]
-					, vertexPool[indexPool[closestTriangleId * 3] * 3 + 1]
-					, vertexPool[indexPool[closestTriangleId * 3] * 3 + 2]);
-				Vec3 b(vertexPool[indexPool[closestTriangleId * 3 + 1] * 3]
-					, vertexPool[indexPool[closestTriangleId * 3 + 1] * 3 + 1]
-					, vertexPool[indexPool[closestTriangleId * 3 + 1] * 3 + 2]);
-				Vec3 c(vertexPool[indexPool[closestTriangleId * 3 + 2] * 3]
-					, vertexPool[indexPool[closestTriangleId * 3 + 2] * 3 + 1]
-					, vertexPool[indexPool[closestTriangleId * 3 + 2] * 3 + 2]);
-				Vec3 n = Math::cross(Math::subtract(b, a), Math::subtract(c, a));
-
-				const f32 g = Math::dot(Math::subtract(p, closestPoint), n);
-				inside = g < 0.f;
-			}
-			result = inside;
-		}
-
-		return result;
 	}
 
 }; // namespace BVH

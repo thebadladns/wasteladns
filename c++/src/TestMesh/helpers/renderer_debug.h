@@ -66,10 +66,9 @@ namespace Immediate
         // Either bump Buffer::kMaxVertexCount or re-implement
         // complex primitives to avoid vertex usage
         assert(buffer.vertexIndex < kMaxVertexCount);
-        if (buffer.vertexIndex + 2 >= kMaxVertexCount) { buffer.vertexIndex = 0; }
-        //if (buffer.vertexIndex+2 >= kMaxVertexCount) {
-
-        //}
+        if (buffer.vertexIndex + 2 >= kMaxVertexCount) {
+            buffer.vertexIndex = 0;
+        }
         
         Layout_Vec3Color4B& vertexStart = buffer.vertexMemory[buffer.vertexIndex];
         Layout_Vec3Color4B& vertexEnd = buffer.vertexMemory[buffer.vertexIndex + 1];
@@ -141,7 +140,7 @@ namespace Immediate
     void circle(Buffer& buffer, const Vec3& center, const Vec3& normal, const f32 radius, const Col color) {
         Transform33 m = Math::fromUp(normal);
         
-        static constexpr u32 kVertexCount = 24;
+        static constexpr u32 kVertexCount = 8;
         Vec3 vertices[kVertexCount];
         for (u8 i = 0; i < kVertexCount; i++) {
             
@@ -155,7 +154,7 @@ namespace Immediate
     
     void sphere(Buffer& buffer, const Vec3& center, const f32 radius, const Col color) {
         
-        static constexpr u32 kSectionCount = 12;
+        static constexpr u32 kSectionCount = 2;
         const Col colorVariation(0.25f, 0.25f, 0.25f, 0.f);
         const Vec3 up = Math::upAxis();
         const Vec3 front = Math::frontAxis();

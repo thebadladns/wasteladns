@@ -291,8 +291,8 @@ namespace Mouse
         glfwGetCursorPos(window, &x, &y);
         mouse.dx = (f32)x - mouse.x;
         mouse.dy = (f32)y - mouse.y;
-        mouse.x = x;
-        mouse.y = y;
+        mouse.x = (f32)x;
+        mouse.y = (f32)y;
 	}
 };
 
