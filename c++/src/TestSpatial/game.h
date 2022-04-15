@@ -96,7 +96,7 @@ namespace Game
     };
 
     struct DebugVis {
-        struct PointMode { enum Enum { AllInput, AllProjected, Inside, InsideProjected, Count }; };
+        struct PointMode { enum Enum { AllInput, AllProjected, Inside, InsideProjected, None, Count }; };
 
         f64 frameHistory[60];
         u32 frameHistoryIdx = 0;
@@ -243,22 +243,6 @@ namespace Game
                 // get mesh centroid so we can center the camera
                 meshCentroid = Math::scale(Math::add(query.bvh.nodes[0].max, query.bvh.nodes[0].min), 0.5f);
             }
-
-            // optional: read results instead
-            //{
-            //    query.outputInsideProjected.clear();
-
-            //    FILE* f;
-            //    f = fopen(outputFilteredProjectedPoints, "r");
-
-            //    int r = 0;
-            //    do {
-            //        Vec3 v;;
-            //        r = fscanf(f, "%f%f%f", &v.x, &v.y, &v.z);
-            //        query.outputInsideProjected.push_back(v);
-            //    } while (r > 0);
-            //    fclose(f);
-            //}
 
             // output results
             {
@@ -690,7 +674,7 @@ namespace Game
                 {
                     Col defaultCol(0.7f, 0.8f, 0.15f, 1.0f);
                     Col activeCol(1.0f, 0.2f, 0.1f, 1.0f);
-                    const char* pointvisnames[] = {"All", "All + Projected", "Inside Points", "Inside Points + Projected"};
+                    const char* pointvisnames[] = {"All", "All + Projected", "Inside Points", "Inside Points + Projected", "None"};
                     Renderer::Immediate::TextParams textParams;
                     textParams.scale = 1;
                     textParams.pos = Vec3(game.renderMgr.orthoProjection.config.left + 10.f, game.renderMgr.orthoProjection.config.top - 15.f, -50);

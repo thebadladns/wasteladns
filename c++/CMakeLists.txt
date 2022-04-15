@@ -46,3 +46,6 @@ endif(WIN32)
 add_custom_command(TARGET app-glfw PRE_BUILD
                    COMMAND ${CMAKE_COMMAND} -E copy_directory
                        ${CMAKE_SOURCE_DIR}/assets $<TARGET_FILE_DIR:app-glfw>/assets)
+add_custom_command(TARGET app-dx11 PRE_BUILD
+                   COMMAND ${CMAKE_COMMAND} -E copy_directory
+                       ${CMAKE_SOURCE_DIR}/assets $<TARGET_FILE_DIR:app-dx11>/assets)
