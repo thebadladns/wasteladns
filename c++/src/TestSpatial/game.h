@@ -160,14 +160,14 @@ namespace Game
             // input mesh
             {
                 FILE* f;
-                if (fopen_s(&f, inputMeshPath, "r") == 0) {
+                if (Platform::fopen(&f, inputMeshPath, "r") == 0) {
                     char c;
                     do {
-                        c = fgetc(f);
+                        c = Platform::fgetc(f);
                         if (c == 'v')
                         {
                             f32 x, y, z;
-                            s32 r = fscanf_s(f, "%f%f%f", &x, &y, &z);
+                            s32 r = Platform::fscanf(f, "%f%f%f", &x, &y, &z);
                             if (r == 3) {
                                 vertices.push_back(x);
                                 vertices.push_back(y);
@@ -177,10 +177,10 @@ namespace Game
                         else if (c == 'f')
                         {
                             int a, b, c;
-                            s32 r = fscanf_s(f, "%d%d%d", &a, &b, &c);
+                            s32 r = Platform::fscanf(f, "%d%d%d", &a, &b, &c);
                             if (r == 3) {
                                 int d;
-                                r = fscanf_s(f, "%d", &d);
+                                r = Platform::fscanf(f, "%d", &d);
                                 if (r <= 0) {
                                     // read three values: triangles
                                     indices.push_back(a - 1);
@@ -199,21 +199,21 @@ namespace Game
                             }
                         }
                     } while (c > 0);
-                    fclose(f);
+                    Platform::fclose(f);
                 }
             }
 
             // query points
             {
                 FILE* f;
-                if (fopen_s(&f, inputPoints, "r") == 0) {
+                if (Platform::fopen(&f, inputPoints, "r") == 0) {
                     int r = 0;
                     do {
                         Vec3 v;
-                        r = fscanf_s(f, "%f%f%f", &v.x, &v.y, &v.z);
+                        r = Platform::fscanf(f, "%f%f%f", &v.x, &v.y, &v.z);
                         query.input.push_back(v);
                     } while (r > 0);
-                    fclose(f);
+                    Platform::fclose(f);
                 }
             }
 
@@ -247,20 +247,20 @@ namespace Game
             // output results
             {
                 FILE* f;
-                if (fopen_s(&f, outputFilteredPoints, "w") == 0) {
+                if (Platform::fopen(&f, outputFilteredPoints, "w") == 0) {
                     for (unsigned i = 0; i < query.outputInside.size(); i++) {
                         fprintf(f, "%f %f %f\n", query.outputInside[i].x, query.outputInside[i].y, query.outputInside[i].z);
                     }
-                    fclose(f);
+                    Platform::fclose(f);
                 }
             }
             {
                 FILE* f;
-                if (fopen_s(&f, outputFilteredProjectedPoints, "w") == 0) {
+                if (Platform::fopen(&f, outputFilteredProjectedPoints, "w") == 0) {
                     for (unsigned i = 0; i < query.outputInsideProjected.size(); i++) {
                         fprintf(f, "%f %f %f\n", query.outputInsideProjected[i].x, query.outputInsideProjected[i].y, query.outputInsideProjected[i].z);
                     }
-                    fclose(f);
+                    Platform::fclose(f);
                 }
             }
         }
