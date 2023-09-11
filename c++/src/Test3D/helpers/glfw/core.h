@@ -11,10 +11,6 @@
 #include "../../lib/glad/glad.c"
 #include "GLFW/glfw3.h"
 
-#define NOMINMAX
-#include <windef.h>
-#include <d3d11_1.h>
-
 #define consoleLog printf
 
 #undef near

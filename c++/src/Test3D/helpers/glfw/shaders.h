@@ -3,6 +3,7 @@
 
 // BIG TODO: OPENGL MATRICES MULTIPLY IN A DIFFERENT ORDER, THAT'S NOT GOOD FOR SHADER CROSS COMPILATION
 // ALSO CROSS COMPILATION REQUIRES ADDING type_ TO BUFFER TYPE NAMES
+// out_var_COLOR seems to have to be the same name in the pixel shader
 
 const char * coloredVertexShaderStr = R"(
 #version 330
@@ -33,12 +34,12 @@ const char* defaultPixelShaderStr = R"(
 #version 330
 #extension GL_ARB_separate_shader_objects : require
 
-layout(location = 0) in vec4 in_var_COLOR;
+layout(location = 0) in vec4 out_var_COLOR;
 layout(location = 0) out vec4 out_var_SV_TARGET;
 
 void main()
 {
-    out_var_SV_TARGET = in_var_COLOR;
+    out_var_SV_TARGET = out_var_COLOR;
 }
 )";
 

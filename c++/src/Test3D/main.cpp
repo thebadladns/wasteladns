@@ -21,7 +21,6 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "lib/stb/stb_image.h"
 
-#define UFBX_HEADER_PATH "lib/fbx/ufbx.h"
 #define UFBX_REAL_IS_FLOAT
 #include "lib/fbx/ufbx.c"
 
