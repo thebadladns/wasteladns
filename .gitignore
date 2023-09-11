@@ -10,7 +10,6 @@
 #######
 
 CMakeCache.txt
-CMake
 CMakeFiles
 CMakeScripts
 cmake_install.cmake
@@ -22,6 +21,7 @@ compile_commands.json
 #######
 
 glfw3.pc
+glfw3ConfigVersion.cmake
 glfw_config.h
 
 #####
