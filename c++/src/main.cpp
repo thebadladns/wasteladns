@@ -8,8 +8,9 @@
 #define TEST_PLATFORMAPI 6
 #define TEST_ILLUMINATION 7
 #define TEST_SPATIAL 8
+#define TEST_3D 9
 
-#define COMPILE_TARGET TEST_SPATIAL
+#define COMPILE_TARGET TEST_3D
 
 #if COMPILE_TARGET == TEST_WORKSPACE
 #include "workspace_main.cpp"
@@ -31,4 +32,6 @@
 #include "TestIllumination/main.cpp"
 #elif COMPILE_TARGET == TEST_SPATIAL
 #include "TestSpatial/main.cpp"
+#elif COMPILE_TARGET == TEST_3D
+#include "Test3D/main.cpp"
 #endif

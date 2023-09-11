@@ -28,7 +28,9 @@
 //
 //========================================================================
 
-#include <glad/glad.h>
+#define GLAD_GL_IMPLEMENTATION
+#include <glad/gl.h>
+#define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
 
 #include <stdio.h>
@@ -90,11 +92,6 @@ static void set_swap_interval(GLFWwindow* window, int interval)
 static void error_callback(int error, const char* description)
 {
     fprintf(stderr, "Error: %s\n", description);
-}
-
-static void framebuffer_size_callback(GLFWwindow* window, int width, int height)
-{
-    glViewport(0, 0, width, height);
 }
 
 static void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
@@ -180,7 +177,7 @@ int main(int argc, char** argv)
     }
 
     glfwMakeContextCurrent(window);
-    gladLoadGLLoader((GLADloadproc) glfwGetProcAddress);
+    gladLoadGL(glfwGetProcAddress);
     set_swap_interval(window, 0);
 
     last_time = glfwGetTime();
@@ -188,7 +185,6 @@ int main(int argc, char** argv)
     swap_tear = (glfwExtensionSupported("WGL_EXT_swap_control_tear") ||
                  glfwExtensionSupported("GLX_EXT_swap_control_tear"));
 
-    glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
     glfwSetKeyCallback(window, key_callback);
 
     glGenBuffers(1, &vertex_buffer);
@@ -217,9 +213,13 @@ int main(int argc, char** argv)
 
     while (!glfwWindowShouldClose(window))
     {
+        int width, height;
         mat4x4 m, p, mvp;
         float position = cosf((float) glfwGetTime() * 4.f) * 0.75f;
 
+        glfwGetFramebufferSize(window, &width, &height);
+
+        glViewport(0, 0, width, height);
         glClear(GL_COLOR_BUFFER_BIT);
 
         mat4x4_ortho(p, -1.f, 1.f, -1.f, 1.f, 0.f, 1.f);

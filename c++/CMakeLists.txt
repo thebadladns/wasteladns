@@ -1,6 +1,6 @@
-project("wasteladns")
+cmake_minimum_required(VERSION 3.5)
 
-cmake_minimum_required(VERSION 2.8.12)
+project("wasteladns")
 
 set(CMAKE_SUPPRESS_REGENERATION true)
 
@@ -22,9 +22,9 @@ set(SOURCES "src/main.cpp" "src")
 endif (WIN32)
 
 add_executable(app-glfw ${SOURCES})
-target_compile_definitions(app-glfw PUBLIC PLATFORM_GLFW=1)
+target_compile_definitions(app-glfw PUBLIC __GLFW=1)
 add_executable(app-dx11 WIN32 ${SOURCES})
-target_compile_definitions(app-dx11 PUBLIC PLATFORM_DX11=1)
+target_compile_definitions(app-dx11 PUBLIC __DX11=1)
 if(${CMAKE_VERSION} VERSION_GREATER "3.6.0" OR ${CMAKE_VERSION} VERSION_EQUAL "3.6.0") 
 	set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT app-dx11)
 endif ()

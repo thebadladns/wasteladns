@@ -6,7 +6,7 @@
 
 // Printf
 #include <stdio.h>
-#if PLATFORM_GLFW
+#if __GLFW
 #include <stdarg.h>
 #endif
 
@@ -39,13 +39,13 @@
 // Spatial queries
 #include "helpers/bvh.h"
 
-#if PLATFORM_GLFW 
+#if __GLFW 
 #include "helpers/glfw/core.h"
 #include "helpers/glfw/input.h"
 #include "helpers/glfw/io.h"
 #include "helpers/glfw/main.h"
 #include "helpers/glfw/shaders.h"
-#elif PLATFORM_DX11
+#elif __DX11
 #include "helpers/dx11/core.h"
 #include "helpers/dx11/input.h"
 #include "helpers/dx11/io.h"
@@ -54,16 +54,16 @@
 #endif
 
 #include "helpers/renderer_types.h"
-#if PLATFORM_GLFW
+#if __GLFW
 #include "helpers/glfw/renderer_types.h"
-#elif PLATFORM_DX11
+#elif __DX11
 #include "helpers/dx11/renderer_types.h"
 #endif
 
 #include "helpers/renderer.h"
-#if PLATFORM_GLFW
+#if __GLFW
 #include "helpers/glfw/renderer.h"
-#elif PLATFORM_DX11
+#elif __DX11
 #include "helpers/dx11/renderer.h"
 #endif
 
@@ -78,7 +78,7 @@ namespace Platform {
         config.window_width = 640 * 1;
         config.window_height = 480 * 1;
         config.fullscreen = false;
-        config.title = "Illumination Test";
+        config.title = "BVH Test";
     };
     template<>
     void start<Game::Instance>(Game::Instance& game, Platform::GameConfig& config, const Platform::State& platform) {
@@ -90,13 +90,13 @@ namespace Platform {
     };
 };
 
-#if PLATFORM_GLFW
+#if __GLFW
 int main(int argc, char** argv) {
     int returnValue = 1;
     returnValue = Platform::GLFW::main<Game::Instance>(argc, argv);
     return returnValue;
 }
-#elif PLATFORM_DX11
+#elif __DX11
 int WINAPI WinMain(HINSTANCE hInstance,
     HINSTANCE hPrevInstance,
     LPSTR lpCmdLine,

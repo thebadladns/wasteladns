@@ -16,8 +16,8 @@ namespace Platform {
         OutputDebugString(buffer);
     }
     int fopen(FILE **f, const char *name, const char *mode) { return fopen_s(f, name, mode); }
-    int fclose(FILE *f) { return fclose_s(f); }
-    int fgetc(FILE* f) { return fgetc(f); }
+    int fclose(FILE *f) { return 0; }
+    int fgetc(FILE* f) { return 0; }
     int fscanf(FILE *f, const char* format, ...) {
         va_list va;
         va_start(va, format);

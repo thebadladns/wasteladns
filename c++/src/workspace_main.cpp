@@ -1,7 +1,7 @@
 //#include your non unity file here
 //#include "TestPlatformAPI/helpers/math.h"
 
-#if PLATFORM_GLFW
+#if __GLFW
 int main(int argc, char** argv) {
     return 0;
 }
