@@ -50,6 +50,10 @@
 #include "helpers/dx11/core.h"
 #include "helpers/dx11/input.h"
 #include "helpers/dx11/shaders.h"
+#elif __MACOS
+#include "helpers/macos/core.h"
+#include "helpers/macos/input.h"
+#include "helpers/macos/shaders.h"
 #endif
 
 #include "helpers/io.h"
@@ -59,6 +63,8 @@
 #include "helpers/glfw/renderer_types.h"
 #elif __DX11
 #include "helpers/dx11/renderer_types.h"
+#elif __MACOS
+#include "helpers/macos/renderer_types.h"
 #endif
 
 #include "helpers/renderer.h"
@@ -66,6 +72,8 @@
 #include "helpers/glfw/renderer.h"
 #elif __DX11
 #include "helpers/dx11/renderer.h"
+#elif __MACOS
+#include "helpers/macos/renderer.h"
 #endif
 
 #ifdef NDEBUG
@@ -89,4 +97,6 @@ do { \
 #include "helpers/glfw/main.h"
 #elif __DX11
 #include "helpers/dx11/main.h"
+#elif __MACOS
+#include "helpers/macos/main.mm"
 #endif
