@@ -88,9 +88,6 @@ int main(int argc, char** argv) {
 
         glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
 #endif
-
-        platform.screen.desiredRatio = platform.screen.width / (f32)platform.screen.height;
-        platform.screen.fullscreen = config.fullscreen;
         windowHandle = glfwCreateWindow(
                 config.window_width
             , config.window_height
@@ -105,6 +102,8 @@ int main(int argc, char** argv) {
         glfwGetWindowSize(windowHandle, &effectiveWidth, &effectiveHeight);
         platform.screen.width = effectiveWidth;
         platform.screen.height = effectiveHeight;
+        platform.screen.desiredRatio = platform.screen.width / (f32)platform.screen.height;
+        platform.screen.fullscreen = config.fullscreen;
     }
 
     glfwMakeContextCurrent(windowHandle);

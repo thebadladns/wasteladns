@@ -208,9 +208,6 @@ int WINAPI WinMain(
 
                 // Input
                 {
-                    if ((config.requestFlags & (Platform::RequestFlags::PollMouse)) != 0) {
-                        ::Input::Mouse::resetState(mousePollData);
-                    }
                     while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
                         TranslateMessage(&msg);
                         DispatchMessage(&msg);
@@ -221,6 +218,7 @@ int WINAPI WinMain(
                     }
                     if ((config.requestFlags & (Platform::RequestFlags::PollMouse)) != 0) {
                         ::Input::Mouse::pollState(platform.input.mouse, mousePollData);
+                        ::Input::Mouse::resetState(mousePollData);
                     }
                     for (u32 i = 0; i < platform.input.padCount; i++) {
                         ::Input::Gamepad::pollState(platform.input.pads[i], keyboardPollData.queue, keyboardPadMappings[i]);
