@@ -101,6 +101,13 @@ namespace Game
         Scene scene;
         __DEBUGDEF(DebugVis debugVis;)
     };
+    void loadLaunchConfig(Platform::WindowConfig& config) {
+        // hardcoded for now
+        config.window_width = 640 * 1;
+        config.window_height = 480 * 1;
+        config.fullscreen = false;
+        config.title = "3D Test";
+    };
     void start(Instance& game, Platform::GameConfig& config, const Platform::State& platform) {
 
         game.time = {};

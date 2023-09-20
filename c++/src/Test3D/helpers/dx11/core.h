@@ -20,4 +20,8 @@
 
 #define consoleLog OutputDebugString
 
+namespace Platform {
+    const char* name = "DX11";
+}
+
 #endif // __WASTELADNS_CORE_DX11_H__

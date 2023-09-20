@@ -17,4 +17,8 @@
 #undef far
 #undef DELETE
 
+namespace Platform {
+    const char* name = "GLFW";
+}
+
 #endif // __WASTELADNS_CORE_GLFW_H__

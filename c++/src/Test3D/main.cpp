@@ -45,12 +45,10 @@
 #if __GLFW 
 #include "helpers/glfw/core.h"
 #include "helpers/glfw/input.h"
-#include "helpers/glfw/main.h"
 #include "helpers/glfw/shaders.h"
 #elif __DX11
 #include "helpers/dx11/core.h"
 #include "helpers/dx11/input.h"
-#include "helpers/dx11/main.h"
 #include "helpers/dx11/shaders.h"
 #endif
 
@@ -87,37 +85,8 @@ do { \
 
 #include "game.h"
 
-namespace Platform {
-    void loadLaunchConfig(Platform::WindowConfig& config) {
-        // hardcoded for now
-        config.window_width = 640 * 1;
-        config.window_height = 480 * 1;
-        config.fullscreen = false;
-        config.title = "3D Test";
-    };
-    template<>
-    void start<Game::Instance>(Game::Instance& game, Platform::GameConfig& config, const Platform::State& platform) {
-        Game::start(game, config, platform);
-    };
-    template<>
-    void update<Game::Instance>(Game::Instance& game, Platform::GameConfig& config, const Platform::State& platform) {
-        Game::update(game, config, platform);
-    };
-};
-
 #if __GLFW
-int main(int argc, char** argv) {
-    int returnValue = 1;
-    returnValue = Platform::GLFW::main<Game::Instance>(argc, argv);
-    return returnValue;
-}
+#include "helpers/glfw/main.h"
 #elif __DX11
-int WINAPI WinMain(HINSTANCE hInstance,
-    HINSTANCE hPrevInstance,
-    LPSTR lpCmdLine,
-    int nCmdShow) {
-    int returnValue = 1;
-    returnValue = Platform::main<Game::Instance>(hInstance, hPrevInstance, lpCmdLine, nCmdShow);
-    return returnValue;
-}
+#include "helpers/dx11/main.h"
 #endif
