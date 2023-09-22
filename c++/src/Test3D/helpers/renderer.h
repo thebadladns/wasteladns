@@ -264,13 +264,6 @@ namespace Renderer {
 };
 
 namespace Renderer {
-    
-    struct TextureFormat { enum Enum { V316 }; };
-    struct Type { enum Enum { Float }; };
-    struct RasterizerFillMode { enum Enum { Fill, Line }; };
-    struct BufferMemoryMode { enum Enum { GPU, CPU }; };
-    struct BufferItemType { enum Enum { U16, U32 }; };
-    struct BufferTopologyType { enum Enum { Triangles, Lines }; };
 
 namespace Driver {
     
@@ -304,6 +297,7 @@ namespace Driver {
         s32 width;
         s32 height;
         TextureFormat::Enum format;
+        InternalTextureFormat::Enum internalFormat;
         Type::Enum type;
     };
     void create(RscTexture& t, const TextureRenderTargetCreateParams& params);
@@ -345,7 +339,7 @@ namespace Driver {
     void bind(const RscBlendState bs);
 
     struct RasterizerStateParams {
-        bool fill;
+        RasterizerFillMode::Enum fill;
         bool cullFace;
     };
     void create(RscRasterizerState&, const RasterizerStateParams&);
@@ -355,7 +349,8 @@ namespace Driver {
         void* vertexData;
         u32 vertexSize;
         BufferTopologyType::Enum type;
-        BufferMemoryMode::Enum memoryMode;
+        BufferMemoryUsage::Enum memoryUsage;
+        BufferAccessType::Enum accessType;
         u32 vertexCount;
     };
     template <typename _layout>
@@ -378,7 +373,8 @@ namespace Driver {
         u32 indexCount;
         BufferItemType::Enum indexType;
         BufferTopologyType::Enum type;
-        BufferMemoryMode::Enum memoryMode;
+        BufferMemoryUsage::Enum memoryUsage;
+        BufferAccessType::Enum accessType;
     };
     template <typename _layout>
     void create(RscIndexedBuffer<_layout>&, const IndexedBufferParams&);

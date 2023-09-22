@@ -255,8 +255,8 @@ namespace Game
 
             // rasterizer states
             Renderer::Driver::create(rscene.blendStateOn, { true });
-            Renderer::Driver::create(rscene.rasterizerStateFill, { Renderer::RasterizerFillMode::Fill, true });
-            Renderer::Driver::create(rscene.rasterizerStateLine, { Renderer::RasterizerFillMode::Line, true });
+            Renderer::Driver::create(rscene.rasterizerStateFill, { Renderer::Driver::RasterizerFillMode::Fill, true });
+            Renderer::Driver::create(rscene.rasterizerStateLine, { Renderer::Driver::RasterizerFillMode::Line, true });
 
             // cbuffers
             Renderer::Driver::create<Renderer::Layout_CBuffer_3DScene::SceneData>(rscene.cbuffers[Renderer::Layout_CBuffer_3DScene::Buffers::SceneData], {});
@@ -317,9 +317,10 @@ namespace Game
                 bufferParams.indexData = &indices[0];
                 bufferParams.indexSize = (u32)indices.size() * sizeof(indices[0]);
                 bufferParams.indexCount = (u32)indices.size();
-                bufferParams.memoryMode = Renderer::BufferMemoryMode::GPU;
-                bufferParams.indexType = Renderer::BufferItemType::U16;
-                bufferParams.type = Renderer::BufferTopologyType::Triangles;
+                bufferParams.memoryUsage = Renderer::Driver::BufferMemoryUsage::GPU;
+                bufferParams.accessType = Renderer::Driver::BufferAccessType::GPU;
+                bufferParams.indexType = Renderer::Driver::BufferItemType::U16;
+                bufferParams.type = Renderer::Driver::BufferTopologyType::Triangles;
                 Renderer::Driver::create(rscBuffer, bufferParams);
 
                 RenderGroup& r = rscene.inputMeshGroupBuffer;
@@ -342,9 +343,10 @@ namespace Game
                 bufferParams.vertexSize = sizeof(cube.vertices);
                 bufferParams.indexSize = sizeof(cube.indices);
                 bufferParams.indexCount = bufferParams.indexSize / sizeof(cube.indices[0]);
-                bufferParams.memoryMode = Renderer::BufferMemoryMode::GPU;
-                bufferParams.indexType = Renderer::BufferItemType::U16;
-                bufferParams.type = Renderer::BufferTopologyType::Triangles;
+                bufferParams.memoryUsage = Renderer::Driver::BufferMemoryUsage::GPU;
+                bufferParams.accessType = Renderer::Driver::BufferAccessType::GPU;
+                bufferParams.indexType = Renderer::Driver::BufferItemType::U16;
+                bufferParams.type = Renderer::Driver::BufferTopologyType::Triangles;
                 Renderer::Driver::create(rscBuffer, bufferParams);
 
                 RenderGroup& r = rscene.instancedCubeGroupBuffer;

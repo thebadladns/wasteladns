@@ -239,8 +239,9 @@ namespace Immediate
             Renderer::Driver::BufferParams bufferParams;
             bufferParams.vertexData = nullptr;
             bufferParams.vertexSize = sizeof(Buffer::vertexMemory);
-            bufferParams.memoryMode = Renderer::BufferMemoryMode::CPU;
-            bufferParams.type = Renderer::BufferTopologyType::Lines;
+            bufferParams.memoryUsage = Renderer::Driver::BufferMemoryUsage::CPU;
+            bufferParams.accessType = Renderer::Driver::BufferAccessType::CPU;
+            bufferParams.type = Renderer::Driver::BufferTopologyType::Lines;
             bufferParams.vertexCount = 0;
             Driver::create(buffer.perspVertex, bufferParams);
         }
@@ -251,9 +252,10 @@ namespace Immediate
             bufferParams.indexData = nullptr;
             bufferParams.vertexSize = sizeof(Buffer::charVertexMemory);
             bufferParams.indexSize = sizeof(Buffer::charIndexVertexMemory);
-            bufferParams.memoryMode = Renderer::BufferMemoryMode::CPU;
-            bufferParams.indexType = Renderer::BufferItemType::U32;
-            bufferParams.type = Renderer::BufferTopologyType::Triangles;
+            bufferParams.memoryUsage = Renderer::Driver::BufferMemoryUsage::CPU;
+            bufferParams.accessType = Renderer::Driver::BufferAccessType::CPU;
+            bufferParams.indexType = Renderer::Driver::BufferItemType::U32;
+            bufferParams.type = Renderer::Driver::BufferTopologyType::Triangles;
             bufferParams.indexCount = 0;
             Driver::create(buffer.orthoVertex, bufferParams);
         }
@@ -307,7 +309,7 @@ namespace Immediate
             }
         }
         
-        Renderer::Driver::create(buffer.orthoRasterizerState, { Renderer::RasterizerFillMode::Fill, true });
+        Renderer::Driver::create(buffer.orthoRasterizerState, { Renderer::Driver::RasterizerFillMode::Fill, true });
     }
     
     void present3d(Buffer& buffer, const Mat4& projMatrix, const Mat4& viewMatrix) {

@@ -28,6 +28,13 @@
 
 // Core
 #include "helpers/types.h"
+#if __DX11
+#include "helpers/dx11/input_types.h"
+#elif __MACOS
+#include "helpers/macos/input_types.h"
+#endif
+
+
 #include "helpers/math.h"
 #include "helpers/easing.h"
 #include "helpers/vec.h"
@@ -42,11 +49,7 @@
 #include "helpers/camera.h"
 #include "helpers/easing.h"
 
-#if __GLFW 
-#include "helpers/glfw/core.h"
-#include "helpers/glfw/input.h"
-#include "helpers/glfw/shaders.h"
-#elif __DX11
+#if __DX11
 #include "helpers/dx11/core.h"
 #include "helpers/dx11/input.h"
 #include "helpers/dx11/shaders.h"
@@ -59,18 +62,14 @@
 #include "helpers/io.h"
 
 #include "helpers/renderer_types.h"
-#if __GLFW
-#include "helpers/glfw/renderer_types.h"
-#elif __DX11
+#if __DX11
 #include "helpers/dx11/renderer_types.h"
 #elif __MACOS
 #include "helpers/macos/renderer_types.h"
 #endif
 
 #include "helpers/renderer.h"
-#if __GLFW
-#include "helpers/glfw/renderer.h"
-#elif __DX11
+#if __DX11
 #include "helpers/dx11/renderer.h"
 #elif __MACOS
 #include "helpers/macos/renderer.h"
@@ -93,9 +92,7 @@ do { \
 
 #include "game.h"
 
-#if __GLFW
-#include "helpers/glfw/main.h"
-#elif __DX11
+#if __DX11
 #include "helpers/dx11/main.h"
 #elif __MACOS
 #include "helpers/macos/main.mm"

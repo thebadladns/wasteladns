@@ -11,6 +11,15 @@ namespace Renderer {
 
 namespace Driver {
 
+    struct Type { enum Enum { Float = GL_FLOAT }; };
+    struct InternalTextureFormat { enum Enum { V316 = GL_RGB16F }; };
+    struct TextureFormat { enum Enum { V316 = GL_RGB }; };
+    struct RasterizerFillMode { enum Enum { Fill = GL_FILL, Line = GL_LINE }; };
+    struct BufferMemoryUsage { enum Enum { GPU = GL_STATIC_DRAW, CPU = GL_DYNAMIC_DRAW }; };
+    struct BufferAccessType { enum Enum { GPU = GL_STATIC_DRAW, CPU = GL_DYNAMIC_DRAW }; }; // repeated, compatibility-only
+    struct BufferItemType { enum Enum { U16 = GL_UNSIGNED_SHORT, U32 = GL_UNSIGNED_INT }; };
+    struct BufferTopologyType { enum Enum { Triangles = GL_TRIANGLES, Lines = GL_LINES }; };
+
     struct RscMainRenderTarget {
         u32 mask;
     };

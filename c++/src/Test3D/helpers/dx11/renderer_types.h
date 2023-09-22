@@ -10,6 +10,15 @@ namespace Renderer {
     constexpr ProjectionType::Enum defaultProjectionType = ProjectionType::Z0to1;
 
 namespace Driver {
+
+    struct Type { enum Enum { Float }; }; // unused, compatibility-only
+    struct InternalTextureFormat { enum Enum { V316 = DXGI_FORMAT_R16G16B16A16_FLOAT }; };
+    struct TextureFormat { enum Enum { V316 = DXGI_FORMAT_R16G16B16A16_FLOAT }; };
+    struct RasterizerFillMode { enum Enum { Fill = D3D11_FILL_SOLID, Line = D3D11_FILL_WIREFRAME }; };
+    struct BufferMemoryUsage { enum Enum { GPU = D3D11_USAGE_IMMUTABLE, CPU = D3D11_USAGE_DYNAMIC }; };
+    struct BufferAccessType { enum Enum { GPU = 0, CPU = D3D11_CPU_ACCESS_WRITE }; };
+    struct BufferItemType { enum Enum { U16 = DXGI_FORMAT_R16_UINT, U32 = DXGI_FORMAT_R32_UINT }; };
+    struct BufferTopologyType { enum Enum { Triangles = D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST, Lines = D3D_PRIMITIVE_TOPOLOGY_LINELIST }; };
     
     struct RscMainRenderTarget {
         ID3D11RenderTargetView* view;

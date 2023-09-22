@@ -13,25 +13,77 @@
 #define COMPILE_TARGET TEST_3D
 
 #if COMPILE_TARGET == TEST_WORKSPACE
-#include "workspace_main.cpp"
+    #include "workspace_main.cpp"
 #elif COMPILE_TARGET == TEST_2D
-#include "Test2D/main.cpp"
+    #if __DX11
+    #error "app-dx11 target not supported, use glfw"
+    #elif __MACOS
+    #error "app-macos target not supported, use glfw"
+    #else
+    #include "Test2D/main.cpp"
+    #endif
 #elif COMPILE_TARGET == TEST_TEXT
-#include "TestText/main.cpp"
+    #if __DX11
+    #error "app-dx11 target not supported, use glfw"
+    #elif __MACOS
+    #error "app-macos target not supported, use glfw"
+    #else
+    #include "TestText/main.cpp"
+    #endif
 #elif COMPILE_TARGET == TEST_SMOOTHMOTION
-#include "TestSmoothMotion/main.cpp"
+    #if __DX11
+    #error "app-dx11 target not supported, use glfw"
+    #elif __MACOS
+    #error "app-macos target not supported, use glfw"
+    #else
+    #include "TestSmoothMotion/main.cpp"
+    #endif
 #elif COMPILE_TARGET == TEST_TRAJECTORY
-#include "TestTrajectory/main.cpp"
+    #if __DX11
+    #error "app-dx11 target not supported, use glfw"
+    #elif __MACOS
+    #error "app-macos target not supported, use glfw"
+    #else
+    #include "TestTrajectory/main.cpp"
+    #endif
 #elif COMPILE_TARGET == TEST_GAMEPAD
-#include "TestGamepad/main.cpp"
+    #if __DX11
+    #error "app-dx11 target not supported, use glfw"
+    #elif __MACOS
+    #error "app-macos target not supported, use glfw"
+    #else
+    #include "TestGamepad/main.cpp"
+    #endif
 #elif COMPILE_TARGET == TEST_CAMERA
-#include "TestCamera/main.cpp"
+    #if __DX11
+    #error "app-dx11 target not supported, use glfw"
+    #elif __MACOS
+    #error "app-macos target not supported, use glfw"
+    #else
+    #include "TestCamera/main.cpp"
+    #endif
 #elif COMPILE_TARGET == TEST_PLATFORMAPI
-#include "TestPlatformAPI/main.cpp"
+    #if __MACOS
+    #error "app-macos target not supported, use glfw or dx11"
+    #else
+    #include "TestPlatformAPI/main.cpp"
+    #endif
 #elif COMPILE_TARGET == TEST_ILLUMINATION
-#include "TestIllumination/main.cpp"
+    #if __MACOS
+    #error "app-macos target not supported, use glfw or dx11"
+    #else
+    #include "TestIllumination/main.cpp"
+    #endif
 #elif COMPILE_TARGET == TEST_SPATIAL
-#include "TestSpatial/main.cpp"
+    #if __MACOS
+    #error "app-macos target not supported, use glfw or dx11"
+    #else
+    #include "TestSpatial/main.cpp"
+    #endif
 #elif COMPILE_TARGET == TEST_3D
-#include "Test3D/main.cpp"
+    #if __GLFW
+    #error "app-glfw target not supported, use dx11 or macos"
+    #else
+    #include "Test3D/main.cpp"
+    #endif
 #endif

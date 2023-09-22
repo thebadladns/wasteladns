@@ -25,13 +25,6 @@ namespace Driver {
     ID3D11DeviceContext1* d3dcontext;
     IDXGISwapChain1* swapchain;
 
-    DXGI_FORMAT toDXTextureFormat[] = { DXGI_FORMAT_R16G16B16A16_FLOAT };
-    D3D11_FILL_MODE toDXRasterizerFillMode[] = { D3D11_FILL_SOLID, D3D11_FILL_WIREFRAME };
-    u32 toDXBufferAccessFlags[] = { 0, D3D11_CPU_ACCESS_WRITE };
-    D3D11_USAGE toDXBufferCPUUsage[] = { D3D11_USAGE_IMMUTABLE, D3D11_USAGE_DYNAMIC };
-    DXGI_FORMAT toDXBufferItemType[] = { DXGI_FORMAT_R16_UINT, DXGI_FORMAT_R32_UINT };
-    D3D_PRIMITIVE_TOPOLOGY toDXBufferTopologyType[] = { D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST, D3D_PRIMITIVE_TOPOLOGY_LINELIST };
-    
     void create(RscMainRenderTarget& rt, const MainRenderTargetParams& params) {
         ID3D11RenderTargetView* targetView;
         ID3D11Texture2D* backbuffer;
@@ -193,7 +186,7 @@ namespace Driver {
     }
     void create(RscTexture& t, const TextureRenderTargetCreateParams& params) {
 
-        DXGI_FORMAT format = toDXTextureFormat[params.format];
+        DXGI_FORMAT format = (DXGI_FORMAT)params.format;
         t.format = format;
 
         D3D11_TEXTURE2D_DESC texDesc = {};
@@ -362,7 +355,7 @@ namespace Driver {
         rasterizerDesc.DepthBias = 0;
         rasterizerDesc.DepthBiasClamp = 0.f;
         rasterizerDesc.DepthClipEnable = TRUE;
-        rasterizerDesc.FillMode = toDXRasterizerFillMode[params.fill];
+        rasterizerDesc.FillMode = (D3D11_FILL_MODE) params.fill;
         rasterizerDesc.FrontCounterClockwise = FALSE;
         rasterizerDesc.MultisampleEnable = FALSE;
         rasterizerDesc.ScissorEnable = FALSE;
@@ -383,13 +376,13 @@ namespace Driver {
         D3D11_BUFFER_DESC vertexBufferDesc = { 0 };
         vertexBufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
         vertexBufferDesc.ByteWidth = params.vertexSize;
-        vertexBufferDesc.CPUAccessFlags = toDXBufferAccessFlags[params.memoryMode];
-        vertexBufferDesc.Usage = toDXBufferCPUUsage[params.memoryMode];
+        vertexBufferDesc.CPUAccessFlags = params.accessType;
+        vertexBufferDesc.Usage = (D3D11_USAGE) params.memoryUsage;
         resourceData = { params.vertexData, 0, 0 };
-        HRESULT result = d3ddev->CreateBuffer(&vertexBufferDesc, params.memoryMode == BufferMemoryMode::CPU ? nullptr : &resourceData, &vertexBuffer);
+        HRESULT result = d3ddev->CreateBuffer(&vertexBufferDesc, params.memoryUsage == BufferMemoryUsage::CPU ? nullptr : &resourceData, &vertexBuffer);
 
         t.vertexBuffer = vertexBuffer;
-        t.type = toDXBufferTopologyType[params.type];
+        t.type = (D3D11_PRIMITIVE_TOPOLOGY) params.type;
         t.vertexCount = params.vertexCount;
         t.vertexStride = sizeof(_layout);
     }
@@ -422,23 +415,23 @@ namespace Driver {
         D3D11_BUFFER_DESC vertexBufferDesc = { 0 };
         vertexBufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
         vertexBufferDesc.ByteWidth = params.vertexSize;
-        vertexBufferDesc.CPUAccessFlags = toDXBufferAccessFlags[params.memoryMode];
-        vertexBufferDesc.Usage = toDXBufferCPUUsage[params.memoryMode];
+        vertexBufferDesc.CPUAccessFlags = params.accessType;
+        vertexBufferDesc.Usage = (D3D11_USAGE) params.memoryUsage;
         resourceData = { params.vertexData, 0, 0 };
-        d3ddev->CreateBuffer(&vertexBufferDesc, params.memoryMode == BufferMemoryMode::CPU ? nullptr : &resourceData, &vertexBuffer);
+        d3ddev->CreateBuffer(&vertexBufferDesc, params.memoryUsage == BufferMemoryUsage::CPU ? nullptr : &resourceData, &vertexBuffer);
 
         D3D11_BUFFER_DESC indexBufferDesc = { 0 };
         indexBufferDesc.BindFlags = D3D11_BIND_INDEX_BUFFER;
         indexBufferDesc.ByteWidth = params.indexSize;
-        indexBufferDesc.CPUAccessFlags = toDXBufferAccessFlags[params.memoryMode];
-        indexBufferDesc.Usage = toDXBufferCPUUsage[params.memoryMode];
+        indexBufferDesc.CPUAccessFlags = params.accessType;
+        indexBufferDesc.Usage = (D3D11_USAGE) params.memoryUsage;
         resourceData = { params.indexData, 0, 0 };
-        d3ddev->CreateBuffer(&indexBufferDesc, params.memoryMode == BufferMemoryMode::CPU ? nullptr : &resourceData, &indexBuffer);
+        d3ddev->CreateBuffer(&indexBufferDesc, params.memoryUsage == BufferMemoryUsage::CPU ? nullptr : &resourceData, &indexBuffer);
 
         t.vertexBuffer = vertexBuffer;
         t.indexBuffer = indexBuffer;
-        t.indexType = toDXBufferItemType[params.indexType];
-        t.type = toDXBufferTopologyType[params.type];
+        t.indexType = (DXGI_FORMAT) params.indexType;
+        t.type = (D3D11_PRIMITIVE_TOPOLOGY) params.type;
         t.indexCount = params.indexCount;
         t.vertexStride = sizeof(_layout);
     }

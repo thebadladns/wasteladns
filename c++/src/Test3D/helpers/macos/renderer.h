@@ -24,14 +24,7 @@ namespace Renderer {
     }
 
 namespace Driver {
-    GLenum toGLType[] = { GL_FLOAT };
-    GLenum toGLInternalTextureFormat[] { GL_RGB16F };
-    GLenum toGLTextureFormat[] { GL_RGB };
-    GLenum toGLRasterizerFillMode[] = { GL_FILL, GL_LINE };
-    GLenum toGLBufferMemoryMode[] = { GL_STATIC_DRAW, GL_DYNAMIC_DRAW };
-    GLenum toGLBufferItemType[] = { GL_UNSIGNED_SHORT, GL_UNSIGNED_INT };
-    GLenum toGLBufferTopologyType[] = { GL_TRIANGLES, GL_LINES };
-    
+
     void create(RscMainRenderTarget& rt, const MainRenderTargetParams& params) {
         rt.mask = GL_COLOR_BUFFER_BIT;
         if (params.depth) {
@@ -117,14 +110,10 @@ namespace Driver {
         }
     }
     void create(RscTexture& t, const TextureRenderTargetCreateParams& params) {
-        GLenum type = toGLType[params.type];
-        GLenum internalFormat = toGLInternalTextureFormat[params.format];
-        GLenum format = toGLTextureFormat[params.format];
-        
         GLuint texId;
         glGenTextures(1, &texId);
         glBindTexture(GL_TEXTURE_2D, texId);
-        glTexImage2D(GL_TEXTURE_2D, 0, internalFormat, params.width, params.height, 0, format, type, nullptr);
+        glTexImage2D(GL_TEXTURE_2D, 0, params.internalFormat, params.width, params.height, 0, params.format, params.type, nullptr);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
         glBindTexture(GL_TEXTURE_2D, 0);
@@ -260,7 +249,7 @@ namespace Driver {
     }
     
     void create(RscRasterizerState& rs, const RasterizerStateParams& params) {
-        rs.fillMode = toGLRasterizerFillMode[params.fill];
+        rs.fillMode = (GLenum) params.fill;
         rs.cullFace = params.cullFace;
     }
     void bind(const RscRasterizerState rs) {
@@ -275,12 +264,11 @@ namespace Driver {
     template <typename _layout>
     void create(RscBuffer<_layout>& t, const BufferParams& params) {
         GLuint vertexBuffer, arrayObject;
-        GLenum glMemoryMode = toGLBufferMemoryMode[params.memoryMode];
         
         // Vertex buffer binding is not part of the VAO state
         glGenBuffers(1, &vertexBuffer);
         glBindBuffer(GL_ARRAY_BUFFER, vertexBuffer);
-        glBufferData(GL_ARRAY_BUFFER, params.vertexSize, params.vertexData, glMemoryMode);
+        glBufferData(GL_ARRAY_BUFFER, params.vertexSize, params.vertexData, params.memoryUsage);
         glGenVertexArrays(1, &arrayObject);
         glBindVertexArray(arrayObject);
         {
@@ -291,7 +279,7 @@ namespace Driver {
         
         t.vertexBuffer = vertexBuffer;
         t.arrayObject = arrayObject;
-        t.type = toGLBufferTopologyType[params.type];
+        t.type = (GLenum) params.type;
         t.vertexCount = params.vertexCount;
     }
     template <typename _layout>
@@ -313,12 +301,11 @@ namespace Driver {
     template <typename _layout>
     void create(RscIndexedBuffer<_layout>& t, const IndexedBufferParams& params) {
         GLuint vertexBuffer, indexBuffer, arrayObject;
-        GLenum glMemoryMode = toGLBufferMemoryMode[params.memoryMode];
         
         // Vertex buffer binding is not part of the VAO state
         glGenBuffers(1, &vertexBuffer);
         glBindBuffer(GL_ARRAY_BUFFER, vertexBuffer);
-        glBufferData(GL_ARRAY_BUFFER, params.vertexSize, params.vertexData, glMemoryMode);
+        glBufferData(GL_ARRAY_BUFFER, params.vertexSize, params.vertexData, params.memoryUsage);
         glGenVertexArrays(1, &arrayObject);
         glBindVertexArray(arrayObject);
         {
@@ -326,7 +313,7 @@ namespace Driver {
             
             glGenBuffers(1, &indexBuffer);
             glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBuffer);
-            glBufferData(GL_ELEMENT_ARRAY_BUFFER, params.indexSize, params.indexData, glMemoryMode);
+            glBufferData(GL_ELEMENT_ARRAY_BUFFER, params.indexSize, params.indexData, params.memoryUsage);
         }
         glBindVertexArray(0);
         glBindBuffer(GL_ARRAY_BUFFER, 0);
@@ -334,8 +321,8 @@ namespace Driver {
         t.vertexBuffer = vertexBuffer;
         t.indexBuffer = indexBuffer;
         t.arrayObject = arrayObject;
-        t.indexType = toGLBufferItemType[params.indexType];
-        t.type = toGLBufferTopologyType[params.type];
+        t.indexType = (GLenum) params.indexType;
+        t.type = (GLenum) params.type;
         t.indexCount = params.indexCount;
     }
     template <typename _layout>

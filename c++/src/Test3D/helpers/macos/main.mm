@@ -181,11 +181,9 @@ int main(int , char** ) {
         }
 
         ::Input::Keyboard::PollData keyboardPollData;
-        ::Input::Keyboard::load(keyboardPollData.mapping);
+        keyboardPollData.queue = {};
         memset(platform.input.keyboard.last, 0, sizeof(u8) * ::Input::Keyboard::Keys::COUNT);
         memset(platform.input.keyboard.current, 0, sizeof(u8) * ::Input::Keyboard::Keys::COUNT);
-        
-        keyboardPollData.queue = {};
         ::Input::Mouse::PollData mousePollData = {};
         
         mach_timebase_info_data_t ticks_to_nanos;
@@ -232,9 +230,8 @@ int main(int , char** ) {
                                         break;
                                     }
                                     namespace KB = ::Input::Keyboard;
-                                    const KB::Keys::Enum key = keyboardPollData.mapping.mapping[[event keyCode]];
                                     bool state = eventType == NSEventTypeKeyDown;
-                                    keyboardPollData.queue.keyStates[key] = state;
+                                    keyboardPollData.queue.keyStates[(KB::Keys::Enum)[event keyCode]] = state;
                                 } break;
                                 case NSEventTypeMouseMoved:
                                 case NSEventTypeLeftMouseDragged:

@@ -19,9 +19,8 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPara
         namespace KB = ::Input::Keyboard;
         KB::PollData* keyboardPollData = (KB::PollData*)GetPropA(hWnd, "KeyboardPollData");
         if (keyboardPollData && wParam != VK_CONTROL && wParam != VK_PROCESSKEY) {
-            const KB::Keys::Enum key = keyboardPollData->mapping.mapping[HIWORD(lParam) & 0x1FF];
             bool state = ((lParam >> 31) & 1) == 0;
-            keyboardPollData->queue.keyStates[key] = state;
+            keyboardPollData->queue.keyStates[(KB::Keys::Enum)(HIWORD(lParam) & 0x1FF)] = state;
         }
     }
     break;
@@ -184,7 +183,6 @@ int WINAPI WinMain(
         ::Input::Gamepad::load(keyboardPadMappings[0]);
 
         ::Input::Keyboard::PollData keyboardPollData;
-        ::Input::Keyboard::load(keyboardPollData.mapping);
         keyboardPollData.queue = {};
         SetPropA(hWnd, "KeyboardPollData", &keyboardPollData);
 
