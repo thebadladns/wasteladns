@@ -81,9 +81,5 @@
     #include "TestSpatial/main.cpp"
     #endif
 #elif COMPILE_TARGET == TEST_3D
-    #if __GLFW
-    #error "app-glfw target not supported, use dx11 or macos"
-    #else
     #include "Test3D/main.cpp"
-    #endif
 #endif

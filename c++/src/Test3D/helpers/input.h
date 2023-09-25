@@ -103,15 +103,7 @@ namespace Input {
     };
 
 	namespace Mouse {
-		namespace Keys {
-			enum Enum : s32 {
-				  BUTTON_RIGHT = 0
-				, BUTTON_LEFT
-				, BUTTON_MIDDLE
-				, COUNT
-			};
-		};
-
+    
 		struct State {
 			bool down(Keys::Enum key) const {
 				return current[key] != 0;

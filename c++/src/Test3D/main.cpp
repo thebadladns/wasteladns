@@ -26,12 +26,22 @@
 
 #define UNITYBUILD
 
+#if __DX11
+#include "helpers/dx11/core.h"
+#elif __MACOS
+#include "helpers/macos/core.h"
+#elif __GLFW
+#include "helpers/glfw/core.h"
+#endif
+
 // Core
 #include "helpers/types.h"
 #if __DX11
 #include "helpers/dx11/input_types.h"
 #elif __MACOS
 #include "helpers/macos/input_types.h"
+#elif __GLFW
+#include "helpers/glfw/input_types.h"
 #endif
 
 
@@ -50,13 +60,14 @@
 #include "helpers/easing.h"
 
 #if __DX11
-#include "helpers/dx11/core.h"
 #include "helpers/dx11/input.h"
 #include "helpers/dx11/shaders.h"
 #elif __MACOS
-#include "helpers/macos/core.h"
 #include "helpers/macos/input.h"
 #include "helpers/macos/shaders.h"
+#elif __GLFW
+#include "helpers/glfw/input.h"
+#include "helpers/glfw/shaders.h"
 #endif
 
 #include "helpers/io.h"
@@ -66,6 +77,8 @@
 #include "helpers/dx11/renderer_types.h"
 #elif __MACOS
 #include "helpers/macos/renderer_types.h"
+#elif __GLFW
+#include "helpers/glfw/renderer_types.h"
 #endif
 
 #include "helpers/renderer.h"
@@ -73,6 +86,8 @@
 #include "helpers/dx11/renderer.h"
 #elif __MACOS
 #include "helpers/macos/renderer.h"
+#elif __GLFW
+#include "helpers/glfw/renderer.h"
 #endif
 
 #ifdef NDEBUG
@@ -96,4 +111,6 @@ do { \
 #include "helpers/dx11/main.h"
 #elif __MACOS
 #include "helpers/macos/main.mm"
+#elif __GLFW
+#include "helpers/glfw/main.h"
 #endif

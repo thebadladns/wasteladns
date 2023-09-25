@@ -121,141 +121,12 @@ namespace Gamepad {
     
 namespace Keyboard
 {
-    struct Mapping {
-        s32 mapping[Keys::COUNT];
-    };
-    
-    void load(Mapping& mapping) {
-        memset(mapping.mapping, GLFW_KEY_UNKNOWN, sizeof(s32) * Keys::COUNT);
-        mapping.mapping[Keys::SPACE] = GLFW_KEY_SPACE;
-        mapping.mapping[Keys::APOSTROPHE] = GLFW_KEY_APOSTROPHE;
-        mapping.mapping[Keys::COMMA] = GLFW_KEY_COMMA;
-        mapping.mapping[Keys::MINUS ] = GLFW_KEY_MINUS;
-        mapping.mapping[Keys::PERIOD] = GLFW_KEY_PERIOD;
-        mapping.mapping[Keys::SLASH] = GLFW_KEY_SLASH;
-        mapping.mapping[Keys::NUM0] = GLFW_KEY_0;
-        mapping.mapping[Keys::NUM1] = GLFW_KEY_1;
-        mapping.mapping[Keys::NUM2] = GLFW_KEY_2;
-        mapping.mapping[Keys::NUM3] = GLFW_KEY_3;
-        mapping.mapping[Keys::NUM4] = GLFW_KEY_4;
-        mapping.mapping[Keys::NUM5] = GLFW_KEY_5;
-        mapping.mapping[Keys::NUM6] = GLFW_KEY_6;
-        mapping.mapping[Keys::NUM7] = GLFW_KEY_7;
-        mapping.mapping[Keys::NUM8] = GLFW_KEY_8;
-        mapping.mapping[Keys::NUM9] = GLFW_KEY_9;
-        mapping.mapping[Keys::SEMICOLON] = GLFW_KEY_SEMICOLON;
-        mapping.mapping[Keys::EQUAL] = GLFW_KEY_EQUAL;
-        mapping.mapping[Keys::A] = GLFW_KEY_A;
-        mapping.mapping[Keys::B] = GLFW_KEY_B;
-        mapping.mapping[Keys::C] = GLFW_KEY_C;
-        mapping.mapping[Keys::D] = GLFW_KEY_D;
-        mapping.mapping[Keys::E] = GLFW_KEY_E;
-        mapping.mapping[Keys::F] = GLFW_KEY_F;
-        mapping.mapping[Keys::G] = GLFW_KEY_G;
-        mapping.mapping[Keys::H] = GLFW_KEY_H;
-        mapping.mapping[Keys::I] = GLFW_KEY_I;
-        mapping.mapping[Keys::J] = GLFW_KEY_J;
-        mapping.mapping[Keys::K] = GLFW_KEY_K;
-        mapping.mapping[Keys::L] = GLFW_KEY_L;
-        mapping.mapping[Keys::M] = GLFW_KEY_M;
-        mapping.mapping[Keys::N] = GLFW_KEY_N;
-        mapping.mapping[Keys::O] = GLFW_KEY_O;
-        mapping.mapping[Keys::P] = GLFW_KEY_P;
-        mapping.mapping[Keys::Q] = GLFW_KEY_Q;
-        mapping.mapping[Keys::R] = GLFW_KEY_R;
-        mapping.mapping[Keys::S] = GLFW_KEY_S;
-        mapping.mapping[Keys::T] = GLFW_KEY_T;
-        mapping.mapping[Keys::U] = GLFW_KEY_U;
-        mapping.mapping[Keys::V] = GLFW_KEY_V;
-        mapping.mapping[Keys::W] = GLFW_KEY_W;
-        mapping.mapping[Keys::X] = GLFW_KEY_X;
-        mapping.mapping[Keys::Y] = GLFW_KEY_Y;
-        mapping.mapping[Keys::Z] = GLFW_KEY_Z;
-        mapping.mapping[Keys::LEFT_BRACKET] = GLFW_KEY_LEFT_BRACKET;
-        mapping.mapping[Keys::BACKSLASH] = GLFW_KEY_BACKSLASH;
-        mapping.mapping[Keys::RIGHT_BRACKET] = GLFW_KEY_RIGHT_BRACKET;
-        mapping.mapping[Keys::GRAVE_ACCENT] = GLFW_KEY_GRAVE_ACCENT;
-        mapping.mapping[Keys::WORLD_1] = GLFW_KEY_WORLD_1;
-        mapping.mapping[Keys::WORLD_2] = GLFW_KEY_WORLD_2;
-        mapping.mapping[Keys::ESCAPE] = GLFW_KEY_ESCAPE;
-        mapping.mapping[Keys::ENTER] = GLFW_KEY_ENTER;
-        mapping.mapping[Keys::TAB] = GLFW_KEY_TAB;
-        mapping.mapping[Keys::BACKSPACE] = GLFW_KEY_BACKSPACE;
-        mapping.mapping[Keys::INSERT] = GLFW_KEY_INSERT;
-        mapping.mapping[Keys::DELETE] = GLFW_KEY_DELETE;
-        mapping.mapping[Keys::RIGHT] = GLFW_KEY_RIGHT;
-        mapping.mapping[Keys::LEFT] = GLFW_KEY_LEFT;
-        mapping.mapping[Keys::DOWN] = GLFW_KEY_DOWN;
-        mapping.mapping[Keys::UP] = GLFW_KEY_UP;
-        mapping.mapping[Keys::PAGE_UP] = GLFW_KEY_PAGE_UP;
-        mapping.mapping[Keys::PAGE_DOWN] = GLFW_KEY_PAGE_DOWN;
-        mapping.mapping[Keys::HOME] = GLFW_KEY_HOME;
-        mapping.mapping[Keys::END] = GLFW_KEY_END;
-        mapping.mapping[Keys::CAPS_LOCK] = GLFW_KEY_CAPS_LOCK;
-        mapping.mapping[Keys::SCROLL_LOCK] = GLFW_KEY_SCROLL_LOCK;
-        mapping.mapping[Keys::NUM_LOCK] = GLFW_KEY_NUM_LOCK;
-        mapping.mapping[Keys::PRINT_SCREEN] = GLFW_KEY_PRINT_SCREEN;
-        mapping.mapping[Keys::PAUSE] = GLFW_KEY_PAUSE;
-        mapping.mapping[Keys::F1] = GLFW_KEY_F1;
-        mapping.mapping[Keys::F2] = GLFW_KEY_F2;
-        mapping.mapping[Keys::F3] = GLFW_KEY_F3;
-        mapping.mapping[Keys::F4] = GLFW_KEY_F4;
-        mapping.mapping[Keys::F5] = GLFW_KEY_F5;
-        mapping.mapping[Keys::F6] = GLFW_KEY_F6;
-        mapping.mapping[Keys::F7] = GLFW_KEY_F7;
-        mapping.mapping[Keys::F8] = GLFW_KEY_F8;
-        mapping.mapping[Keys::F9] = GLFW_KEY_F9;
-        mapping.mapping[Keys::F10] = GLFW_KEY_F10;
-        mapping.mapping[Keys::F11] = GLFW_KEY_F11;
-        mapping.mapping[Keys::F12] = GLFW_KEY_F12;
-        mapping.mapping[Keys::F13] = GLFW_KEY_F13;
-        mapping.mapping[Keys::F14] = GLFW_KEY_F14;
-        mapping.mapping[Keys::F15] = GLFW_KEY_F15;
-        mapping.mapping[Keys::F16] = GLFW_KEY_F16;
-        mapping.mapping[Keys::F17] = GLFW_KEY_F17;
-        mapping.mapping[Keys::F18] = GLFW_KEY_F18;
-        mapping.mapping[Keys::F19] = GLFW_KEY_F19;
-        mapping.mapping[Keys::F20] = GLFW_KEY_F20;
-        mapping.mapping[Keys::F21] = GLFW_KEY_F21;
-        mapping.mapping[Keys::F22] = GLFW_KEY_F22;
-        mapping.mapping[Keys::F23] = GLFW_KEY_F23;
-        mapping.mapping[Keys::F24] = GLFW_KEY_F24;
-        mapping.mapping[Keys::F25] = GLFW_KEY_F25;
-        mapping.mapping[Keys::KP_0] = GLFW_KEY_KP_0;
-        mapping.mapping[Keys::KP_1] = GLFW_KEY_KP_1;
-        mapping.mapping[Keys::KP_2] = GLFW_KEY_KP_2;
-        mapping.mapping[Keys::KP_3] = GLFW_KEY_KP_3;
-        mapping.mapping[Keys::KP_4] = GLFW_KEY_KP_4;
-        mapping.mapping[Keys::KP_5] = GLFW_KEY_KP_5;
-        mapping.mapping[Keys::KP_6] = GLFW_KEY_KP_6;
-        mapping.mapping[Keys::KP_7] = GLFW_KEY_KP_7;
-        mapping.mapping[Keys::KP_8] = GLFW_KEY_KP_8;
-        mapping.mapping[Keys::KP_9] = GLFW_KEY_KP_9;
-        mapping.mapping[Keys::KP_DECIMAL] = GLFW_KEY_KP_DECIMAL;
-        mapping.mapping[Keys::KP_DIVIDE] = GLFW_KEY_KP_DIVIDE;
-        mapping.mapping[Keys::KP_MULTIPLY] = GLFW_KEY_KP_MULTIPLY;
-        mapping.mapping[Keys::KP_SUBTRACT] = GLFW_KEY_KP_SUBTRACT;
-        mapping.mapping[Keys::KP_ADD] = GLFW_KEY_KP_ADD;
-        mapping.mapping[Keys::KP_ENTER] = GLFW_KEY_KP_ENTER;
-        mapping.mapping[Keys::KP_EQUAL] = GLFW_KEY_KP_EQUAL;
-        mapping.mapping[Keys::LEFT_SHIFT] = GLFW_KEY_LEFT_SHIFT;
-        mapping.mapping[Keys::LEFT_CONTROL] = GLFW_KEY_LEFT_CONTROL;
-        mapping.mapping[Keys::LEFT_ALT] = GLFW_KEY_LEFT_ALT;
-        mapping.mapping[Keys::LEFT_SUPER] = GLFW_KEY_LEFT_SUPER;
-        mapping.mapping[Keys::RIGHT_SHIFT] = GLFW_KEY_RIGHT_SHIFT;
-        mapping.mapping[Keys::RIGHT_CONTROL] = GLFW_KEY_RIGHT_CONTROL;
-        mapping.mapping[Keys::RIGHT_ALT] = GLFW_KEY_RIGHT_ALT;
-        mapping.mapping[Keys::RIGHT_SUPER] = GLFW_KEY_RIGHT_SUPER;
-        mapping.mapping[Keys::MENU] = GLFW_KEY_MENU;
-    };
-    
-    void pollState(State& keyboard, GLFWwindow* window, const Mapping& mapping) {
+    void pollState(State& keyboard, GLFWwindow* window) {
         memcpy(keyboard.last, keyboard.current, sizeof(u8) * Keys::COUNT);
         memset(keyboard.current, 0, sizeof(u8) * Keys::COUNT);
         for (int i = 0; i < Keys::COUNT; i++) {
-            s32 glfw_id = mapping.mapping[i];
-            if (glfw_id != GLFW_KEY_UNKNOWN) {
-                keyboard.current[i] = glfwGetKey(window, glfw_id) != GLFW_RELEASE;
+            if (i != GLFW_KEY_UNKNOWN) {
+                keyboard.current[i] = glfwGetKey(window, i) != GLFW_RELEASE;
             }
         }
     }
@@ -263,27 +134,15 @@ namespace Keyboard
 
 namespace Mouse
 {
-	struct Mapping {
-		s32 mapping[Keys::COUNT];
-	};
-
-	void load(Mapping& mapping) {
-		memset(mapping.mapping, GLFW_KEY_UNKNOWN, sizeof(s32) * Keys::COUNT);
-		mapping.mapping[Keys::BUTTON_LEFT] = GLFW_MOUSE_BUTTON_LEFT;
-		mapping.mapping[Keys::BUTTON_RIGHT] = GLFW_MOUSE_BUTTON_RIGHT;
-		mapping.mapping[Keys::BUTTON_MIDDLE] = GLFW_MOUSE_BUTTON_MIDDLE;
-	};
-
     void resetState(State& mouse) {
         mouse.scrolldx = mouse.scrolldy = 0.0;
     }
-	void pollState(State& mouse, GLFWwindow* window, const Mapping& mapping) {
+	void pollState(State& mouse, GLFWwindow* window) {
 		memcpy(mouse.last, mouse.current, sizeof(u8) * Keys::COUNT);
 		memset(mouse.current, 0, sizeof(u8) * Keys::COUNT);
 		for (int i = 0; i < Keys::COUNT; i++) {
-			s32 glfw_id = mapping.mapping[i];
-			if (glfw_id != GLFW_KEY_UNKNOWN) {
-				mouse.current[i] = glfwGetMouseButton(window, glfw_id) != GLFW_RELEASE;
+			if (i != GLFW_KEY_UNKNOWN) {
+				mouse.current[i] = glfwGetMouseButton(window, i) != GLFW_RELEASE;
 			}
 		}
 

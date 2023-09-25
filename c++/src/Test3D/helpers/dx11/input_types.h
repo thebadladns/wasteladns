@@ -126,6 +126,15 @@ namespace Input {
             , INVALID = -1
         }; };
     };
+
+    namespace Mouse {
+        namespace Keys { enum Enum : s32 {
+              BUTTON_RIGHT = 0
+            , BUTTON_LEFT
+            , BUTTON_MIDDLE
+            , COUNT
+        }; };
+    };
 };
 
 //#include "input_mappings.h"

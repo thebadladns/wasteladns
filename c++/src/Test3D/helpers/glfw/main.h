@@ -126,11 +126,6 @@ int main(int argc, char** argv) {
     platform.input.pads = pads;
     ::Input::Gamepad::load(keyboardPadMappings[0]);
         
-    ::Input::Keyboard::Mapping keyboardMapping;
-    ::Input::Keyboard::load(keyboardMapping);
-	::Input::Mouse::Mapping mouseMapping;
-	::Input::Mouse::load(mouseMapping);
-        
     platform.time.running = 0.0;
     platform.time.now = platform.time.start = glfwGetTime();
         
@@ -158,10 +153,10 @@ int main(int argc, char** argv) {
                 }
                 glfwPollEvents();
                 if ((config.requestFlags & (Platform::RequestFlags::PollKeyboard)) != 0) {
-                    ::Input::Keyboard::pollState(platform.input.keyboard, windowHandle, keyboardMapping);
+                    ::Input::Keyboard::pollState(platform.input.keyboard, windowHandle);
                 }
                 if ((config.requestFlags & (Platform::RequestFlags::PollMouse)) != 0) {
-                    ::Input::Mouse::pollState(platform.input.mouse, windowHandle, mouseMapping);
+                    ::Input::Mouse::pollState(platform.input.mouse, windowHandle);
                 }
                 for (u32 i = 0; i < platform.input.padCount; i++) {
                     ::Input::Gamepad::pollState(platform.input.pads[i], windowHandle, keyboardPadMappings[i]);
