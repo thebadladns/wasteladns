@@ -83,8 +83,7 @@ int main(int argc, char** argv) {
         glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
         glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
             
-        // TODO: add define on cmakelist
-#ifdef __APPLE__
+#ifdef __MACOS
 
         glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
 #endif

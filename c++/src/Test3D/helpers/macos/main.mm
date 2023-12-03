@@ -1,6 +1,5 @@
 
 #import <Cocoa/Cocoa.h>
-//#include <dlfcn.h>
 #import <mach/mach_time.h> // for mach_absolute_time
 
 #ifndef GL_SILENCE_DEPRECATION
@@ -79,16 +78,30 @@
 
 @end // AppDelegate
 
+static CFBundleRef glFramework;
+void loadGLFramework()
+{
+    glFramework = CFBundleGetBundleWithIdentifier(CFSTR("com.apple.opengl"));
+}
+static void* getGLProcAddress(const char* procname)
+{
+    CFStringRef symbolName = CFStringCreateWithCString(kCFAllocatorDefault,
+                                                       procname,
+                                                       kCFStringEncodingASCII);
+
+    void* symbol = CFBundleGetFunctionPointerForName(glFramework, symbolName);
+
+    CFRelease(symbolName);
+
+    return symbol;
+}
+
 
 int main(int , char** ) {
     @autoreleasepool {
-
-        // todo: consider opengl via dlfcn.h
-        // https://github.com/andr3wmac/Torque6/blob/db6cd08f18f4917e0c6557b2766fb40d8e2bee39/lib/bgfx/include/bx/os.h
-        // https://github.com/andr3wmac/Torque6/blob/db6cd08f18f4917e0c6557b2766fb40d8e2bee39/lib/bgfx/src/glcontext_nsgl.mm
-//                dlopen("/System/Library/Frameworks/OpenGL.framework/Versions/Current/OpenGL", RTLD_LOCAL|RTLD_LAZY);
         
-        
+        // load framework to access opengl functions through glad
+        loadGLFramework();
         
         [NSApplication sharedApplication];
         AppDelegate* delegate = [[AppDelegate alloc] init];
@@ -139,22 +152,16 @@ int main(int , char** ) {
             
             NSView* contentView = [window contentView];
             
-            NSOpenGLPixelFormatAttribute pixelFormatAttributes[] = {
-                NSOpenGLPFAOpenGLProfile, NSOpenGLProfileVersion3_2Core,
-                NSOpenGLPFADepthSize,    (NSOpenGLPixelFormatAttribute) 24,
-                NSOpenGLPFADoubleBuffer, (NSOpenGLPixelFormatAttribute) true,
-                NSOpenGLPFAAccelerated,  (NSOpenGLPixelFormatAttribute) true,
-                0, 0,
-            };
-            
             NSOpenGLPixelFormatAttribute glAttributes[] = {
+                NSOpenGLPFAAccelerated, NSOpenGLPFAClosestPolicy,
                 NSOpenGLPFAOpenGLProfile, NSOpenGLProfileVersion3_2Core,
                 NSOpenGLPFAColorSize, (NSOpenGLPixelFormatAttribute) 24,
                 NSOpenGLPFAAlphaSize, (NSOpenGLPixelFormatAttribute) 8,
-                NSOpenGLPFADoubleBuffer, true,
-                NSOpenGLPFASampleBuffers, (NSOpenGLPixelFormatAttribute) 1,
-                NSOpenGLPFASamples, (NSOpenGLPixelFormatAttribute) 4,
-                NSOpenGLPFAAccelerated,  (NSOpenGLPixelFormatAttribute) true,
+                NSOpenGLPFADepthSize, (NSOpenGLPixelFormatAttribute) 24,
+                NSOpenGLPFAStencilSize, (NSOpenGLPixelFormatAttribute) 8,
+                NSOpenGLPFADoubleBuffer,
+                NSOpenGLPFASampleBuffers, (NSOpenGLPixelFormatAttribute) 0,
+                0
             };
             NSOpenGLPixelFormat* pixelFormat = [[NSOpenGLPixelFormat alloc] initWithAttributes:glAttributes];
             
@@ -164,8 +171,8 @@ int main(int , char** ) {
             [openGLContext setValues:&swap forParameter:NSOpenGLCPSwapInterval];
             [openGLContext setView:contentView];
             [openGLContext makeCurrentContext];
-            
-            gladLoadGL();
+        
+            gladLoadGLLoader(getGLProcAddress);
             
             [(NSWindow*)window center];
             [window orderFrontRegardless];
