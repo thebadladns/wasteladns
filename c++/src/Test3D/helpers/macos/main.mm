@@ -11,73 +11,6 @@
 //#include "input.h"
 //#endif
 
-@interface WindowDelegate : NSObject<NSWindowDelegate>
-@end
-
-@implementation WindowDelegate
--(void)windowWillClose:(NSNotification*)notification
-{
-    
-}
-
-@end // WindowDelegate
-
-@interface AppDelegate : NSObject <NSApplicationDelegate>
-@end
-
-@implementation AppDelegate
-
-- (NSApplicationTerminateReply)applicationShouldTerminate:(NSApplication *)sender
-{
-//    for (_GLFWwindow* window = _glfw.windowListHead;  window;  window = window->next)
-//        _glfwInputWindowCloseRequest(window);
-//
-    return NSTerminateCancel;
-}
-
-- (void)applicationDidChangeScreenParameters:(NSNotification *) notification
-{
-//    for (_GLFWwindow* window = _glfw.windowListHead;  window;  window = window->next)
-//    {
-//        if (window->context.client != GLFW_NO_API)
-//            [window->context.nsgl.object update];
-//    }
-//
-//    _glfwPollMonitorsCocoa();
-}
-
-- (void)applicationWillFinishLaunching:(NSNotification *)notification
-{
-//    if (_glfw.hints.init.ns.menubar)
-//    {
-//        // Menu bar setup must go between sharedApplication and finishLaunching
-//        // in order to properly emulate the behavior of NSApplicationMain
-//
-//        if ([[NSBundle mainBundle] pathForResource:@"MainMenu" ofType:@"nib"])
-//        {
-//            [[NSBundle mainBundle] loadNibNamed:@"MainMenu"
-//                                          owner:NSApp
-//                                topLevelObjects:&_glfw.ns.nibObjects];
-//        }
-//        else
-//            createMenuBar();
-//    }
-}
-
-- (void)applicationDidFinishLaunching:(NSNotification *)notification
-{
-//    _glfwPostEmptyEventCocoa();
-//    [NSApp stop:nil];
-}
-
-- (void)applicationDidHide:(NSNotification *)notification
-{
-//    for (int i = 0;  i < _glfw.monitorCount;  i++)
-//        _glfwRestoreVideoModeCocoa(_glfw.monitors[i]);
-}
-
-@end // AppDelegate
-
 static CFBundleRef glFramework;
 void loadGLFramework()
 {
@@ -104,8 +37,6 @@ int main(int , char** ) {
         loadGLFramework();
         
         [NSApplication sharedApplication];
-        AppDelegate* delegate = [[AppDelegate alloc] init];
-        [NSApp setDelegate:delegate];
         
         // Need for menu bar and window focus
         [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
@@ -147,9 +78,6 @@ int main(int , char** ) {
             [window setTitle:nstitle];
             [window cascadeTopLeftFromPoint:NSMakePoint(20,20)];
             
-            WindowDelegate* windowDelegate = [[WindowDelegate alloc] init];
-            [window setDelegate:windowDelegate];
-            
             NSView* contentView = [window contentView];
             
             NSOpenGLPixelFormatAttribute glAttributes[] = {
@@ -168,7 +96,7 @@ int main(int , char** ) {
             openGLContext = [[NSOpenGLContext alloc] initWithFormat:pixelFormat shareContext:nil];
             
             GLint swap = 1;
-            [openGLContext setValues:&swap forParameter:NSOpenGLCPSwapInterval];
+            [openGLContext setValues:&swap forParameter:NSOpenGLContextParameterSwapInterval];
             [openGLContext setView:contentView];
             [openGLContext makeCurrentContext];
         
@@ -270,7 +198,7 @@ int main(int , char** ) {
                                     [NSApp sendEvent:event];
                                 } break;
                             }
-//                            [NSApp sendEvent:event];
+                            [NSApp sendEvent:event];
                         } while (event);
                         
                         [NSApp updateWindows];
@@ -300,9 +228,6 @@ int main(int , char** ) {
 
         } while (!config.quit);
 
-        
-//        [NSApp run];
-        
     }
 
     return 1;
