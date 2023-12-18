@@ -199,7 +199,7 @@ int WINAPI WinMain(
         Platform::GameConfig config;
         Game::start(game, config, platform);
 
-        MSG msg;
+        MSG msg = {};
 
         do {
             if (platform.time.now >= config.nextFrame) {

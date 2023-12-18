@@ -3,7 +3,7 @@
 
 namespace Game
 {
-    const char* inputMeshPath = "assets/meshes/mesh_ona_mixed.fbx";
+    const char* inputMeshPath = "assets/meshes/tank.fbx";
 
     struct Time {
         struct Config {
@@ -212,7 +212,7 @@ namespace Game
             {
                 RenderItemModel& r = rscene.inputMeshGroupBuffer;
                 Math::identity4x4(r.transform);
-                const float modelScale = 30.f;
+                const float modelScale = 10.f;
                 r.transform.matrix.col0.x = modelScale;
                 r.transform.matrix.col1.y = modelScale;
                 r.transform.matrix.col2.z = modelScale;
@@ -243,14 +243,15 @@ namespace Game
                     };
                     std::vector<f32> vertices;
                     std::vector<u32> indices;
-                    ufbx_load_opts opts = { 0 };
+                    ufbx_load_opts opts = {};
+                    opts.allow_null_material = true;
                     ufbx_error error;
                     ufbx_scene* scene = ufbx_load_file(inputMeshPath, &opts, &error);
                     if (scene) {
                         for (size_t i = 0; i < scene->meshes.count; i++) {
-                            // option 1: add vertex by materials (todo: flatten vertices and make them properly indexed)
+                            ufbx_mesh& mesh = *scene->meshes.data[i];
+                            //option 1: add vertex by materials (todo: flatten vertices and make them properly indexed)
                             //{
-                            //    ufbx_mesh& mesh = *scene->meshes[0];
                             //    for (size_t pi = 0; pi < mesh.materials.count; pi++) {
                             //        ufbx_mesh_material& mesh_mat = mesh.materials.data[pi];
                             //        if (mesh_mat.num_triangles == 0) continue;
@@ -300,46 +301,36 @@ namespace Game
                             
                             // option 2: copy the vertices directly
                             {
-                                for (size_t i = 0; i < scene->nodes.count; i++) {
-                                    ufbx_node* node = scene->nodes.data[i];
-                                    if (node->is_root) continue;
-                                    if (node->mesh) {
-                                        //vertices.reserve(node->mesh->num_vertices*3);
-                                        //for (size_t i = 0; i < node->mesh->num_vertices; i++) {
-                                        //    auto v = node->mesh->vertices[i];
-                                        //    vertices.push_back(v.x*10.f);
-                                        //    vertices.push_back(v.y*10.f);
-                                        //    vertices.push_back(v.z*10.f);
-                                        //}
-                                        vertices.resize(node->mesh->num_vertices * 3);
-                                        memcpy(&vertices[0], &node->mesh->vertices[0], node->mesh->num_vertices * 3 * sizeof(f32));
-                                        // can't copy the face indexes directly, need to de-triangulate
-                                        for (size_t i = 0; i < node->mesh->num_faces; i++) {
-                                            if (node->mesh->faces[i].num_indices > 3) {
-                                                const u32 a = node->mesh->vertex_indices[node->mesh->faces[i].index_begin];
-                                                const u32 b = node->mesh->vertex_indices[node->mesh->faces[i].index_begin + 1];
-                                                const u32 c = node->mesh->vertex_indices[node->mesh->faces[i].index_begin + 2];
-                                                const u32 d = node->mesh->vertex_indices[node->mesh->faces[i].index_begin + 3];
-                                                indices.push_back(a);
-                                                indices.push_back(b);
-                                                indices.push_back(c);
-                                                indices.push_back(a);
-                                                indices.push_back(c);
-                                                indices.push_back(d);
-                                            }
-                                            else {
-                                                const u32 a = node->mesh->vertex_indices[node->mesh->faces[i].index_begin];
-                                                const u32 b = node->mesh->vertex_indices[node->mesh->faces[i].index_begin + 1];
-                                                const u32 c = node->mesh->vertex_indices[node->mesh->faces[i].index_begin + 2];
-                                                indices.push_back(a);
-                                                indices.push_back(b);
-                                                indices.push_back(c);
-                                            }
-                                        }
-
-                                        addMesh(vertices, indices, rscene.inputMeshGroupBuffer);
+                                vertices.clear();
+                                indices.clear();
+                                vertices.resize(mesh.num_vertices * 3);
+                                memcpy(&vertices[0], &mesh.vertices[0], mesh.num_vertices * 3 * sizeof(f32));
+                                // can't copy the face indexes directly, need to de-triangulate
+                                for (size_t i = 0; i < mesh.num_faces; i++) {
+                                    ufbx_face& face = mesh.faces[i];
+                                    if (mesh.faces[i].num_indices > 3) {
+                                        const u32 a = mesh.vertex_indices[face.index_begin];
+                                        const u32 b = mesh.vertex_indices[face.index_begin + 1];
+                                        const u32 c = mesh.vertex_indices[face.index_begin + 2];
+                                        const u32 d = mesh.vertex_indices[face.index_begin + 3];
+                                        indices.push_back(a);
+                                        indices.push_back(b);
+                                        indices.push_back(c);
+                                        indices.push_back(a);
+                                        indices.push_back(c);
+                                        indices.push_back(d);
+                                    }
+                                    else {
+                                        const u32 a = mesh.vertex_indices[face.index_begin];
+                                        const u32 b = mesh.vertex_indices[face.index_begin + 1];
+                                        const u32 c = mesh.vertex_indices[face.index_begin + 2];
+                                        indices.push_back(a);
+                                        indices.push_back(b);
+                                        indices.push_back(c);
                                     }
                                 }
+
+                                addMesh(vertices, indices, rscene.inputMeshGroupBuffer);
                             }
                         }
                     }
