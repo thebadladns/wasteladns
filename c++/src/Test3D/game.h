@@ -91,11 +91,14 @@ namespace Game
     };
     #endif
 
+#include "gameplay.h"
+
     struct Instance {
         Time time;
         CameraManager cameraMgr;
         RenderManager renderMgr;
         Scene scene;
+        Gameplay::PlayerMovement player;
         __DEBUGDEF(DebugVis debugVis;)
     };
     void loadLaunchConfig(Platform::WindowConfig& config) {
@@ -250,7 +253,7 @@ namespace Game
                     if (scene) {
                         for (size_t i = 0; i < scene->meshes.count; i++) {
                             ufbx_mesh& mesh = *scene->meshes.data[i];
-                            //option 1: add vertex by materials (todo: flatten vertices and make them properly indexed)
+                            // option 1: add vertex by materials (todo: flatten vertices and make them properly indexed)
                             //{
                             //    for (size_t pi = 0; pi < mesh.materials.count; pi++) {
                             //        ufbx_mesh_material& mesh_mat = mesh.materials.data[pi];
@@ -365,6 +368,12 @@ namespace Game
             __DEBUGEXP(Renderer::Immediate::load(game.renderMgr.immediateBuffer));
         }
 
+        game.player = {};
+        {
+            Math::identity4x4(game.player.transform);
+            game.player.transform.pos = Vec3(5.f, 10.f, 0.f);
+        }
+
         game.scene = {};
         {
             game.scene.offset = Vec3(0.f, -100.f, 0.f);
@@ -429,6 +438,14 @@ namespace Game
             using namespace Game;
 
             Camera* activeCam = game.cameraMgr.activeCam;
+
+            // player movement update
+            {
+                const Gameplay::ControlButtons plyButtons = {Gameplay::Input::UP, Gameplay::Input::DOWN, Gameplay::Input::LEFT, Gameplay::Input::RIGHT};
+                process(game.player.control, keyboard, plyButtons, dt);
+                process_cameraRelative(game.player.transform, game.player.movementController, game.player.control, activeCam->transform, dt);
+                game.renderMgr.renderScene.inputMeshGroupBuffer.transform = game.player.transform;
+            }
 
             // camera update
             {
