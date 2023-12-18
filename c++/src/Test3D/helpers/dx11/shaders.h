@@ -22,11 +22,11 @@ VertexOutput VS(AppData IN) {
 )";
 
 const char * defaultPixelShaderStr = R"(
-struct PixelIn {
+struct VertexOut {
     float4 color : COLOR;
 };
-float4 PS(PixelIn IN) : SV_TARGET {
-    return IN.color;
+float4 PS(VertexOut OUT) : SV_TARGET {
+    return OUT.color;
 }
 )";
 

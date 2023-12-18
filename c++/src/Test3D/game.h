@@ -3,8 +3,7 @@
 
 namespace Game
 {
-    //const char* inputMeshPath = "assets/meshes/PolySphere1.fbx";
-    const char* inputMeshPath = "assets/meshes/mesh_ona_quads.obj";
+    const char* inputMeshPath = "assets/meshes/mesh_ona_mixed.fbx";
 
     struct Time {
         struct Config {
@@ -32,25 +31,23 @@ namespace Game
             ;
     };
 
-    struct RenderInstance {
+    struct RenderItemModel {
+        std::vector< Renderer::Driver::RscIndexedBuffer<Renderer::Layout_Vec3> > buffers;
         Transform transform;
-    };
-    struct Material {
-        Col groupColor;
-    };
-    struct RenderDescription {
-        Renderer::Driver::RscIndexedBuffer<Renderer::Layout_Vec3> buffer;
         Renderer::Driver::RscRasterizerState rasterizerState;
-        Material material;
+        Col groupColor;
         bool fill;
     };
-    struct RenderGroup {
-        RenderInstance instanceBuffer;
-        RenderDescription desc;
+    struct RenderItemGeo {
+        Renderer::Driver::RscIndexedBuffer<Renderer::Layout_Vec3> buffer;
+        Renderer::Driver::RscRasterizerState rasterizerState;
+        Transform transform;
+        Col groupColor;
+        bool fill;
     };
     struct RenderScene {
-        RenderGroup inputMeshGroupBuffer;
-        RenderGroup instancedCubeGroupBuffer;
+        RenderItemModel inputMeshGroupBuffer;
+        RenderItemGeo instancedCubeGroupBuffer;
         Renderer::Driver::RscCBuffer cbuffers[Renderer::Layout_CBuffer_3DScene::Buffers::Count];
         Renderer::Driver::RscRasterizerState rasterizerStateFill, rasterizerStateLine;
         Renderer::Driver::RscBlendState blendStateOn;
@@ -146,102 +143,6 @@ namespace Game
 
         // mesh analysis
         Vec3 meshCentroid = {};
-        std::vector<f32> vertices;
-        std::vector<u16> indices;
-        {
-             //input mesh
-            ufbx_load_opts opts = { 0 };
-            ufbx_error error;
-            ufbx_scene* scene = ufbx_load_file(inputMeshPath, &opts, &error);
-            if (scene) {
-                for (size_t i = 0; i < scene->nodes.count; i++) {
-                    ufbx_node* node = scene->nodes.data[i];
-                    if (node->is_root) continue;
-
-                    Platform::debuglog("Object: %s\n", node->name.data);
-                    if (node->mesh) {
-                        Platform::debuglog("-> mesh with %zu faces\n", node->mesh->faces.count);
-
-                        //vertices.reserve(node->mesh->num_vertices*3);
-                        //for (size_t i = 0; i < node->mesh->num_vertices; i++) {
-                        //    auto v = node->mesh->vertices[i];
-                        //    vertices.push_back(v.x*10.f);
-                        //    vertices.push_back(v.y*10.f);
-                        //    vertices.push_back(v.z*10.f);
-                        //}
-                        vertices.resize(node->mesh->num_vertices * 3);
-                        memcpy(&vertices[0], &node->mesh->vertices[0], node->mesh->num_vertices * 3 * sizeof(f32));
-                        for (size_t i = 0; i < node->mesh->num_faces; i++) {
-                            if (node->mesh->faces[i].num_indices > 3) {
-                                const u16 a = node->mesh->vertex_indices[node->mesh->faces[i].index_begin];
-                                const u16 b = node->mesh->vertex_indices[node->mesh->faces[i].index_begin + 1];
-                                const u16 c = node->mesh->vertex_indices[node->mesh->faces[i].index_begin + 2];
-                                const u16 d = node->mesh->vertex_indices[node->mesh->faces[i].index_begin + 3];
-                                indices.push_back(a);
-                                indices.push_back(b);
-                                indices.push_back(c);
-                                indices.push_back(a);
-                                indices.push_back(c);
-                                indices.push_back(d);
-                            }
-                            else {
-                                const u16 a = node->mesh->vertex_indices[node->mesh->faces[i].index_begin];
-                                const u16 b = node->mesh->vertex_indices[node->mesh->faces[i].index_begin + 1];
-                                const u16 c = node->mesh->vertex_indices[node->mesh->faces[i].index_begin + 2];
-                                indices.push_back(a);
-                                indices.push_back(b);
-                                indices.push_back(c);
-                            }
-                        }
-                    }
-                }
-            }
-            else {
-                Platform::debuglog("failed to load: %s\n", error.description.data);
-                FILE* f;
-                if (Platform::fopen(&f, inputMeshPath, "r") == 0) {
-                    char c;
-                    do {
-                        c = Platform::fgetc(f);
-                        if (c == 'v')
-                        {
-                            f32 x, y, z;
-                            s32 r = Platform::fscanf(f, "%f%f%f", &x, &y, &z);
-                            if (r == 3) {
-                                vertices.push_back(x);
-                                vertices.push_back(y);
-                                vertices.push_back(z);
-                            }
-                        }
-                        else if (c == 'f')
-                        {
-                            int a, b, c;
-                            s32 r = Platform::fscanf(f, "%d%d%d", &a, &b, &c);
-                            if (r == 3) {
-                                int d;
-                                r = Platform::fscanf(f, "%d", &d);
-                                if (r <= 0) {
-                                    // read three values: triangles
-                                    indices.push_back(a - 1);
-                                    indices.push_back(b - 1);
-                                    indices.push_back(c - 1);
-                                }
-                                else {
-                                    // read four values: divide quad in two triangles
-                                    indices.push_back(a - 1);
-                                    indices.push_back(b - 1);
-                                    indices.push_back(c - 1);
-                                    indices.push_back(a - 1);
-                                    indices.push_back(c - 1);
-                                    indices.push_back(d - 1);
-                                }
-                            }
-                        }
-                    } while (c > 0);
-                    Platform::fclose(f);
-                }
-            }
-        }
 
         game.renderMgr.renderScene = {};
         {
@@ -308,27 +209,141 @@ namespace Game
             }
 
             // input mesh vertex buffer
-            if (vertices.size() > 0 && indices.size() > 0)
             {
-                Renderer::Driver::RscIndexedBuffer<Renderer::Layout_Vec3> rscBuffer;
-                Renderer::Driver::IndexedBufferParams bufferParams;
-                bufferParams.vertexData = &vertices[0];
-                bufferParams.vertexSize = (u32)vertices.size() * sizeof(vertices[0]);
-                bufferParams.indexData = &indices[0];
-                bufferParams.indexSize = (u32)indices.size() * sizeof(indices[0]);
-                bufferParams.indexCount = (u32)indices.size();
-                bufferParams.memoryUsage = Renderer::Driver::BufferMemoryUsage::GPU;
-                bufferParams.accessType = Renderer::Driver::BufferAccessType::GPU;
-                bufferParams.indexType = Renderer::Driver::BufferItemType::U16;
-                bufferParams.type = Renderer::Driver::BufferTopologyType::Triangles;
-                Renderer::Driver::create(rscBuffer, bufferParams);
+                RenderItemModel& r = rscene.inputMeshGroupBuffer;
+                Math::identity4x4(r.transform);
+                const float modelScale = 30.f;
+                r.transform.matrix.col0.x = modelScale;
+                r.transform.matrix.col1.y = modelScale;
+                r.transform.matrix.col2.z = modelScale;
+                r.rasterizerState = rscene.rasterizerStateLine;
+                r.groupColor = Col(0.3f, 0.3f, 0.3f, 1.f);
 
-                RenderGroup& r = rscene.inputMeshGroupBuffer;
-                r.desc.buffer = rscBuffer;
-                r.desc.rasterizerState = rscene.rasterizerStateLine;
-                Material& material = r.desc.material;
-                material.groupColor = Col(0.3f, 0.3f, 0.3f, 1.f);
-                Math::identity4x4(r.instanceBuffer.transform);
+                // load mesh
+                {
+                    // we may have multiple vertex streams depending on materials or mesh being separated in parts
+                    auto addMesh = [](std::vector<f32> vertices, std::vector<u32> indices, RenderItemModel& desc) {
+                        if (vertices.size() > 0 && indices.size() > 0)
+                        {
+                            Renderer::Driver::RscIndexedBuffer<Renderer::Layout_Vec3> rscBuffer;
+                            Renderer::Driver::IndexedBufferParams bufferParams;
+                            bufferParams.vertexData = &vertices[0];
+                            bufferParams.vertexSize = (u32)vertices.size() * sizeof(vertices[0]);
+                            bufferParams.indexData = &indices[0];
+                            bufferParams.indexSize = (u32)indices.size() * sizeof(indices[0]);
+                            bufferParams.indexCount = (u32)indices.size();
+                            bufferParams.memoryUsage = Renderer::Driver::BufferMemoryUsage::GPU;
+                            bufferParams.accessType = Renderer::Driver::BufferAccessType::GPU;
+                            bufferParams.indexType = Renderer::Driver::BufferItemType::U32;
+                            bufferParams.type = Renderer::Driver::BufferTopologyType::Triangles;
+                            Renderer::Driver::create(rscBuffer, bufferParams);
+
+                            desc.buffers.emplace_back(rscBuffer);
+                        }
+                    };
+                    std::vector<f32> vertices;
+                    std::vector<u32> indices;
+                    ufbx_load_opts opts = { 0 };
+                    ufbx_error error;
+                    ufbx_scene* scene = ufbx_load_file(inputMeshPath, &opts, &error);
+                    if (scene) {
+                        for (size_t i = 0; i < scene->meshes.count; i++) {
+                            // option 1: add vertex by materials (todo: flatten vertices and make them properly indexed)
+                            //{
+                            //    ufbx_mesh& mesh = *scene->meshes[0];
+                            //    for (size_t pi = 0; pi < mesh.materials.count; pi++) {
+                            //        ufbx_mesh_material& mesh_mat = mesh.materials.data[pi];
+                            //        if (mesh_mat.num_triangles == 0) continue;
+                            //        vertices.clear();
+                            //        indices.clear();
+                            //        for (size_t fi = 0; fi < mesh_mat.num_faces; fi++) {
+                            //            ufbx_vertex_vec3& positions = mesh.vertex_position;
+                            //            ufbx_face face = mesh.faces.data[mesh_mat.face_indices.data[fi]];
+                            //            if (face.num_indices == 3) {
+                            //                ufbx_vec3 va = positions.values.data[(int32_t)positions.indices.data[face.index_begin + 0]];
+                            //                u32 a = (u32)vertices.size() / 3;
+                            //                vertices.push_back(va.x); vertices.push_back(va.y); vertices.push_back(va.z);
+                            //                ufbx_vec3 vb = positions.values.data[(int32_t)positions.indices.data[face.index_begin + 1]];
+                            //                u32 b = (u32)vertices.size() / 3;
+                            //                vertices.push_back(vb.x); vertices.push_back(vb.y); vertices.push_back(vb.z);
+                            //                ufbx_vec3 vc = positions.values.data[(int32_t)positions.indices.data[face.index_begin + 2]];
+                            //                u32 c = (u32)vertices.size() / 3;
+                            //                vertices.push_back(vc.x); vertices.push_back(vc.y); vertices.push_back(vc.z);
+                            //                indices.push_back(a);
+                            //                indices.push_back(b);
+                            //                indices.push_back(c);
+                            //            }
+                            //            else {
+                            //                ufbx_vec3 va = positions.values.data[(int32_t)positions.indices.data[face.index_begin + 0]];
+                            //                u32 a = (u32)vertices.size() / 3;
+                            //                vertices.push_back(va.x); vertices.push_back(va.y); vertices.push_back(va.z);
+                            //                ufbx_vec3 vb = positions.values.data[(int32_t)positions.indices.data[face.index_begin + 1]];
+                            //                u32 b = (u32)vertices.size() / 3;
+                            //                vertices.push_back(vb.x); vertices.push_back(vb.y); vertices.push_back(vb.z);
+                            //                ufbx_vec3 vc = positions.values.data[(int32_t)positions.indices.data[face.index_begin + 2]];
+                            //                u32 c = (u32)vertices.size() / 3;
+                            //                vertices.push_back(vc.x); vertices.push_back(vc.y); vertices.push_back(vc.z);
+                            //                ufbx_vec3 vd = positions.values.data[(int32_t)positions.indices.data[face.index_begin + 3]];
+                            //                u32 d = (u32)vertices.size() / 3;
+                            //                vertices.push_back(vd.x); vertices.push_back(vd.y); vertices.push_back(vd.z);
+                            //                indices.push_back(a);
+                            //                indices.push_back(b);
+                            //                indices.push_back(c);
+                            //                indices.push_back(a);
+                            //                indices.push_back(c);
+                            //                indices.push_back(d);
+                            //            }
+                            //        }
+                            //        addMesh(vertices, indices, rscene.inputMeshGroupBuffer);
+                            //    }
+                            //}
+                            
+                            // option 2: copy the vertices directly
+                            {
+                                for (size_t i = 0; i < scene->nodes.count; i++) {
+                                    ufbx_node* node = scene->nodes.data[i];
+                                    if (node->is_root) continue;
+                                    if (node->mesh) {
+                                        //vertices.reserve(node->mesh->num_vertices*3);
+                                        //for (size_t i = 0; i < node->mesh->num_vertices; i++) {
+                                        //    auto v = node->mesh->vertices[i];
+                                        //    vertices.push_back(v.x*10.f);
+                                        //    vertices.push_back(v.y*10.f);
+                                        //    vertices.push_back(v.z*10.f);
+                                        //}
+                                        vertices.resize(node->mesh->num_vertices * 3);
+                                        memcpy(&vertices[0], &node->mesh->vertices[0], node->mesh->num_vertices * 3 * sizeof(f32));
+                                        // can't copy the face indexes directly, need to de-triangulate
+                                        for (size_t i = 0; i < node->mesh->num_faces; i++) {
+                                            if (node->mesh->faces[i].num_indices > 3) {
+                                                const u32 a = node->mesh->vertex_indices[node->mesh->faces[i].index_begin];
+                                                const u32 b = node->mesh->vertex_indices[node->mesh->faces[i].index_begin + 1];
+                                                const u32 c = node->mesh->vertex_indices[node->mesh->faces[i].index_begin + 2];
+                                                const u32 d = node->mesh->vertex_indices[node->mesh->faces[i].index_begin + 3];
+                                                indices.push_back(a);
+                                                indices.push_back(b);
+                                                indices.push_back(c);
+                                                indices.push_back(a);
+                                                indices.push_back(c);
+                                                indices.push_back(d);
+                                            }
+                                            else {
+                                                const u32 a = node->mesh->vertex_indices[node->mesh->faces[i].index_begin];
+                                                const u32 b = node->mesh->vertex_indices[node->mesh->faces[i].index_begin + 1];
+                                                const u32 c = node->mesh->vertex_indices[node->mesh->faces[i].index_begin + 2];
+                                                indices.push_back(a);
+                                                indices.push_back(b);
+                                                indices.push_back(c);
+                                            }
+                                        }
+
+                                        addMesh(vertices, indices, rscene.inputMeshGroupBuffer);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
 
             // unit cube vertex buffer
@@ -345,16 +360,15 @@ namespace Game
                 bufferParams.indexCount = bufferParams.indexSize / sizeof(cube.indices[0]);
                 bufferParams.memoryUsage = Renderer::Driver::BufferMemoryUsage::GPU;
                 bufferParams.accessType = Renderer::Driver::BufferAccessType::GPU;
-                bufferParams.indexType = Renderer::Driver::BufferItemType::U16;
+                bufferParams.indexType = Renderer::Driver::BufferItemType::U32;
                 bufferParams.type = Renderer::Driver::BufferTopologyType::Triangles;
                 Renderer::Driver::create(rscBuffer, bufferParams);
 
-                RenderGroup& r = rscene.instancedCubeGroupBuffer;
-                r.desc.buffer = rscBuffer;
-                r.desc.rasterizerState = rscene.rasterizerStateLine;
-                Material& material = r.desc.material;
-                material.groupColor = Col(1.f, 1.f, 1.f, 1.f);
-                Math::identity4x4(r.instanceBuffer.transform);
+                RenderItemGeo& r = rscene.instancedCubeGroupBuffer;
+                r.buffer = rscBuffer;
+                r.rasterizerState = rscene.rasterizerStateLine;
+                r.groupColor = Col(1.f, 1.f, 1.f, 1.f);
+                Math::identity4x4(r.transform);
             }
 
             __DEBUGEXP(Renderer::Immediate::load(game.renderMgr.immediateBuffer));
@@ -500,18 +514,19 @@ namespace Game
 
                 // mesh
                 {
-                    RenderDescription& d = rscene.inputMeshGroupBuffer.desc;
-
+                    const RenderItemModel& r = rscene.inputMeshGroupBuffer;
                     Renderer::Layout_CBuffer_3DScene::GroupData buffer;
-                    buffer.worldMatrix = rscene.inputMeshGroupBuffer.instanceBuffer.transform.matrix;
-                    buffer.groupColor = Vec4(d.material.groupColor.getRf(), d.material.groupColor.getGf(), d.material.groupColor.getBf(), d.material.groupColor.getAf());
+                    buffer.worldMatrix = r.transform.matrix;
+                    buffer.groupColor = Vec4(r.groupColor.getRf(), r.groupColor.getGf(), r.groupColor.getBf(), r.groupColor.getAf());
                     Renderer::Driver::update(rscene.cbuffers[Renderer::Layout_CBuffer_3DScene::Buffers::GroupData], buffer);
 
-                    Renderer::Driver::bind(rscene.sceneShader);
-                    Renderer::Driver::bind(d.rasterizerState);
-                    Renderer::Driver::bind(d.buffer);
                     Renderer::Driver::bind(rscene.cbuffers, Renderer::Layout_CBuffer_3DScene::Buffers::Count, { true, false });
-                    draw(d.buffer);
+                    Renderer::Driver::bind(rscene.sceneShader);
+                    Renderer::Driver::bind(r.rasterizerState);
+                    for (const auto& d : r.buffers) {
+                        Renderer::Driver::bind(d);
+                        draw(d);
+                    }
                 }
             }
 

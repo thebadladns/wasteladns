@@ -26,12 +26,17 @@
 
 #define UNITYBUILD
 
+
+#if __MACOS || __GLFW
+#define __GL 1
+#endif
+
 #if __DX11
 #include "helpers/dx11/core.h"
 #elif __MACOS
-#include "helpers/macos/core.h"
+#include "helpers/platform_mac/core.h"
 #elif __GLFW
-#include "helpers/glfw/core.h"
+#include "helpers/platform_glfw/core.h"
 #endif
 
 // Core
@@ -39,9 +44,9 @@
 #if __DX11
 #include "helpers/dx11/input_types.h"
 #elif __MACOS
-#include "helpers/macos/input_types.h"
+#include "helpers/platform_mac/input_types.h"
 #elif __GLFW
-#include "helpers/glfw/input_types.h"
+#include "helpers/platform_glfw/input_types.h"
 #endif
 
 
@@ -61,33 +66,28 @@
 
 #if __DX11
 #include "helpers/dx11/input.h"
-#include "helpers/dx11/shaders.h"
 #elif __MACOS
-#include "helpers/macos/input.h"
-#include "helpers/macos/shaders.h"
+#include "helpers/platform_mac/input.h"
 #elif __GLFW
-#include "helpers/glfw/input.h"
-#include "helpers/glfw/shaders.h"
+#include "helpers/platform_glfw/input.h"
 #endif
 
 #include "helpers/io.h"
 
 #include "helpers/renderer_types.h"
 #if __DX11
+#include "helpers/dx11/shaders.h"
 #include "helpers/dx11/renderer_types.h"
-#elif __MACOS
-#include "helpers/macos/renderer_types.h"
-#elif __GLFW
-#include "helpers/glfw/renderer_types.h"
+#elif __GL
+#include "helpers/gl/shaders.h"
+#include "helpers/gl/renderer_types.h"
 #endif
 
 #include "helpers/renderer.h"
 #if __DX11
 #include "helpers/dx11/renderer.h"
-#elif __MACOS
-#include "helpers/macos/renderer.h"
-#elif __GLFW
-#include "helpers/glfw/renderer.h"
+#elif __GL
+#include "helpers/gl/renderer.h"
 #endif
 
 #ifdef NDEBUG
@@ -110,7 +110,7 @@ do { \
 #if __DX11
 #include "helpers/dx11/main.h"
 #elif __MACOS
-#include "helpers/macos/main.mm"
+#include "helpers/platform_mac/main.mm"
 #elif __GLFW
-#include "helpers/glfw/main.h"
+#include "helpers/platform_glfw/main.h"
 #endif
