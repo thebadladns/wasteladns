@@ -26,6 +26,9 @@ gl_shaders_file.write("#ifndef __WASTELADNS_SHADERS_GL_H__\n#define __WASTELADNS
 
 shaders = re.findall(r"const\s+char\s*\*\s+([a-zA-Z0-9._]+)\s*=\s*R\"\(([^\"]*)\)\";", dx_shaders_cpp, re.DOTALL)
 for shader in shaders:
+
+	gl_shaders_file.write("const char* " + shader[0] + " = R\"(\n")
+	
 	pixel_shader = True
 	if re.search(r"[vV]ertex", shader[0]):
 		pixel_shader = False
@@ -37,14 +40,19 @@ for shader in shaders:
 	if pixel_shader:
 		gl_shader_file_name = op_path + shader[0] + "_ps.glsl"
 		os.system("ShaderConductorCmd.exe -E \"PS\" -I \"" + shader_file_name + "\" -O \"" + gl_shader_file_name + "\" -S ps -T glsl -V \"330 core\"")
+		gl_shader_file = open(gl_shader_file_name, 'r')
+		gl_shader = gl_shader_file.read()
+		gl_shader = re.sub(r"in_var_(.*);", r"varying_\1;", gl_shader)
+		gl_shader_file.close()
 	else:
 		gl_shader_file_name = op_path + shader[0] + "_vs.glsl"
 		os.system("ShaderConductorCmd.exe -E \"VS\" -I \"" + shader_file_name + "\" -O \"" + gl_shader_file_name + "\" -S vs -T glsl -V \"330 core\"")
+		gl_shader_file = open(gl_shader_file_name, 'r')
+		gl_shader = gl_shader_file.read()
+		gl_shader = re.sub(r"out_var_(.*);", r"varying_\1;", gl_shader)
+		gl_shader_file.close()
 	
-	gl_shaders_file.write("const char* " + shader[0] + " = R\"(\n")
-	gl_shader_file = open(gl_shader_file_name, 'r')
-	gl_shaders_file.write(gl_shader_file.read())
-	gl_shader_file.close()
+	gl_shaders_file.write(gl_shader)
 	gl_shaders_file.write(")\";\n\n")
 
 	

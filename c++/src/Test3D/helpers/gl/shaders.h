@@ -17,11 +17,11 @@ layout(std140) uniform type_PerGroup
 
 layout(location = 0) in vec3 in_var_POSITION;
 layout(location = 1) in vec4 in_var_COLOR;
-layout(location = 0) out vec4 out_var_COLOR;
+layout(location = 0) out vec4 varying_COLOR;
 
 void main()
 {
-    out_var_COLOR = in_var_COLOR;
+    varying_COLOR = in_var_COLOR;
     gl_Position = vec4(in_var_POSITION, 1.0) * PerGroup.MVP;
 }
 
@@ -31,12 +31,12 @@ const char* defaultPixelShaderStr = R"(
 #version 330
 #extension GL_ARB_separate_shader_objects : require
 
-layout(location = 0) in vec4 out_var_COLOR;
+layout(location = 0) in vec4 varying_COLOR;
 layout(location = 0) out vec4 out_var_SV_TARGET;
 
 void main()
 {
-    out_var_SV_TARGET = out_var_COLOR;
+    out_var_SV_TARGET = varying_COLOR;
 }
 
 )";
@@ -65,11 +65,11 @@ layout(std140) uniform type_PerGroup
 } PerGroup;
 
 layout(location = 0) in vec3 in_var_POSITION;
-layout(location = 0) out vec4 out_var_COLOR;
+layout(location = 0) out vec4 varying_COLOR;
 
 void main()
 {
-    out_var_COLOR = PerGroup.groupColor;
+    varying_COLOR = PerGroup.groupColor;
     gl_Position = (vec4(in_var_POSITION, 1.0) * PerGroup.modelMatrix) * (PerScene.viewMatrix * PerScene.projectionMatrix);
 }
 
@@ -105,11 +105,11 @@ layout(std140) uniform type_PerInstance
 
 layout(location = 0) in vec3 in_var_POSITION;
 uniform int SPIRV_Cross_BaseInstance;
-layout(location = 0) out vec4 out_var_COLOR;
+layout(location = 0) out vec4 varying_COLOR;
 
 void main()
 {
-    out_var_COLOR = PerGroup.groupColor;
+    varying_COLOR = PerGroup.groupColor;
     gl_Position = (vec4(in_var_POSITION, 1.0) * (PerGroup.modelMatrix * PerInstance.instanceMatrices[uint((gl_InstanceID + SPIRV_Cross_BaseInstance))])) * (PerScene.viewMatrix * PerScene.projectionMatrix);
 }
 
