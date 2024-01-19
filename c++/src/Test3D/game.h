@@ -1,10 +1,10 @@
 #ifndef __WASTELADNS_GAME_H__
 #define __WASTELADNS_GAME_H__
 
+#include "gameplay.h"
+
 namespace Game
 {
-    const char* inputMeshPath = "assets/meshes/tank.fbx";
-
     struct Time {
         struct Config {
             f64 targetFramerate;
@@ -23,10 +23,13 @@ namespace Game
     namespace Input
     {
         constexpr ::Input::Keyboard::Keys::Enum
+              UP = ::Input::Keyboard::Keys::W
+            , DOWN = ::Input::Keyboard::Keys::S
+            , LEFT = ::Input::Keyboard::Keys::A
+            , RIGHT = ::Input::Keyboard::Keys::D
+            ;
+        constexpr ::Input::Keyboard::Keys::Enum
               EXIT = ::Input::Keyboard::Keys::ESCAPE
-            , INCREASE_LOD = ::Input::Keyboard::Keys::UP
-            , DECREASE_LOD = ::Input::Keyboard::Keys::DOWN
-            , TOGGLE_VIS = ::Input::Keyboard::Keys::V
             , TOGGLE_HELP = ::Input::Keyboard::Keys::H
             ;
     };
@@ -38,16 +41,24 @@ namespace Game
         Col groupColor;
         bool fill;
     };
-    struct RenderItemGeo {
+    struct RenderItemUntexturedGeo {
         Renderer::Driver::RscIndexedBuffer<Renderer::Layout_Vec3> buffer;
         Renderer::Driver::RscRasterizerState rasterizerState;
         Transform transform;
         Col groupColor;
         bool fill;
     };
+    struct RenderItemTexturedGeo {
+        Renderer::Driver::RscIndexedBuffer<Renderer::Layout_TexturedVec3> buffer;
+        Renderer::Driver::RscTexture albedo;
+        Renderer::Driver::RscTexture normal;
+        Renderer::Driver::RscTexture depth;
+        Transform transform;
+    };
     struct RenderScene {
         RenderItemModel inputMeshGroupBuffer;
-        RenderItemGeo instancedCubeGroupBuffer;
+        RenderItemTexturedGeo texturedCubeGroupBuffer;
+        RenderItemUntexturedGeo untexturedCubeGroupBuffer;
         Renderer::Driver::RscCBuffer cbuffers[Renderer::Layout_CBuffer_3DScene::Buffers::Count];
         Renderer::Driver::RscRasterizerState rasterizerStateFill, rasterizerStateLine;
         Renderer::Driver::RscBlendState blendStateOn;
@@ -55,22 +66,13 @@ namespace Game
         Renderer::Driver::RscMainRenderTarget mainRenderTarget;
         Renderer::Driver::RscShaderSet<Renderer::Layout_Vec3, Renderer::Layout_CBuffer_3DScene::Buffers> sceneShader;
         Renderer::Driver::RscShaderSet<Renderer::Layout_Vec3, Renderer::Layout_CBuffer_3DScene::Buffers> sceneInstancedShader;
-    };
-    struct RenderInstanceHandle {
-        u32 desc;
-        u32 inst;
-    };
-
-    struct Scene {
-        Vec3 offset;
-        Vec3 rotationEulers;
-        Vec3 orbitPosition;
-        f32 localScale;
+        Renderer::Driver::RscShaderSet<Renderer::Layout_TexturedVec3, Renderer::Layout_CBuffer_3DScene::Buffers> sceneTexturedShader;
     };
 
     struct CameraManager {
         enum { FlyCam, CamCount };
         Camera cameras[CamCount];
+        Gameplay::Orbit::State orbitCamera;
         Camera* activeCam;
     };
 
@@ -91,23 +93,22 @@ namespace Game
     };
     #endif
 
-#include "gameplay.h"
-
     struct Instance {
         Time time;
         CameraManager cameraMgr;
         RenderManager renderMgr;
-        Scene scene;
-        Gameplay::PlayerMovement player;
+        Gameplay::Movement::State player;
         __DEBUGDEF(DebugVis debugVis;)
     };
+
     void loadLaunchConfig(Platform::WindowConfig& config) {
         // hardcoded for now
         config.window_width = 640 * 1;
         config.window_height = 480 * 1;
         config.fullscreen = false;
         config.title = "3D Test";
-    };
+    }
+
     void start(Instance& game, Platform::GameConfig& config, const Platform::State& platform) {
 
         game.time = {};
@@ -117,8 +118,6 @@ namespace Game
 
         config = {};
         config.nextFrame = platform.time.now;
-        u32 requestFlags = Platform::RequestFlags::PollKeyboard | Platform::RequestFlags::PollMouse;
-        config.requestFlags = (Platform::RequestFlags::Enum)requestFlags;
 
         // camera set up
         game.renderMgr = {};
@@ -163,206 +162,40 @@ namespace Game
             Renderer::Driver::create(rscene.rasterizerStateLine, { Renderer::Driver::RasterizerFillMode::Line, true });
 
             // cbuffers
-            Renderer::Driver::create<Renderer::Layout_CBuffer_3DScene::SceneData>(rscene.cbuffers[Renderer::Layout_CBuffer_3DScene::Buffers::SceneData], {});
-            Renderer::Driver::create<Renderer::Layout_CBuffer_3DScene::GroupData>(rscene.cbuffers[Renderer::Layout_CBuffer_3DScene::Buffers::GroupData], {});
-            Renderer::Driver::create<Renderer::Layout_CBuffer_3DScene::InstanceData>(rscene.cbuffers[Renderer::Layout_CBuffer_3DScene::Buffers::InstanceData], {});
+            Renderer::create(rscene.cbuffers);
 
-            {
-                Renderer::Driver::RscVertexShader<Renderer::Layout_Vec3, Renderer::Layout_CBuffer_3DScene::Buffers> rscVS;
-                Renderer::Driver::RscPixelShader rscPS;
-                Renderer::Driver::ShaderResult pixelResult;
-                Renderer::Driver::ShaderResult vertexResult;
-                pixelResult = Renderer::Driver::create(rscPS, { defaultPixelShaderStr, (u32)strlen(defaultPixelShaderStr) });
-                if (!pixelResult.compiled) {
-                    Platform::debuglog("link: %s", pixelResult.error);
-                }
-                vertexResult = Renderer::Driver::create(rscVS, { defaultVertexShaderStr, (u32)strlen(defaultVertexShaderStr) });
-                if (!vertexResult.compiled) {
-                    Platform::debuglog("PS: %s", vertexResult.error);
-                }
-                Renderer::Driver::RscShaderSet<Renderer::Layout_Vec3, Renderer::Layout_CBuffer_3DScene::Buffers> shaderSet;
-                if (pixelResult.compiled && vertexResult.compiled) {
-                    Renderer::Driver::ShaderResult result = Renderer::Driver::create(shaderSet, { rscVS, rscPS, rscene.cbuffers });
-                    if (result.compiled) {
-                        rscene.sceneShader = shaderSet;
-                    }
-                    else {
-                        Platform::debuglog("link: %s", result.error);
-                    }
-                }
-
-                // Todo: RscShaderSet deletes pixel shader after creating, need to recompile it for reuse, not great
-                pixelResult = Renderer::Driver::create(rscPS, { defaultPixelShaderStr, (u32)strlen(defaultPixelShaderStr) });
-                if (!pixelResult.compiled) {
-                    Platform::debuglog("link: %s", pixelResult.error);
-                }
-                vertexResult = Renderer::Driver::create(rscVS, { defaultInstancedVertexShaderStr, (u32)strlen(defaultInstancedVertexShaderStr) });
-                if (!vertexResult.compiled) {
-                    Platform::debuglog("PS: %s", vertexResult.error);
-                }
-                if (pixelResult.compiled && vertexResult.compiled) {
-                    Renderer::Driver::ShaderResult result = Renderer::Driver::create(shaderSet, { rscVS, rscPS, rscene.cbuffers });
-                    if (result.compiled) {
-                        rscene.sceneInstancedShader = shaderSet;
-                    }
-                    else {
-                        Platform::debuglog("link: %s", result.error);
-                    }
-                }
-            }
+            // shaders
+            Renderer::create(rscene.sceneShader, rscene.cbuffers, defaultVertexShaderStr, defaultPixelShaderStr);
+            Renderer::create(rscene.sceneTexturedShader, rscene.cbuffers, texturedVertexShaderStr, texturedPixelShaderStr);
+            Renderer::create(rscene.sceneInstancedShader, rscene.cbuffers, defaultInstancedVertexShaderStr, defaultPixelShaderStr);
 
             // input mesh vertex buffer
             {
                 RenderItemModel& r = rscene.inputMeshGroupBuffer;
                 Math::identity4x4(r.transform);
-                const float modelScale = 10.f;
-                r.transform.matrix.col0.x = modelScale;
-                r.transform.matrix.col1.y = modelScale;
-                r.transform.matrix.col2.z = modelScale;
+                const float scale = 10.f;
+                r.transform.matrix.col0.x = scale;
+                r.transform.matrix.col1.y = scale;
+                r.transform.matrix.col2.z = scale;
                 r.rasterizerState = rscene.rasterizerStateLine;
                 r.groupColor = Col(0.3f, 0.3f, 0.3f, 1.f);
-
-                // load mesh
-                {
-                    // we may have multiple vertex streams depending on materials or mesh being separated in parts
-                    auto addMesh = [](std::vector<f32> vertices, std::vector<u32> indices, RenderItemModel& desc) {
-                        if (vertices.size() > 0 && indices.size() > 0)
-                        {
-                            Renderer::Driver::RscIndexedBuffer<Renderer::Layout_Vec3> rscBuffer;
-                            Renderer::Driver::IndexedBufferParams bufferParams;
-                            bufferParams.vertexData = &vertices[0];
-                            bufferParams.vertexSize = (u32)vertices.size() * sizeof(vertices[0]);
-                            bufferParams.indexData = &indices[0];
-                            bufferParams.indexSize = (u32)indices.size() * sizeof(indices[0]);
-                            bufferParams.indexCount = (u32)indices.size();
-                            bufferParams.memoryUsage = Renderer::Driver::BufferMemoryUsage::GPU;
-                            bufferParams.accessType = Renderer::Driver::BufferAccessType::GPU;
-                            bufferParams.indexType = Renderer::Driver::BufferItemType::U32;
-                            bufferParams.type = Renderer::Driver::BufferTopologyType::Triangles;
-                            Renderer::Driver::create(rscBuffer, bufferParams);
-
-                            desc.buffers.emplace_back(rscBuffer);
-                        }
-                    };
-                    std::vector<f32> vertices;
-                    std::vector<u32> indices;
-                    ufbx_load_opts opts = {};
-                    opts.allow_null_material = true;
-                    ufbx_error error;
-                    ufbx_scene* scene = ufbx_load_file(inputMeshPath, &opts, &error);
-                    if (scene) {
-                        for (size_t i = 0; i < scene->meshes.count; i++) {
-                            ufbx_mesh& mesh = *scene->meshes.data[i];
-                            // option 1: add vertex by materials (todo: flatten vertices and make them properly indexed)
-                            //{
-                            //    for (size_t pi = 0; pi < mesh.materials.count; pi++) {
-                            //        ufbx_mesh_material& mesh_mat = mesh.materials.data[pi];
-                            //        if (mesh_mat.num_triangles == 0) continue;
-                            //        vertices.clear();
-                            //        indices.clear();
-                            //        for (size_t fi = 0; fi < mesh_mat.num_faces; fi++) {
-                            //            ufbx_vertex_vec3& positions = mesh.vertex_position;
-                            //            ufbx_face face = mesh.faces.data[mesh_mat.face_indices.data[fi]];
-                            //            if (face.num_indices == 3) {
-                            //                ufbx_vec3 va = positions.values.data[(int32_t)positions.indices.data[face.index_begin + 0]];
-                            //                u32 a = (u32)vertices.size() / 3;
-                            //                vertices.push_back(va.x); vertices.push_back(va.y); vertices.push_back(va.z);
-                            //                ufbx_vec3 vb = positions.values.data[(int32_t)positions.indices.data[face.index_begin + 1]];
-                            //                u32 b = (u32)vertices.size() / 3;
-                            //                vertices.push_back(vb.x); vertices.push_back(vb.y); vertices.push_back(vb.z);
-                            //                ufbx_vec3 vc = positions.values.data[(int32_t)positions.indices.data[face.index_begin + 2]];
-                            //                u32 c = (u32)vertices.size() / 3;
-                            //                vertices.push_back(vc.x); vertices.push_back(vc.y); vertices.push_back(vc.z);
-                            //                indices.push_back(a);
-                            //                indices.push_back(b);
-                            //                indices.push_back(c);
-                            //            }
-                            //            else {
-                            //                ufbx_vec3 va = positions.values.data[(int32_t)positions.indices.data[face.index_begin + 0]];
-                            //                u32 a = (u32)vertices.size() / 3;
-                            //                vertices.push_back(va.x); vertices.push_back(va.y); vertices.push_back(va.z);
-                            //                ufbx_vec3 vb = positions.values.data[(int32_t)positions.indices.data[face.index_begin + 1]];
-                            //                u32 b = (u32)vertices.size() / 3;
-                            //                vertices.push_back(vb.x); vertices.push_back(vb.y); vertices.push_back(vb.z);
-                            //                ufbx_vec3 vc = positions.values.data[(int32_t)positions.indices.data[face.index_begin + 2]];
-                            //                u32 c = (u32)vertices.size() / 3;
-                            //                vertices.push_back(vc.x); vertices.push_back(vc.y); vertices.push_back(vc.z);
-                            //                ufbx_vec3 vd = positions.values.data[(int32_t)positions.indices.data[face.index_begin + 3]];
-                            //                u32 d = (u32)vertices.size() / 3;
-                            //                vertices.push_back(vd.x); vertices.push_back(vd.y); vertices.push_back(vd.z);
-                            //                indices.push_back(a);
-                            //                indices.push_back(b);
-                            //                indices.push_back(c);
-                            //                indices.push_back(a);
-                            //                indices.push_back(c);
-                            //                indices.push_back(d);
-                            //            }
-                            //        }
-                            //        addMesh(vertices, indices, rscene.inputMeshGroupBuffer);
-                            //    }
-                            //}
-                            
-                            // option 2: copy the vertices directly
-                            {
-                                vertices.clear();
-                                indices.clear();
-                                vertices.resize(mesh.num_vertices * 3);
-                                memcpy(&vertices[0], &mesh.vertices[0], mesh.num_vertices * 3 * sizeof(f32));
-                                // can't copy the face indexes directly, need to de-triangulate
-                                for (size_t i = 0; i < mesh.num_faces; i++) {
-                                    ufbx_face& face = mesh.faces[i];
-                                    if (mesh.faces[i].num_indices > 3) {
-                                        const u32 a = mesh.vertex_indices[face.index_begin];
-                                        const u32 b = mesh.vertex_indices[face.index_begin + 1];
-                                        const u32 c = mesh.vertex_indices[face.index_begin + 2];
-                                        const u32 d = mesh.vertex_indices[face.index_begin + 3];
-                                        indices.push_back(a);
-                                        indices.push_back(b);
-                                        indices.push_back(c);
-                                        indices.push_back(a);
-                                        indices.push_back(c);
-                                        indices.push_back(d);
-                                    }
-                                    else {
-                                        const u32 a = mesh.vertex_indices[face.index_begin];
-                                        const u32 b = mesh.vertex_indices[face.index_begin + 1];
-                                        const u32 c = mesh.vertex_indices[face.index_begin + 2];
-                                        indices.push_back(a);
-                                        indices.push_back(b);
-                                        indices.push_back(c);
-                                    }
-                                }
-
-                                addMesh(vertices, indices, rscene.inputMeshGroupBuffer);
-                            }
-                        }
-                    }
-                }
+                Renderer::load(r.buffers, "assets/meshes/tank.fbx");
             }
 
-            // unit cube vertex buffer
+            // unit cube vertex buffers
             {
-                Renderer::UntexturedCube cube;
-                Renderer::create(cube, { 1.f, 1.f, 1.f });
+                RenderItemUntexturedGeo& untextured = rscene.untexturedCubeGroupBuffer;
+                untextured.rasterizerState = rscene.rasterizerStateFill;
+                untextured.groupColor = Col(0.9f, 0.1f, 0.8f, 1.f);
+                Renderer::create(untextured.buffer, { 1.f, 1.f, 1.f });
+                Math::identity4x4(untextured.transform);
 
-                Renderer::Driver::RscIndexedBuffer<Renderer::Layout_Vec3> rscBuffer;
-                Renderer::Driver::IndexedBufferParams bufferParams;
-                bufferParams.vertexData = cube.vertices;
-                bufferParams.indexData = cube.indices;
-                bufferParams.vertexSize = sizeof(cube.vertices);
-                bufferParams.indexSize = sizeof(cube.indices);
-                bufferParams.indexCount = bufferParams.indexSize / sizeof(cube.indices[0]);
-                bufferParams.memoryUsage = Renderer::Driver::BufferMemoryUsage::GPU;
-                bufferParams.accessType = Renderer::Driver::BufferAccessType::GPU;
-                bufferParams.indexType = Renderer::Driver::BufferItemType::U32;
-                bufferParams.type = Renderer::Driver::BufferTopologyType::Triangles;
-                Renderer::Driver::create(rscBuffer, bufferParams);
-
-                RenderItemGeo& r = rscene.instancedCubeGroupBuffer;
-                r.buffer = rscBuffer;
-                r.rasterizerState = rscene.rasterizerStateLine;
-                r.groupColor = Col(1.f, 1.f, 1.f, 1.f);
-                Math::identity4x4(r.transform);
+                RenderItemTexturedGeo& textured = rscene.texturedCubeGroupBuffer;
+                Renderer::Driver::create(textured.albedo, { "assets/pbr/material04-albedo.png" });
+                Renderer::Driver::create(textured.normal, { "assets/pbr/material04-normal.png" });
+                Renderer::Driver::create(textured.depth, { "assets/pbr/material04-depth.png" });
+                Renderer::create(textured.buffer, { 1.f, 1.f, 1.f });
+                Math::identity4x4(textured.transform);
             }
 
             __DEBUGEXP(Renderer::Immediate::load(game.renderMgr.immediateBuffer));
@@ -374,19 +207,16 @@ namespace Game
             game.player.transform.pos = Vec3(5.f, 10.f, 0.f);
         }
 
-        game.scene = {};
-        {
-            game.scene.offset = Vec3(0.f, -100.f, 0.f);
-            game.scene.rotationEulers = Vec3(0.f, 0.f, 0.f);
-            game.scene.localScale = 1.f;
-            game.scene.orbitPosition = Math::negate(meshCentroid);
-        }
-
         game.cameraMgr = {};
         {
             CameraManager& mgr = game.cameraMgr;
             Camera& cam = mgr.cameras[CameraManager::FlyCam];
             mgr.activeCam = &cam;
+
+            mgr.orbitCamera.offset = Vec3(0.f, -100.f, 0.f);
+            mgr.orbitCamera.eulers = Vec3(0.f, 0.f, 0.f);
+            mgr.orbitCamera.scale = 1.f;
+            mgr.orbitCamera.origin = Vec3(0.f, 0.f, 0.f);
         }
     }
 
@@ -441,60 +271,16 @@ namespace Game
 
             // player movement update
             {
-                const Gameplay::ControlButtons plyButtons = {Gameplay::Input::UP, Gameplay::Input::DOWN, Gameplay::Input::LEFT, Gameplay::Input::RIGHT};
-                process(game.player.control, keyboard, plyButtons, dt);
-                process_cameraRelative(game.player.transform, game.player.movementController, game.player.control, activeCam->transform, dt);
+                Gameplay::Movement::process(game.player.control, keyboard, { Input::UP, Input::DOWN, Input::LEFT, Input::RIGHT }, dt);
+                Gameplay::Movement::process_cameraRelative(game.player.transform, game.player.movementController, game.player.control, activeCam->transform, dt);
                 game.renderMgr.renderScene.inputMeshGroupBuffer.transform = game.player.transform;
             }
 
             // camera update
             {
-                if (platform.input.mouse.down(::Input::Mouse::Keys::BUTTON_LEFT))
-                {
-                    constexpr f32 rotationSpeed = 0.01f;
-                    constexpr f32 rotationEps = 0.01f;
-                    f32 speedx = platform.input.mouse.dx * rotationSpeed;
-                    f32 speedy = platform.input.mouse.dy * rotationSpeed;
-                    if (Math::abs(speedx) > rotationEps || Math::abs(speedy) > rotationEps)
-                    {
-                        game.scene.rotationEulers.x = Math::wrap(game.scene.rotationEulers.x + speedx);
-                        game.scene.rotationEulers.z = Math::wrap(game.scene.rotationEulers.z - speedy);
-                    }
-                }
-                if (platform.input.mouse.down(::Input::Mouse::Keys::BUTTON_RIGHT))
-                {
-                    constexpr f32 panSpeed = 0.1f;
-                    constexpr f32 panEps = 0.01f;
-                    f32 speedx = platform.input.mouse.dx * panSpeed;
-                    f32 speedy = platform.input.mouse.dy * panSpeed;
-                    if (Math::abs(speedx) > panEps || Math::abs(speedy) > panEps)
-                    {
-                        game.scene.offset.x -= speedx;
-                        game.scene.offset.z += speedy;
-                    }
-
-                }
-                if (platform.input.mouse.scrolldy != 0)
-                {
-                    const f32 scrollSpeed = 0.1f;
-                    game.scene.localScale -= platform.input.mouse.scrolldy * scrollSpeed;
-                }
-            }
-
-            // send camera data to render manager
-            {
-                // orbit around mesh
-                Transform rotationAndScale = Math::fromPositionScaleAndRotationEulers(Math::negate(game.scene.orbitPosition), game.scene.localScale, game.scene.rotationEulers);
-
-                // translate to centroid 
-                Transform cameraTranslation;
-                Math::identity4x4(cameraTranslation);
-                cameraTranslation.pos = game.scene.offset;
-
-                Transform result;
-                result.matrix = Math::mult(rotationAndScale.matrix, cameraTranslation.matrix);
-                activeCam->transform = result;
-
+                Gameplay::Orbit::process(game.cameraMgr.orbitCamera, platform.input.mouse);
+                Gameplay::Orbit::process(activeCam->transform, game.cameraMgr.orbitCamera);
+                // send camera data to render manager
                 Renderer::generateModelViewMatrix(activeCam->viewMatrix, activeCam->transform);
             }
         }
@@ -525,7 +311,7 @@ namespace Game
                     const RenderItemModel& r = rscene.inputMeshGroupBuffer;
                     Renderer::Layout_CBuffer_3DScene::GroupData buffer;
                     buffer.worldMatrix = r.transform.matrix;
-                    buffer.groupColor = Vec4(r.groupColor.getRf(), r.groupColor.getGf(), r.groupColor.getBf(), r.groupColor.getAf());
+                    buffer.groupColor = r.groupColor.RGBAv4();
                     Renderer::Driver::update(rscene.cbuffers[Renderer::Layout_CBuffer_3DScene::Buffers::GroupData], buffer);
 
                     Renderer::Driver::bind(rscene.cbuffers, Renderer::Layout_CBuffer_3DScene::Buffers::Count, { true, false });
@@ -535,6 +321,58 @@ namespace Game
                         Renderer::Driver::bind(d);
                         draw(d);
                     }
+                }
+                
+                // instanced cubes
+                {
+                    {
+                        const RenderItemTexturedGeo& r = rscene.texturedCubeGroupBuffer;
+                        Renderer::Layout_CBuffer_3DScene::GroupData buffer;
+                        buffer.worldMatrix = r.transform.matrix;
+                        Renderer::Driver::update(rscene.cbuffers[Renderer::Layout_CBuffer_3DScene::Buffers::GroupData], buffer);
+
+                        Renderer::Driver::bind(rscene.cbuffers, Renderer::Layout_CBuffer_3DScene::Buffers::Count, { true, false });
+                        Renderer::Driver::bind(rscene.sceneTexturedShader);
+                        Renderer::Driver::bind(rscene.rasterizerStateFill);
+                        Renderer::Driver::RscTexture textures[] = { r.albedo, r.normal, r.depth };
+                        const u32 textureCount = sizeof(textures) / sizeof(textures[0]);
+                        Renderer::Driver::bind(textures, textureCount);
+                        Renderer::Driver::bind(r.buffer);
+                        draw(r.buffer);
+                        Renderer::Driver::RscTexture nullTex[] = { {}, {}, {} };
+                        Renderer::Driver::bind(nullTex, textureCount);
+                    }
+
+                    {
+                        const RenderItemUntexturedGeo& r = rscene.untexturedCubeGroupBuffer;
+                        Renderer::Layout_CBuffer_3DScene::GroupData buffer;
+                        buffer.worldMatrix = r.transform.matrix;
+                        buffer.groupColor = r.groupColor.RGBAv4();
+                        Renderer::Driver::update(rscene.cbuffers[Renderer::Layout_CBuffer_3DScene::Buffers::GroupData], buffer);
+
+                        Renderer::Driver::bind(rscene.sceneInstancedShader);
+                        Renderer::Driver::bind(r.rasterizerState);
+                        Renderer::Driver::bind(r.buffer);
+                        Renderer::Driver::bind(rscene.cbuffers, Renderer::Layout_CBuffer_3DScene::Buffers::Count, { true, false });
+
+                        Renderer::Layout_CBuffer_3DScene::InstanceData instancedBuffer;
+                        u32 bufferId = 0;
+                        u32 begin = 1;
+                        u32 end = 4;
+                        for (u32 i = begin; i < end; i++) {
+                            Transform t;
+                            Math::identity4x4(t);
+                            t.pos = Math::add(rscene.inputMeshGroupBuffer.transform.pos, Math::scale(rscene.inputMeshGroupBuffer.transform.front, -5.f * i));
+                            t.matrix.col0.x = 0.2f;
+                            t.matrix.col1.y = 0.2f;
+                            t.matrix.col2.z = 0.2f;
+                            instancedBuffer.instanceMatrices[bufferId++] = t.matrix;
+                        }
+
+                        Renderer::Driver::update(rscene.cbuffers[Renderer::Layout_CBuffer_3DScene::Buffers::InstanceData], instancedBuffer);
+                        drawInstances(r.buffer, end - begin);
+                    }
+
                 }
             }
 

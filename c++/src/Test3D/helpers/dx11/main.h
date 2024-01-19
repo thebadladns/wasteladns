@@ -182,7 +182,7 @@ int WINAPI WinMain(
         platform.input.pads = pads;
         ::Input::Gamepad::load(keyboardPadMappings[0]);
 
-        ::Input::Keyboard::PollData keyboardPollData;
+        ::Input::Keyboard::PollData keyboardPollData = {};
         keyboardPollData.queue = {};
         SetPropA(hWnd, "KeyboardPollData", &keyboardPollData);
 
@@ -211,13 +211,9 @@ int WINAPI WinMain(
                         DispatchMessage(&msg);
                     }
                     // Input
-                    if ((config.requestFlags & (Platform::RequestFlags::PollKeyboard)) != 0) {
-                        ::Input::Keyboard::pollState(platform.input.keyboard, keyboardPollData.queue);
-                    }
-                    if ((config.requestFlags & (Platform::RequestFlags::PollMouse)) != 0) {
-                        ::Input::Mouse::pollState(platform.input.mouse, mousePollData);
-                        ::Input::Mouse::resetState(mousePollData);
-                    }
+                    ::Input::Keyboard::pollState(platform.input.keyboard, keyboardPollData.queue);
+                    ::Input::Mouse::pollState(platform.input.mouse, mousePollData);
+                    ::Input::Mouse::resetState(mousePollData);
                     for (u32 i = 0; i < platform.input.padCount; i++) {
                         ::Input::Gamepad::pollState(platform.input.pads[i], keyboardPollData.queue, keyboardPadMappings[i]);
                     }

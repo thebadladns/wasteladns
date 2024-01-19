@@ -14,14 +14,8 @@ namespace Platform
         bool fullscreen;
     };
     
-    struct RequestFlags { enum Enum : u32 {
-          PollKeyboard = 1 << 0
-		, PollMouse = 1 << 0
-    }; };
-    
     struct GameConfig {
         f64 nextFrame;
-        RequestFlags::Enum requestFlags;
         bool quit;
     };
     

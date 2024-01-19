@@ -132,10 +132,8 @@ int main(int , char** ) {
         Platform::GameConfig config;
         Game::start(game, config, platform);
         
-        if ((config.requestFlags & (Platform::RequestFlags::PollMouse)) != 0) {
-            memset(platform.input.mouse.last, 0, sizeof(u8) * ::Input::Mouse::Keys::COUNT);
-            memset(platform.input.mouse.current, 0, sizeof(u8) * ::Input::Mouse::Keys::COUNT);
-        }
+        memset(platform.input.mouse.last, 0, sizeof(u8) * ::Input::Mouse::Keys::COUNT);
+        memset(platform.input.mouse.current, 0, sizeof(u8) * ::Input::Mouse::Keys::COUNT);
         
         do
         {
@@ -145,9 +143,7 @@ int main(int , char** ) {
                     // Input
                     {
                         // todo: figure out mouse
-                        if ((config.requestFlags & (Platform::RequestFlags::PollMouse)) != 0) {
-                            ::Input::Mouse::resetState(mousePollData);
-                        }
+                        ::Input::Mouse::resetState(mousePollData);
                         NSEvent *event = nil;
                         do {
                             event = [NSApp nextEventMatchingMask:NSEventMaskAny
@@ -204,13 +200,8 @@ int main(int , char** ) {
                         [NSApp updateWindows];
                         
                         // Input
-                        if ((config.requestFlags & (Platform::RequestFlags::PollKeyboard)) != 0) {
-                            ::Input::Keyboard::pollState(platform.input.keyboard, keyboardPollData.queue);
-                        }
-                        if ((config.requestFlags & (Platform::RequestFlags::PollMouse)) != 0) {
-                            ::Input::Mouse::pollState(platform.input.mouse, mousePollData);
-                            
-                        }
+                        ::Input::Keyboard::pollState(platform.input.keyboard, keyboardPollData.queue);
+                        ::Input::Mouse::pollState(platform.input.mouse, mousePollData);
                         //                            for (u32 i = 0; i < platform.input.padCount; i++) {
                         //                                ::Input::Gamepad::pollState(platform.input.pads[i], keyboardPollData.queue, keyboardPadMappings[i]);
                     }

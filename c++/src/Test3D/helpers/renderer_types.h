@@ -85,7 +85,7 @@ namespace Renderer {
         Renderer::Layout_TexturedVec2 vertices[4];
         u16 indices[6];
     };
-    struct MappedCube {
+    struct TexturedCube {
         Renderer::Layout_TexturedVec3 vertices[24];
         u16 indices[36];
     };

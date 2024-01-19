@@ -42,14 +42,14 @@ for shader in shaders:
 		os.system("ShaderConductorCmd.exe -E \"PS\" -I \"" + shader_file_name + "\" -O \"" + gl_shader_file_name + "\" -S ps -T glsl -V \"330 core\"")
 		gl_shader_file = open(gl_shader_file_name, 'r')
 		gl_shader = gl_shader_file.read()
-		gl_shader = re.sub(r"in_var_(.*);", r"varying_\1;", gl_shader)
+		gl_shader = gl_shader.replace('in_var_','varying_')
 		gl_shader_file.close()
 	else:
 		gl_shader_file_name = op_path + shader[0] + "_vs.glsl"
 		os.system("ShaderConductorCmd.exe -E \"VS\" -I \"" + shader_file_name + "\" -O \"" + gl_shader_file_name + "\" -S vs -T glsl -V \"330 core\"")
 		gl_shader_file = open(gl_shader_file_name, 'r')
 		gl_shader = gl_shader_file.read()
-		gl_shader = re.sub(r"out_var_(.*);", r"varying_\1;", gl_shader)
+		gl_shader = gl_shader.replace('out_var_','varying_')
 		gl_shader_file.close()
 	
 	gl_shaders_file.write(gl_shader)

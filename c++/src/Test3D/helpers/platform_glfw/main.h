@@ -138,25 +138,17 @@ int main(int argc, char** argv) {
             platform.input.mouse.scrolldy = (f32)yoffset;
 		}
 	};
-    if ((config.requestFlags & (Platform::RequestFlags::PollMouse)) != 0) {
-        glfwSetScrollCallback(windowHandle, &MouseCallback::fn);
-    }
+    glfwSetScrollCallback(windowHandle, &MouseCallback::fn);
         
     do {
         if (platform.time.now >= config.nextFrame) {
                 
             // Input
             {
-                if ((config.requestFlags & (Platform::RequestFlags::PollMouse)) != 0) {
-                    ::Input::Mouse::resetState(platform.input.mouse);
-                }
+                ::Input::Mouse::resetState(platform.input.mouse);
                 glfwPollEvents();
-                if ((config.requestFlags & (Platform::RequestFlags::PollKeyboard)) != 0) {
-                    ::Input::Keyboard::pollState(platform.input.keyboard, windowHandle);
-                }
-                if ((config.requestFlags & (Platform::RequestFlags::PollMouse)) != 0) {
-                    ::Input::Mouse::pollState(platform.input.mouse, windowHandle);
-                }
+                ::Input::Keyboard::pollState(platform.input.keyboard, windowHandle);
+                ::Input::Mouse::pollState(platform.input.mouse, windowHandle);
                 for (u32 i = 0; i < platform.input.padCount; i++) {
                     ::Input::Gamepad::pollState(platform.input.pads[i], windowHandle, keyboardPadMappings[i]);
                 }
