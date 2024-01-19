@@ -194,7 +194,6 @@ int main(int , char** ) {
                                     [NSApp sendEvent:event];
                                 } break;
                             }
-                            [NSApp sendEvent:event];
                         } while (event);
                         
                         [NSApp updateWindows];
