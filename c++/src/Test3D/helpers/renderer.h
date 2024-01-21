@@ -341,7 +341,7 @@ namespace Driver {
 
     struct RasterizerStateParams {
         RasterizerFillMode::Enum fill;
-        bool cullFace;
+         RasterizerCullMode::Enum cull;
     };
     void create(RscRasterizerState&, const RasterizerStateParams&);
     void bind(const RscRasterizerState rs);
@@ -416,25 +416,28 @@ namespace Driver {
 }
 
 template <typename _vertexLayout, typename _cbufferLayout>
-void create(Renderer::Driver::RscShaderSet<_vertexLayout, _cbufferLayout>& shaderSet, const Renderer::Driver::RscCBuffer* cbuffers, const char* vertexSrc, const char* pixelSrc) {
+void create(Renderer::Driver::RscShaderSet<_vertexLayout, _cbufferLayout>& shaderSet, const Renderer::Driver::RscCBuffer* cbuffers
+    , const char* vertexSrc, const char* vertexShaderName
+    , const char* pixelSrc, const char* pixelShaderName
+    ) {
     Renderer::Driver::RscVertexShader<_vertexLayout, _cbufferLayout> rscVS;
     Renderer::Driver::RscPixelShader rscPS;
     Renderer::Driver::ShaderResult pixelResult;
     Renderer::Driver::ShaderResult vertexResult;
     pixelResult = Renderer::Driver::create(rscPS, { pixelSrc, (u32)strlen(pixelSrc) });
     if (!pixelResult.compiled) {
-        Platform::debuglog("link: %s", pixelResult.error);
+        Platform::debuglog("%s: %s\n", vertexShaderName, pixelResult.error);
         return;
     }
     vertexResult = Renderer::Driver::create(rscVS, { vertexSrc, (u32)strlen(vertexSrc) });
     if (!vertexResult.compiled) {
-        Platform::debuglog("PS: %s", vertexResult.error);
+        Platform::debuglog("%s: %s\n", pixelShaderName, vertexResult.error);
         return;
     }
     // Todo: can't reuse pixel or vertex shader after this. Is that bad?
     Renderer::Driver::ShaderResult result = Renderer::Driver::create(shaderSet, { rscVS, rscPS, cbuffers });
     if (!result.compiled) {
-        Platform::debuglog("link: %s", result.error);
+        Platform::debuglog("Linking %s & %s: %s\n", vertexShaderName, pixelShaderName, result.error);
     }
 }
 void create(Renderer::Driver::RscCBuffer (&buffers)[Renderer::Layout_CBuffer_3DScene::Buffers::Count]) {
@@ -442,7 +445,7 @@ void create(Renderer::Driver::RscCBuffer (&buffers)[Renderer::Layout_CBuffer_3DS
     create<Renderer::Layout_CBuffer_3DScene::GroupData>(buffers[Renderer::Layout_CBuffer_3DScene::Buffers::GroupData], {});
     create<Renderer::Layout_CBuffer_3DScene::InstanceData>(buffers[Renderer::Layout_CBuffer_3DScene::Buffers::InstanceData], {});
 }
-void create(Renderer::Driver::RscIndexedBuffer<Renderer::Layout_Vec3>& buffer, const CubeCreateParams& params) {
+void create(Renderer::Driver::RscIndexedBuffer<Renderer::Layout_Vec3Color4B>& buffer, const CubeCreateParams& params) {
     Renderer::UntexturedCube cube;
     Renderer::create(cube, { 1.f, 1.f, 1.f });
     Renderer::Driver::IndexedBufferParams bufferParams;
@@ -475,10 +478,10 @@ void create(Renderer::Driver::RscIndexedBuffer<Renderer::Layout_TexturedVec3>& b
 template <typename _VertexBufferArray>
 void load(_VertexBufferArray& buffers, const char* path) {
     // we may have multiple vertex streams depending on materials or mesh being separated in parts
-    auto addMesh = [](std::vector<f32> vertices, std::vector<u32> indices, _VertexBufferArray& buffers) {
+    auto addMesh = [](std::vector<Layout_Vec3Color4B> vertices, std::vector<u32> indices, _VertexBufferArray& buffers) {
         if (vertices.size() > 0 && indices.size() > 0)
         {
-            Renderer::Driver::RscIndexedBuffer<Renderer::Layout_Vec3> rscBuffer;
+            Renderer::Driver::RscIndexedBuffer<Renderer::Layout_Vec3Color4B> rscBuffer;
             Renderer::Driver::IndexedBufferParams bufferParams;
             bufferParams.vertexData = &vertices[0];
             bufferParams.vertexSize = (u32)vertices.size() * sizeof(vertices[0]);
@@ -494,7 +497,7 @@ void load(_VertexBufferArray& buffers, const char* path) {
             buffers.emplace_back(rscBuffer);
         }
         };
-    std::vector<f32> vertices;
+    std::vector<Layout_Vec3Color4B> vertices;
     std::vector<u32> indices;
     ufbx_load_opts opts = {};
     opts.allow_null_material = true;
@@ -556,11 +559,19 @@ void load(_VertexBufferArray& buffers, const char* path) {
             {
                 vertices.clear();
                 indices.clear();
-                vertices.resize(mesh.num_vertices * 3);
-                memcpy(&vertices[0], &mesh.vertices[0], mesh.num_vertices * 3 * sizeof(f32));
+                vertices.reserve(mesh.num_vertices);
+                for (size_t i = 0; i < mesh.num_vertices; i++) {
+                    Layout_Vec3Color4B vertex;
+                    vertex.pos.x = mesh.vertices[i].x;
+                    vertex.pos.y = mesh.vertices[i].y;
+                    vertex.pos.z = mesh.vertices[i].z;
+                    vertices.push_back(vertex);
+                }
+
                 // can't copy the face indexes directly, need to de-triangulate
                 for (size_t i = 0; i < mesh.num_faces; i++) {
                     ufbx_face& face = mesh.faces[i];
+
                     if (mesh.faces[i].num_indices > 3) {
                         const u32 a = mesh.vertex_indices[face.index_begin];
                         const u32 b = mesh.vertex_indices[face.index_begin + 1];
@@ -580,6 +591,15 @@ void load(_VertexBufferArray& buffers, const char* path) {
                         indices.push_back(a);
                         indices.push_back(b);
                         indices.push_back(c);
+                    }
+                }
+
+
+                if (mesh.vertex_color.exists) {
+                    for (size_t index = 0; index < mesh.num_indices; index++) {
+                        auto& c = mesh.vertex_color[index];
+                        Col32 color(c.x, c.y, c.z, c.w);
+                        vertices[mesh.vertex_indices[index]].color = color.ABGR();
                     }
                 }
 

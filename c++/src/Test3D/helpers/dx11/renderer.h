@@ -351,7 +351,7 @@ namespace Driver {
         ID3D11RasterizerState* rasterizerState;
         D3D11_RASTERIZER_DESC rasterizerDesc = {};
         rasterizerDesc.AntialiasedLineEnable = FALSE;
-        rasterizerDesc.CullMode = params.cullFace ? D3D11_CULL_FRONT : D3D11_CULL_NONE;
+        rasterizerDesc.CullMode = (D3D11_CULL_MODE) params.cull;
         rasterizerDesc.DepthBias = 0;
         rasterizerDesc.DepthBiasClamp = 0.f;
         rasterizerDesc.DepthClipEnable = TRUE;

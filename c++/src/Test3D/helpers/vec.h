@@ -354,6 +354,24 @@ Vector4<_T> min(const Vector4<_T>& a, const Vector4<_T>& b) {
                        Math::min(a.z,b.z),
                        Math::min(a.w,b.w));
 }
+template <typename _T>
+bool isCloseAll(const Vector2<_T>& a, const Vector2<_T>& b, const _T d) {
+    return Math::abs(a.x - b.x) < d
+        && Math::abs(a.y - b.y) < d;
+}
+template <typename _T>
+bool isCloseAll(const Vector3<_T>& a, const Vector3<_T>& b, const _T d) {
+    return Math::abs(a.x - b.x) < d
+        && Math::abs(a.y - b.y) < d
+        && Math::abs(a.z - b.z) < d;
+}
+template <typename _T>
+bool isCloseAll(const Vector4<_T>& a, const Vector4<_T>& b, const _T d) {
+    return Math::abs(a.x - b.x) < d
+        && Math::abs(a.y - b.y) < d
+        && Math::abs(a.z - b.z) < d
+        && Math::abs(a.w - b.w) < d;
+}
     
 template <typename _T>
 Matrix33<_T> mult(const Matrix33<_T>& a, const Matrix33<_T>& b) {

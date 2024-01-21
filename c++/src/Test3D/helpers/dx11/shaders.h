@@ -3,7 +3,7 @@
 
 const char * coloredVertexShaderStr = R"(
 cbuffer PerGroup : register(b0) {
-    column_major matrix MVP;
+    matrix MVP;
 }
 struct AppData {
     float3 position : POSITION;
@@ -33,20 +33,21 @@ float4 PS(VertexOut OUT) : SV_TARGET {
 const char* defaultVertexShaderStr = R"(
 
 cbuffer PerScene : register(b0) {
-    column_major matrix projectionMatrix;
-    column_major matrix viewMatrix;
+    matrix projectionMatrix;
+    matrix viewMatrix;
     float3 viewPosWS;
     float padding;
 }
 cbuffer PerGroup : register(b1) {
-    column_major matrix modelMatrix;
+    matrix modelMatrix;
     float4 groupColor;
 }
 cbuffer PerInstance : register(b2) {
-	column_major matrix instanceMatrices[256];
+	matrix instanceMatrices[256];
 };
 struct AppData {
     float3 posMS : POSITION;
+    float4 color : COLOR;
 };
 struct VertexOutput {
     float4 color : COLOR;
@@ -54,10 +55,10 @@ struct VertexOutput {
 };
 VertexOutput VS(AppData IN) {
     VertexOutput OUT;
-    column_major matrix vp = mul(projectionMatrix, viewMatrix);
+    matrix vp = mul(projectionMatrix, viewMatrix);
     float4 posWS = mul(modelMatrix, float4(IN.posMS, 1.f));
     OUT.positionCS = mul(vp, posWS);
-    OUT.color = groupColor;
+    OUT.color = IN.color.rgba;
     return OUT;
 }
 )";
@@ -65,17 +66,17 @@ VertexOutput VS(AppData IN) {
 const char* texturedVertexShaderStr = R"(
 
 cbuffer PerScene : register(b0) {
-    column_major matrix projectionMatrix;
-    column_major matrix viewMatrix;
+    matrix projectionMatrix;
+    matrix viewMatrix;
     float3 viewPosWS;
     float padding;
 }
 cbuffer PerGroup : register(b1) {
-    column_major matrix modelMatrix;
+    matrix modelMatrix;
     float4 groupColor;
 }
 cbuffer PerInstance : register(b2) {
-	column_major matrix instanceMatrices[256];
+	matrix instanceMatrices[256];
 };
 struct AppData {
     float3 posMS : POSITION;
@@ -125,14 +126,14 @@ SamplerState texNormalSampler : register(s1);
 SamplerState texDepthSampler : register(s2);
 
 cbuffer PerScene : register(b0) {
-    column_major matrix projectionMatrix;
-    column_major matrix viewMatrix;
+    matrix projectionMatrix;
+    matrix viewMatrix;
     float3 viewPosWS;
     float padding;
 }
 
 cbuffer PerGroup : register(b1) {
-    column_major matrix modelMatrix;
+    matrix modelMatrix;
     float4 groupColor;
 }
 
@@ -175,17 +176,17 @@ float4 PS(PixelIn IN) : SV_TARGET {
 const char * defaultInstancedVertexShaderStr = R"(
 
 cbuffer PerScene : register(b0) {
-    column_major matrix projectionMatrix;
-    column_major matrix viewMatrix;
+    matrix projectionMatrix;
+    matrix viewMatrix;
     float3 viewPosWS;
     float padding;
 }
 cbuffer PerGroup : register(b1) {
-    column_major matrix modelMatrix;
+    matrix modelMatrix;
     float4 groupColor;
 }
 cbuffer PerInstance : register(b2) {
-	column_major matrix instanceMatrices[256];
+	matrix instanceMatrices[256];
 };
 struct AppData {
     float3 posMS : POSITION;
@@ -197,9 +198,9 @@ struct VertexOutput {
 };
 VertexOutput VS(AppData IN) {
     VertexOutput OUT;
-    column_major matrix instanceMatrix = instanceMatrices[IN.instanceID];
-    column_major matrix mm = mul(instanceMatrix, modelMatrix);
-    column_major matrix vp = mul(projectionMatrix, viewMatrix);
+    matrix instanceMatrix = instanceMatrices[IN.instanceID];
+    matrix mm = mul(instanceMatrix, modelMatrix);
+    matrix vp = mul(projectionMatrix, viewMatrix);
     float4 posWS = mul(mm, float4(IN.posMS, 1.f));
     OUT.positionCS = mul(vp, posWS);
     OUT.color = groupColor;

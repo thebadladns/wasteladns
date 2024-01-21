@@ -65,11 +65,12 @@ layout(std140) uniform type_PerGroup
 } PerGroup;
 
 layout(location = 0) in vec3 in_var_POSITION;
+layout(location = 1) in vec4 in_var_COLOR;
 layout(location = 0) out vec4 varying_COLOR;
 
 void main()
 {
-    varying_COLOR = PerGroup.groupColor;
+    varying_COLOR = in_var_COLOR;
     gl_Position = (vec4(in_var_POSITION, 1.0) * PerGroup.modelMatrix) * (PerScene.viewMatrix * PerScene.projectionMatrix);
 }
 

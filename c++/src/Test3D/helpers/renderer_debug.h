@@ -309,7 +309,7 @@ namespace Immediate
             }
         }
         
-        Renderer::Driver::create(buffer.orthoRasterizerState, { Renderer::Driver::RasterizerFillMode::Fill, true });
+        Renderer::Driver::create(buffer.orthoRasterizerState, { Renderer::Driver::RasterizerFillMode::Fill, Renderer::Driver::RasterizerCullMode::CullBack });
     }
     
     void present3d(Buffer& buffer, const Mat4& projMatrix, const Mat4& viewMatrix) {

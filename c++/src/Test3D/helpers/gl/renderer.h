@@ -250,15 +250,12 @@ namespace Driver {
     
     void create(RscRasterizerState& rs, const RasterizerStateParams& params) {
         rs.fillMode = (GLenum) params.fill;
-        rs.cullFace = params.cullFace;
+        rs.cullFace = (GLenum) params.cull;
     }
     void bind(const RscRasterizerState rs) {
         glPolygonMode(GL_FRONT_AND_BACK, rs.fillMode);
-        if (rs.cullFace) {
-            glEnable(GL_CULL_FACE);
-        } else {
-            glDisable(GL_CULL_FACE);
-        }
+        glEnable(GL_CULL_FACE);
+        glCullFace(rs.cullFace);
     }
     
     template <typename _layout>
