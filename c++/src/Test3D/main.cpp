@@ -25,6 +25,7 @@
 #include "lib/fbx/ufbx.c"
 
 #define UNITYBUILD
+#define __GPU_DEBUG 0
 
 
 #if __MACOS || __GLFW

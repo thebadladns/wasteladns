@@ -445,7 +445,7 @@ void create(Renderer::Driver::RscCBuffer (&buffers)[Renderer::Layout_CBuffer_3DS
     create<Renderer::Layout_CBuffer_3DScene::GroupData>(buffers[Renderer::Layout_CBuffer_3DScene::Buffers::GroupData], {});
     create<Renderer::Layout_CBuffer_3DScene::InstanceData>(buffers[Renderer::Layout_CBuffer_3DScene::Buffers::InstanceData], {});
 }
-void create(Renderer::Driver::RscIndexedBuffer<Renderer::Layout_Vec3Color4B>& buffer, const CubeCreateParams& params) {
+void create(Renderer::Driver::RscIndexedBuffer<Renderer::Layout_Vec3>& buffer, const CubeCreateParams& params) {
     Renderer::UntexturedCube cube;
     Renderer::create(cube, { 1.f, 1.f, 1.f });
     Renderer::Driver::IndexedBufferParams bufferParams;

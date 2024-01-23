@@ -57,8 +57,8 @@ void GLAPIENTRY debugMessageCallback(
     case GL_DEBUG_TYPE_POP_GROUP: typeStr = "POP"; logData.indent--, indent--; break;
     }
 
-    //Platform::debuglog( "%*s=>GL[%s,src:%s,severity:%s,id:%d]: %s\n",
-        //indent*2, "", typeStr, sourceStr, severityStr, id, message );
+    Platform::debuglog( "%*s=>GL[%s,src:%s,severity:%s,id:%d]: %s\n",
+        indent*2, "", typeStr, sourceStr, severityStr, id, message );
 }
 
 // globals so callbacks can access it
@@ -109,11 +109,12 @@ int main(int argc, char** argv) {
     gladLoadGLLoader((GLADloadproc)glfwGetProcAddress);
     glfwSwapInterval(1);
 
-    // Todo: only on windows
-    //LogData logLevel = {};
-    //logLevel.minLevel = LogLevel::Debug;
-    //glEnable( GL_DEBUG_OUTPUT );
-    //glDebugMessageCallback( debugMessageCallback, &logLevel );
+#if __GPU_DEBUG
+    LogData logLevel = {};
+    logLevel.minLevel = LogLevel::Debug;
+    glEnable( GL_DEBUG_OUTPUT );
+    glDebugMessageCallback( debugMessageCallback, &logLevel );
+#endif
 
     // Input setup
 	glfwSetInputMode(windowHandle, GLFW_STICKY_KEYS, 1);

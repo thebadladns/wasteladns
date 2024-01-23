@@ -55,7 +55,9 @@ layout(std140) uniform type_PerScene
     layout(row_major) mat4 projectionMatrix;
     layout(row_major) mat4 viewMatrix;
     vec3 viewPosWS;
-    float padding;
+    float padding1;
+    vec3 lightPosWS;
+    float padding2;
 } PerScene;
 
 layout(std140) uniform type_PerGroup
@@ -90,7 +92,9 @@ layout(std140) uniform type_PerScene
     mat4 projectionMatrix;
     mat4 viewMatrix;
     vec3 viewPosWS;
-    float padding;
+    float padding1;
+    vec3 lightPosWS;
+    float padding2;
 } PerScene;
 
 layout(std140) uniform type_PerGroup
@@ -135,11 +139,14 @@ layout(std140) uniform type_PerScene
     mat4 projectionMatrix;
     mat4 viewMatrix;
     vec3 viewPosWS;
-    float padding;
+    float padding1;
+    vec3 lightPosWS;
+    float padding2;
 } PerScene;
 
-uniform sampler2D SPIRV_Cross_CombinedtexDiffusetexDiffuseSampler;
-uniform sampler2D SPIRV_Cross_CombinedtexNormaltexNormalSampler;
+uniform sampler2D texDiffuse;
+uniform sampler2D texNormal;
+// uniform sampler2D texDepth;
 
 layout(location = 0) in vec3 varying_POSITION;
 layout(location = 1) in vec2 varying_TEXCOORD;
@@ -148,10 +155,10 @@ layout(location = 0) out vec4 out_var_SV_TARGET;
 
 void main()
 {
-    vec3 lightWS = vec3(3.f, 8.f, 15.f);
-    vec3 albedo = texture(SPIRV_Cross_CombinedtexDiffusetexDiffuseSampler, varying_TEXCOORD).rgb;
+    vec3 lightWS = PerScene.lightPosWS;
+    vec3 albedo = texture(texDiffuse, varying_TEXCOORD).rgb;
     vec3 lightDir = normalize(lightWS - varying_POSITION);
-    vec3 normalWS = texture(SPIRV_Cross_CombinedtexNormaltexNormalSampler, varying_TEXCOORD).xyz;
+    vec3 normalWS = texture(texNormal, varying_TEXCOORD).xyz;
     normalWS = normalWS * 2.f - 1.f;
     normalWS = normalize(varying_TBN * normalWS);
     
@@ -186,7 +193,9 @@ layout(std140) uniform type_PerScene
     mat4 projectionMatrix;
     mat4 viewMatrix;
     vec3 viewPosWS;
-    float padding;
+    float padding1;
+    vec3 lightPosWS;
+    float padding2;
 } PerScene;
 
 layout(std140) uniform type_PerGroup

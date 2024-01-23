@@ -36,7 +36,9 @@ cbuffer PerScene : register(b0) {
     matrix projectionMatrix;
     matrix viewMatrix;
     float3 viewPosWS;
-    float padding;
+    float padding1;
+    float3 lightPosWS;
+    float padding2;
 }
 cbuffer PerGroup : register(b1) {
     matrix modelMatrix;
@@ -69,7 +71,9 @@ cbuffer PerScene : register(b0) {
     matrix projectionMatrix;
     matrix viewMatrix;
     float3 viewPosWS;
-    float padding;
+    float padding1;
+    float3 lightPosWS;
+    float padding2;
 }
 cbuffer PerGroup : register(b1) {
     matrix modelMatrix;
@@ -117,6 +121,21 @@ VertexOutput VS(AppData IN) {
 }
 )";
 const char* texturedPixelShaderStr = R"(
+cbuffer PerScene : register(b0) {
+    matrix projectionMatrix;
+    matrix viewMatrix;
+    float3 viewPosWS;
+    float padding1;
+    float3 lightPosWS;
+    float padding2;
+}
+cbuffer PerGroup : register(b1) {
+    matrix modelMatrix;
+    float4 groupColor;
+}
+cbuffer PerInstance : register(b2) {
+	matrix instanceMatrices[256];
+};
 
 Texture2D texDiffuse : register(t0);
 Texture2D texNormal : register(t1);
@@ -125,17 +144,6 @@ SamplerState texDiffuseSampler : register(s0);
 SamplerState texNormalSampler : register(s1);
 SamplerState texDepthSampler : register(s2);
 
-cbuffer PerScene : register(b0) {
-    matrix projectionMatrix;
-    matrix viewMatrix;
-    float3 viewPosWS;
-    float padding;
-}
-
-cbuffer PerGroup : register(b1) {
-    matrix modelMatrix;
-    float4 groupColor;
-}
 
 struct PixelIn {
     float3 posWS : POSITION;
@@ -149,7 +157,7 @@ struct PixelIn {
 
 float4 PS(PixelIn IN) : SV_TARGET {
 
-    float3 lightWS = float3(3.f, 8.f, 15.f);
+    float3 lightWS = lightPosWS;
     float3 albedo = texDiffuse.Sample(texDiffuseSampler, IN.uv).rgb;
     float3 lightDir = normalize(lightWS - IN.posWS);
     float3 normalWS = texNormal.Sample(texNormalSampler, IN.uv).xyz;
@@ -179,7 +187,9 @@ cbuffer PerScene : register(b0) {
     matrix projectionMatrix;
     matrix viewMatrix;
     float3 viewPosWS;
-    float padding;
+    float padding1;
+    float3 lightPosWS;
+    float padding2;
 }
 cbuffer PerGroup : register(b1) {
     matrix modelMatrix;

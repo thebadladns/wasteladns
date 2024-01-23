@@ -121,7 +121,9 @@ int WINAPI WinMain(
     IDXGISwapChain1* swapchain;
         
     u32 flags = 0;
-    //flags = D3D11_CREATE_DEVICE_DEBUG;
+#if __GPU_DEBUG
+    flags = D3D11_CREATE_DEVICE_DEBUG;
+#endif
     D3D11CreateDevice(
         nullptr,
         D3D_DRIVER_TYPE_HARDWARE,

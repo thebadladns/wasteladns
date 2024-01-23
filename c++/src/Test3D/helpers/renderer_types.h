@@ -57,7 +57,9 @@ namespace Renderer {
             Mat4 projectionMatrix;
             Mat4 viewMatrix;
             Vec3 viewPos;
-            f32 padding;
+            f32 padding1;
+            Vec3 lightPos;
+            f32 padding2;
         };
         struct GroupData {
             Mat4 worldMatrix;

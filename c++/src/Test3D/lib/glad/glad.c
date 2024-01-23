@@ -1799,7 +1799,6 @@ int gladLoadGLLoader(GLADloadproc load) {
     GLVersion.major = 0; GLVersion.minor = 0;
     glGetString = (PFNGLGETSTRINGPROC)load("glGetString");
     auto b = glad_glGetString(GL_VERSION);
-    printf("%p", b);
     if(glGetString == NULL) return 0;
     if(glGetString(GL_VERSION) == NULL) return 0;
     find_coreGL();

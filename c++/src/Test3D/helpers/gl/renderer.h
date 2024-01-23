@@ -421,9 +421,12 @@ namespace Driver {
         GLuint perRenderGroup = glGetUniformBlockIndex(ss.shaderObject, "type_PerGroup");
         GLuint perInstance = glGetUniformBlockIndex(ss.shaderObject, "type_PerInstance");
         
-        glUniformBlockBinding(ss.shaderObject, perScene, cbuffers[Layout_CBuffer_3DScene::Buffers::SceneData].index);
-        glUniformBlockBinding(ss.shaderObject, perRenderGroup, cbuffers[Layout_CBuffer_3DScene::Buffers::GroupData].index);
-        glUniformBlockBinding(ss.shaderObject, perInstance, cbuffers[Layout_CBuffer_3DScene::Buffers::InstanceData].index);
+        if (perScene != GL_INVALID_INDEX)
+            glUniformBlockBinding(ss.shaderObject, perScene, cbuffers[Layout_CBuffer_3DScene::Buffers::SceneData].index);
+        if (perRenderGroup != GL_INVALID_INDEX)
+            glUniformBlockBinding(ss.shaderObject, perRenderGroup, cbuffers[Layout_CBuffer_3DScene::Buffers::GroupData].index);
+        if (perInstance != GL_INVALID_INDEX)
+            glUniformBlockBinding(ss.shaderObject, perInstance, cbuffers[Layout_CBuffer_3DScene::Buffers::InstanceData].index);
     }
     template <typename _vertexLayout>
     void bindCBuffers(RscShaderSet<_vertexLayout, Layout_CBuffer_LightPass::Buffers>& ss, const RscCBuffer* cbuffers) {
