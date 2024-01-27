@@ -414,30 +414,51 @@ namespace Driver {
     template <typename _vertexLayout, typename _bufferLayout>
     void bindCBuffers(RscShaderSet<_vertexLayout, _bufferLayout>&, const RscCBuffer* cbuffers);
 }
-
 template <typename _vertexLayout, typename _cbufferLayout>
-void create(Renderer::Driver::RscShaderSet<_vertexLayout, _cbufferLayout>& shaderSet, const Renderer::Driver::RscCBuffer* cbuffers
-    , const char* vertexSrc, const char* vertexShaderName
-    , const char* pixelSrc, const char* pixelShaderName
-    ) {
+struct TechniqueSrcParams {
+    const Renderer::Driver::RscCBuffer* cbuffers;
+    const char* vertexSrc; const char* vertexShaderName;
+    const char* pixelSrc; const char* pixelShaderName;
+    const char** samplerNames; u32 numSamplers;
+};
+template <Shaders::VSTechnique::Enum _vsTechnique, Shaders::PSTechnique::Enum _psTechnique
+        , Shaders::VSDrawType::Enum _drawType
+        , typename _vertexLayout, typename _cbufferLayout>
+void create(TechniqueSrcParams< _vertexLayout, _cbufferLayout>& params
+          , const Renderer::Driver::RscCBuffer* cbuffers) {
+    params.cbuffers = cbuffers;
+    const Shaders::VSSrc& vsSrc = Shaders::vsSrc<_vsTechnique, _vertexLayout, _cbufferLayout, _drawType>;
+    const Shaders::PSSrc& psSrc = Shaders::psSrc<_psTechnique, _vertexLayout, _cbufferLayout>;
+    params.vertexSrc = vsSrc.src;
+    params.vertexShaderName = vsSrc.name;
+    params.pixelSrc = psSrc.src;
+    params.pixelShaderName = psSrc.name;
+    params.samplerNames = psSrc.samplerNames; params.numSamplers = psSrc.numSamplers;
+}
+template <typename _vertexLayout, typename _cbufferLayout>
+void create(Renderer::Driver::RscShaderSet<_vertexLayout, _cbufferLayout>& shaderSet, const TechniqueSrcParams<_vertexLayout, _cbufferLayout>& params) {
     Renderer::Driver::RscVertexShader<_vertexLayout, _cbufferLayout> rscVS;
     Renderer::Driver::RscPixelShader rscPS;
     Renderer::Driver::ShaderResult pixelResult;
     Renderer::Driver::ShaderResult vertexResult;
-    pixelResult = Renderer::Driver::create(rscPS, { pixelSrc, (u32)strlen(pixelSrc) });
+    pixelResult = Renderer::Driver::create(rscPS, { params.pixelSrc, (u32)strlen(params.pixelSrc) });
     if (!pixelResult.compiled) {
-        Platform::debuglog("%s: %s\n", vertexShaderName, pixelResult.error);
+        Platform::debuglog("%s: %s\n", params.pixelShaderName, pixelResult.error);
         return;
     }
-    vertexResult = Renderer::Driver::create(rscVS, { vertexSrc, (u32)strlen(vertexSrc) });
+    vertexResult = Renderer::Driver::create(rscVS, { params.vertexSrc, (u32)strlen(params.vertexSrc) });
     if (!vertexResult.compiled) {
-        Platform::debuglog("%s: %s\n", pixelShaderName, vertexResult.error);
+        Platform::debuglog("%s: %s\n", params.vertexShaderName, vertexResult.error);
         return;
     }
     // Todo: can't reuse pixel or vertex shader after this. Is that bad?
-    Renderer::Driver::ShaderResult result = Renderer::Driver::create(shaderSet, { rscVS, rscPS, cbuffers });
+    Renderer::Driver::ShaderResult result = Renderer::Driver::create(shaderSet, { rscVS, rscPS, params.cbuffers });
     if (!result.compiled) {
-        Platform::debuglog("Linking %s & %s: %s\n", vertexShaderName, pixelShaderName, result.error);
+        Platform::debuglog("Linking %s & %s: %s\n", params.vertexShaderName, params.pixelShaderName, result.error);
+    }
+
+    if (params.numSamplers) {
+        Renderer::Driver::bind(shaderSet, params.samplerNames, params.numSamplers);
     }
 }
 void create(Renderer::Driver::RscCBuffer (&buffers)[Renderer::Layout_CBuffer_3DScene::Buffers::Count]) {
@@ -475,139 +496,152 @@ void create(Renderer::Driver::RscIndexedBuffer<Renderer::Layout_TexturedVec3>& b
     bufferParams.type = Renderer::Driver::BufferTopologyType::Triangles;
     Renderer::Driver::create(buffer, bufferParams);
 }
-template <typename _VertexBufferArray>
-void load(_VertexBufferArray& buffers, const char* path) {
-    // we may have multiple vertex streams depending on materials or mesh being separated in parts
-    auto addMesh = [](std::vector<Layout_Vec3Color4B> vertices, std::vector<u32> indices, _VertexBufferArray& buffers) {
-        if (vertices.size() > 0 && indices.size() > 0)
-        {
-            Renderer::Driver::RscIndexedBuffer<Renderer::Layout_Vec3Color4B> rscBuffer;
-            Renderer::Driver::IndexedBufferParams bufferParams;
-            bufferParams.vertexData = &vertices[0];
-            bufferParams.vertexSize = (u32)vertices.size() * sizeof(vertices[0]);
-            bufferParams.indexData = &indices[0];
-            bufferParams.indexSize = (u32)indices.size() * sizeof(indices[0]);
-            bufferParams.indexCount = (u32)indices.size();
-            bufferParams.memoryUsage = Renderer::Driver::BufferMemoryUsage::GPU;
-            bufferParams.accessType = Renderer::Driver::BufferAccessType::GPU;
-            bufferParams.indexType = Renderer::Driver::BufferItemType::U32;
-            bufferParams.type = Renderer::Driver::BufferTopologyType::Triangles;
-            Renderer::Driver::create(rscBuffer, bufferParams);
-
-            buffers.emplace_back(rscBuffer);
+namespace FBX {
+    void extractVertex(Renderer::Layout_Vec3& vertexout, const ufbx_vec3& vertexin) {
+        vertexout.x = vertexin.x;
+        vertexout.y = vertexin.y;
+        vertexout.z = vertexin.z;
+    }
+    void extractVertex(Renderer::Layout_Vec3Color4B& vertexout, const ufbx_vec3& vertexin) {
+        vertexout.pos.x = vertexin.x;
+        vertexout.pos.y = vertexin.y;
+        vertexout.pos.z = vertexin.z;
+    }
+    void extractVertexAttributes(Renderer::Layout_Vec3* vertices, const ufbx_mesh& mesh) {}
+    void extractVertexAttributes(Renderer::Layout_Vec3Color4B* vertices, const ufbx_mesh& mesh) {
+        if (mesh.vertex_color.exists) {
+            for (size_t index = 0; index < mesh.num_indices; index++) {
+                auto& c = mesh.vertex_color[index];
+                Col32 color(c.x, c.y, c.z, c.w);
+                vertices[mesh.vertex_indices[index]].color = color.ABGR();
+            }
         }
-        };
-    std::vector<Layout_Vec3Color4B> vertices;
-    std::vector<u32> indices;
-    ufbx_load_opts opts = {};
-    opts.allow_null_material = true;
-    ufbx_error error;
-    ufbx_scene* scene = ufbx_load_file(path, &opts, &error);
-    if (scene) {
-        for (size_t i = 0; i < scene->meshes.count; i++) {
-            ufbx_mesh& mesh = *scene->meshes.data[i];
-            // option 1: add vertex by materials (todo: flatten vertices and make them properly indexed)
-            //{
-            //    for (size_t pi = 0; pi < mesh.materials.count; pi++) {
-            //        ufbx_mesh_material& mesh_mat = mesh.materials.data[pi];
-            //        if (mesh_mat.num_triangles == 0) continue;
-            //        vertices.clear();
-            //        indices.clear();
-            //        for (size_t fi = 0; fi < mesh_mat.num_faces; fi++) {
-            //            ufbx_vertex_vec3& positions = mesh.vertex_position;
-            //            ufbx_face face = mesh.faces.data[mesh_mat.face_indices.data[fi]];
-            //            if (face.num_indices == 3) {
-            //                ufbx_vec3 va = positions.values.data[(int32_t)positions.indices.data[face.index_begin + 0]];
-            //                u32 a = (u32)vertices.size() / 3;
-            //                vertices.push_back(va.x); vertices.push_back(va.y); vertices.push_back(va.z);
-            //                ufbx_vec3 vb = positions.values.data[(int32_t)positions.indices.data[face.index_begin + 1]];
-            //                u32 b = (u32)vertices.size() / 3;
-            //                vertices.push_back(vb.x); vertices.push_back(vb.y); vertices.push_back(vb.z);
-            //                ufbx_vec3 vc = positions.values.data[(int32_t)positions.indices.data[face.index_begin + 2]];
-            //                u32 c = (u32)vertices.size() / 3;
-            //                vertices.push_back(vc.x); vertices.push_back(vc.y); vertices.push_back(vc.z);
-            //                indices.push_back(a);
-            //                indices.push_back(b);
-            //                indices.push_back(c);
-            //            }
-            //            else {
-            //                ufbx_vec3 va = positions.values.data[(int32_t)positions.indices.data[face.index_begin + 0]];
-            //                u32 a = (u32)vertices.size() / 3;
-            //                vertices.push_back(va.x); vertices.push_back(va.y); vertices.push_back(va.z);
-            //                ufbx_vec3 vb = positions.values.data[(int32_t)positions.indices.data[face.index_begin + 1]];
-            //                u32 b = (u32)vertices.size() / 3;
-            //                vertices.push_back(vb.x); vertices.push_back(vb.y); vertices.push_back(vb.z);
-            //                ufbx_vec3 vc = positions.values.data[(int32_t)positions.indices.data[face.index_begin + 2]];
-            //                u32 c = (u32)vertices.size() / 3;
-            //                vertices.push_back(vc.x); vertices.push_back(vc.y); vertices.push_back(vc.z);
-            //                ufbx_vec3 vd = positions.values.data[(int32_t)positions.indices.data[face.index_begin + 3]];
-            //                u32 d = (u32)vertices.size() / 3;
-            //                vertices.push_back(vd.x); vertices.push_back(vd.y); vertices.push_back(vd.z);
-            //                indices.push_back(a);
-            //                indices.push_back(b);
-            //                indices.push_back(c);
-            //                indices.push_back(a);
-            //                indices.push_back(c);
-            //                indices.push_back(d);
-            //            }
-            //        }
-            //        addMesh(vertices, indices, buffers);
-            //    }
-            //}
-
-            // option 2: copy the vertices directly
+    }
+    template <typename _vertexLayout>
+    void load(std::vector<Driver::RscIndexedBuffer<_vertexLayout>>& buffers, const char* path) {
+        // we may have multiple vertex streams depending on materials or mesh being separated in parts
+        auto addMesh = [](std::vector<_vertexLayout> vertices, std::vector<u32> indices, auto& buffers) {
+            if (vertices.size() > 0 && indices.size() > 0)
             {
-                vertices.clear();
-                indices.clear();
-                vertices.reserve(mesh.num_vertices);
-                for (size_t i = 0; i < mesh.num_vertices; i++) {
-                    Layout_Vec3Color4B vertex;
-                    vertex.pos.x = mesh.vertices[i].x;
-                    vertex.pos.y = mesh.vertices[i].y;
-                    vertex.pos.z = mesh.vertices[i].z;
-                    vertices.push_back(vertex);
-                }
+                Renderer::Driver::RscIndexedBuffer<_vertexLayout> rscBuffer;
+                Renderer::Driver::IndexedBufferParams bufferParams;
+                bufferParams.vertexData = &vertices[0];
+                bufferParams.vertexSize = (u32)vertices.size() * sizeof(vertices[0]);
+                bufferParams.indexData = &indices[0];
+                bufferParams.indexSize = (u32)indices.size() * sizeof(indices[0]);
+                bufferParams.indexCount = (u32)indices.size();
+                bufferParams.memoryUsage = Renderer::Driver::BufferMemoryUsage::GPU;
+                bufferParams.accessType = Renderer::Driver::BufferAccessType::GPU;
+                bufferParams.indexType = Renderer::Driver::BufferItemType::U32;
+                bufferParams.type = Renderer::Driver::BufferTopologyType::Triangles;
+                Renderer::Driver::create(rscBuffer, bufferParams);
 
-                // can't copy the face indexes directly, need to de-triangulate
-                for (size_t i = 0; i < mesh.num_faces; i++) {
-                    ufbx_face& face = mesh.faces[i];
+                buffers.emplace_back(rscBuffer);
+            }
+        };
+        std::vector<_vertexLayout> vertices;
+        std::vector<u32> indices;
+        ufbx_load_opts opts = {};
+        opts.allow_null_material = true;
+        ufbx_error error;
+        ufbx_scene* scene = ufbx_load_file(path, &opts, &error);
+        if (scene) {
+            for (size_t i = 0; i < scene->meshes.count; i++) {
+                ufbx_mesh& mesh = *scene->meshes.data[i];
+                // option 1: add vertex by materials (todo: flatten vertices and make them properly indexed)
+                //{
+                //    for (size_t pi = 0; pi < mesh.materials.count; pi++) {
+                //        ufbx_mesh_material& mesh_mat = mesh.materials.data[pi];
+                //        if (mesh_mat.num_triangles == 0) continue;
+                //        vertices.clear();
+                //        indices.clear();
+                //        for (size_t fi = 0; fi < mesh_mat.num_faces; fi++) {
+                //            ufbx_vertex_vec3& positions = mesh.vertex_position;
+                //            ufbx_face face = mesh.faces.data[mesh_mat.face_indices.data[fi]];
+                //            if (face.num_indices == 3) {
+                //                ufbx_vec3 va = positions.values.data[(int32_t)positions.indices.data[face.index_begin + 0]];
+                //                u32 a = (u32)vertices.size() / 3;
+                //                vertices.push_back(va.x); vertices.push_back(va.y); vertices.push_back(va.z);
+                //                ufbx_vec3 vb = positions.values.data[(int32_t)positions.indices.data[face.index_begin + 1]];
+                //                u32 b = (u32)vertices.size() / 3;
+                //                vertices.push_back(vb.x); vertices.push_back(vb.y); vertices.push_back(vb.z);
+                //                ufbx_vec3 vc = positions.values.data[(int32_t)positions.indices.data[face.index_begin + 2]];
+                //                u32 c = (u32)vertices.size() / 3;
+                //                vertices.push_back(vc.x); vertices.push_back(vc.y); vertices.push_back(vc.z);
+                //                indices.push_back(a);
+                //                indices.push_back(b);
+                //                indices.push_back(c);
+                //            }
+                //            else {
+                //                ufbx_vec3 va = positions.values.data[(int32_t)positions.indices.data[face.index_begin + 0]];
+                //                u32 a = (u32)vertices.size() / 3;
+                //                vertices.push_back(va.x); vertices.push_back(va.y); vertices.push_back(va.z);
+                //                ufbx_vec3 vb = positions.values.data[(int32_t)positions.indices.data[face.index_begin + 1]];
+                //                u32 b = (u32)vertices.size() / 3;
+                //                vertices.push_back(vb.x); vertices.push_back(vb.y); vertices.push_back(vb.z);
+                //                ufbx_vec3 vc = positions.values.data[(int32_t)positions.indices.data[face.index_begin + 2]];
+                //                u32 c = (u32)vertices.size() / 3;
+                //                vertices.push_back(vc.x); vertices.push_back(vc.y); vertices.push_back(vc.z);
+                //                ufbx_vec3 vd = positions.values.data[(int32_t)positions.indices.data[face.index_begin + 3]];
+                //                u32 d = (u32)vertices.size() / 3;
+                //                vertices.push_back(vd.x); vertices.push_back(vd.y); vertices.push_back(vd.z);
+                //                indices.push_back(a);
+                //                indices.push_back(b);
+                //                indices.push_back(c);
+                //                indices.push_back(a);
+                //                indices.push_back(c);
+                //                indices.push_back(d);
+                //            }
+                //        }
+                //        addMesh(vertices, indices, buffers);
+                //    }
+                //}
 
-                    if (mesh.faces[i].num_indices > 3) {
-                        const u32 a = mesh.vertex_indices[face.index_begin];
-                        const u32 b = mesh.vertex_indices[face.index_begin + 1];
-                        const u32 c = mesh.vertex_indices[face.index_begin + 2];
-                        const u32 d = mesh.vertex_indices[face.index_begin + 3];
-                        indices.push_back(a);
-                        indices.push_back(b);
-                        indices.push_back(c);
-                        indices.push_back(a);
-                        indices.push_back(c);
-                        indices.push_back(d);
+                // option 2: copy the vertices directly
+                {
+                    vertices.clear();
+                    indices.clear();
+                    vertices.reserve(mesh.num_vertices);
+                    for (size_t i = 0; i < mesh.num_vertices; i++) {
+                        _vertexLayout vertex;
+                        extractVertex(vertex, mesh.vertices[i]);
+                        vertices.push_back(vertex);
                     }
-                    else {
-                        const u32 a = mesh.vertex_indices[face.index_begin];
-                        const u32 b = mesh.vertex_indices[face.index_begin + 1];
-                        const u32 c = mesh.vertex_indices[face.index_begin + 2];
-                        indices.push_back(a);
-                        indices.push_back(b);
-                        indices.push_back(c);
+
+                    // can't copy the face indexes directly, need to de-triangulate
+                    for (size_t i = 0; i < mesh.num_faces; i++) {
+                        ufbx_face& face = mesh.faces[i];
+                        if (mesh.faces[i].num_indices > 3) {
+                            const u32 a = mesh.vertex_indices[face.index_begin];
+                            const u32 b = mesh.vertex_indices[face.index_begin + 1];
+                            const u32 c = mesh.vertex_indices[face.index_begin + 2];
+                            const u32 d = mesh.vertex_indices[face.index_begin + 3];
+                            indices.push_back(a);
+                            indices.push_back(b);
+                            indices.push_back(c);
+                            indices.push_back(a);
+                            indices.push_back(c);
+                            indices.push_back(d);
+                        }
+                        else {
+                            const u32 a = mesh.vertex_indices[face.index_begin];
+                            const u32 b = mesh.vertex_indices[face.index_begin + 1];
+                            const u32 c = mesh.vertex_indices[face.index_begin + 2];
+                            indices.push_back(a);
+                            indices.push_back(b);
+                            indices.push_back(c);
+                        }
                     }
+
+                    extractVertexAttributes(vertices.data(), mesh);
+
+                    addMesh(vertices, indices, buffers);
                 }
-
-
-                if (mesh.vertex_color.exists) {
-                    for (size_t index = 0; index < mesh.num_indices; index++) {
-                        auto& c = mesh.vertex_color[index];
-                        Col32 color(c.x, c.y, c.z, c.w);
-                        vertices[mesh.vertex_indices[index]].color = color.ABGR();
-                    }
-                }
-
-                addMesh(vertices, indices, buffers);
             }
         }
     }
 }
+
 };
 
 #endif // __WASTELADNS_RENDERER_H__

@@ -1,7 +1,17 @@
 #ifndef __WASTELADNS_SHADERS_DX11_H__
 #define __WASTELADNS_SHADERS_DX11_H__
 
-const char * coloredVertexShaderStr = R"(
+namespace Renderer {
+namespace Shaders {
+
+template <>
+constexpr VSSrc vsSrc<
+    VSTechnique::forward_base,
+    Layout_Vec3Color4B,
+    Layout_CBuffer_DebugScene::Buffers,
+    VSDrawType::Standard> = {
+"forward_base_Vec3Color4B_CBuffer_DebugScene_Standard",
+R"(
 cbuffer PerGroup : register(b0) {
     matrix MVP;
 }
@@ -19,19 +29,70 @@ VertexOutput VS(AppData IN) {
     OUT.color = IN.color.rgba;
     return OUT;
 }
-)";
-
-const char * defaultPixelShaderStr = R"(
-struct VertexOut {
-    float4 color : COLOR;
+)"
 };
-float4 PS(VertexOut OUT) : SV_TARGET {
-    return OUT.color;
+
+template <>
+constexpr VSSrc vsSrc <
+    VSTechnique::forward_base,
+    Layout_Vec2Color4B,
+    Layout_CBuffer_DebugScene::Buffers,
+    VSDrawType::Standard> = vsSrc<
+        VSTechnique::forward_base,
+        Layout_Vec3Color4B,
+        Layout_CBuffer_DebugScene::Buffers,
+        VSDrawType::Standard>;
+
+template <>
+constexpr VSSrc vsSrc <
+    VSTechnique::forward_base,
+    Layout_Vec3,
+    Layout_CBuffer_3DScene::Buffers,
+    VSDrawType::Standard> = {
+"forward_base_Vec3_CBuffer_3DScene_Sandard",
+R"(
+
+cbuffer PerScene : register(b0) {
+    matrix projectionMatrix;
+    matrix viewMatrix;
+    float3 viewPosWS;
+    float padding1;
+    float3 lightPosWS;
+    float padding2;
 }
-)";
+cbuffer PerGroup : register(b1) {
+    matrix modelMatrix;
+    float4 groupColor;
+}
+cbuffer PerInstance : register(b2) {
+	matrix instanceMatrices[256];
+};
+struct AppData {
+    float3 posMS : POSITION;
+};
+struct VertexOutput {
+    float4 color : COLOR;
+    float4 positionCS : SV_POSITION;
+};
+VertexOutput VS(AppData IN) {
+    VertexOutput OUT;
+    matrix vp = mul(projectionMatrix, viewMatrix);
+    float4 posWS = mul(modelMatrix, float4(IN.posMS, 1.f));
+    OUT.positionCS = mul(vp, posWS);
+    OUT.color = groupColor;
+    return OUT;
+}
+)"
+};
 
-const char* defaultVertexShaderStr = R"(
-
+template <>
+constexpr VSSrc vsSrc <
+    VSTechnique::forward_base,
+    Layout_Vec3Color4B,
+    Layout_CBuffer_3DScene::Buffers,
+    VSDrawType::Standard> = {
+"forward_base_Vec3Color4B_CBuffer_3DScene_Standard",
+R"(
 cbuffer PerScene : register(b0) {
     matrix projectionMatrix;
     matrix viewMatrix;
@@ -63,10 +124,61 @@ VertexOutput VS(AppData IN) {
     OUT.color = IN.color.rgba;
     return OUT;
 }
-)";
+)"
+};
 
-const char* texturedVertexShaderStr = R"(
+template <>
+constexpr VSSrc vsSrc <
+    VSTechnique::forward_base,
+    Layout_Vec3,
+    Layout_CBuffer_3DScene::Buffers,
+    VSDrawType::Instanced> = {
+"forward_base_Vec3_CBuffer_3DScene_Instanced"
+, R"(
+cbuffer PerScene : register(b0) {
+    matrix projectionMatrix;
+    matrix viewMatrix;
+    float3 viewPosWS;
+    float padding1;
+    float3 lightPosWS;
+    float padding2;
+}
+cbuffer PerGroup : register(b1) {
+    matrix modelMatrix;
+    float4 groupColor;
+}
+cbuffer PerInstance : register(b2) {
+	matrix instanceMatrices[256];
+};
+struct AppData {
+    float3 posMS : POSITION;
+    uint instanceID : SV_InstanceID;
+};
+struct VertexOutput {
+    float4 color : COLOR;
+    float4 positionCS : SV_POSITION;
+};
+VertexOutput VS(AppData IN) {
+    VertexOutput OUT;
+    matrix instanceMatrix = instanceMatrices[IN.instanceID];
+    matrix mm = mul(instanceMatrix, modelMatrix);
+    matrix vp = mul(projectionMatrix, viewMatrix);
+    float4 posWS = mul(mm, float4(IN.posMS, 1.f));
+    OUT.positionCS = mul(vp, posWS);
+    OUT.color = groupColor;
+    return OUT;
+}
+)"
+};
 
+template <>
+constexpr VSSrc vsSrc <
+    VSTechnique::forward_base,
+    Layout_TexturedVec3,
+    Layout_CBuffer_3DScene::Buffers,
+    VSDrawType::Standard> = {
+"forward_base_TexturedVec3_CBuffer_3DScene_Standard",
+R"(
 cbuffer PerScene : register(b0) {
     matrix projectionMatrix;
     matrix viewMatrix;
@@ -119,8 +231,68 @@ VertexOutput VS(AppData IN) {
     OUT.uv = IN.uv;
     return OUT;
 }
-)";
-const char* texturedPixelShaderStr = R"(
+)"
+};
+
+template <>
+constexpr PSSrc psSrc <
+    PSTechnique::forward_untextured_unlit,
+    Layout_Vec3,
+    Layout_CBuffer_3DScene::Buffers> = {
+"forward_untextured_unlit", // used for multiple vertex and buffer layouts
+nullptr, 0, // no samplers
+R"(
+struct VertexOut {
+    float4 color : COLOR;
+};
+float4 PS(VertexOut OUT) : SV_TARGET {
+    return OUT.color;
+}
+)"
+};
+template <>
+constexpr PSSrc psSrc <
+    PSTechnique::forward_untextured_unlit,
+    Layout_Vec2Color4B,
+    Layout_CBuffer_3DScene::Buffers> = psSrc <
+        PSTechnique::forward_untextured_unlit,
+        Layout_Vec3,
+        Layout_CBuffer_3DScene::Buffers>;
+template <>
+constexpr PSSrc psSrc <
+    PSTechnique::forward_untextured_unlit,
+    Layout_Vec3Color4B,
+    Layout_CBuffer_3DScene::Buffers> = psSrc <
+        PSTechnique::forward_untextured_unlit,
+        Layout_Vec3,
+        Layout_CBuffer_3DScene::Buffers>;
+template <>
+constexpr PSSrc psSrc <
+    PSTechnique::forward_untextured_unlit,
+    Layout_Vec2Color4B,
+    Layout_CBuffer_DebugScene::Buffers> = psSrc <
+        PSTechnique::forward_untextured_unlit,
+        Layout_Vec3,
+        Layout_CBuffer_3DScene::Buffers>;
+template <>
+constexpr PSSrc psSrc <
+    PSTechnique::forward_untextured_unlit,
+    Layout_Vec3Color4B,
+    Layout_CBuffer_DebugScene::Buffers> = psSrc <
+        PSTechnique::forward_untextured_unlit,
+        Layout_Vec3,
+        Layout_CBuffer_3DScene::Buffers>;
+
+const char* textured_lit_normalmapped_samplers[] = {"texDiffuse", "texNormal", "texDepth"};
+template <>
+constexpr PSSrc psSrc <
+    PSTechnique::forward_textured_lit_normalmapped,
+    Layout_TexturedVec3,
+    Layout_CBuffer_3DScene::Buffers> = {
+"forward_textured_lit_normalmapped_TexturedVec3_CBuffer_3DScene",
+textured_lit_normalmapped_samplers,
+sizeof(textured_lit_normalmapped_samplers) / sizeof(textured_lit_normalmapped_samplers[0]),
+R"(
 cbuffer PerScene : register(b0) {
     matrix projectionMatrix;
     matrix viewMatrix;
@@ -179,43 +351,9 @@ float4 PS(PixelIn IN) : SV_TARGET {
     float4 fragcolor = float4(s * float3(1.f,1.f,1.f) + (1 - s)*(t*cwarm + (1 - t)*ccool), 1.f);
     return fragcolor;
 }
-)";
-
-const char * defaultInstancedVertexShaderStr = R"(
-
-cbuffer PerScene : register(b0) {
-    matrix projectionMatrix;
-    matrix viewMatrix;
-    float3 viewPosWS;
-    float padding1;
-    float3 lightPosWS;
-    float padding2;
-}
-cbuffer PerGroup : register(b1) {
-    matrix modelMatrix;
-    float4 groupColor;
-}
-cbuffer PerInstance : register(b2) {
-	matrix instanceMatrices[256];
+)"
 };
-struct AppData {
-    float3 posMS : POSITION;
-    uint instanceID : SV_InstanceID;
-};
-struct VertexOutput {
-    float4 color : COLOR;
-    float4 positionCS : SV_POSITION;
-};
-VertexOutput VS(AppData IN) {
-    VertexOutput OUT;
-    matrix instanceMatrix = instanceMatrices[IN.instanceID];
-    matrix mm = mul(instanceMatrix, modelMatrix);
-    matrix vp = mul(projectionMatrix, viewMatrix);
-    float4 posWS = mul(mm, float4(IN.posMS, 1.f));
-    OUT.positionCS = mul(vp, posWS);
-    OUT.color = groupColor;
-    return OUT;
-}
-)";
 
+}
+}
 #endif // __WASTELADNS_SHADERS_DX11_H__

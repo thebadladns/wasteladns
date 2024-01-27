@@ -24,7 +24,7 @@ namespace Renderer {
         struct RscIndexedBuffer;
         struct RscCBuffer;
     };
-    
+
     // Supported layouts
     typedef Vec3 Layout_Vec3;
     struct Layout_TexturedVec2 {
@@ -79,9 +79,9 @@ namespace Renderer {
     };
     namespace Layout_CBuffer_DebugScene {
         typedef Mat4 GroupData;
-        struct Buffers { enum Enum { GroupData, Count }; } ;
+        struct Buffers { enum Enum { GroupData, Count }; };
     };
-    
+
     // Convenience shapes
     struct RenderTargetTexturedQuad {
         Renderer::Layout_TexturedVec2 vertices[4];
@@ -91,10 +91,38 @@ namespace Renderer {
         Renderer::Layout_TexturedVec3 vertices[24];
         u16 indices[36];
     };
-	struct UntexturedCube {
-		Renderer::Layout_Vec3 vertices[24];
-		u16 indices[36];
-	};
+    struct UntexturedCube {
+        Renderer::Layout_Vec3 vertices[24];
+        u16 indices[36];
+    };
+
+namespace Shaders {
+
+    struct VSSrc {
+        const char* name;
+        const char* src;
+    };
+    struct VSDrawType { enum Enum { Standard, Instanced }; };
+
+    struct VSTechnique { enum Enum {
+        forward_base
+    }; };
+    template<VSTechnique::Enum _technique, typename _vertexLayout, typename _cbufferLayout, VSDrawType::Enum _type>
+    constexpr VSSrc vsSrc;
+
+    struct PSSrc {
+        const char* name;
+        const char** samplerNames;
+        const u32 numSamplers;
+        const char* src;
+    };
+    struct PSTechnique { enum Enum {
+          forward_untextured_unlit
+        , forward_textured_lit_normalmapped
+    }; };
+    template <PSTechnique::Enum _technique, typename _vertexLayoutIn, typename _cbufferLayout>
+    constexpr PSSrc psSrc;
+}
 }
 
 #endif // __WASTELADNS_RENDERER_TYPES_H__

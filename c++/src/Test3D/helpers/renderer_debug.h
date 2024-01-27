@@ -261,52 +261,20 @@ namespace Immediate
         }
         
         {
-            Renderer::Driver::RscVertexShader<Renderer::Layout_Vec3Color4B, Renderer::Layout_CBuffer_DebugScene::Buffers> rscVS;
-            Renderer::Driver::RscPixelShader rscPS;
-            Renderer::Driver::RscShaderSet<Renderer::Layout_Vec3Color4B, Renderer::Layout_CBuffer_DebugScene::Buffers> shaderSet;
-            Renderer::Driver::ShaderResult result = Renderer::Driver::create(rscVS, { coloredVertexShaderStr, (u32)strlen(coloredVertexShaderStr) });
-            if (result.compiled) {
-                result = Renderer::Driver::create(rscPS, { defaultPixelShaderStr, (u32)strlen(defaultPixelShaderStr) });
-                if (result.compiled) {
-                    result = Renderer::Driver::create(shaderSet, { rscVS, rscPS, buffer.cbuffers });
-                    if (result.compiled) {
-                        buffer.shaderSetPersp = shaderSet;
-                    }
-                    else {
-                        Platform::debuglog("link: %s", result.error);
-                    }
-                }
-                else {
-                    Platform::debuglog("PS: %s", result.error);
-                }
-            }
-            else {
-                Platform::debuglog("VS: %s", result.error);
-            }
+            Renderer::TechniqueSrcParams< Renderer::Layout_Vec3Color4B, Layout_CBuffer_DebugScene::Buffers> params;
+            Renderer::create<Renderer::Shaders::VSTechnique::forward_base
+                           , Renderer::Shaders::PSTechnique::forward_untextured_unlit
+                           , Renderer::Shaders::VSDrawType::Standard>
+                (params, buffer.cbuffers);
+            Renderer::create(buffer.shaderSetPersp, params);
         }
         {
-            Renderer::Driver::RscVertexShader<Renderer::Layout_Vec2Color4B, Renderer::Layout_CBuffer_DebugScene::Buffers> rscVS;
-            Renderer::Driver::RscPixelShader rscPS;
-            Renderer::Driver::RscShaderSet<Renderer::Layout_Vec2Color4B, Renderer::Layout_CBuffer_DebugScene::Buffers> shaderSet;
-            Renderer::Driver::ShaderResult result = Renderer::Driver::create(rscVS, { coloredVertexShaderStr, (u32)strlen(coloredVertexShaderStr) });
-            if (result.compiled) {
-                result = Renderer::Driver::create(rscPS, { defaultPixelShaderStr, (u32)strlen(defaultPixelShaderStr) });
-                if (result.compiled) {
-                    result = Renderer::Driver::create(shaderSet, { rscVS, rscPS, buffer.cbuffers });
-                    if (result.compiled) {
-                        buffer.shaderSetOrtho = shaderSet;
-                    }
-                    else {
-                        Platform::debuglog("link: %s", result.error);
-                    }
-                }
-                else {
-                    Platform::debuglog("PS: %s", result.error);
-                }
-            }
-            else {
-                Platform::debuglog("VS: %s", result.error);
-            }
+            Renderer::TechniqueSrcParams< Renderer::Layout_Vec2Color4B, Layout_CBuffer_DebugScene::Buffers> params;
+            Renderer::create<Renderer::Shaders::VSTechnique::forward_base
+                           , Renderer::Shaders::PSTechnique::forward_untextured_unlit
+                           , Renderer::Shaders::VSDrawType::Standard>
+                (params, buffer.cbuffers);
+            Renderer::create(buffer.shaderSetOrtho, params);
         }
         
         Renderer::Driver::create(buffer.orthoRasterizerState, { Renderer::Driver::RasterizerFillMode::Fill, Renderer::Driver::RasterizerCullMode::CullBack });

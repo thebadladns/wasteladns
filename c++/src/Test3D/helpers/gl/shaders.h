@@ -1,7 +1,17 @@
 #ifndef __WASTELADNS_SHADERS_GL_H__
 #define __WASTELADNS_SHADERS_GL_H__
 
-const char* coloredVertexShaderStr = R"(
+namespace Renderer {
+namespace Shaders {
+
+template <>
+constexpr VSSrc vsSrc<
+    VSTechnique::forward_base,
+    Layout_Vec3Color4B,
+    Layout_CBuffer_DebugScene::Buffers,
+    VSDrawType::Standard> = {
+"forward_base_Vec3Color4B_CBuffer_DebugScene_Standard",
+R"(
 #version 330
 #extension GL_ARB_separate_shader_objects : require
 
@@ -24,24 +34,71 @@ void main()
     varying_COLOR = in_var_COLOR;
     gl_Position = vec4(in_var_POSITION, 1.0) * PerGroup.MVP;
 }
+)"
+};
 
-)";
+template <>
+constexpr VSSrc vsSrc <
+    VSTechnique::forward_base,
+    Layout_Vec2Color4B,
+    Layout_CBuffer_DebugScene::Buffers,
+    VSDrawType::Standard> = vsSrc<
+        VSTechnique::forward_base,
+        Layout_Vec3Color4B,
+        Layout_CBuffer_DebugScene::Buffers,
+        VSDrawType::Standard>;
 
-const char* defaultPixelShaderStr = R"(
+template <>
+constexpr VSSrc vsSrc <
+    VSTechnique::forward_base,
+    Layout_Vec3,
+    Layout_CBuffer_3DScene::Buffers,
+    VSDrawType::Standard> = {
+"forward_base_Vec3_CBuffer_3DScene_Sandard",
+R"(
 #version 330
 #extension GL_ARB_separate_shader_objects : require
 
-layout(location = 0) in vec4 varying_COLOR;
-layout(location = 0) out vec4 out_var_SV_TARGET;
+out gl_PerVertex
+{
+    vec4 gl_Position;
+};
+
+layout(std140) uniform type_PerScene
+{
+    layout(row_major) mat4 projectionMatrix;
+    layout(row_major) mat4 viewMatrix;
+    vec3 viewPosWS;
+    float padding1;
+    vec3 lightPosWS;
+    float padding2;
+} PerScene;
+
+layout(std140) uniform type_PerGroup
+{
+    layout(row_major) mat4 modelMatrix;
+    vec4 groupColor;
+} PerGroup;
+
+layout(location = 0) in vec3 in_var_POSITION;
+layout(location = 0) out vec4 varying_COLOR;
 
 void main()
 {
-    out_var_SV_TARGET = varying_COLOR;
+    varying_COLOR = PerGroup.groupColor;
+    gl_Position = (vec4(in_var_POSITION, 1.0) * PerGroup.modelMatrix) * (PerScene.viewMatrix * PerScene.projectionMatrix);
 }
+)"
+};
 
-)";
-
-const char* defaultVertexShaderStr = R"(
+template <>
+constexpr VSSrc vsSrc <
+    VSTechnique::forward_base,
+    Layout_Vec3Color4B,
+    Layout_CBuffer_3DScene::Buffers,
+    VSDrawType::Standard> = {
+"forward_base_Vec3Color4B_CBuffer_3DScene_Standard",
+R"(
 #version 330
 #extension GL_ARB_separate_shader_objects : require
 
@@ -75,10 +132,69 @@ void main()
     varying_COLOR = in_var_COLOR;
     gl_Position = (vec4(in_var_POSITION, 1.0) * PerGroup.modelMatrix) * (PerScene.viewMatrix * PerScene.projectionMatrix);
 }
+)"
+};
 
-)";
+template <>
+constexpr VSSrc vsSrc <
+    VSTechnique::forward_base,
+    Layout_Vec3,
+    Layout_CBuffer_3DScene::Buffers,
+    VSDrawType::Instanced> = {
+"forward_base_Vec3_CBuffer_3DScene_Instanced"
+, R"(
+#version 330
+#extension GL_ARB_separate_shader_objects : require
 
-const char* texturedVertexShaderStr = R"(
+out gl_PerVertex
+{
+    vec4 gl_Position;
+};
+
+layout(std140) uniform type_PerScene
+{
+    mat4 projectionMatrix;
+    mat4 viewMatrix;
+    vec3 viewPosWS;
+    float padding1;
+    vec3 lightPosWS;
+    float padding2;
+} PerScene;
+
+layout(std140) uniform type_PerGroup
+{
+    mat4 modelMatrix;
+    vec4 groupColor;
+} PerGroup;
+
+layout(std140) uniform type_PerInstance
+{
+    mat4 instanceMatrices[256];
+} PerInstance;
+
+layout(location = 0) in vec3 in_var_POSITION;
+uniform int SPIRV_Cross_BaseInstance;
+layout(location = 0) out vec4 varying_COLOR;
+
+void main()
+{
+    mat4 mm = PerInstance.instanceMatrices[uint(gl_InstanceID + SPIRV_Cross_BaseInstance)] * PerGroup.modelMatrix;
+    mat4 vp = PerScene.projectionMatrix * PerScene.viewMatrix;
+    vec4 posWS = mm * vec4(in_var_POSITION, 1.0);
+    gl_Position = vp * posWS;
+    varying_COLOR = PerGroup.groupColor;
+}
+)"
+};
+
+template <>
+constexpr VSSrc vsSrc <
+    VSTechnique::forward_base,
+    Layout_TexturedVec3,
+    Layout_CBuffer_3DScene::Buffers,
+    VSDrawType::Standard> = {
+"forward_base_TexturedVec3_CBuffer_3DScene_Standard",
+R"(
 #version 330
 #extension GL_ARB_separate_shader_objects : require
 
@@ -127,10 +243,72 @@ void main()
     mat4 vp = PerScene.projectionMatrix * PerScene.viewMatrix;
     gl_Position = vp * posWS;
 }
+)"
+};
 
-)";
+template <>
+constexpr PSSrc psSrc <
+    PSTechnique::forward_untextured_unlit,
+    Layout_Vec3,
+    Layout_CBuffer_3DScene::Buffers> = {
+"forward_untextured_unlit", // used for multiple vertex and buffer layouts
+nullptr, 0, // no samplers
+R"(
+#version 330
+#extension GL_ARB_separate_shader_objects : require
 
-const char* texturedPixelShaderStr = R"(
+layout(location = 0) in vec4 varying_COLOR;
+layout(location = 0) out vec4 out_var_SV_TARGET;
+
+void main()
+{
+    out_var_SV_TARGET = varying_COLOR;
+}
+)"
+};
+template <>
+constexpr PSSrc psSrc <
+    PSTechnique::forward_untextured_unlit,
+    Layout_Vec2Color4B,
+    Layout_CBuffer_3DScene::Buffers> = psSrc <
+        PSTechnique::forward_untextured_unlit,
+        Layout_Vec3,
+        Layout_CBuffer_3DScene::Buffers>;
+template <>
+constexpr PSSrc psSrc <
+    PSTechnique::forward_untextured_unlit,
+    Layout_Vec3Color4B,
+    Layout_CBuffer_3DScene::Buffers> = psSrc <
+        PSTechnique::forward_untextured_unlit,
+        Layout_Vec3,
+        Layout_CBuffer_3DScene::Buffers>;
+template <>
+constexpr PSSrc psSrc <
+    PSTechnique::forward_untextured_unlit,
+    Layout_Vec2Color4B,
+    Layout_CBuffer_DebugScene::Buffers> = psSrc <
+        PSTechnique::forward_untextured_unlit,
+        Layout_Vec3,
+        Layout_CBuffer_3DScene::Buffers>;
+template <>
+constexpr PSSrc psSrc <
+    PSTechnique::forward_untextured_unlit,
+    Layout_Vec3Color4B,
+    Layout_CBuffer_DebugScene::Buffers> = psSrc <
+        PSTechnique::forward_untextured_unlit,
+        Layout_Vec3,
+        Layout_CBuffer_3DScene::Buffers>;
+
+const char* textured_lit_normalmapped_samplers[] = {"texDiffuse", "texNormal", "texDepth"};
+template <>
+constexpr PSSrc psSrc <
+    PSTechnique::forward_textured_lit_normalmapped,
+    Layout_TexturedVec3,
+    Layout_CBuffer_3DScene::Buffers> = {
+"forward_textured_lit_normalmapped_TexturedVec3_CBuffer_3DScene",
+textured_lit_normalmapped_samplers,
+sizeof(textured_lit_normalmapped_samplers) / sizeof(textured_lit_normalmapped_samplers[0]),
+R"(
 #version 330
 #extension GL_ARB_separate_shader_objects : require
 
@@ -176,55 +354,10 @@ void main()
 
     out_var_SV_TARGET = vec4(s * vec3(1.f,1.f,1.f) + (1 - s)*(t*cwarm + (1 - t)*ccool), 1.f);
 }
-
-)";
-
-const char* defaultInstancedVertexShaderStr = R"(
-#version 330
-#extension GL_ARB_separate_shader_objects : require
-
-out gl_PerVertex
-{
-    vec4 gl_Position;
+)"
 };
 
-layout(std140) uniform type_PerScene
-{
-    mat4 projectionMatrix;
-    mat4 viewMatrix;
-    vec3 viewPosWS;
-    float padding1;
-    vec3 lightPosWS;
-    float padding2;
-} PerScene;
-
-layout(std140) uniform type_PerGroup
-{
-    mat4 modelMatrix;
-    vec4 groupColor;
-} PerGroup;
-
-layout(std140) uniform type_PerInstance
-{
-    mat4 instanceMatrices[256];
-} PerInstance;
-
-layout(location = 0) in vec3 in_var_POSITION;
-uniform int SPIRV_Cross_BaseInstance;
-layout(location = 0) out vec4 varying_COLOR;
-
-void main()
-{
-    mat4 mm = PerInstance.instanceMatrices[uint(gl_InstanceID + SPIRV_Cross_BaseInstance)] * PerGroup.modelMatrix;
-    mat4 vp = PerScene.projectionMatrix * PerScene.viewMatrix;
-    vec4 posWS = mm * vec4(in_var_POSITION, 1.0);
-    gl_Position = vp * posWS;
-    varying_COLOR = PerGroup.groupColor;
 }
-
-
-)";
-
-
+}
 
 #endif // __WASTELADNS_SHADERS_GL_H__

@@ -34,8 +34,9 @@ namespace Game
             ;
     };
 
+    template<typename _vertexLayout>
     struct RenderItemModel {
-        std::vector< Renderer::Driver::RscIndexedBuffer<Renderer::Layout_Vec3Color4B> > buffers;
+        std::vector< Renderer::Driver::RscIndexedBuffer<_vertexLayout> > buffers;
         Transform transform;
         Transform localTransform;
         Renderer::Driver::RscRasterizerState rasterizerState;
@@ -57,7 +58,8 @@ namespace Game
         Transform transform;
     };
     struct RenderScene {
-        RenderItemModel inputMeshGroupBuffer;
+        RenderItemModel<Renderer::Layout_Vec3Color4B> inputMeshGroupBuffer;
+        RenderItemModel<Renderer::Layout_Vec3> inputMeshUnlitGroupBuffer;
         RenderItemTexturedGeo texturedCubeGroupBuffer;
         RenderItemUntexturedGeo untexturedCubeGroupBuffer;
         Renderer::Driver::RscCBuffer cbuffers[Renderer::Layout_CBuffer_3DScene::Buffers::Count];
@@ -66,6 +68,7 @@ namespace Game
         Renderer::Driver::RscBlendState blendStateOff;
         Renderer::Driver::RscMainRenderTarget mainRenderTarget;
         Renderer::Driver::RscShaderSet<Renderer::Layout_Vec3Color4B, Renderer::Layout_CBuffer_3DScene::Buffers> sceneShader;
+        Renderer::Driver::RscShaderSet<Renderer::Layout_Vec3, Renderer::Layout_CBuffer_3DScene::Buffers> sceneUnlitShader;
         Renderer::Driver::RscShaderSet<Renderer::Layout_Vec3, Renderer::Layout_CBuffer_3DScene::Buffers> sceneInstancedShader;
         Renderer::Driver::RscShaderSet<Renderer::Layout_TexturedVec3, Renderer::Layout_CBuffer_3DScene::Buffers> sceneTexturedShader;
     };
@@ -166,30 +169,68 @@ namespace Game
             Renderer::create(rscene.cbuffers);
 
             // shaders
-            Renderer::create(rscene.sceneShader, rscene.cbuffers, defaultVertexShaderStr, "defaultVertexShaderStr", defaultPixelShaderStr, "defaultPixelShaderStr");
             {
-                // Shader texture binding points
-                Renderer::create(rscene.sceneTexturedShader, rscene.cbuffers, texturedVertexShaderStr, "texturedVertexShaderStr", texturedPixelShaderStr, "texturedPixelShaderStr");
-                const char* params[] = { "texDiffuse", "texNormal", "texDepth" };
-                Renderer::Driver::bind(rscene.sceneTexturedShader, params, sizeof(params) / sizeof(params[0]));
+                Renderer::TechniqueSrcParams< Renderer::Layout_Vec3Color4B, Renderer::Layout_CBuffer_3DScene::Buffers> params;
+                Renderer::create<Renderer::Shaders::VSTechnique::forward_base
+                               , Renderer::Shaders::PSTechnique::forward_untextured_unlit
+                               , Renderer::Shaders::VSDrawType::Standard>
+                    (params, rscene.cbuffers);
+                Renderer::create(rscene.sceneShader, params);
             }
-            Renderer::create(rscene.sceneInstancedShader, rscene.cbuffers, defaultInstancedVertexShaderStr, "defaultInstancedVertexShaderStr", defaultPixelShaderStr, "defaultPixelShaderStr");
-
-
+            {
+                Renderer::TechniqueSrcParams< Renderer::Layout_Vec3, Renderer::Layout_CBuffer_3DScene::Buffers> params;
+                Renderer::create<Renderer::Shaders::VSTechnique::forward_base
+                               , Renderer::Shaders::PSTechnique::forward_untextured_unlit
+                               , Renderer::Shaders::VSDrawType::Standard>
+                    (params, rscene.cbuffers);
+                Renderer::create(rscene.sceneUnlitShader, params);
+            }
+            {
+                Renderer::TechniqueSrcParams< Renderer::Layout_TexturedVec3, Renderer::Layout_CBuffer_3DScene::Buffers> params;
+                Renderer::create<Renderer::Shaders::VSTechnique::forward_base
+                               , Renderer::Shaders::PSTechnique::forward_textured_lit_normalmapped
+                               , Renderer::Shaders::VSDrawType::Standard>
+                    (params, rscene.cbuffers);
+                Renderer::create(rscene.sceneTexturedShader, params);
+            }
+            {
+                Renderer::TechniqueSrcParams< Renderer::Layout_Vec3, Renderer::Layout_CBuffer_3DScene::Buffers> params;
+                Renderer::create<Renderer::Shaders::VSTechnique::forward_base
+                               , Renderer::Shaders::PSTechnique::forward_untextured_unlit
+                               , Renderer::Shaders::VSDrawType::Instanced>
+                    (params, rscene.cbuffers);
+                Renderer::create(rscene.sceneInstancedShader, params);
+            }
 
             // input mesh vertex buffer
             {
-                RenderItemModel& r = rscene.inputMeshGroupBuffer;
-                Math::identity4x4(r.transform);
-                const float scale = 1.f;
-                Math::identity4x4(r.localTransform);
-                r.localTransform.matrix.col0.x *= scale;
-                r.localTransform.matrix.col1.y *= -scale;
-                r.localTransform.matrix.col2.z *= scale;
-                // reverse culling, since we are inverting the model's y
-                r.rasterizerState = rscene.rasterizerStateFillCulledBack;
-                r.groupColor = Col(0.3f, 0.3f, 0.3f, 1.f);
-                Renderer::load(r.buffers, "assets/meshes/boar.fbx");
+                {
+                    auto& r = rscene.inputMeshGroupBuffer;
+                    Math::identity4x4(r.transform);
+                    const float scale = 1.f;
+                    Math::identity4x4(r.localTransform);
+                    r.localTransform.matrix.col0.x *= scale;
+                    r.localTransform.matrix.col1.y *= -scale;
+                    r.localTransform.matrix.col2.z *= scale;
+                    // reverse culling, since we are inverting the model's y
+                    r.rasterizerState = rscene.rasterizerStateFillCulledBack;
+                    r.groupColor = Col(0.3f, 0.3f, 0.3f, 1.f);
+                    Renderer::FBX::load(r.buffers, "assets/meshes/boar.fbx");
+                }
+
+                {
+                    auto& r = rscene.inputMeshUnlitGroupBuffer;
+                    Math::identity4x4(r.transform);
+                    const float scale = 1.f;
+                    Math::identity4x4(r.localTransform);
+                    r.localTransform.matrix.col0.x *= scale;
+                    r.localTransform.matrix.col1.y *= -scale;
+                    r.localTransform.matrix.col2.z *= scale;
+                    // reverse culling, since we are inverting the model's y
+                    r.rasterizerState = rscene.rasterizerStateLine;
+                    r.groupColor = Col(1.f, 1.f, 1.f, 1.f);
+                    Renderer::FBX::load(r.buffers, "assets/meshes/boar.fbx");
+                }
             }
 
             // unit cube vertex buffers
@@ -319,7 +360,7 @@ namespace Game
 
                 // mesh
                 {
-                    const RenderItemModel& r = rscene.inputMeshGroupBuffer;
+                    const auto& r = rscene.inputMeshGroupBuffer;
                     Renderer::Layout_CBuffer_3DScene::GroupData buffer;
                     buffer.worldMatrix = Math::mult(r.transform.matrix, r.localTransform.matrix);
                     buffer.groupColor = r.groupColor.RGBAv4();
@@ -327,6 +368,21 @@ namespace Game
 
                     Renderer::Driver::bind(rscene.cbuffers, Renderer::Layout_CBuffer_3DScene::Buffers::Count, { true, false });
                     Renderer::Driver::bind(rscene.sceneShader);
+                    Renderer::Driver::bind(r.rasterizerState);
+                    for (const auto& d : r.buffers) {
+                        Renderer::Driver::bind(d);
+                        draw(d);
+                    }
+                }
+                {
+                    const auto& r = rscene.inputMeshUnlitGroupBuffer;
+                    Renderer::Layout_CBuffer_3DScene::GroupData buffer;
+                    buffer.worldMatrix = Math::mult(r.transform.matrix, r.localTransform.matrix);
+                    buffer.groupColor = r.groupColor.RGBAv4();
+                    Renderer::Driver::update(rscene.cbuffers[Renderer::Layout_CBuffer_3DScene::Buffers::GroupData], buffer);
+
+                    Renderer::Driver::bind(rscene.cbuffers, Renderer::Layout_CBuffer_3DScene::Buffers::Count, { true, false });
+                    Renderer::Driver::bind(rscene.sceneUnlitShader);
                     Renderer::Driver::bind(r.rasterizerState);
                     for (const auto& d : r.buffers) {
                         Renderer::Driver::bind(d);

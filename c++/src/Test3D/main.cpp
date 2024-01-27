@@ -77,11 +77,11 @@
 
 #include "helpers/renderer_types.h"
 #if __DX11
-#include "helpers/dx11/shaders.h"
 #include "helpers/dx11/renderer_types.h"
+#include "helpers/dx11/shaders.h"
 #elif __GL
-#include "helpers/gl/shaders.h"
 #include "helpers/gl/renderer_types.h"
+#include "helpers/gl/shaders.h"
 #endif
 
 #include "helpers/renderer.h"
