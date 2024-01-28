@@ -108,12 +108,12 @@ namespace Shaders {
         forward_base
     }; };
     template<VSTechnique::Enum _technique, typename _vertexLayout, typename _cbufferLayout, VSDrawType::Enum _type>
-    constexpr VSSrc vsSrc;
+    VSSrc vsSrc;
 
     struct PSSrc {
         const char* name;
         const char** samplerNames;
-        const u32 numSamplers;
+        u32 numSamplers;
         const char* src;
     };
     struct PSTechnique { enum Enum {
@@ -121,7 +121,7 @@ namespace Shaders {
         , forward_textured_lit_normalmapped
     }; };
     template <PSTechnique::Enum _technique, typename _vertexLayoutIn, typename _cbufferLayout>
-    constexpr PSSrc psSrc;
+    PSSrc psSrc;
 }
 }
 

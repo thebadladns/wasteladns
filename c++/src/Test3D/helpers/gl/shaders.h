@@ -5,7 +5,7 @@ namespace Renderer {
 namespace Shaders {
 
 template <>
-constexpr VSSrc vsSrc<
+const VSSrc vsSrc<
     VSTechnique::forward_base,
     Layout_Vec3Color4B,
     Layout_CBuffer_DebugScene::Buffers,
@@ -38,7 +38,7 @@ void main()
 };
 
 template <>
-constexpr VSSrc vsSrc <
+const VSSrc vsSrc <
     VSTechnique::forward_base,
     Layout_Vec2Color4B,
     Layout_CBuffer_DebugScene::Buffers,
@@ -49,7 +49,7 @@ constexpr VSSrc vsSrc <
         VSDrawType::Standard>;
 
 template <>
-constexpr VSSrc vsSrc <
+const VSSrc vsSrc <
     VSTechnique::forward_base,
     Layout_Vec3,
     Layout_CBuffer_3DScene::Buffers,
@@ -92,7 +92,7 @@ void main()
 };
 
 template <>
-constexpr VSSrc vsSrc <
+const VSSrc vsSrc <
     VSTechnique::forward_base,
     Layout_Vec3Color4B,
     Layout_CBuffer_3DScene::Buffers,
@@ -136,7 +136,7 @@ void main()
 };
 
 template <>
-constexpr VSSrc vsSrc <
+const VSSrc vsSrc <
     VSTechnique::forward_base,
     Layout_Vec3,
     Layout_CBuffer_3DScene::Buffers,
@@ -188,7 +188,7 @@ void main()
 };
 
 template <>
-constexpr VSSrc vsSrc <
+const VSSrc vsSrc <
     VSTechnique::forward_base,
     Layout_TexturedVec3,
     Layout_CBuffer_3DScene::Buffers,
@@ -247,7 +247,7 @@ void main()
 };
 
 template <>
-constexpr PSSrc psSrc <
+const PSSrc psSrc <
     PSTechnique::forward_untextured_unlit,
     Layout_Vec3,
     Layout_CBuffer_3DScene::Buffers> = {
@@ -267,7 +267,7 @@ void main()
 )"
 };
 template <>
-constexpr PSSrc psSrc <
+const PSSrc psSrc <
     PSTechnique::forward_untextured_unlit,
     Layout_Vec2Color4B,
     Layout_CBuffer_3DScene::Buffers> = psSrc <
@@ -275,7 +275,7 @@ constexpr PSSrc psSrc <
         Layout_Vec3,
         Layout_CBuffer_3DScene::Buffers>;
 template <>
-constexpr PSSrc psSrc <
+const PSSrc psSrc <
     PSTechnique::forward_untextured_unlit,
     Layout_Vec3Color4B,
     Layout_CBuffer_3DScene::Buffers> = psSrc <
@@ -283,7 +283,7 @@ constexpr PSSrc psSrc <
         Layout_Vec3,
         Layout_CBuffer_3DScene::Buffers>;
 template <>
-constexpr PSSrc psSrc <
+const PSSrc psSrc <
     PSTechnique::forward_untextured_unlit,
     Layout_Vec2Color4B,
     Layout_CBuffer_DebugScene::Buffers> = psSrc <
@@ -291,7 +291,7 @@ constexpr PSSrc psSrc <
         Layout_Vec3,
         Layout_CBuffer_3DScene::Buffers>;
 template <>
-constexpr PSSrc psSrc <
+const PSSrc psSrc <
     PSTechnique::forward_untextured_unlit,
     Layout_Vec3Color4B,
     Layout_CBuffer_DebugScene::Buffers> = psSrc <
@@ -301,7 +301,7 @@ constexpr PSSrc psSrc <
 
 const char* textured_lit_normalmapped_samplers[] = {"texDiffuse", "texNormal", "texDepth"};
 template <>
-constexpr PSSrc psSrc <
+const PSSrc psSrc <
     PSTechnique::forward_textured_lit_normalmapped,
     Layout_TexturedVec3,
     Layout_CBuffer_3DScene::Buffers> = {
