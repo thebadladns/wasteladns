@@ -84,7 +84,6 @@ int main(int argc, char** argv) {
         glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
             
 #ifdef __MACOS
-
         glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
 #endif
         windowHandle = glfwCreateWindow(
@@ -110,10 +109,14 @@ int main(int argc, char** argv) {
     glfwSwapInterval(1);
 
 #if __GPU_DEBUG
-    LogData logLevel = {};
-    logLevel.minLevel = LogLevel::Debug;
-    glEnable( GL_DEBUG_OUTPUT );
-    glDebugMessageCallback( debugMessageCallback, &logLevel );
+    if (GLAD_GL_KHR_debug) {
+        LogData logLevel = {};
+        logLevel.minLevel = LogLevel::Debug;
+        glEnable(GL_DEBUG_OUTPUT);
+        glDebugMessageCallback(debugMessageCallback, &logLevel);
+    } else {
+        assert(0);
+    }
 #endif
 
     // Input setup

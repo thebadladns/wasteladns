@@ -22,13 +22,13 @@ namespace BVH {
 		u32 firstVertexIndex;
 	};
 	struct BuildTreeContext {
-		std::vector<Triangle> trianglePool;
+		tinystl::vector<Triangle> trianglePool;
 		const f32* vertexPool;
 		const u16* indexPool;
 		u32 indexCount;
 	};
 	struct Tree {
-		std::vector<Node> nodes;
+		tinystl::vector<Node> nodes;
 	};
 	void emptyNode(Node& n) {
 		n.min = Vec3(FLT_MAX, FLT_MAX, FLT_MAX);
@@ -38,7 +38,7 @@ namespace BVH {
 		n.min = Math::min(n.min, tri.min);
 		n.max = Math::max(n.max, tri.max);
 	}
-	void buildTreeRec(Tree& bvh, const u32 nodeId, const BuildTreeContext& context, const std::vector<u32>& triangleIds) {
+	void buildTreeRec(Tree& bvh, const u32 nodeId, const BuildTreeContext& context, const tinystl::vector<u32>& triangleIds) {
 		bvh.nodes[nodeId].isLeaf = triangleIds.size() == 1;
 		if (bvh.nodes[nodeId].isLeaf) {
 			const Triangle& tri = context.trianglePool[triangleIds[0]];
@@ -49,8 +49,8 @@ namespace BVH {
 		else {
 			bvh.nodes[nodeId].lchildId = (u32)bvh.nodes.size();
 
-			std::vector<u32> ltriangleIds;
-			std::vector<u32> rtriangleIds;
+			tinystl::vector<u32> ltriangleIds;
+			tinystl::vector<u32> rtriangleIds;
 			// Start off with the same size as our parent, to prevent resizing mid-way
 			ltriangleIds.reserve(triangleIds.size());
 			rtriangleIds.reserve(triangleIds.size());
@@ -72,7 +72,7 @@ namespace BVH {
 			for (u32 triangleId : triangleIds) {
 				const Triangle& tri = context.trianglePool[triangleId];
 				Node* selectedNode;
-				std::vector <u32>* selectedTriangleIds;
+				tinystl::vector <u32>* selectedTriangleIds;
 				if (tri.center.coords[widestCoord] < widestCoordCenter) {
 					selectedNode = &lchild;
 					selectedTriangleIds = &ltriangleIds;
@@ -95,7 +95,7 @@ namespace BVH {
 				for (u32 i = 0; i < triangleIds.size(); i++) {
 					const Triangle& tri = context.trianglePool[triangleIds[i]];
 					Node* selectedNode;
-					std::vector <u32>* selectedTriangleIds;
+					tinystl::vector <u32>* selectedTriangleIds;
 					// Pick one side for each triangle
 					if ((i & 1) == 0) {
 						selectedNode = &lchild;
@@ -130,7 +130,7 @@ namespace BVH {
 		context.trianglePool.clear();
 		context.trianglePool.reserve(context.indexCount / 3);
 
-		std::vector<u32> triangleIds;
+		tinystl::vector<u32> triangleIds;
 		u32 triangleCount = context.indexCount / 3;
 		bvh.nodes.clear();
 		Node root;
@@ -217,7 +217,7 @@ namespace BVH {
 	struct InsideQueryNode {
 		u32 nodeId;
 	};
-	bool queryIsPointInside(std::vector<f32>& closestTs, const Tree& bvh, const Vec3& p, const Vec3& biasDir, f32* vertexPool, const u16* indexPool, const u32 indexCount) {
+	bool queryIsPointInside(tinystl::vector<f32>& closestTs, const Tree& bvh, const Vec3& p, const Vec3& biasDir, f32* vertexPool, const u16* indexPool, const u32 indexCount) {
 		std::queue<InsideQueryNode> nodeQueue;
 		nodeQueue.push(InsideQueryNode{ 0 });
 		u32 intersections = 0;
@@ -319,7 +319,7 @@ namespace BVH {
 	void findClosestPoint(Vec3& resultPoint, const Tree& bvh, const Vec3& p, f32* vertexPool, const u16* indexPool, const u32 indexCount) {
 		// heap is sorted keeping the node with the shortest candidate distance on top
 		auto cmp = [](const DistanceQueryNode& a, const DistanceQueryNode& b) { return a.distanceSq > b.distanceSq; };
-		std::priority_queue<DistanceQueryNode, std::vector<DistanceQueryNode>, decltype(cmp)> nodeHeap(cmp);
+		std::priority_queue<DistanceQueryNode, tinystl::vector<DistanceQueryNode>, decltype(cmp)> nodeHeap(cmp);
 		nodeHeap.push(DistanceQueryNode{ 0, 0.f });
 		f32 closestDistanceSq = FLT_MAX;
 		Vec3 closestPoint = {};

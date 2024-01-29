@@ -518,9 +518,9 @@ namespace FBX {
         }
     }
     template <typename _vertexLayout>
-    void load(std::vector<Driver::RscIndexedBuffer<_vertexLayout>>& buffers, const char* path) {
+    void load(tinystl::vector<Driver::RscIndexedBuffer<_vertexLayout>>& buffers, const char* path) {
         // we may have multiple vertex streams depending on materials or mesh being separated in parts
-        auto addMesh = [](std::vector<_vertexLayout> vertices, std::vector<u32> indices, auto& buffers) {
+        auto addMesh = [](tinystl::vector<_vertexLayout> vertices, tinystl::vector<u32> indices, auto& buffers) {
             if (vertices.size() > 0 && indices.size() > 0)
             {
                 Renderer::Driver::RscIndexedBuffer<_vertexLayout> rscBuffer;
@@ -539,8 +539,8 @@ namespace FBX {
                 buffers.emplace_back(rscBuffer);
             }
         };
-        std::vector<_vertexLayout> vertices;
-        std::vector<u32> indices;
+        tinystl::vector<_vertexLayout> vertices;
+        tinystl::vector<u32> indices;
         ufbx_load_opts opts = {};
         opts.allow_null_material = true;
         ufbx_error error;

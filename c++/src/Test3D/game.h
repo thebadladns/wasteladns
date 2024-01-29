@@ -36,7 +36,7 @@ namespace Game
 
     template<typename _vertexLayout>
     struct RenderItemModel {
-        std::vector< Renderer::Driver::RscIndexedBuffer<_vertexLayout> > buffers;
+        tinystl::vector< Renderer::Driver::RscIndexedBuffer<_vertexLayout> > buffers;
         Transform transform;
         Transform localTransform;
         Renderer::Driver::RscRasterizerState rasterizerState;
