@@ -31,10 +31,10 @@ namespace Renderer {
     };
     
     template <ProjectionType::Enum _type = defaultProjectionType>
-    void generateMatrix(Mat4& matrix, const OrthoProjection::Config& config);
+    void generate_matrix_ortho(Mat4& matrix, const OrthoProjection::Config& config);
 
     template<>
-    void generateMatrix<ProjectionType::Zminus1to1>(Mat4& matrix, const OrthoProjection::Config& config) {
+    void generate_matrix_ortho<ProjectionType::Zminus1to1>(Mat4& matrix, const OrthoProjection::Config& config) {
         f32* matrixCM = matrix.dataCM;
         memset(matrixCM, 0, sizeof(f32) * 16);
         matrixCM[0] = 2.f / (config.right - config.left);
@@ -46,7 +46,7 @@ namespace Renderer {
         matrixCM[15] = 1.f;
     }
     template<>
-    void generateMatrix<ProjectionType::Z0to1>(Mat4& matrix, const OrthoProjection::Config& config) {
+    void generate_matrix_ortho<ProjectionType::Z0to1>(Mat4& matrix, const OrthoProjection::Config& config) {
         f32* matrixCM = matrix.dataCM;
         memset(matrixCM, 0, sizeof(f32) * 16);
         matrixCM[0] = 2.f / (config.right - config.left);
@@ -60,9 +60,9 @@ namespace Renderer {
     
     // Expects right-handed view matrix, z-coordinate point towards the viewer
     template <ProjectionType::Enum _type = defaultProjectionType>
-    void generateMatrix(Mat4& matrixRHwithYup, const PerspProjection::Config& config);
+    void generate_matrix_persp(Mat4& matrixRHwithYup, const PerspProjection::Config& config);
     template <>
-    void generateMatrix<ProjectionType::Zminus1to1>(Mat4& matrixRHwithYup, const PerspProjection::Config& config) {
+    void generate_matrix_persp<ProjectionType::Zminus1to1>(Mat4& matrixRHwithYup, const PerspProjection::Config& config) {
         const f32 h = 1.f / Math::tan(config.fov * 0.5f * Math::d2r<f32>);
         const f32 w = h / config.aspect;
         
@@ -76,7 +76,7 @@ namespace Renderer {
         matrixCM[14] = -(2.f * config.far * config.near) / (config.far - config.near);
     }
     template <>
-    void generateMatrix<ProjectionType::Z0to1>(Mat4& matrixRHwithYup, const PerspProjection::Config& config) {
+    void generate_matrix_persp<ProjectionType::Z0to1>(Mat4& matrixRHwithYup, const PerspProjection::Config& config) {
         const f32 h = 1.f / Math::tan(config.fov * 0.5f * Math::d2r<f32>);
         const f32 w = h / config.aspect;
         // maps each xyz axis to [0,1] (left handed, y points up z moves away from the viewer)
@@ -90,7 +90,7 @@ namespace Renderer {
     }
 
     template <CoordinateSystem::Enum _system>
-    void generateModelViewMatrix(Mat4& modelview, const TransformMatrix<_system>& t) {
+    void generate_MV_matrix(Mat4& modelview, const TransformMatrix<_system>& t) {
         
         const TransformMatrix<CoordinateSystem::RH_Yup_Zfront> tRHwithYUp = Math::toEyeSpace(t);
         const Mat4& mRHwithYUp = tRHwithYUp.matrix;
@@ -124,9 +124,9 @@ namespace Renderer {
         modelview.dataCM[15] = mRHwithYUp.col3.w;
     }
 
-    void create(RenderTargetTexturedQuad& q);
+    void create_RT(RenderTargetTexturedQuad& q);
 
-    void tangents(Vec3& t, Vec3& b, const Vec3& vbl, const Vec3& vtr, const Vec3& vtl) {
+    void calculate_tangents(Vec3& t, Vec3& b, const Vec3& vbl, const Vec3& vtr, const Vec3& vtl) {
         const Vec2
             bl = { 0.f, 0.f }
             , tr = { 1.f, 1.f }
@@ -151,7 +151,7 @@ namespace Renderer {
         f32 height;
         f32 depth;
     };
-    void create(TexturedCube& c, const CubeCreateParams& params) {
+    void create_textured_cube_coords(TexturedCube& c, const CubeCreateParams& params) {
 
         enum Normals { Y, NY, X, NX, Z, NZ };
         const Vec3 normals[] = {
@@ -233,7 +233,7 @@ namespace Renderer {
         i[24] = 16; i[25] = 17; i[26] = 18; i[27] = 19; i[28] = 16; i[29] = 18; // +z tris
         i[30] = 20; i[31] = 21; i[32] = 22; i[33] = 23; i[34] = 20; i[35] = 22; // -z tris
     }
-	void create(UntexturedCube& c, const CubeCreateParams& params) {
+	void create_untextured_cube_coords(UntexturedCube& c, const CubeCreateParams& params) {
 
 		f32 w = params.width;
 		f32 h = params.height;
@@ -272,27 +272,27 @@ namespace Driver {
         u32 height;
         bool depth;
     };
-    void create(RscMainRenderTarget&, const MainRenderTargetParams&);
-    void bind(RscMainRenderTarget& rt);
+    void create_main_RT(RscMainRenderTarget&, const MainRenderTargetParams&);
+    void bind_main_RT(RscMainRenderTarget& rt);
     
     struct RenderTargetParams {
         u32 width;
         u32 height;
         bool depth;
     };
-    void create(RscRenderTarget& rt, const RenderTargetParams& params);
-    void bind(const RscRenderTarget& rt);
-    void clear(const RscRenderTarget& rt);
+    void create_RT(RscRenderTarget& rt, const RenderTargetParams& params);
+    void bind_RT(const RscRenderTarget& rt);
+    void clear_RT(const RscRenderTarget& rt);
     struct RenderTargetCopyParams {
         // for now
         bool depth;
     };
-    void copy(RscMainRenderTarget& dst, const RscRenderTarget& src, const RenderTargetCopyParams& params);
+    void copy_RT_to_main_RT(RscMainRenderTarget& dst, const RscRenderTarget& src, const RenderTargetCopyParams& params);
 
     struct TextureFromFileParams {
         const char* path;
     };
-    void create(RscTexture& t, const TextureFromFileParams& params);
+    void create_texture_from_file(RscTexture& t, const TextureFromFileParams& params);
     struct TextureRenderTargetCreateParams {
         s32 width;
         s32 height;
@@ -300,11 +300,11 @@ namespace Driver {
         InternalTextureFormat::Enum internalFormat;
         Type::Enum type;
     };
-    void create(RscTexture& t, const TextureRenderTargetCreateParams& params);
-    void bind(const RscTexture* textures, const u32 count);
+    void create_texture_empty(RscTexture& t, const TextureRenderTargetCreateParams& params);
+    void bind_textures(const RscTexture* textures, const u32 count);
     template <typename _vertexLayout, typename _cbufferLayout>
-    void bind(RscShaderSet<_vertexLayout, _cbufferLayout>& ss, const char** params, const u32 count);
-    void bind(RscRenderTarget& b, const RscTexture* textures, const u32 count);
+    void bind_shader_samplers(RscShaderSet<_vertexLayout, _cbufferLayout>& ss, const char** params, const u32 count);
+    void bind_RTs(RscRenderTarget& b, const RscTexture* textures, const u32 count);
 
     struct ShaderResult {
         char error[128];
@@ -315,36 +315,35 @@ namespace Driver {
         u32 length;
     };
     template <typename _vertexLayout, typename _cbufferLayout>
-    ShaderResult create(RscVertexShader<_vertexLayout, _cbufferLayout>&, const VertexShaderRuntimeCompileParams&);
+    ShaderResult create_shader_vs(RscVertexShader<_vertexLayout, _cbufferLayout>&, const VertexShaderRuntimeCompileParams&);
     struct PixelShaderRuntimeCompileParams {
         const char* shaderStr;
         u32 length;
     };
-    ShaderResult create(RscPixelShader&, const PixelShaderRuntimeCompileParams&);
+    ShaderResult create_shader_ps(RscPixelShader&, const PixelShaderRuntimeCompileParams&);
     template <typename _vertexLayout, typename _cbufferLayout>
     struct ShaderSetRuntimeCompileParams {
         RscVertexShader<_vertexLayout, _cbufferLayout>& rscVS;
         RscPixelShader& rscPS;
         const RscCBuffer* cbuffers;
     };
-    ShaderResult create(RscPixelShader&, const PixelShaderRuntimeCompileParams&);
     template <typename _vertexLayout, typename _cbufferLayout>
-    ShaderResult create(RscShaderSet<_vertexLayout, _cbufferLayout>&, const ShaderSetRuntimeCompileParams<_vertexLayout, _cbufferLayout>&);
+    ShaderResult create_shader_set(RscShaderSet<_vertexLayout, _cbufferLayout>&, const ShaderSetRuntimeCompileParams<_vertexLayout, _cbufferLayout>&);
     template <typename _vertexLayout, typename _cbufferLayout>
-    void bind(const RscShaderSet<_vertexLayout, _cbufferLayout>& ss);
+    void bind_shader(const RscShaderSet<_vertexLayout, _cbufferLayout>& ss);
 
     struct BlendStateParams {
         bool enable;
     };
-    void create(RscBlendState&, const BlendStateParams&);
-    void bind(const RscBlendState bs);
+    void create_blend_state(RscBlendState&, const BlendStateParams&);
+    void bind_blend_state(const RscBlendState bs);
 
     struct RasterizerStateParams {
         RasterizerFillMode::Enum fill;
          RasterizerCullMode::Enum cull;
     };
-    void create(RscRasterizerState&, const RasterizerStateParams&);
-    void bind(const RscRasterizerState rs);
+    void create_RS(RscRasterizerState&, const RasterizerStateParams&);
+    void bind_RS(const RscRasterizerState rs);
 
     struct BufferParams {
         void* vertexData;
@@ -355,16 +354,18 @@ namespace Driver {
         u32 vertexCount;
     };
     template <typename _layout>
-    void create(RscBuffer<_layout>&, const BufferParams&);
+    void create_vertex_buffer(RscBuffer<_layout>&, const BufferParams&);
     struct BufferUpdateParams {
         void* vertexData;
         u32 vertexSize;
         u32 vertexCount;
     };
     template <typename _layout>
-    void update(RscBuffer<_layout>&, const BufferUpdateParams&);
+    void update_vertex_buffer(RscBuffer<_layout>&, const BufferUpdateParams&);
     template <typename _layout>
-    void bind(const RscBuffer<_layout>& b);
+    void bind_vertex_buffer(const RscBuffer<_layout>&);
+    template <typename _layout>
+    void draw_vertex_buffer(const RscBuffer<_layout>&);
     
     struct IndexedBufferParams {
         void* vertexData;
@@ -378,7 +379,7 @@ namespace Driver {
         BufferAccessType::Enum accessType;
     };
     template <typename _layout>
-    void create(RscIndexedBuffer<_layout>&, const IndexedBufferParams&);
+    void create_indexed_vertex_buffer(RscIndexedBuffer<_layout>&, const IndexedBufferParams&);
     struct IndexedBufferUpdateParams {
         void* vertexData;
         void* indexData;
@@ -387,32 +388,30 @@ namespace Driver {
         u32 indexCount;
     };
     template <typename _layout>
-    void update(RscIndexedBuffer<_layout>&, const IndexedBufferUpdateParams&);
+    void update_indexed_vertex_buffer(RscIndexedBuffer<_layout>&, const IndexedBufferUpdateParams&);
     template <typename _layout>
-    void update(RscIndexedBuffer<_layout>& b, const IndexedBufferUpdateParams& params);
+    void draw_indexed_vertex_buffer(const RscIndexedBuffer<_layout>&);
     template <typename _layout>
-    void draw(const RscIndexedBuffer<_layout>& b);
-    template <typename _layout>
-    void drawInstances(const RscIndexedBuffer<_layout>& b, const u32 instanceCount);
+    void draw_instances_indexed_vertex_buffer(const RscIndexedBuffer<_layout>&, const u32);
 
     struct CBufferCreateParams {
     };
     template <typename _layout>
-    void create(RscCBuffer& cb, const CBufferCreateParams& params);
+    void create_cbuffer(RscCBuffer& cb, const CBufferCreateParams& params);
     template <typename _layout>
-    void update(RscCBuffer& cb, const _layout& data);
+    void update_cbuffer(RscCBuffer& cb, const _layout& data);
     struct CBufferBindParams {
         bool vertex;
         bool pixel;
     };
-    void bind(const RscCBuffer* cb, const u32 count, const CBufferBindParams& params);
+    void bind_cbuffers(const RscCBuffer* cb, const u32 count, const CBufferBindParams& params);
 
     template <typename _vertexLayout, typename _bufferLayout>
-    void createLayout(RscVertexShader<_vertexLayout, _bufferLayout>& vs, void* shaderBufferPointer, u32 shaderBufferSize);
+    void create_vertex_layout(RscVertexShader<_vertexLayout, _bufferLayout>& vs, void* shaderBufferPointer, u32 shaderBufferSize);
     template <typename _layout>
-    void bindLayout();
+    void bind_vertex_layout();
     template <typename _vertexLayout, typename _bufferLayout>
-    void bindCBuffers(RscShaderSet<_vertexLayout, _bufferLayout>&, const RscCBuffer* cbuffers);
+    void bind_cbuffers_to_shader(RscShaderSet<_vertexLayout, _bufferLayout>&, const RscCBuffer* cbuffers);
 }
 template <typename _vertexLayout, typename _cbufferLayout>
 struct TechniqueSrcParams {
@@ -424,7 +423,7 @@ struct TechniqueSrcParams {
 template <Shaders::VSTechnique::Enum _vsTechnique, Shaders::PSTechnique::Enum _psTechnique
         , Shaders::VSDrawType::Enum _drawType
         , typename _vertexLayout, typename _cbufferLayout>
-void create(TechniqueSrcParams< _vertexLayout, _cbufferLayout>& params
+void create_technique(TechniqueSrcParams< _vertexLayout, _cbufferLayout>& params
           , const Renderer::Driver::RscCBuffer* cbuffers) {
     params.cbuffers = cbuffers;
     const Shaders::VSSrc& vsSrc = Shaders::vsSrc<_vsTechnique, _vertexLayout, _cbufferLayout, _drawType>;
@@ -436,39 +435,39 @@ void create(TechniqueSrcParams< _vertexLayout, _cbufferLayout>& params
     params.samplerNames = psSrc.samplerNames; params.numSamplers = psSrc.numSamplers;
 }
 template <typename _vertexLayout, typename _cbufferLayout>
-void create(Renderer::Driver::RscShaderSet<_vertexLayout, _cbufferLayout>& shaderSet, const TechniqueSrcParams<_vertexLayout, _cbufferLayout>& params) {
+void create_shader_from_technique(Renderer::Driver::RscShaderSet<_vertexLayout, _cbufferLayout>& shaderSet, const TechniqueSrcParams<_vertexLayout, _cbufferLayout>& params) {
     Renderer::Driver::RscVertexShader<_vertexLayout, _cbufferLayout> rscVS;
     Renderer::Driver::RscPixelShader rscPS;
     Renderer::Driver::ShaderResult pixelResult;
     Renderer::Driver::ShaderResult vertexResult;
-    pixelResult = Renderer::Driver::create(rscPS, { params.pixelSrc, (u32)strlen(params.pixelSrc) });
+    pixelResult = Renderer::Driver::create_shader_ps(rscPS, { params.pixelSrc, (u32)strlen(params.pixelSrc) });
     if (!pixelResult.compiled) {
         Platform::debuglog("%s: %s\n", params.pixelShaderName, pixelResult.error);
         return;
     }
-    vertexResult = Renderer::Driver::create(rscVS, { params.vertexSrc, (u32)strlen(params.vertexSrc) });
+    vertexResult = Renderer::Driver::create_shader_vs(rscVS, { params.vertexSrc, (u32)strlen(params.vertexSrc) });
     if (!vertexResult.compiled) {
         Platform::debuglog("%s: %s\n", params.vertexShaderName, vertexResult.error);
         return;
     }
     // Todo: can't reuse pixel or vertex shader after this. Is that bad?
-    Renderer::Driver::ShaderResult result = Renderer::Driver::create(shaderSet, { rscVS, rscPS, params.cbuffers });
+    Renderer::Driver::ShaderResult result = Renderer::Driver::create_shader_set(shaderSet, { rscVS, rscPS, params.cbuffers });
     if (!result.compiled) {
         Platform::debuglog("Linking %s & %s: %s\n", params.vertexShaderName, params.pixelShaderName, result.error);
     }
 
     if (params.numSamplers) {
-        Renderer::Driver::bind(shaderSet, params.samplerNames, params.numSamplers);
+        Renderer::Driver::bind_shader_samplers(shaderSet, params.samplerNames, params.numSamplers);
     }
 }
-void create(Renderer::Driver::RscCBuffer (&buffers)[Renderer::Layout_CBuffer_3DScene::Buffers::Count]) {
-    create<Renderer::Layout_CBuffer_3DScene::SceneData>(buffers[Renderer::Layout_CBuffer_3DScene::Buffers::SceneData], {});
-    create<Renderer::Layout_CBuffer_3DScene::GroupData>(buffers[Renderer::Layout_CBuffer_3DScene::Buffers::GroupData], {});
-    create<Renderer::Layout_CBuffer_3DScene::InstanceData>(buffers[Renderer::Layout_CBuffer_3DScene::Buffers::InstanceData], {});
+void create_cbuffers_3DScene(Renderer::Driver::RscCBuffer (&buffers)[Renderer::Layout_CBuffer_3DScene::Buffers::Count]) {
+    create_cbuffer<Renderer::Layout_CBuffer_3DScene::SceneData>(buffers[Renderer::Layout_CBuffer_3DScene::Buffers::SceneData], {});
+    create_cbuffer<Renderer::Layout_CBuffer_3DScene::GroupData>(buffers[Renderer::Layout_CBuffer_3DScene::Buffers::GroupData], {});
+    create_cbuffer<Renderer::Layout_CBuffer_3DScene::InstanceData>(buffers[Renderer::Layout_CBuffer_3DScene::Buffers::InstanceData], {});
 }
-void create(Renderer::Driver::RscIndexedBuffer<Renderer::Layout_Vec3>& buffer, const CubeCreateParams& params) {
+void create_indexed_vertex_buffer_from_untextured_cube(Renderer::Driver::RscIndexedBuffer<Renderer::Layout_Vec3>& buffer, const CubeCreateParams& params) {
     Renderer::UntexturedCube cube;
-    Renderer::create(cube, { 1.f, 1.f, 1.f });
+    Renderer::create_untextured_cube_coords(cube, { 1.f, 1.f, 1.f });
     Renderer::Driver::IndexedBufferParams bufferParams;
     bufferParams.vertexData = cube.vertices;
     bufferParams.indexData = cube.indices;
@@ -479,11 +478,11 @@ void create(Renderer::Driver::RscIndexedBuffer<Renderer::Layout_Vec3>& buffer, c
     bufferParams.accessType = Renderer::Driver::BufferAccessType::GPU;
     bufferParams.indexType = Renderer::Driver::BufferItemType::U16;
     bufferParams.type = Renderer::Driver::BufferTopologyType::Triangles;
-    Renderer::Driver::create(buffer, bufferParams);
+    Renderer::Driver::create_indexed_vertex_buffer(buffer, bufferParams);
 }
-void create(Renderer::Driver::RscIndexedBuffer<Renderer::Layout_TexturedVec3>& buffer, const CubeCreateParams& params) {
+void create_indexed_vertex_buffer_from_textured_cube(Renderer::Driver::RscIndexedBuffer<Renderer::Layout_TexturedVec3>& buffer, const CubeCreateParams& params) {
     Renderer::TexturedCube cube;
-    Renderer::create(cube, { 1.f, 1.f, 1.f });
+    Renderer::create_textured_cube_coords(cube, { 1.f, 1.f, 1.f });
     Renderer::Driver::IndexedBufferParams bufferParams;
     bufferParams.vertexData = cube.vertices;
     bufferParams.indexData = cube.indices;
@@ -494,21 +493,21 @@ void create(Renderer::Driver::RscIndexedBuffer<Renderer::Layout_TexturedVec3>& b
     bufferParams.accessType = Renderer::Driver::BufferAccessType::GPU;
     bufferParams.indexType = Renderer::Driver::BufferItemType::U16;
     bufferParams.type = Renderer::Driver::BufferTopologyType::Triangles;
-    Renderer::Driver::create(buffer, bufferParams);
+    Renderer::Driver::create_indexed_vertex_buffer(buffer, bufferParams);
 }
 namespace FBX {
-    void extractVertex(Renderer::Layout_Vec3& vertexout, const ufbx_vec3& vertexin) {
+    void extract_vertex(Renderer::Layout_Vec3& vertexout, const ufbx_vec3& vertexin) {
         vertexout.x = vertexin.x;
         vertexout.y = vertexin.y;
         vertexout.z = vertexin.z;
     }
-    void extractVertex(Renderer::Layout_Vec3Color4B& vertexout, const ufbx_vec3& vertexin) {
+    void extract_vertex(Renderer::Layout_Vec3Color4B& vertexout, const ufbx_vec3& vertexin) {
         vertexout.pos.x = vertexin.x;
         vertexout.pos.y = vertexin.y;
         vertexout.pos.z = vertexin.z;
     }
-    void extractVertexAttributes(Renderer::Layout_Vec3* vertices, const ufbx_mesh& mesh) {}
-    void extractVertexAttributes(Renderer::Layout_Vec3Color4B* vertices, const ufbx_mesh& mesh) {
+    void extract_vertex_attrib(Renderer::Layout_Vec3* vertices, const ufbx_mesh& mesh) {}
+    void extract_vertex_attrib(Renderer::Layout_Vec3Color4B* vertices, const ufbx_mesh& mesh) {
         if (mesh.vertex_color.exists) {
             for (size_t index = 0; index < mesh.num_indices; index++) {
                 auto& c = mesh.vertex_color[index];
@@ -534,7 +533,7 @@ namespace FBX {
                 bufferParams.accessType = Renderer::Driver::BufferAccessType::GPU;
                 bufferParams.indexType = Renderer::Driver::BufferItemType::U32;
                 bufferParams.type = Renderer::Driver::BufferTopologyType::Triangles;
-                Renderer::Driver::create(rscBuffer, bufferParams);
+                Renderer::Driver::create_indexed_vertex_buffer(rscBuffer, bufferParams);
 
                 buffers.emplace_back(rscBuffer);
             }
@@ -548,95 +547,44 @@ namespace FBX {
         if (scene) {
             for (size_t i = 0; i < scene->meshes.count; i++) {
                 ufbx_mesh& mesh = *scene->meshes.data[i];
-                // option 1: add vertex by materials (todo: flatten vertices and make them properly indexed)
-                //{
-                //    for (size_t pi = 0; pi < mesh.materials.count; pi++) {
-                //        ufbx_mesh_material& mesh_mat = mesh.materials.data[pi];
-                //        if (mesh_mat.num_triangles == 0) continue;
-                //        vertices.clear();
-                //        indices.clear();
-                //        for (size_t fi = 0; fi < mesh_mat.num_faces; fi++) {
-                //            ufbx_vertex_vec3& positions = mesh.vertex_position;
-                //            ufbx_face face = mesh.faces.data[mesh_mat.face_indices.data[fi]];
-                //            if (face.num_indices == 3) {
-                //                ufbx_vec3 va = positions.values.data[(int32_t)positions.indices.data[face.index_begin + 0]];
-                //                u32 a = (u32)vertices.size() / 3;
-                //                vertices.push_back(va.x); vertices.push_back(va.y); vertices.push_back(va.z);
-                //                ufbx_vec3 vb = positions.values.data[(int32_t)positions.indices.data[face.index_begin + 1]];
-                //                u32 b = (u32)vertices.size() / 3;
-                //                vertices.push_back(vb.x); vertices.push_back(vb.y); vertices.push_back(vb.z);
-                //                ufbx_vec3 vc = positions.values.data[(int32_t)positions.indices.data[face.index_begin + 2]];
-                //                u32 c = (u32)vertices.size() / 3;
-                //                vertices.push_back(vc.x); vertices.push_back(vc.y); vertices.push_back(vc.z);
-                //                indices.push_back(a);
-                //                indices.push_back(b);
-                //                indices.push_back(c);
-                //            }
-                //            else {
-                //                ufbx_vec3 va = positions.values.data[(int32_t)positions.indices.data[face.index_begin + 0]];
-                //                u32 a = (u32)vertices.size() / 3;
-                //                vertices.push_back(va.x); vertices.push_back(va.y); vertices.push_back(va.z);
-                //                ufbx_vec3 vb = positions.values.data[(int32_t)positions.indices.data[face.index_begin + 1]];
-                //                u32 b = (u32)vertices.size() / 3;
-                //                vertices.push_back(vb.x); vertices.push_back(vb.y); vertices.push_back(vb.z);
-                //                ufbx_vec3 vc = positions.values.data[(int32_t)positions.indices.data[face.index_begin + 2]];
-                //                u32 c = (u32)vertices.size() / 3;
-                //                vertices.push_back(vc.x); vertices.push_back(vc.y); vertices.push_back(vc.z);
-                //                ufbx_vec3 vd = positions.values.data[(int32_t)positions.indices.data[face.index_begin + 3]];
-                //                u32 d = (u32)vertices.size() / 3;
-                //                vertices.push_back(vd.x); vertices.push_back(vd.y); vertices.push_back(vd.z);
-                //                indices.push_back(a);
-                //                indices.push_back(b);
-                //                indices.push_back(c);
-                //                indices.push_back(a);
-                //                indices.push_back(c);
-                //                indices.push_back(d);
-                //            }
-                //        }
-                //        addMesh(vertices, indices, buffers);
-                //    }
-                //}
 
-                // option 2: copy the vertices directly
-                {
-                    vertices.clear();
-                    indices.clear();
-                    vertices.reserve(mesh.num_vertices);
-                    for (size_t i = 0; i < mesh.num_vertices; i++) {
-                        _vertexLayout vertex;
-                        extractVertex(vertex, mesh.vertices[i]);
-                        vertices.push_back(vertex);
-                    }
-
-                    // can't copy the face indexes directly, need to de-triangulate
-                    for (size_t i = 0; i < mesh.num_faces; i++) {
-                        ufbx_face& face = mesh.faces[i];
-                        if (mesh.faces[i].num_indices > 3) {
-                            const u32 a = mesh.vertex_indices[face.index_begin];
-                            const u32 b = mesh.vertex_indices[face.index_begin + 1];
-                            const u32 c = mesh.vertex_indices[face.index_begin + 2];
-                            const u32 d = mesh.vertex_indices[face.index_begin + 3];
-                            indices.push_back(a);
-                            indices.push_back(b);
-                            indices.push_back(c);
-                            indices.push_back(a);
-                            indices.push_back(c);
-                            indices.push_back(d);
-                        }
-                        else {
-                            const u32 a = mesh.vertex_indices[face.index_begin];
-                            const u32 b = mesh.vertex_indices[face.index_begin + 1];
-                            const u32 c = mesh.vertex_indices[face.index_begin + 2];
-                            indices.push_back(a);
-                            indices.push_back(b);
-                            indices.push_back(c);
-                        }
-                    }
-
-                    extractVertexAttributes(vertices.data(), mesh);
-
-                    addMesh(vertices, indices, buffers);
+                vertices.clear();
+                indices.clear();
+                vertices.reserve(mesh.num_vertices);
+                for (size_t i = 0; i < mesh.num_vertices; i++) {
+                    _vertexLayout vertex;
+                    extract_vertex(vertex, mesh.vertices[i]);
+                    vertices.push_back(vertex);
                 }
+
+                // can't copy the face indexes directly, need to de-triangulate
+                for (size_t i = 0; i < mesh.num_faces; i++) {
+                    ufbx_face& face = mesh.faces[i];
+                    if (mesh.faces[i].num_indices > 3) {
+                        const u32 a = mesh.vertex_indices[face.index_begin];
+                        const u32 b = mesh.vertex_indices[face.index_begin + 1];
+                        const u32 c = mesh.vertex_indices[face.index_begin + 2];
+                        const u32 d = mesh.vertex_indices[face.index_begin + 3];
+                        indices.push_back(a);
+                        indices.push_back(b);
+                        indices.push_back(c);
+                        indices.push_back(a);
+                        indices.push_back(c);
+                        indices.push_back(d);
+                    }
+                    else {
+                        const u32 a = mesh.vertex_indices[face.index_begin];
+                        const u32 b = mesh.vertex_indices[face.index_begin + 1];
+                        const u32 c = mesh.vertex_indices[face.index_begin + 2];
+                        indices.push_back(a);
+                        indices.push_back(b);
+                        indices.push_back(c);
+                    }
+                }
+
+                extract_vertex_attrib(vertices.data(), mesh);
+
+                addMesh(vertices, indices, buffers);
             }
         }
     }

@@ -7,7 +7,7 @@
 
 namespace Renderer {
 
-    void create(RenderTargetTexturedQuad& q) {
+    void create_textured_quad(RenderTargetTexturedQuad& q) {
         Renderer::Layout_TexturedVec2* v = q.vertices;
         u16* i = q.indices;
         v[0] = { { -1.f, 1.f }, { 0.f, 0.f } };
@@ -25,7 +25,7 @@ namespace Driver {
     ID3D11DeviceContext1* d3dcontext;
     IDXGISwapChain1* swapchain;
 
-    void create(RscMainRenderTarget& rt, const MainRenderTargetParams& params) {
+    void create_main_RT(RscMainRenderTarget& rt, const MainRenderTargetParams& params) {
         ID3D11RenderTargetView* targetView;
         ID3D11Texture2D* backbuffer;
         swapchain->GetBuffer(0, __uuidof(ID3D11Texture2D), (void**) &backbuffer);
@@ -66,18 +66,18 @@ namespace Driver {
             d3dcontext->OMSetDepthStencilState(stencilState, 1);
         }
     }
-    void clear(const RscMainRenderTarget& rt, Col color) {
+    void clear_main_RT(const RscMainRenderTarget& rt, Col color) {
         float colorv[] = { RGBA_PARAMS(color) };
         d3dcontext->ClearRenderTargetView(rt.view, colorv);
         if (rt.depthStencilView) {
             d3dcontext->ClearDepthStencilView(rt.depthStencilView, D3D11_CLEAR_DEPTH, 1.f, 0);
         }
     }
-    void bind(RscMainRenderTarget& rt) {
+    void bind_main_RT(RscMainRenderTarget& rt) {
         d3dcontext->OMSetRenderTargets(1, &rt.view, rt.depthStencilView);
     }
 
-    void create(RscRenderTarget& rt, const RenderTargetParams& params) {
+    void create_RT(RscRenderTarget& rt, const RenderTargetParams& params) {
 
         // Make depth buffer a part of the main render target, for now
         if (params.depth) {
@@ -102,10 +102,10 @@ namespace Driver {
             d3ddev->CreateDepthStencilView(stencil, nullptr, &rt.depthStencilView);
         }
     }
-    void bind(const RscRenderTarget& rt) {
+    void bind_RT(const RscRenderTarget& rt) {
         d3dcontext->OMSetRenderTargets(rt.viewCount, rt.views, rt.depthStencilView);
     }
-    void clear(const RscRenderTarget& rt) {
+    void bind_RT(const RscRenderTarget& rt) {
         float colorv[] = { 0.f, 0.f, 0.f, 0.f };
         for (u32 i = 0; i < rt.viewCount; i++) {
             d3dcontext->ClearRenderTargetView(rt.views[i], colorv);
@@ -114,7 +114,7 @@ namespace Driver {
             d3dcontext->ClearDepthStencilView(rt.depthStencilView, D3D11_CLEAR_DEPTH, 1.f, 0);
         }
     }
-    void copy(RscMainRenderTarget& dst, const RscRenderTarget& src, const RenderTargetCopyParams& params) {
+    void copy_RT_to_main_RT(RscMainRenderTarget& dst, const RscRenderTarget& src, const RenderTargetCopyParams& params) {
         if (params.depth) {
             ID3D11Resource* srcDepth;
             ID3D11Resource* dstDepth;
@@ -124,7 +124,7 @@ namespace Driver {
         }
     }
 
-    void create(RscTexture& t, const TextureFromFileParams& params) {
+    void create_texture_from_file(RscTexture& t, const TextureFromFileParams& params) {
         s32 w, h, channels;
         u8* data = stbi_load(params.path, &w, &h, &channels, 0);
         if (data) {
@@ -184,7 +184,7 @@ namespace Driver {
             stbi_image_free(data);
         }
     }
-    void create(RscTexture& t, const TextureRenderTargetCreateParams& params) {
+    void create_texture_empty(RscTexture& t, const TextureRenderTargetCreateParams& params) {
 
         DXGI_FORMAT format = (DXGI_FORMAT)params.format;
         t.format = format;
@@ -227,7 +227,7 @@ namespace Driver {
 
         d3ddev->CreateSamplerState(&samplerDesc, &t.samplerState);
     }
-    void bind(const RscTexture* textures, const u32 count) {
+    void bind_textures(const RscTexture* textures, const u32 count) {
         // hack, don't care for templates, dynamic arrays or alloca for now
         ID3D11ShaderResourceView* textureViews[16];
         ID3D11SamplerState* samplers[16];
@@ -239,8 +239,8 @@ namespace Driver {
         d3dcontext->PSSetSamplers(0, count, samplers);
     }
     template <typename _vertexLayout, typename _cbufferLayout>
-    void bind(RscShaderSet<_vertexLayout, _cbufferLayout>& ss, const char** params, const u32 count) {}
-    void bind(RscRenderTarget& b, const RscTexture* textures, const u32 count) {
+    void bind_shader_samplers(RscShaderSet<_vertexLayout, _cbufferLayout>& ss, const char** params, const u32 count) {}
+    void bind_RTs(RscRenderTarget& b, const RscTexture* textures, const u32 count) {
         for (u32 i = 0; i < count; i++) {
             D3D11_RENDER_TARGET_VIEW_DESC rtViewDesc = {};
             rtViewDesc.Format = textures[i].format;
@@ -252,7 +252,7 @@ namespace Driver {
     }
 
     template <typename _vertexLayout, typename _cbufferLayout>
-    ShaderResult create(RscVertexShader<_vertexLayout, _cbufferLayout>& vs, const VertexShaderRuntimeCompileParams& params) {
+    ShaderResult create_shader_vs(RscVertexShader<_vertexLayout, _cbufferLayout>& vs, const VertexShaderRuntimeCompileParams& params) {
         ID3D11VertexShader* vertexShader = nullptr;
         ID3D11InputLayout* vertexInputLayout = nullptr;
         ID3DBlob* pShaderBlob = nullptr;
@@ -271,7 +271,7 @@ namespace Driver {
         result.compiled = !FAILED(hr);
         if (result.compiled) {
             d3ddev->CreateVertexShader(pShaderBlob->GetBufferPointer(), pShaderBlob->GetBufferSize(), nullptr, &vertexShader);
-            createLayout(vs, (void*)pShaderBlob->GetBufferPointer(), (u32)pShaderBlob->GetBufferSize());
+            create_vertex_layout(vs, (void*)pShaderBlob->GetBufferPointer(), (u32)pShaderBlob->GetBufferSize());
         } else {
             Platform::format(result.error, 128, "%.128s", pErrorBlob ? (char*)pErrorBlob->GetBufferPointer() : "Unknown shader error");
         }
@@ -283,7 +283,7 @@ namespace Driver {
 
         return result;
     }
-    ShaderResult create(RscPixelShader& ps, const PixelShaderRuntimeCompileParams& params) {
+    ShaderResult create_shader_ps(RscPixelShader& ps, const PixelShaderRuntimeCompileParams& params) {
         ID3D11PixelShader* pixelShader = nullptr;
         ID3DBlob* pShaderBlob = nullptr;
         ID3DBlob* pErrorBlob = nullptr;
@@ -313,7 +313,7 @@ namespace Driver {
         return result;
     }
     template <typename _vertexLayout, typename _cbufferLayout>
-    ShaderResult create(RscShaderSet<_vertexLayout, _cbufferLayout>& ss, const ShaderSetRuntimeCompileParams<_vertexLayout, _cbufferLayout>& params) {
+    ShaderResult create_shader_set(RscShaderSet<_vertexLayout, _cbufferLayout>& ss, const ShaderSetRuntimeCompileParams<_vertexLayout, _cbufferLayout>& params) {
         ss.vs = params.rscVS;
         ss.ps = params.rscPS;
         ShaderResult result;
@@ -321,13 +321,13 @@ namespace Driver {
         return result;
     }
     template <typename _vertexLayout, typename _cbufferLayout>
-    void bind(const RscShaderSet<_vertexLayout, _cbufferLayout>& ss) {
+    void bind_shader(const RscShaderSet<_vertexLayout, _cbufferLayout>& ss) {
         d3dcontext->VSSetShader(ss.vs.shaderObject, nullptr, 0);
         d3dcontext->PSSetShader(ss.ps.shaderObject, nullptr, 0);
         d3dcontext->IASetInputLayout(ss.vs.inputLayout);
     }
     
-    void create(RscBlendState& bs, const BlendStateParams& params) {
+    void create_blend_state(RscBlendState& bs, const BlendStateParams& params) {
         // Todo: make parameters when needed
         ID3D11BlendState1* blendState;
         D3D11_BLEND_DESC1 blendStateDesc = {};
@@ -343,11 +343,11 @@ namespace Driver {
 
         bs.bs = blendState;
     }
-    void bind(const RscBlendState bs) {
+    void bind_blend_state(const RscBlendState bs) {
         d3dcontext->OMSetBlendState(bs.bs, 0, 0xffffffff);
     }
     
-    void create(RscRasterizerState& rs, const RasterizerStateParams& params) {
+    void create_RS(RscRasterizerState& rs, const RasterizerStateParams& params) {
         ID3D11RasterizerState* rasterizerState;
         D3D11_RASTERIZER_DESC rasterizerDesc = {};
         rasterizerDesc.AntialiasedLineEnable = FALSE;
@@ -363,12 +363,12 @@ namespace Driver {
         d3ddev->CreateRasterizerState(&rasterizerDesc, &rasterizerState);
         rs.rs = rasterizerState;
     }
-    void bind(const RscRasterizerState rs) {
+    void bind_RS(const RscRasterizerState rs) {
         d3dcontext->RSSetState(rs.rs);
     }
     
     template <typename _layout>
-    void create(RscBuffer<_layout>& t, const BufferParams& params) {
+    void create_vertex_buffer(RscBuffer<_layout>& t, const BufferParams& params) {
         ID3D11Buffer* vertexBuffer;
 
         D3D11_SUBRESOURCE_DATA resourceData = { 0 };
@@ -387,7 +387,7 @@ namespace Driver {
         t.vertexStride = sizeof(_layout);
     }
     template <typename _layout>
-    void update(RscBuffer<_layout>& b, const BufferUpdateParams& params) {
+    void update_vertex_buffer(RscBuffer<_layout>& b, const BufferUpdateParams& params) {
         D3D11_MAPPED_SUBRESOURCE mapped;
         d3dcontext->Map(b.vertexBuffer, 0, D3D11_MAP_WRITE_DISCARD, NULL, &mapped);
         memcpy(mapped.pData, params.vertexData, params.vertexSize);
@@ -395,18 +395,18 @@ namespace Driver {
         b.vertexCount = params.vertexCount;
     }
     template <typename _layout>
-    void bind(const RscBuffer<_layout>& b) {
+    void bind_vertex_buffer(const RscBuffer<_layout>& b) {
         u32 offset = 0;
         d3dcontext->IASetVertexBuffers(0, 1, &b.vertexBuffer, &b.vertexStride, &offset);
         d3dcontext->IASetPrimitiveTopology(b.type);
     }
     template <typename _layout>
-    void draw(const RscBuffer<_layout>& b) {
+    void draw_vertex_buffer(const RscBuffer<_layout>& b) {
         d3dcontext->Draw(b.vertexCount, 0);
     }
     
     template <typename _layout>
-    void create(RscIndexedBuffer<_layout>& t, const IndexedBufferParams& params) {
+    void create_indexed_vertex_buffer(RscIndexedBuffer<_layout>& t, const IndexedBufferParams& params) {
         ID3D11Buffer* vertexBuffer;
         ID3D11Buffer* indexBuffer;
 
@@ -436,7 +436,7 @@ namespace Driver {
         t.vertexStride = sizeof(_layout);
     }
     template <typename _layout>
-    void update(RscIndexedBuffer<_layout>& b, const IndexedBufferUpdateParams& params) {
+    void update_indexed_vertex_buffer(RscIndexedBuffer<_layout>& b, const IndexedBufferUpdateParams& params) {
         D3D11_MAPPED_SUBRESOURCE mapped;
         d3dcontext->Map(b.vertexBuffer, 0, D3D11_MAP_WRITE_DISCARD, NULL, &mapped);
         memcpy(mapped.pData, params.vertexData, params.vertexSize);
@@ -447,24 +447,24 @@ namespace Driver {
         b.indexCount = params.indexCount;
     }
     template <typename _layout>
-    void bind(const RscIndexedBuffer<_layout>& b) {
+    void bind_indexed_vertex_buffer(const RscIndexedBuffer<_layout>& b) {
         u32 offset = 0;
         d3dcontext->IASetVertexBuffers(0, 1, &b.vertexBuffer, &b.vertexStride, &offset);
         d3dcontext->IASetIndexBuffer(b.indexBuffer, b.indexType, 0);
         d3dcontext->IASetPrimitiveTopology(b.type);
     }
     template <typename _layout>
-    void draw(const RscIndexedBuffer<_layout>& b) {
+    void draw_indexed_vertex_buffer(const RscIndexedBuffer<_layout>& b) {
         d3dcontext->DrawIndexed(b.indexCount, 0, 0);
 
     }
     template <typename _layout>
-    void drawInstances(const RscIndexedBuffer<_layout>& b, const u32 instanceCount) {
+    void draw_instances_indexed_vertex_buffer(const RscIndexedBuffer<_layout>& b, const u32 instanceCount) {
         d3dcontext->DrawIndexedInstanced(b.indexCount, instanceCount, 0, 0, 0);
     }
 
     template <typename _layout>
-    void create(RscCBuffer& cb, const CBufferCreateParams& params) {
+    void create_cbuffer(RscCBuffer& cb, const CBufferCreateParams& params) {
         ID3D11Buffer* bufferObject;
         D3D11_BUFFER_DESC constantBufferDesc = { 0 };
         constantBufferDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
@@ -476,10 +476,10 @@ namespace Driver {
         cb.bufferObject = bufferObject;
     }
     template <typename _layout>
-    void update(RscCBuffer& cb, const _layout& data) {
+    void update_cbuffer(RscCBuffer& cb, const _layout& data) {
         d3dcontext->UpdateSubresource(cb.bufferObject, 0, nullptr, &data, 0, 0);
     }
-    void bind(const RscCBuffer* cb, const u32 count, const CBufferBindParams& params) {
+    void bind_cbuffers(const RscCBuffer* cb, const u32 count, const CBufferBindParams& params) {
         // this all works because an array of RscCBuffer maps to an array of tightly packed bufferObject
         if (params.vertex) {
             d3dcontext->VSSetConstantBuffers(0, count, &(cb[0].bufferObject));
@@ -496,7 +496,7 @@ namespace Renderer {
 namespace Driver {
     
     template <typename _bufferLayout>
-    void createLayout(RscVertexShader<Layout_Vec3, _bufferLayout>& vs, void* shaderBufferPointer, u32 shaderBufferSize) {
+    void create_vertex_layout(RscVertexShader<Layout_Vec3, _bufferLayout>& vs, void* shaderBufferPointer, u32 shaderBufferSize) {
         ID3D11InputLayout* inputLayout;
         D3D11_INPUT_ELEMENT_DESC vertexLayoutDesc[] = {
                 { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 }
@@ -506,7 +506,7 @@ namespace Driver {
         vs.inputLayout = inputLayout;
     }
     template <typename _bufferLayout>
-    void createLayout(RscVertexShader<Layout_TexturedVec2, _bufferLayout>& vs, void* shaderBufferPointer, u32 shaderBufferSize) {
+    void create_vertex_layout(RscVertexShader<Layout_TexturedVec2, _bufferLayout>& vs, void* shaderBufferPointer, u32 shaderBufferSize) {
         ID3D11InputLayout* inputLayout;
         D3D11_INPUT_ELEMENT_DESC vertexLayoutDesc[] = {
               { "POSITION", 0, DXGI_FORMAT_R32G32_FLOAT, 0, offsetof(Layout_TexturedVec2, pos), D3D11_INPUT_PER_VERTEX_DATA, 0 }
@@ -517,7 +517,7 @@ namespace Driver {
         vs.inputLayout = inputLayout;
     }
     template <typename _bufferLayout>
-    void createLayout(RscVertexShader<Layout_TexturedVec3, _bufferLayout>& vs, void* shaderBufferPointer, u32 shaderBufferSize) {
+    void create_vertex_layout(RscVertexShader<Layout_TexturedVec3, _bufferLayout>& vs, void* shaderBufferPointer, u32 shaderBufferSize) {
         ID3D11InputLayout* inputLayout;
         D3D11_INPUT_ELEMENT_DESC vertexLayoutDesc[] = {
               { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, offsetof(Layout_TexturedVec3, pos), D3D11_INPUT_PER_VERTEX_DATA, 0 }
@@ -531,7 +531,7 @@ namespace Driver {
         vs.inputLayout = inputLayout;
     }
     template <typename _bufferLayout>
-    void createLayout(RscVertexShader<Layout_Vec2Color4B, _bufferLayout>& vs, void* shaderBufferPointer, u32 shaderBufferSize) {
+    void create_vertex_layout(RscVertexShader<Layout_Vec2Color4B, _bufferLayout>& vs, void* shaderBufferPointer, u32 shaderBufferSize) {
         ID3D11InputLayout* inputLayout;
         D3D11_INPUT_ELEMENT_DESC vertexLayoutDesc[] = {
               { "POSITION", 0, DXGI_FORMAT_R32G32_FLOAT, 0, offsetof(Layout_Vec2Color4B, pos), D3D11_INPUT_PER_VERTEX_DATA, 0 }
@@ -542,7 +542,7 @@ namespace Driver {
         vs.inputLayout = inputLayout;
     }
     template <typename _bufferLayout>
-    void createLayout(RscVertexShader<Layout_Vec3Color4B, _bufferLayout>& vs, void* shaderBufferPointer, u32 shaderBufferSize) {
+    void create_vertex_layout(RscVertexShader<Layout_Vec3Color4B, _bufferLayout>& vs, void* shaderBufferPointer, u32 shaderBufferSize) {
         ID3D11InputLayout* inputLayout;
         D3D11_INPUT_ELEMENT_DESC vertexLayoutDesc[] = {
               { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, offsetof(Layout_Vec3Color4B, pos), D3D11_INPUT_PER_VERTEX_DATA, 0 }

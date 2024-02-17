@@ -7,7 +7,7 @@
 
 namespace Renderer {
 
-    void create(RenderTargetTexturedQuad& q) {
+    void create_textured_quad(RenderTargetTexturedQuad& q) {
         // Generally we use uv=(0,0) as top left, but only
         // for texture data which is interpreted by opengl
         // as bottom-to-top (they are stored top-to-bottom)
@@ -25,22 +25,21 @@ namespace Renderer {
 
 namespace Driver {
 
-    void create(RscMainRenderTarget& rt, const MainRenderTargetParams& params) {
+    void create_main_RT(RscMainRenderTarget& rt, const MainRenderTargetParams& params) {
         rt.mask = GL_COLOR_BUFFER_BIT;
         if (params.depth) {
             rt.mask = rt.mask | GL_DEPTH_BUFFER_BIT;
             glEnable(GL_DEPTH_TEST);
         }
     }
-    void clear(RscMainRenderTarget& rt, Col color) {
+    void clear_main_RT(RscMainRenderTarget& rt, Col color) {
         glClearColor( RGBA_PARAMS(color) );
         glClear(rt.mask | GL_STENCIL_BUFFER_BIT);
     }
-    void bind(RscMainRenderTarget& rt) {
+    void bind_main_RT(RscMainRenderTarget& rt) {
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
     }
-    
-    void create(RscRenderTarget& rt, const RenderTargetParams& params) {
+    void create_RT(RscRenderTarget& rt, const RenderTargetParams& params) {
         GLuint buffer;
         glGenFramebuffers(1, &buffer);
         glBindFramebuffer(GL_FRAMEBUFFER, buffer);
@@ -59,13 +58,13 @@ namespace Driver {
             glBindFramebuffer(GL_FRAMEBUFFER, 0);
         }
     }
-    void bind(const RscRenderTarget& rt) {
+    void bind_RT(const RscRenderTarget& rt) {
         glBindFramebuffer(GL_FRAMEBUFFER, rt.buffer);
     }
-    void clear(const RscRenderTarget& rt) {
+    void clear_RT(const RscRenderTarget& rt) {
         glClear(rt.mask | GL_STENCIL_BUFFER_BIT);
     }
-    void copy(RscMainRenderTarget& dst, const RscRenderTarget& src, const RenderTargetCopyParams& params) {
+    void copy_RT_to_main_RT(RscMainRenderTarget& dst, const RscRenderTarget& src, const RenderTargetCopyParams& params) {
         glBindFramebuffer(GL_READ_FRAMEBUFFER, src.buffer);
         glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
         // Todo: ensure matching formats?
@@ -77,7 +76,7 @@ namespace Driver {
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
     }
     
-    void create(RscTexture& t, const TextureFromFileParams& params) {
+    void create_texture_from_file(RscTexture& t, const TextureFromFileParams& params) {
         s32 w, h, channels;
         u8* data = stbi_load(params.path, &w, &h, &channels, 0);
         if (data) {
@@ -109,7 +108,7 @@ namespace Driver {
             stbi_image_free(data);
         }
     }
-    void create(RscTexture& t, const TextureRenderTargetCreateParams& params) {
+    void create_texture_empty(RscTexture& t, const TextureRenderTargetCreateParams& params) {
         GLuint texId;
         glGenTextures(1, &texId);
         glBindTexture(GL_TEXTURE_2D, texId);
@@ -120,21 +119,21 @@ namespace Driver {
 
         t.texId = texId;
     }
-    void bind(const RscTexture* textures, const u32 count) {
+    void bind_textures(const RscTexture* textures, const u32 count) {
         for (u32 i = 0; i < count; i++) {
             glActiveTexture(GL_TEXTURE0 + i);
             glBindTexture(GL_TEXTURE_2D, textures[i].texId);
         }
     }
     template <typename _vertexLayout, typename _cbufferLayout>
-    void bind(RscShaderSet<_vertexLayout, _cbufferLayout>& ss, const char** params, const u32 count) {
+    void bind_shader_samplers(RscShaderSet<_vertexLayout, _cbufferLayout>& ss, const char** params, const u32 count) {
         glUseProgram(ss.shaderObject);
         for (u32 i = 0; i < count; i++) {
             const s32 samplerLoc = glGetUniformLocation(ss.shaderObject, params[i]);
             glUniform1i(samplerLoc, i);
         }
     }
-    void bind(RscRenderTarget& b, const RscTexture* textures, const u32 count) {
+    void bind_RTs(RscRenderTarget& b, const RscTexture* textures, const u32 count) {
         GLuint attachments[16]; // hack
         glBindFramebuffer(GL_FRAMEBUFFER, b.buffer);
         for (u32 i = 0; i < count; i++) {
@@ -148,7 +147,7 @@ namespace Driver {
     }
     
     template <typename _vertexLayout, typename _cbufferLayout>
-    ShaderResult create(RscVertexShader<_vertexLayout, _cbufferLayout>& vs, const VertexShaderRuntimeCompileParams& params) {
+    ShaderResult create_shader_vs(RscVertexShader<_vertexLayout, _cbufferLayout>& vs, const VertexShaderRuntimeCompileParams& params) {
         GLuint vertexShader;
         
         vertexShader = glCreateShader(GL_VERTEX_SHADER);
@@ -172,7 +171,7 @@ namespace Driver {
 
         return result;
     }
-    ShaderResult create(RscPixelShader& ps, const PixelShaderRuntimeCompileParams& params) {
+    ShaderResult create_shader_ps(RscPixelShader& ps, const PixelShaderRuntimeCompileParams& params) {
         GLuint pixelShader;
         
         pixelShader = glCreateShader(GL_FRAGMENT_SHADER);
@@ -197,7 +196,7 @@ namespace Driver {
         return result;
     }
     template <typename _vertexLayout, typename _cbufferLayout>
-    ShaderResult create(RscShaderSet<_vertexLayout, _cbufferLayout>& ss, const ShaderSetRuntimeCompileParams<_vertexLayout, _cbufferLayout>& params) {
+    ShaderResult create_shader_set(RscShaderSet<_vertexLayout, _cbufferLayout>& ss, const ShaderSetRuntimeCompileParams<_vertexLayout, _cbufferLayout>& params) {
         GLuint shader;
         GLuint vs = params.rscVS.shaderObject;
         GLuint ps = params.rscPS.shaderObject;
@@ -215,7 +214,7 @@ namespace Driver {
         ShaderResult result;
         result.compiled = compiled != 0;
         if (result.compiled) {
-            bindCBuffers(ss, params.cbuffers);
+            bind_cbuffers_to_shader(ss, params.cbuffers);
         } else {
             GLint infoLogLength;
             glGetProgramiv(ss.shaderObject, GL_INFO_LOG_LENGTH, &infoLogLength);
@@ -232,14 +231,14 @@ namespace Driver {
         return result;
     }
     template <typename _vertexLayout, typename _cbufferLayout>
-    void bind(const RscShaderSet<_vertexLayout, _cbufferLayout>& ss) {
+    void bind_shader(const RscShaderSet<_vertexLayout, _cbufferLayout>& ss) {
         glUseProgram(ss.shaderObject);
     }
     
-    void create(RscBlendState& bs, const BlendStateParams& params) {
+    void create_blend_state(RscBlendState& bs, const BlendStateParams& params) {
         bs.enable = params.enable;
     }
-    void bind(const RscBlendState bs) {
+    void bind_blend_state(const RscBlendState bs) {
         if (bs.enable) {
             glEnable(GL_BLEND);
             glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -248,18 +247,18 @@ namespace Driver {
         }
     }
     
-    void create(RscRasterizerState& rs, const RasterizerStateParams& params) {
+    void create_RS(RscRasterizerState& rs, const RasterizerStateParams& params) {
         rs.fillMode = (GLenum) params.fill;
         rs.cullFace = (GLenum) params.cull;
     }
-    void bind(const RscRasterizerState rs) {
+    void bind_RS(const RscRasterizerState rs) {
         glPolygonMode(GL_FRONT_AND_BACK, rs.fillMode);
         glEnable(GL_CULL_FACE);
         glCullFace(rs.cullFace);
     }
     
     template <typename _layout>
-    void create(RscBuffer<_layout>& t, const BufferParams& params) {
+    void create_vertex_buffer(RscBuffer<_layout>& t, const BufferParams& params) {
         GLuint vertexBuffer, arrayObject;
         
         // Vertex buffer binding is not part of the VAO state
@@ -269,7 +268,7 @@ namespace Driver {
         glGenVertexArrays(1, &arrayObject);
         glBindVertexArray(arrayObject);
         {
-            bindLayout<_layout>();
+            bind_vertex_layout<_layout>();
         }
         glBindVertexArray(0);
         glBindBuffer(GL_ARRAY_BUFFER, 0);
@@ -280,23 +279,23 @@ namespace Driver {
         t.vertexCount = params.vertexCount;
     }
     template <typename _layout>
-    void update(RscBuffer<_layout>& b, const BufferUpdateParams& params) {
+    void update_vertex_buffer(RscBuffer<_layout>& b, const BufferUpdateParams& params) {
         glBindBuffer(GL_ARRAY_BUFFER, b.vertexBuffer);
         glBufferSubData(GL_ARRAY_BUFFER, 0, params.vertexSize, params.vertexData);
         glBindBuffer(GL_ARRAY_BUFFER, 0);
         b.vertexCount = params.vertexCount;
     }
     template <typename _layout>
-    void bind(const RscBuffer<_layout>& b) {
+    void bind_vertex_buffer(const RscBuffer<_layout>& b) {
         glBindVertexArray(b.arrayObject);
     }
     template <typename _layout>
-    void draw(const RscBuffer<_layout>& b) {
+    void draw_vertex_buffer(const RscBuffer<_layout>& b) {
         glDrawArrays(b.type, 0, b.vertexCount);
     }
     
     template <typename _layout>
-    void create(RscIndexedBuffer<_layout>& t, const IndexedBufferParams& params) {
+    void create_indexed_vertex_buffer(RscIndexedBuffer<_layout>& t, const IndexedBufferParams& params) {
         GLuint vertexBuffer, indexBuffer, arrayObject;
         
         // Vertex buffer binding is not part of the VAO state
@@ -306,7 +305,7 @@ namespace Driver {
         glGenVertexArrays(1, &arrayObject);
         glBindVertexArray(arrayObject);
         {
-            bindLayout<_layout>();
+            bind_vertex_layout<_layout>();
             
             glGenBuffers(1, &indexBuffer);
             glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBuffer);
@@ -323,7 +322,7 @@ namespace Driver {
         t.indexCount = params.indexCount;
     }
     template <typename _layout>
-    void update(RscIndexedBuffer<_layout>& b, const IndexedBufferUpdateParams& params) {
+    void update_indexed_vertex_buffer(RscIndexedBuffer<_layout>& b, const IndexedBufferUpdateParams& params) {
         glBindBuffer(GL_ARRAY_BUFFER, b.vertexBuffer);
         glBufferSubData(GL_ARRAY_BUFFER, 0, params.vertexSize, params.vertexData);
         glBindBuffer(GL_ARRAY_BUFFER, 0);
@@ -333,20 +332,20 @@ namespace Driver {
         b.indexCount = params.indexCount;
     }
     template <typename _layout>
-    void bind(const RscIndexedBuffer<_layout>& b) {
+    void bind_indexed_vertex_buffer(const RscIndexedBuffer<_layout>& b) {
         glBindVertexArray(b.arrayObject);
     }
     template <typename _layout>
-    void draw(const RscIndexedBuffer<_layout>& b) {
+    void draw_indexed_vertex_buffer(const RscIndexedBuffer<_layout>& b) {
         glDrawElements(b.type, b.indexCount, b.indexType, nullptr);
     }
     template <typename _layout>
-    void drawInstances(const RscIndexedBuffer<_layout>& b, const u32 instanceCount) {
+    void draw_instances_indexed_vertex_buffer(const RscIndexedBuffer<_layout>& b, const u32 instanceCount) {
         glDrawElementsInstanced(b.type, b.indexCount, b.indexType, nullptr, instanceCount);
     }
     
     template <typename _layout>
-    void create(RscCBuffer& cb, const CBufferCreateParams& params) {
+    void create_cbuffer(RscCBuffer& cb, const CBufferCreateParams& params) {
         GLuint buffer, index;
         
         glGenBuffers(1, &buffer);
@@ -361,11 +360,11 @@ namespace Driver {
         cb.bufferObject = buffer;
     }
     template <typename _layout>
-    void update(RscCBuffer& cb, const _layout& data) {
+    void update_cbuffer(RscCBuffer& cb, const _layout& data) {
         glBindBuffer(GL_UNIFORM_BUFFER, cb.bufferObject);
         glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(_layout), &data);
     }
-    void bind(const RscCBuffer* cb, const u32 count, const CBufferBindParams& params) {}
+    void bind_cbuffers(const RscCBuffer* cb, const u32 count, const CBufferBindParams& params) {}
 
 }
 }
@@ -375,19 +374,19 @@ namespace Renderer {
 namespace Driver {
     
     template <>
-    void bindLayout<Layout_Vec3>() {
+    void bind_vertex_layout<Layout_Vec3>() {
         glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Layout_Vec3), (void*)0);
         glEnableVertexAttribArray(0);
     }
     template <>
-    void bindLayout<Layout_TexturedVec2>() {
+    void bind_vertex_layout<Layout_TexturedVec2>() {
         glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(Layout_TexturedVec2), &(((Layout_TexturedVec2*)0)->pos));
         glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(Layout_TexturedVec2), &(((Layout_TexturedVec2*)0)->uv));
         glEnableVertexAttribArray(0);
         glEnableVertexAttribArray(1);
     }
     template <>
-    void bindLayout<Layout_TexturedVec3>() {
+    void bind_vertex_layout<Layout_TexturedVec3>() {
         glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Layout_TexturedVec3), &(((Layout_TexturedVec3*)0)->pos));
         glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(Layout_TexturedVec3), &(((Layout_TexturedVec3*)0)->uv));
         glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(Layout_TexturedVec3), &(((Layout_TexturedVec3*)0)->normal));
@@ -400,23 +399,23 @@ namespace Driver {
         glEnableVertexAttribArray(4);
     }
     template <>
-    void bindLayout<Layout_Vec2Color4B>() {
+    void bind_vertex_layout<Layout_Vec2Color4B>() {
         glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(Layout_Vec2Color4B), &(((Layout_Vec2Color4B*)0)->pos));
         glVertexAttribPointer(1, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(Layout_Vec2Color4B), &(((Layout_Vec2Color4B*)0)->color));
         glEnableVertexAttribArray(0);
         glEnableVertexAttribArray(1);
     }
     template <>
-    void bindLayout<Layout_Vec3Color4B>() {
+    void bind_vertex_layout<Layout_Vec3Color4B>() {
         glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Layout_Vec3Color4B), &(((Layout_Vec3Color4B*)0)->pos));
         glVertexAttribPointer(1, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(Layout_Vec3Color4B), &(((Layout_Vec3Color4B*)0)->color));
         glEnableVertexAttribArray(0);
         glEnableVertexAttribArray(1);
     }
     template <typename _vertexLayout>
-    void bindCBuffers(RscShaderSet<_vertexLayout, Layout_CNone::Buffers>& ss, const RscCBuffer* cbuffers) {}
+    void bind_cbuffers_to_shader(RscShaderSet<_vertexLayout, Layout_CNone::Buffers>& ss, const RscCBuffer* cbuffers) {}
     template <typename _vertexLayout>
-    void bindCBuffers(RscShaderSet<_vertexLayout, Layout_CBuffer_3DScene::Buffers>& ss, const RscCBuffer* cbuffers) {
+    void bind_cbuffers_to_shader(RscShaderSet<_vertexLayout, Layout_CBuffer_3DScene::Buffers>& ss, const RscCBuffer* cbuffers) {
         GLuint perScene = glGetUniformBlockIndex(ss.shaderObject, "type_PerScene");
         GLuint perRenderGroup = glGetUniformBlockIndex(ss.shaderObject, "type_PerGroup");
         GLuint perInstance = glGetUniformBlockIndex(ss.shaderObject, "type_PerInstance");
@@ -429,13 +428,13 @@ namespace Driver {
             glUniformBlockBinding(ss.shaderObject, perInstance, cbuffers[Layout_CBuffer_3DScene::Buffers::InstanceData].index);
     }
     template <typename _vertexLayout>
-    void bindCBuffers(RscShaderSet<_vertexLayout, Layout_CBuffer_LightPass::Buffers>& ss, const RscCBuffer* cbuffers) {
+    void bind_cbuffers_to_shader(RscShaderSet<_vertexLayout, Layout_CBuffer_LightPass::Buffers>& ss, const RscCBuffer* cbuffers) {
         GLuint perScene = glGetUniformBlockIndex(ss.shaderObject, "type_PerScene");
         
         glUniformBlockBinding(ss.shaderObject, perScene, cbuffers[Layout_CBuffer_LightPass::Buffers::SceneData].index);
     }
     template <typename _vertexLayout>
-    void bindCBuffers(RscShaderSet<_vertexLayout, Layout_CBuffer_DebugScene::Buffers>& ss, const RscCBuffer* cbuffers) {
+    void bind_cbuffers_to_shader(RscShaderSet<_vertexLayout, Layout_CBuffer_DebugScene::Buffers>& ss, const RscCBuffer* cbuffers) {
         u32 renderGroupBlock = glGetUniformBlockIndex(ss.shaderObject, "type_PerGroup");
         glUniformBlockBinding(ss.shaderObject, renderGroupBlock, cbuffers[Layout_CBuffer_DebugScene::Buffers::GroupData].index);
     }

@@ -136,7 +136,7 @@ namespace Game
             ortho.bottom = -ortho.top;
             ortho.near = 0.f;
             ortho.far = 1000.f;
-            generateMatrix(mgr.orthoProjection.matrix, ortho);
+            generate_matrix_ortho(mgr.orthoProjection.matrix, ortho);
 
             // Todo: consider whether precision needs special handling
             PerspProjection::Config& frustum = mgr.perspProjection.config;
@@ -144,7 +144,7 @@ namespace Game
             frustum.aspect = platform.screen.width / (f32)platform.screen.height;
             frustum.near = 1.f;
             frustum.far = 1000.f;
-            generateMatrix(mgr.perspProjection.matrix, frustum);
+            generate_matrix_persp(mgr.perspProjection.matrix, frustum);
         }
 
         Vec3 meshCentroid = {};
@@ -157,49 +157,49 @@ namespace Game
             renderTargetParams.depth = true;
             renderTargetParams.width = platform.screen.width;
             renderTargetParams.height = platform.screen.height;
-            Renderer::Driver::create(rscene.mainRenderTarget, renderTargetParams);
+            Renderer::Driver::create_main_RT(rscene.mainRenderTarget, renderTargetParams);
 
             // rasterizer states
-            Renderer::Driver::create(rscene.blendStateOn, { true });
-            Renderer::Driver::create(rscene.rasterizerStateFill, { Renderer::Driver::RasterizerFillMode::Fill, Renderer::Driver::RasterizerCullMode::CullBack });
-            Renderer::Driver::create(rscene.rasterizerStateFillCulledBack, { Renderer::Driver::RasterizerFillMode::Fill, Renderer::Driver::RasterizerCullMode::CullFront });
-            Renderer::Driver::create(rscene.rasterizerStateLine, { Renderer::Driver::RasterizerFillMode::Line, Renderer::Driver::RasterizerCullMode::CullBack });
+            Renderer::Driver::create_blend_state(rscene.blendStateOn, { true });
+            Renderer::Driver::create_RS(rscene.rasterizerStateFill, { Renderer::Driver::RasterizerFillMode::Fill, Renderer::Driver::RasterizerCullMode::CullBack });
+            Renderer::Driver::create_RS(rscene.rasterizerStateFillCulledBack, { Renderer::Driver::RasterizerFillMode::Fill, Renderer::Driver::RasterizerCullMode::CullFront });
+            Renderer::Driver::create_RS(rscene.rasterizerStateLine, { Renderer::Driver::RasterizerFillMode::Line, Renderer::Driver::RasterizerCullMode::CullBack });
 
             // cbuffers
-            Renderer::create(rscene.cbuffers);
+            Renderer::create_cbuffers_3DScene(rscene.cbuffers);
 
             // shaders
             {
                 Renderer::TechniqueSrcParams< Renderer::Layout_Vec3Color4B, Renderer::Layout_CBuffer_3DScene::Buffers> params;
-                Renderer::create<Renderer::Shaders::VSTechnique::forward_base
+                Renderer::create_technique<Renderer::Shaders::VSTechnique::forward_base
                                , Renderer::Shaders::PSTechnique::forward_untextured_unlit
                                , Renderer::Shaders::VSDrawType::Standard>
                     (params, rscene.cbuffers);
-                Renderer::create(rscene.sceneShader, params);
+                Renderer::create_shader_from_technique(rscene.sceneShader, params);
             }
             {
                 Renderer::TechniqueSrcParams< Renderer::Layout_Vec3, Renderer::Layout_CBuffer_3DScene::Buffers> params;
-                Renderer::create<Renderer::Shaders::VSTechnique::forward_base
+                Renderer::create_technique<Renderer::Shaders::VSTechnique::forward_base
                                , Renderer::Shaders::PSTechnique::forward_untextured_unlit
                                , Renderer::Shaders::VSDrawType::Standard>
                     (params, rscene.cbuffers);
-                Renderer::create(rscene.sceneUnlitShader, params);
+                Renderer::create_shader_from_technique(rscene.sceneUnlitShader, params);
             }
             {
                 Renderer::TechniqueSrcParams< Renderer::Layout_TexturedVec3, Renderer::Layout_CBuffer_3DScene::Buffers> params;
-                Renderer::create<Renderer::Shaders::VSTechnique::forward_base
+                Renderer::create_technique<Renderer::Shaders::VSTechnique::forward_base
                                , Renderer::Shaders::PSTechnique::forward_textured_lit_normalmapped
                                , Renderer::Shaders::VSDrawType::Standard>
                     (params, rscene.cbuffers);
-                Renderer::create(rscene.sceneTexturedShader, params);
+                Renderer::create_shader_from_technique(rscene.sceneTexturedShader, params);
             }
             {
                 Renderer::TechniqueSrcParams< Renderer::Layout_Vec3, Renderer::Layout_CBuffer_3DScene::Buffers> params;
-                Renderer::create<Renderer::Shaders::VSTechnique::forward_base
+                Renderer::create_technique<Renderer::Shaders::VSTechnique::forward_base
                                , Renderer::Shaders::PSTechnique::forward_untextured_unlit
                                , Renderer::Shaders::VSDrawType::Instanced>
                     (params, rscene.cbuffers);
-                Renderer::create(rscene.sceneInstancedShader, params);
+                Renderer::create_shader_from_technique(rscene.sceneInstancedShader, params);
             }
 
             // input mesh vertex buffer
@@ -238,14 +238,14 @@ namespace Game
                 RenderItemUntexturedGeo& untextured = rscene.untexturedCubeGroupBuffer;
                 untextured.rasterizerState = rscene.rasterizerStateFill;
                 untextured.groupColor = Col(0.9f, 0.1f, 0.8f, 1.f);
-                Renderer::create(untextured.buffer, { 1.f, 1.f, 1.f });
+                Renderer::create_indexed_vertex_buffer_from_untextured_cube(untextured.buffer, { 1.f, 1.f, 1.f });
                 Math::identity4x4(untextured.transform);
 
                 RenderItemTexturedGeo& textured = rscene.texturedCubeGroupBuffer;
-                Renderer::Driver::create(textured.albedo, { "assets/pbr/material04-albedo.png" });
-                Renderer::Driver::create(textured.normal, { "assets/pbr/material04-normal.png" });
-                Renderer::Driver::create(textured.depth, { "assets/pbr/material04-depth.png" });
-                Renderer::create(textured.buffer, { 1.f, 1.f, 1.f });
+                Renderer::Driver::create_texture_from_file(textured.albedo, { "assets/pbr/material04-albedo.png" });
+                Renderer::Driver::create_texture_from_file(textured.normal, { "assets/pbr/material04-normal.png" });
+                Renderer::Driver::create_texture_from_file(textured.depth, { "assets/pbr/material04-depth.png" });
+                Renderer::create_indexed_vertex_buffer_from_textured_cube(textured.buffer, { 1.f, 1.f, 1.f });
                 Math::identity4x4(textured.transform);
             }
 
@@ -332,7 +332,7 @@ namespace Game
                 Gameplay::Orbit::process(game.cameraMgr.orbitCamera, platform.input.mouse);
                 Gameplay::Orbit::process(activeCam->transform, game.cameraMgr.orbitCamera);
                 // send camera data to render manager
-                Renderer::generateModelViewMatrix(activeCam->viewMatrix, activeCam->transform);
+                Renderer::generate_MV_matrix(activeCam->viewMatrix, activeCam->transform);
             }
         }
 
@@ -350,13 +350,13 @@ namespace Game
                 cbufferPerScene.viewMatrix = activeCam->viewMatrix;
                 cbufferPerScene.viewPos = activeCam->transform.pos;
                 cbufferPerScene.lightPos = Vec3(3.f, 8.f, 15.f);
-                Renderer::Driver::update(rscene.cbuffers[Renderer::Layout_CBuffer_3DScene::Buffers::SceneData], cbufferPerScene);
+                Renderer::Driver::update_cbuffer(rscene.cbuffers[Renderer::Layout_CBuffer_3DScene::Buffers::SceneData], cbufferPerScene);
             }
 
             {
-                Renderer::Driver::bind(rscene.blendStateOn);
-                Renderer::Driver::bind(rscene.mainRenderTarget);
-                Renderer::Driver::clear(rscene.mainRenderTarget, Col(0.f, 0.f, 0.f, 1.f));
+                Renderer::Driver::bind_blend_state(rscene.blendStateOn);
+                Renderer::Driver::bind_main_RT(rscene.mainRenderTarget);
+                Renderer::Driver::clear_main_RT(rscene.mainRenderTarget, Col(0.f, 0.f, 0.f, 1.f));
 
                 // mesh
                 {
@@ -364,14 +364,14 @@ namespace Game
                     Renderer::Layout_CBuffer_3DScene::GroupData buffer;
                     buffer.worldMatrix = Math::mult(r.transform.matrix, r.localTransform.matrix);
                     buffer.groupColor = r.groupColor.RGBAv4();
-                    Renderer::Driver::update(rscene.cbuffers[Renderer::Layout_CBuffer_3DScene::Buffers::GroupData], buffer);
+                    Renderer::Driver::update_cbuffer(rscene.cbuffers[Renderer::Layout_CBuffer_3DScene::Buffers::GroupData], buffer);
 
-                    Renderer::Driver::bind(rscene.cbuffers, Renderer::Layout_CBuffer_3DScene::Buffers::Count, { true, false });
-                    Renderer::Driver::bind(rscene.sceneShader);
-                    Renderer::Driver::bind(r.rasterizerState);
+                    Renderer::Driver::bind_cbuffers(rscene.cbuffers, Renderer::Layout_CBuffer_3DScene::Buffers::Count, { true, false });
+                    Renderer::Driver::bind_shader(rscene.sceneShader);
+                    Renderer::Driver::bind_RS(r.rasterizerState);
                     for (const auto& d : r.buffers) {
-                        Renderer::Driver::bind(d);
-                        draw(d);
+                        Renderer::Driver::bind_indexed_vertex_buffer(d);
+                        draw_indexed_vertex_buffer(d);
                     }
                 }
                 {
@@ -379,14 +379,14 @@ namespace Game
                     Renderer::Layout_CBuffer_3DScene::GroupData buffer;
                     buffer.worldMatrix = Math::mult(r.transform.matrix, r.localTransform.matrix);
                     buffer.groupColor = r.groupColor.RGBAv4();
-                    Renderer::Driver::update(rscene.cbuffers[Renderer::Layout_CBuffer_3DScene::Buffers::GroupData], buffer);
+                    Renderer::Driver::update_cbuffer(rscene.cbuffers[Renderer::Layout_CBuffer_3DScene::Buffers::GroupData], buffer);
 
-                    Renderer::Driver::bind(rscene.cbuffers, Renderer::Layout_CBuffer_3DScene::Buffers::Count, { true, false });
-                    Renderer::Driver::bind(rscene.sceneUnlitShader);
-                    Renderer::Driver::bind(r.rasterizerState);
+                    Renderer::Driver::bind_cbuffers(rscene.cbuffers, Renderer::Layout_CBuffer_3DScene::Buffers::Count, { true, false });
+                    Renderer::Driver::bind_shader(rscene.sceneUnlitShader);
+                    Renderer::Driver::bind_RS(r.rasterizerState);
                     for (const auto& d : r.buffers) {
-                        Renderer::Driver::bind(d);
-                        draw(d);
+                        Renderer::Driver::bind_indexed_vertex_buffer(d);
+                        draw_indexed_vertex_buffer(d);
                     }
                 }
                 
@@ -396,19 +396,19 @@ namespace Game
                         const RenderItemTexturedGeo& r = rscene.texturedCubeGroupBuffer;
                         Renderer::Layout_CBuffer_3DScene::GroupData buffer;
                         buffer.worldMatrix = r.transform.matrix;
-                        Renderer::Driver::update(rscene.cbuffers[Renderer::Layout_CBuffer_3DScene::Buffers::GroupData], buffer);
+                        Renderer::Driver::update_cbuffer(rscene.cbuffers[Renderer::Layout_CBuffer_3DScene::Buffers::GroupData], buffer);
 
                         // TODO: handle visibility of constant buffers better than this (or include it in the compile data of the shader)
-                        Renderer::Driver::bind(rscene.cbuffers, Renderer::Layout_CBuffer_3DScene::Buffers::Count, { true, true });
-                        Renderer::Driver::bind(rscene.sceneTexturedShader);
-                        Renderer::Driver::bind(rscene.rasterizerStateFill);
+                        Renderer::Driver::bind_cbuffers(rscene.cbuffers, Renderer::Layout_CBuffer_3DScene::Buffers::Count, { true, true });
+                        Renderer::Driver::bind_shader(rscene.sceneTexturedShader);
+                        Renderer::Driver::bind_RS(rscene.rasterizerStateFill);
                         Renderer::Driver::RscTexture textures[] = { r.albedo, r.normal, r.depth };
                         const u32 textureCount = sizeof(textures) / sizeof(textures[0]);
-                        Renderer::Driver::bind(textures, textureCount);
-                        Renderer::Driver::bind(r.buffer);
-                        draw(r.buffer);
+                        Renderer::Driver::bind_textures(textures, textureCount);
+                        Renderer::Driver::bind_indexed_vertex_buffer(r.buffer);
+                        draw_indexed_vertex_buffer(r.buffer);
                         Renderer::Driver::RscTexture nullTex[] = { {}, {}, {} };
-                        Renderer::Driver::bind(nullTex, textureCount);
+                        Renderer::Driver::bind_textures(nullTex, textureCount);
                     }
 
                     {
@@ -416,12 +416,12 @@ namespace Game
                         Renderer::Layout_CBuffer_3DScene::GroupData buffer;
                         buffer.worldMatrix = r.transform.matrix;
                         buffer.groupColor = r.groupColor.RGBAv4();
-                        Renderer::Driver::update(rscene.cbuffers[Renderer::Layout_CBuffer_3DScene::Buffers::GroupData], buffer);
+                        Renderer::Driver::update_cbuffer(rscene.cbuffers[Renderer::Layout_CBuffer_3DScene::Buffers::GroupData], buffer);
 
-                        Renderer::Driver::bind(rscene.sceneInstancedShader);
-                        Renderer::Driver::bind(r.rasterizerState);
-                        Renderer::Driver::bind(r.buffer);
-                        Renderer::Driver::bind(rscene.cbuffers, Renderer::Layout_CBuffer_3DScene::Buffers::Count, { true, false });
+                        Renderer::Driver::bind_shader(rscene.sceneInstancedShader);
+                        Renderer::Driver::bind_RS(r.rasterizerState);
+                        Renderer::Driver::bind_indexed_vertex_buffer(r.buffer);
+                        Renderer::Driver::bind_cbuffers(rscene.cbuffers, Renderer::Layout_CBuffer_3DScene::Buffers::Count, { true, false });
 
                         Renderer::Layout_CBuffer_3DScene::InstanceData instancedBuffer;
                         u32 bufferId = 0;
@@ -437,8 +437,8 @@ namespace Game
                             instancedBuffer.instanceMatrices[bufferId++] = t.matrix;
                         }
 
-                        Renderer::Driver::update(rscene.cbuffers[Renderer::Layout_CBuffer_3DScene::Buffers::InstanceData], instancedBuffer);
-                        drawInstances(r.buffer, end - begin);
+                        Renderer::Driver::update_cbuffer(rscene.cbuffers[Renderer::Layout_CBuffer_3DScene::Buffers::InstanceData], instancedBuffer);
+                        draw_instances_indexed_vertex_buffer(r.buffer, end - begin);
                     }
 
                 }
