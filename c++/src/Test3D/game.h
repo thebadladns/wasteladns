@@ -147,8 +147,6 @@ namespace Game
             generate_matrix_persp(mgr.perspProjection.matrix, frustum);
         }
 
-        Vec3 meshCentroid = {};
-
         game.renderMgr.renderScene = {};
         {
             RenderScene& rscene = game.renderMgr.renderScene;
@@ -297,7 +295,6 @@ namespace Game
         }
 
         // meta input checks
-        const ::Input::Gamepad::State& pad = platform.input.pads[0];
         const ::Input::Keyboard::State& keyboard = platform.input.keyboard;
         bool step = true;
         {

@@ -52,7 +52,7 @@ namespace Driver {
 
             // same format as texture, 0 minmap
             D3D11_DEPTH_STENCIL_VIEW_DESC stencilViewDesc = {};
-            d3ddev->CreateDepthStencilView(stencil, nullptr, &rt.depthStencilView);
+            d3ddev->CreateDepthStencilView(stencil, &stencilViewDesc, &rt.depthStencilView);
 
             ID3D11DepthStencilState* stencilState;
             D3D11_DEPTH_STENCIL_DESC stencilStateDesc = {};
@@ -99,13 +99,13 @@ namespace Driver {
 
             // same format as texture, 0 minmap
             D3D11_DEPTH_STENCIL_VIEW_DESC stencilViewDesc = {};
-            d3ddev->CreateDepthStencilView(stencil, nullptr, &rt.depthStencilView);
+            d3ddev->CreateDepthStencilView(stencil, &stencilViewDesc, &rt.depthStencilView);
         }
     }
     void bind_RT(const RscRenderTarget& rt) {
         d3dcontext->OMSetRenderTargets(rt.viewCount, rt.views, rt.depthStencilView);
     }
-    void bind_RT(const RscRenderTarget& rt) {
+    void clear_RT(const RscRenderTarget& rt) {
         float colorv[] = { 0.f, 0.f, 0.f, 0.f };
         for (u32 i = 0; i < rt.viewCount; i++) {
             d3dcontext->ClearRenderTargetView(rt.views[i], colorv);
@@ -254,7 +254,6 @@ namespace Driver {
     template <typename _vertexLayout, typename _cbufferLayout>
     ShaderResult create_shader_vs(RscVertexShader<_vertexLayout, _cbufferLayout>& vs, const VertexShaderRuntimeCompileParams& params) {
         ID3D11VertexShader* vertexShader = nullptr;
-        ID3D11InputLayout* vertexInputLayout = nullptr;
         ID3DBlob* pShaderBlob = nullptr;
         ID3DBlob* pErrorBlob = nullptr;
         HRESULT hr = D3DCompile(
@@ -380,6 +379,7 @@ namespace Driver {
         vertexBufferDesc.Usage = (D3D11_USAGE) params.memoryUsage;
         resourceData = { params.vertexData, 0, 0 };
         HRESULT result = d3ddev->CreateBuffer(&vertexBufferDesc, params.memoryUsage == BufferMemoryUsage::CPU ? nullptr : &resourceData, &vertexBuffer);
+        (void)result;
 
         t.vertexBuffer = vertexBuffer;
         t.type = (D3D11_PRIMITIVE_TOPOLOGY) params.type;

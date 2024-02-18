@@ -24,15 +24,20 @@ namespace Platform {
 #endif
 #if _MSC_VER
     int fopen(FILE** f, const char* name, const char* mode) { return ::fopen_s(f, name, mode); }
+    int fscanf( FILE* f, const char* name, const char* mode) { return ::fscanf_s(f, name, mode); }
 #else
     int fopen(FILE** f, const char* name, const char* mode) {
         *f = ::fopen(name, mode);
         return *f == 0;
     }
+    int fopen(FILE** f, const char* name, const char* mode) {
+        *f = ::fopen(name, mode);
+        return *f == 0;
+    }
+    const auto fscanf = ::fscanf;
 #endif
     const auto fclose = ::fclose;
     const auto fgetc = ::fgetc;
-    const auto fscanf = ::fscanf;
 }
 
 #endif // __WASTELADNS_IO_GLFW_H__
