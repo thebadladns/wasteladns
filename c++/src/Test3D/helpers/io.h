@@ -30,10 +30,6 @@ namespace Platform {
         *f = ::fopen(name, mode);
         return *f == 0;
     }
-    int fopen(FILE** f, const char* name, const char* mode) {
-        *f = ::fopen(name, mode);
-        return *f == 0;
-    }
     const auto fscanf = ::fscanf;
 #endif
     const auto fclose = ::fclose;
