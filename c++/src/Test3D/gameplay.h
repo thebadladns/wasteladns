@@ -178,6 +178,7 @@ namespace Gameplay
             if (mouse.scrolldy != 0) {
                 const f32 scrollSpeed = 0.1f;
                 controller.scale -= mouse.scrolldy * scrollSpeed;
+                controller.scale = Math::clamp(controller.scale, 0.3f, 2.f);
             }
         }
         void process(Transform& transform, const State& controller) {

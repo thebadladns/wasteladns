@@ -172,7 +172,7 @@ int main(int , char** ) {
                                     // todo: doesn't work while pressing mouse buttons
                                     NSPoint pos = [event locationInWindow];
                                     mousePollData.x = pos.x;
-                                    mousePollData.y = pos.y;
+                                    mousePollData.y = platform.screen.height-pos.y;
                                 } break;
                                 case NSEventTypeLeftMouseDown:
                                 case NSEventTypeLeftMouseUp:
