@@ -22,6 +22,8 @@
 #include "lib/stb/stb_image.h"
 
 #define UFBX_REAL_IS_FLOAT
+#define UFBX_MINIMAL
+#define UFBXI_FEATURE_TRIANGULATION 1
 #include "lib/fbx/ufbx.c"
 
 #define UNITYBUILD

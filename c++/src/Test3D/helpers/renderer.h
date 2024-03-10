@@ -517,12 +517,48 @@ namespace FBX {
         }
     }
     template <typename _vertexLayout>
-    void load(tinystl::vector<Driver::RscIndexedBuffer<_vertexLayout>>& buffers, const char* path) {
-        // we may have multiple vertex streams depending on materials or mesh being separated in parts
-        auto addMesh = [](tinystl::vector<_vertexLayout> vertices, tinystl::vector<u32> indices, auto& buffers) {
+    void load(Driver::RscIndexedBuffer<_vertexLayout>& rscBuffer, const char* path) {
+        tinystl::vector<_vertexLayout> vertices;
+        tinystl::vector<u32> indices;
+        ufbx_load_opts opts = {};
+        opts.allow_null_material = true;
+        ufbx_error error;
+        ufbx_scene* scene = ufbx_load_file(path, &opts, &error);
+        if (scene) {
+            u32 maxVertices = 0;
+            for (size_t i = 0; i < scene->meshes.count; i++) { maxVertices += scene->meshes.data[i]->num_vertices; }
+
+            vertices.reserve(maxVertices);
+            indices.clear(); // todo: reserve
+            u32 vertexOffset = 0;
+            for (size_t i = 0; i < scene->meshes.count; i++) {
+                ufbx_mesh& mesh = *scene->meshes.data[i];
+
+                for (size_t i = 0; i < mesh.num_vertices; i++) {
+                    _vertexLayout vertex;
+                    extract_vertex(vertex, mesh.vertices[i]);
+                    vertices.push_back(vertex);
+                }
+
+                // can't copy the face indexes directly, need to de-triangulate
+                for (size_t i = 0; i < mesh.num_faces; i++) {
+                    ufbx_face& face = mesh.faces[i];
+                    const u32 maxTriIndices = 32;
+                    u32 triIndices[maxTriIndices];
+                    u32 numTris = ufbx_triangulate_face(triIndices, maxTriIndices, &mesh, face);
+                    for (u32 vi = 0; vi < numTris * 3; vi++) {
+                        const uint32_t triangulatedFaceIndex = triIndices[vi];
+                        const u32 vertexIndex = mesh.vertex_indices[triangulatedFaceIndex];
+                        indices.push_back(vertexIndex + vertexOffset);
+                    }
+                }
+                _vertexLayout* meshFirstVertex = &vertices[vertexOffset];
+                extract_vertex_attrib(meshFirstVertex, mesh);
+                vertexOffset += mesh.num_vertices;
+            }
+
             if (vertices.size() > 0 && indices.size() > 0)
             {
-                Renderer::Driver::RscIndexedBuffer<_vertexLayout> rscBuffer;
                 Renderer::Driver::IndexedBufferParams bufferParams;
                 bufferParams.vertexData = &vertices[0];
                 bufferParams.vertexSize = (u32)vertices.size() * sizeof(vertices[0]);
@@ -534,57 +570,6 @@ namespace FBX {
                 bufferParams.indexType = Renderer::Driver::BufferItemType::U32;
                 bufferParams.type = Renderer::Driver::BufferTopologyType::Triangles;
                 Renderer::Driver::create_indexed_vertex_buffer(rscBuffer, bufferParams);
-
-                buffers.emplace_back(rscBuffer);
-            }
-        };
-        tinystl::vector<_vertexLayout> vertices;
-        tinystl::vector<u32> indices;
-        ufbx_load_opts opts = {};
-        opts.allow_null_material = true;
-        ufbx_error error;
-        ufbx_scene* scene = ufbx_load_file(path, &opts, &error);
-        if (scene) {
-            for (size_t i = 0; i < scene->meshes.count; i++) {
-                ufbx_mesh& mesh = *scene->meshes.data[i];
-
-                vertices.clear();
-                indices.clear();
-                vertices.reserve(mesh.num_vertices);
-                for (size_t i = 0; i < mesh.num_vertices; i++) {
-                    _vertexLayout vertex;
-                    extract_vertex(vertex, mesh.vertices[i]);
-                    vertices.push_back(vertex);
-                }
-
-                // can't copy the face indexes directly, need to de-triangulate
-                for (size_t i = 0; i < mesh.num_faces; i++) {
-                    ufbx_face& face = mesh.faces[i];
-                    if (mesh.faces[i].num_indices > 3) {
-                        const u32 a = mesh.vertex_indices[face.index_begin];
-                        const u32 b = mesh.vertex_indices[face.index_begin + 1];
-                        const u32 c = mesh.vertex_indices[face.index_begin + 2];
-                        const u32 d = mesh.vertex_indices[face.index_begin + 3];
-                        indices.push_back(a);
-                        indices.push_back(b);
-                        indices.push_back(c);
-                        indices.push_back(a);
-                        indices.push_back(c);
-                        indices.push_back(d);
-                    }
-                    else {
-                        const u32 a = mesh.vertex_indices[face.index_begin];
-                        const u32 b = mesh.vertex_indices[face.index_begin + 1];
-                        const u32 c = mesh.vertex_indices[face.index_begin + 2];
-                        indices.push_back(a);
-                        indices.push_back(b);
-                        indices.push_back(c);
-                    }
-                }
-
-                extract_vertex_attrib(vertices.data(), mesh);
-
-                addMesh(vertices, indices, buffers);
             }
         }
     }

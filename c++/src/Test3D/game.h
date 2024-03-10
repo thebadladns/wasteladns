@@ -36,17 +36,10 @@ namespace Game
 
     template<typename _vertexLayout>
     struct RenderItemModel {
-        tinystl::vector< Renderer::Driver::RscIndexedBuffer<_vertexLayout> > buffers;
+        Renderer::Driver::RscIndexedBuffer<_vertexLayout> buffer;
         Transform transform;
         Transform localTransform;
         Renderer::Driver::RscRasterizerState rasterizerState;
-        Col groupColor;
-        bool fill;
-    };
-    struct RenderItemUntexturedGeo {
-        Renderer::Driver::RscIndexedBuffer<Renderer::Layout_Vec3> buffer;
-        Renderer::Driver::RscRasterizerState rasterizerState;
-        Transform transform;
         Col groupColor;
         bool fill;
     };
@@ -56,12 +49,13 @@ namespace Game
         Renderer::Driver::RscTexture normal;
         Renderer::Driver::RscTexture depth;
         Transform transform;
+        Transform localTransform;
     };
     struct RenderScene {
         RenderItemModel<Renderer::Layout_Vec3Color4B> inputMeshGroupBuffer;
         RenderItemModel<Renderer::Layout_Vec3> inputMeshUnlitGroupBuffer;
+        RenderItemModel<Renderer::Layout_Vec3> untexturedCubeGroupBuffer;
         RenderItemTexturedGeo texturedCubeGroupBuffer;
-        RenderItemUntexturedGeo untexturedCubeGroupBuffer;
         Renderer::Driver::RscCBuffer cbuffers[Renderer::Layout_CBuffer_3DScene::Buffers::Count];
         Renderer::Driver::RscRasterizerState rasterizerStateFill, rasterizerStateLine, rasterizerStateFillCulledBack;
         Renderer::Driver::RscBlendState blendStateOn;
@@ -161,7 +155,7 @@ namespace Game
             Renderer::Driver::create_blend_state(rscene.blendStateOn, { true });
             Renderer::Driver::create_RS(rscene.rasterizerStateFill, { Renderer::Driver::RasterizerFillMode::Fill, Renderer::Driver::RasterizerCullMode::CullBack });
             Renderer::Driver::create_RS(rscene.rasterizerStateFillCulledBack, { Renderer::Driver::RasterizerFillMode::Fill, Renderer::Driver::RasterizerCullMode::CullFront });
-            Renderer::Driver::create_RS(rscene.rasterizerStateLine, { Renderer::Driver::RasterizerFillMode::Line, Renderer::Driver::RasterizerCullMode::CullBack });
+            Renderer::Driver::create_RS(rscene.rasterizerStateLine, { Renderer::Driver::RasterizerFillMode::Line, Renderer::Driver::RasterizerCullMode::CullNone });
 
             // cbuffers
             Renderer::create_cbuffers_3DScene(rscene.cbuffers);
@@ -213,7 +207,7 @@ namespace Game
                     // reverse culling, since we are inverting the model's y
                     r.rasterizerState = rscene.rasterizerStateFillCulledBack;
                     r.groupColor = Col(0.3f, 0.3f, 0.3f, 1.f);
-                    Renderer::FBX::load(r.buffers, "assets/meshes/boar.fbx");
+                    Renderer::FBX::load(r.buffer, "assets/meshes/boar.fbx");
                 }
 
                 {
@@ -227,17 +221,18 @@ namespace Game
                     // reverse culling, since we are inverting the model's y
                     r.rasterizerState = rscene.rasterizerStateLine;
                     r.groupColor = Col(1.f, 1.f, 1.f, 1.f);
-                    Renderer::FBX::load(r.buffers, "assets/meshes/boar.fbx");
+                    Renderer::FBX::load(r.buffer, "assets/meshes/boar.fbx");
                 }
             }
 
             // unit cube vertex buffers
             {
-                RenderItemUntexturedGeo& untextured = rscene.untexturedCubeGroupBuffer;
+                RenderItemModel<Renderer::Layout_Vec3>& untextured = rscene.untexturedCubeGroupBuffer;
                 untextured.rasterizerState = rscene.rasterizerStateFill;
                 untextured.groupColor = Col(0.9f, 0.1f, 0.8f, 1.f);
                 Renderer::create_indexed_vertex_buffer_from_untextured_cube(untextured.buffer, { 1.f, 1.f, 1.f });
                 Math::identity4x4(untextured.transform);
+                Math::identity4x4(untextured.localTransform);
 
                 RenderItemTexturedGeo& textured = rscene.texturedCubeGroupBuffer;
                 Renderer::Driver::create_texture_from_file(textured.albedo, { "assets/pbr/material04-albedo.png" });
@@ -245,6 +240,7 @@ namespace Game
                 Renderer::Driver::create_texture_from_file(textured.depth, { "assets/pbr/material04-depth.png" });
                 Renderer::create_indexed_vertex_buffer_from_textured_cube(textured.buffer, { 1.f, 1.f, 1.f });
                 Math::identity4x4(textured.transform);
+                Math::identity4x4(textured.localTransform);
             }
 
             __DEBUGEXP(Renderer::Immediate::load(game.renderMgr.immediateBuffer));
@@ -366,10 +362,8 @@ namespace Game
                     Renderer::Driver::bind_cbuffers(rscene.cbuffers, Renderer::Layout_CBuffer_3DScene::Buffers::Count, { true, false });
                     Renderer::Driver::bind_shader(rscene.sceneShader);
                     Renderer::Driver::bind_RS(r.rasterizerState);
-                    for (const auto& d : r.buffers) {
-                        Renderer::Driver::bind_indexed_vertex_buffer(d);
-                        draw_indexed_vertex_buffer(d);
-                    }
+                    Renderer::Driver::bind_indexed_vertex_buffer(r.buffer);
+                    Renderer::Driver::draw_indexed_vertex_buffer(r.buffer);
                 }
                 {
                     const auto& r = rscene.inputMeshUnlitGroupBuffer;
@@ -381,10 +375,8 @@ namespace Game
                     Renderer::Driver::bind_cbuffers(rscene.cbuffers, Renderer::Layout_CBuffer_3DScene::Buffers::Count, { true, false });
                     Renderer::Driver::bind_shader(rscene.sceneUnlitShader);
                     Renderer::Driver::bind_RS(r.rasterizerState);
-                    for (const auto& d : r.buffers) {
-                        Renderer::Driver::bind_indexed_vertex_buffer(d);
-                        draw_indexed_vertex_buffer(d);
-                    }
+                    Renderer::Driver::bind_indexed_vertex_buffer(r.buffer);
+                    Renderer::Driver::draw_indexed_vertex_buffer(r.buffer);
                 }
                 
                 // unit cubes
@@ -392,7 +384,7 @@ namespace Game
                     {
                         const RenderItemTexturedGeo& r = rscene.texturedCubeGroupBuffer;
                         Renderer::Layout_CBuffer_3DScene::GroupData buffer;
-                        buffer.worldMatrix = r.transform.matrix;
+                        buffer.worldMatrix = Math::mult(r.transform.matrix, r.localTransform.matrix);
                         Renderer::Driver::update_cbuffer(rscene.cbuffers[Renderer::Layout_CBuffer_3DScene::Buffers::GroupData], buffer);
 
                         // TODO: handle visibility of constant buffers better than this (or include it in the compile data of the shader)
@@ -409,9 +401,9 @@ namespace Game
                     }
 
                     {
-                        const RenderItemUntexturedGeo& r = rscene.untexturedCubeGroupBuffer;
+                        const auto& r = rscene.untexturedCubeGroupBuffer;
                         Renderer::Layout_CBuffer_3DScene::GroupData buffer;
-                        buffer.worldMatrix = r.transform.matrix;
+                        buffer.worldMatrix = Math::mult(r.transform.matrix, r.localTransform.matrix);
                         buffer.groupColor = r.groupColor.RGBAv4();
                         Renderer::Driver::update_cbuffer(rscene.cbuffers[Renderer::Layout_CBuffer_3DScene::Buffers::GroupData], buffer);
 
