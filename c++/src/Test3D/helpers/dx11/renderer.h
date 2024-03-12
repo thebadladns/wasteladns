@@ -51,8 +51,7 @@ namespace Driver {
             d3ddev->CreateTexture2D(&stencilDesc, nullptr, &stencil);
 
             // same format as texture, 0 minmap
-            D3D11_DEPTH_STENCIL_VIEW_DESC stencilViewDesc = {};
-            d3ddev->CreateDepthStencilView(stencil, &stencilViewDesc, &rt.depthStencilView);
+            d3ddev->CreateDepthStencilView(stencil, nullptr, &rt.depthStencilView);
 
             ID3D11DepthStencilState* stencilState;
             D3D11_DEPTH_STENCIL_DESC stencilStateDesc = {};
@@ -98,8 +97,7 @@ namespace Driver {
             d3ddev->CreateTexture2D(&stencilDesc, nullptr, &stencil);
 
             // same format as texture, 0 minmap
-            D3D11_DEPTH_STENCIL_VIEW_DESC stencilViewDesc = {};
-            d3ddev->CreateDepthStencilView(stencil, &stencilViewDesc, &rt.depthStencilView);
+            d3ddev->CreateDepthStencilView(stencil, nullptr, &rt.depthStencilView);
         }
     }
     void bind_RT(const RscRenderTarget& rt) {
