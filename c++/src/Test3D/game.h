@@ -91,11 +91,16 @@ namespace Game
     };
     #endif
 
+    struct Memory {
+        u8* frameArenaBuffer; // used to reset Allocator::frameArena every frame
+    };
+
     struct Instance {
         Time time;
         CameraManager cameraMgr;
         RenderManager renderMgr;
         Gameplay::Movement::State player;
+        Memory memory;
         __DEBUGDEF(DebugVis debugVis;)
     };
 
@@ -116,6 +121,11 @@ namespace Game
 
         config = {};
         config.nextFrame = platform.time.now;
+
+        {
+            Allocator::init_arena(Allocator::frameArena, 2 * 1024 * 1024);
+            game.memory.frameArenaBuffer = Allocator::frameArena.curr;
+        }
 
         // camera set up
         game.renderMgr = {};
@@ -266,6 +276,9 @@ namespace Game
     }
 
     void update(Instance& game, Platform::GameConfig& config, const Platform::State& platform) {
+
+        // frame arena reset
+        Allocator::frameArena.curr = game.memory.frameArenaBuffer;
 
         // frame timing calculations
         {

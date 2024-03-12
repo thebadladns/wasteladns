@@ -108,6 +108,7 @@ do { \
 } while (0)
 #endif
 
+#include "helpers/allocator.h"
 #include "game.h"
 
 #if __DX11
