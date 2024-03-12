@@ -13,12 +13,11 @@ namespace Allocator {
     }
 
     void* alloc_arena(Arena& arena, ptrdiff_t size, ptrdiff_t align) {
-        assert((align & (align - 1)) == 0); // Alignment needs to be a power of two")
-        uintptr_t next = ((uintptr_t)arena.curr + size + (align - 1)) & -align;
-        if (next < (uintptr_t)arena.end) {
-            void* ptr = (void*)arena.curr;
-            arena.curr = (u8*)next;
-            return ptr;
+        assert((align & (align - 1)) == 0); // Alignment needs to be a power of two
+        uintptr_t curr_aligned = ((uintptr_t)arena.curr + (align - 1)) & -align;
+        if (curr_aligned + size < (uintptr_t)arena.end) {
+            arena.curr = (u8*)(curr_aligned + size);
+            return (void*)curr_aligned;
         }
         return 0;
     }
