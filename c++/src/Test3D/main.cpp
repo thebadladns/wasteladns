@@ -44,6 +44,8 @@
 
 // Core
 #include "helpers/types.h"
+#include "helpers/allocator.h"
+
 #if __DX11
 #include "helpers/dx11/input_types.h"
 #elif __MACOS
@@ -108,7 +110,6 @@ do { \
 } while (0)
 #endif
 
-#include "helpers/allocator.h"
 #include "game.h"
 
 #if __DX11
