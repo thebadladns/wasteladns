@@ -87,6 +87,8 @@ namespace Game
         f64 frameHistory[60];
         f64 frameAvg = 0;
         u64 frameHistoryIdx = 0;
+        u64 arena_highmark = 0;
+        u64 arena_maxEOF = 0;
         bool help = true;
     };
     #endif
@@ -278,6 +280,8 @@ namespace Game
     void update(Instance& game, Platform::GameConfig& config, const Platform::State& platform) {
 
         // frame arena reset
+        __DEBUGEXP(game.debugVis.arena_maxEOF = Math::max(game.debugVis.arena_maxEOF, (u64)((uintptr_t)Allocator::frameArena.curr - (uintptr_t)game.memory.frameArenaBuffer)));
+        __DEBUGEXP(game.debugVis.arena_highmark = Math::max(game.debugVis.arena_highmark, (u64)((uintptr_t)Allocator::frameArena.highmark - (uintptr_t)game.memory.frameArenaBuffer)));
         Allocator::frameArena.curr = game.memory.frameArenaBuffer;
 
         // frame timing calculations
@@ -480,6 +484,10 @@ namespace Game
                     textParams.pos.y -= 15.f;
                     textParams.color = keyboard.pressed(Input::TOGGLE_HELP) ? activeCol : defaultCol;
                     Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParams, "H to hide");
+                    textParams.pos.y -= 15.f;
+                    Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParams, "Arena end of frame max: %lu bytes", game.debugVis.arena_maxEOF);
+                    textParams.pos.y -= 15.f;
+                    Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParams, "Arena highmark: %lu bytes", game.debugVis.arena_highmark );
                     textParams.pos.y -= 15.f;
 
                     textParams.pos = Vec3(game.renderMgr.orthoProjection.config.right - 60.f, game.renderMgr.orthoProjection.config.top - 15.f, -50);

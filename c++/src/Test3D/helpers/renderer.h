@@ -6,7 +6,6 @@
 #include "renderer_debug.h"
 #endif
 
-
 namespace Renderer {
     struct OrthoProjection {
         struct Config {
@@ -519,18 +518,19 @@ namespace FBX {
     }
     template <typename _vertexLayout>
     void load(Driver::RscIndexedBuffer<_vertexLayout>& rscBuffer, const char* path) {
-        tinystl::vector<_vertexLayout, Allocator::FrameArena> vertices;
-        tinystl::vector<u32, Allocator::FrameArena> indices;
         ufbx_load_opts opts = {};
         opts.allow_null_material = true;
         ufbx_error error;
         ufbx_scene* scene = ufbx_load_file(path, &opts, &error);
         if (scene) {
+            tinystl::vector<_vertexLayout, Allocator::ArenaSTL<_vertexLayout>> vertices;
+            tinystl::vector<u32, Allocator::ArenaSTL<u32>> indices;
+
             u32 maxVertices = 0;
             for (size_t i = 0; i < scene->meshes.count; i++) { maxVertices += (u32)scene->meshes.data[i]->num_vertices; }
 
             vertices.reserve(maxVertices);
-            indices.clear(); // todo: reserve
+            indices.reserve(maxVertices * 3 * 2); // 2x best case, less likely to resize
             u32 vertexOffset = 0;
             for (size_t i = 0; i < scene->meshes.count; i++) {
                 ufbx_mesh& mesh = *scene->meshes.data[i];

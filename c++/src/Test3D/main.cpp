@@ -34,6 +34,20 @@
 #define __GL 1
 #endif
 
+#ifdef NDEBUG
+#define __DEBUG 0
+#define __DEBUGDEF(a)
+#define __DEBUGEXP(a)
+#else
+#define __DEBUG 1
+#define __WASTELADNS_DEBUG_TEXT__
+#define __DEBUGDEF(a) a
+#define __DEBUGEXP(a) \
+do { \
+  (a); \
+} while (0)
+#endif
+
 #if __DX11
 #include "helpers/dx11/core.h"
 #elif __MACOS
@@ -44,7 +58,6 @@
 
 // Core
 #include "helpers/types.h"
-#include "helpers/allocator.h"
 
 #if __DX11
 #include "helpers/dx11/input_types.h"
@@ -62,6 +75,7 @@
 #include "helpers/vec_ops.h"
 #include "helpers/transform.h"
 #include "helpers/color.h"
+#include "helpers/allocator.h"
 #define __WASTELADNS_HASH_DEBUG__
 #include "helpers/hash.h"
 #include "helpers/input.h"
@@ -95,19 +109,8 @@
 #include "helpers/gl/renderer.h"
 #endif
 
-#ifdef NDEBUG
-#define __DEBUG 0
-#define __DEBUGDEF(a)
-#define __DEBUGEXP(a)
-#else
-#define __DEBUG 1
-#define __WASTELADNS_DEBUG_TEXT__
+#if __DEBUG
 #include "helpers/renderer_debug.h"
-#define __DEBUGDEF(a) a
-#define __DEBUGEXP(a) \
-do { \
-  (a); \
-} while (0)
 #endif
 
 #include "game.h"
