@@ -41,7 +41,7 @@ namespace Game
             ;
         constexpr ::Input::Keyboard::Keys::Enum
               EXIT = ::Input::Keyboard::Keys::ESCAPE
-            , TOGGLE_HELP = ::Input::Keyboard::Keys::H
+            , TOGGLE_OVERLAY = ::Input::Keyboard::Keys::H
             ;
     };
 
@@ -96,12 +96,13 @@ namespace Game
 
     #if __DEBUG
     struct DebugVis {
+        struct OverlayMode { enum Enum { All, HelpOnly, ArenaOnly, None, Count }; };
+
         f64 frameHistory[60];
         f64 frameAvg = 0;
         u64 frameHistoryIdx = 0;
         u64 arena_highmark = 0;
-        u64 arena_maxEOF = 0;
-        bool help = true;
+        OverlayMode::Enum overlaymode = OverlayMode::Enum::All;
     };
     #endif
 
@@ -137,7 +138,7 @@ namespace Game
         config.nextFrame = platform.time.now;
 
         {
-            Allocator::init_arena(Allocator::frameArena, 2 * 1024 * 1024);
+            Allocator::init_arena(Allocator::frameArena, 1 << 16);
             game.memory.frameArenaBuffer = Allocator::frameArena.curr;
         }
 
@@ -279,7 +280,6 @@ namespace Game
     void update(Instance& game, Platform::GameConfig& config, const Platform::State& platform) {
 
         // frame arena reset
-        __DEBUGEXP(game.debugVis.arena_maxEOF = Math::max(game.debugVis.arena_maxEOF, (u64)((uintptr_t)Allocator::frameArena.curr - (uintptr_t)game.memory.frameArenaBuffer)));
         __DEBUGEXP(game.debugVis.arena_highmark = Math::max(game.debugVis.arena_highmark, (u64)((uintptr_t)Allocator::frameArena.highmark - (uintptr_t)game.memory.frameArenaBuffer)));
         Allocator::frameArena.curr = game.memory.frameArenaBuffer;
 
@@ -314,8 +314,8 @@ namespace Game
                 config.quit = true;
             }
             #if __DEBUG
-            if (keyboard.pressed(Input::TOGGLE_HELP)) {
-                game.debugVis.help = !game.debugVis.help;
+            if (keyboard.pressed(Input::TOGGLE_OVERLAY)) {
+                game.debugVis.overlaymode = (DebugVis::OverlayMode::Enum)((game.debugVis.overlaymode + 1) % DebugVis::OverlayMode::Count);
             }
             #endif      
             step = !game.time.paused;
@@ -470,87 +470,139 @@ namespace Game
                     const u32 steps = 10;
                     const f32 spacing = 1.f / (f32)steps;
                     for (int i = 1; i <= steps; i++) {
-                        Immediate::segment(mgr.immediateBuffer, 
+                        Immediate::segment(mgr.immediateBuffer,
                               Math::add(pos, Vec3(spacing * i, 0.f, -thickness))
                             , Math::add(pos, Vec3(spacing * i, 0.f, thickness))
                             , axisX);
                         Immediate::segment(mgr.immediateBuffer,
-                            Math::add(pos, Vec3(0.f, spacing * i, -thickness))
+                              Math::add(pos, Vec3(0.f, spacing * i, -thickness))
                             , Math::add(pos, Vec3(0.f, spacing * i, thickness))
                             , axisY);
                         Immediate::segment(mgr.immediateBuffer,
-                            Math::add(pos, Vec3(-thickness, thickness, spacing * i))
+                              Math::add(pos, Vec3(-thickness, thickness, spacing * i))
                             , Math::add(pos, Vec3(thickness, -thickness, spacing * i))
                             , axisZ);
                     }
                 }
-                // Some debug decoration
-                if (game.debugVis.help)
+                // 2d debug info
+                if (game.debugVis.overlaymode != DebugVis::OverlayMode::None)
                 {
                     Col defaultCol(0.7f, 0.8f, 0.15f, 1.0f);
                     Col activeCol(1.0f, 0.2f, 0.1f, 1.0f);
-                    Renderer::Immediate::TextParams textParams;
-                    textParams.scale = 1;
-                    textParams.pos = Vec3(game.renderMgr.orthoProjection.config.left + 10.f, game.renderMgr.orthoProjection.config.top - 15.f, -50);
-                    textParams.color = platform.input.mouse.down(::Input::Mouse::Keys::BUTTON_LEFT) ? activeCol : defaultCol;
-                    Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParams, "left mouse click and drag to orbit");
-                    textParams.pos.y -= 15.f;
-                    textParams.color = platform.input.mouse.down(::Input::Mouse::Keys::BUTTON_RIGHT) ? activeCol : defaultCol;
-                    Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParams, "right mouse click and drag to pan");
-                    textParams.pos.y -= 15.f;
-                    textParams.color = platform.input.mouse.scrolldy != 0 ? activeCol : defaultCol;
-                    Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParams, "mouse wheel to scale");
-                    textParams.pos.y -= 15.f;
-                    textParams.color = keyboard.pressed(Input::TOGGLE_HELP) ? activeCol : defaultCol;
-                    Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParams, "H to hide");
-                    textParams.pos.y -= 15.f;
-                    {
-                        Vec3 eulers_deg = Math::scale(game.cameraMgr.orbitCamera.eulers, Math::r2d<f32>);
-                        Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParams, "Camera eulers: " VEC3_FORMAT("% .3f"), VEC3_PARAMS(eulers_deg));
-                        textParams.pos.y -= 15.f;
-                    }
-                    
-                    {
-                        const Col arenabaseCol(0.65f, 0.65f, 0.65f, 0.4f);
-                        const Col arenamaxEOFCol(0.35f, 0.95f, 0.8f, 1.f);
-                        const Col arenahighmarkCol(0.95f, 0.35f, 0.8f, 1.f);
-                        
-                        textParams.color = arenamaxEOFCol;
-                        Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParams, "Arena end of frame max: %lu bytes", game.debugVis.arena_maxEOF);
-                        textParams.pos.y -= 15.f;
-                        textParams.color = arenahighmarkCol;
-                        Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParams, "Arena highmark: %lu bytes", game.debugVis.arena_highmark );
-                        textParams.pos.y -= 15.f;
-                        textParams.color = defaultCol;
-                        
-                        const f32 max_barwidth = 150.f;
-                        const f32 barheight = 10.f;
-                        const ptrdiff_t arenaTotal = (ptrdiff_t)Allocator::frameArena.end - (ptrdiff_t)game.memory.frameArenaBuffer;
-                        const f32 arenaHighmark_barwidth = max_barwidth * (game.debugVis.arena_highmark / (f32)arenaTotal);
-                        const f32 arenaMaxEOF_barwidth = max_barwidth * (game.debugVis.arena_maxEOF / (f32)arenaTotal);
 
-                        Renderer::Immediate::box_2d(game.renderMgr.immediateBuffer
-                                                , Vec2(textParams.pos.x, textParams.pos.y - barheight)
-                                                , Vec2(textParams.pos.x + max_barwidth, textParams.pos.y)
-                                                , arenabaseCol);
-                        Renderer::Immediate::box_2d(game.renderMgr.immediateBuffer
-                                                , Vec2(textParams.pos.x, textParams.pos.y - barheight)
-                                                , Vec2(textParams.pos.x + arenaHighmark_barwidth, textParams.pos.y)
-                                                , arenahighmarkCol);
-                        Renderer::Immediate::box_2d(game.renderMgr.immediateBuffer
-                                                , Vec2(textParams.pos.x, textParams.pos.y - barheight)
-                                                , Vec2(textParams.pos.x + arenaMaxEOF_barwidth, textParams.pos.y)
-                                                , arenamaxEOFCol);
-                        textParams.pos.y -= barheight + 5.f;
+                    Renderer::Immediate::TextParams textParamsLeft, textParamsRight, textParamsCenter;
+                    textParamsLeft.scale = 1;
+                    textParamsLeft.pos = Vec3(game.renderMgr.orthoProjection.config.left + 10.f, game.renderMgr.orthoProjection.config.top - 15.f, -50);
+                    textParamsLeft.color = defaultCol;
+                    textParamsRight.scale = 1;
+                    textParamsRight.pos = Vec3(game.renderMgr.orthoProjection.config.right - 60.f, game.renderMgr.orthoProjection.config.top - 15.f, -50);
+                    textParamsRight.color = defaultCol;
+                    textParamsCenter.scale = 1;
+                    textParamsCenter.pos = Vec3(0.f, game.renderMgr.orthoProjection.config.top - 15.f, -50);
+                    textParamsCenter.color = defaultCol;
+
+                    const char* overlaynames[] = { "All", "Help Only", "Arenas only", "None" };
+                    textParamsLeft.color = keyboard.pressed(Input::TOGGLE_OVERLAY) ? activeCol : defaultCol;
+                    Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParamsLeft, "H to toggle overlays: %s", overlaynames[game.debugVis.overlaymode]);
+                    textParamsLeft.pos.y -= 15.f;
+
+                    if (game.debugVis.overlaymode == DebugVis::OverlayMode::All || game.debugVis.overlaymode == DebugVis::OverlayMode::HelpOnly) {
+                        textParamsLeft.color = platform.input.mouse.down(::Input::Mouse::Keys::BUTTON_LEFT) ? activeCol : defaultCol;
+                        Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParamsLeft, "left mouse click and drag to orbit");
+                        textParamsLeft.pos.y -= 15.f;
+                        textParamsLeft.color = platform.input.mouse.down(::Input::Mouse::Keys::BUTTON_RIGHT) ? activeCol : defaultCol;
+                        Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParamsLeft, "right mouse click and drag to pan");
+                        textParamsLeft.pos.y -= 15.f;
+                        textParamsLeft.color = platform.input.mouse.scrolldy != 0 ? activeCol : defaultCol;
+                        Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParamsLeft, "mouse wheel to scale");
+                        textParamsLeft.pos.y -= 15.f;
+                        {
+                            Vec3 eulers_deg = Math::scale(game.cameraMgr.orbitCamera.eulers, Math::r2d<f32>);
+                            Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParamsLeft, "Camera eulers: " VEC3_FORMAT("% .3f"), VEC3_PARAMS(eulers_deg));
+                            textParamsLeft.pos.y -= 15.f;
+                        }
+
+                        textParamsRight.color = defaultCol;
+                        Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParamsRight, "%s", Platform::name);
+                        textParamsRight.pos.y -= 15.f;
+                        textParamsRight.pos.x -= 30.f;
+                        Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParamsRight, "%.3lf fps", 1. / game.debugVis.frameAvg);
+                        textParamsRight.pos.y -= 15.f;
                     }
 
-                    textParams.pos = Vec3(game.renderMgr.orthoProjection.config.right - 60.f, game.renderMgr.orthoProjection.config.top - 15.f, -50);
-                    textParams.color = defaultCol;
-                    Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParams, "%s", Platform::name);
-                    textParams.pos.y -= 15.f;
-                    textParams.pos.x -= 30.f;
-                    Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParams, "%.3lf fps", 1. / game.debugVis.frameAvg);
-                    textParams.pos.y -= 15.f;
+                    if (game.debugVis.overlaymode == DebugVis::OverlayMode::All || game.debugVis.overlaymode == DebugVis::OverlayMode::ArenaOnly)
+                    {
+                        {
+                            const Col arenabaseCol(0.65f, 0.65f, 0.65f, 0.4f);
+                            const Col arenahighmarkCol(0.95f, 0.35f, 0.8f, 1.f);
+                            const f32 max_barwidth = 150.f;
+                            const f32 barheight = 10.f;
+
+                            textParamsCenter.pos.x -= max_barwidth / 2.f;
+                            textParamsCenter.color = arenahighmarkCol;
+                            Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParamsCenter, "Frame arena highmark: %lu bytes", game.debugVis.arena_highmark);
+                            textParamsCenter.pos.y -= 15.f;
+                            textParamsCenter.color = defaultCol;
+
+                            const ptrdiff_t arenaTotal = (ptrdiff_t)Allocator::frameArena.end - (ptrdiff_t)game.memory.frameArenaBuffer;
+                            const f32 arenaHighmark_barwidth = max_barwidth * (game.debugVis.arena_highmark / (f32)arenaTotal);
+
+                            Renderer::Immediate::box_2d(game.renderMgr.immediateBuffer
+                                , Vec2(textParamsCenter.pos.x, textParamsCenter.pos.y - barheight)
+                                , Vec2(textParamsCenter.pos.x + max_barwidth, textParamsCenter.pos.y)
+                                , arenabaseCol);
+                            Renderer::Immediate::box_2d(game.renderMgr.immediateBuffer
+                                , Vec2(textParamsCenter.pos.x, textParamsCenter.pos.y - barheight)
+                                , Vec2(textParamsCenter.pos.x + arenaHighmark_barwidth, textParamsCenter.pos.y)
+                                , arenahighmarkCol);
+                            textParamsCenter.pos.y -= barheight + 5.f;
+                        }
+                        {
+                            auto& im = game.renderMgr.immediateBuffer;
+                            const Col baseCol(0.65f, 0.65f, 0.65f, 0.4f);
+                            const Col used3dCol(0.95f, 0.35f, 0.8f, 1.f);
+                            const Col used2dCol(0.35f, 0.95f, 0.8f, 1.f);
+                            const Col used2didxCol(0.8f, 0.95f, 0.8f, 1.f);
+                            const f32 barwidth = 150.f;
+                            const f32 barheight = 10.f;
+
+                            const ptrdiff_t memory_size = (ptrdiff_t)im.backing_memory.curr - (ptrdiff_t)im.vertices_3d;
+                            const ptrdiff_t vertices_3d_size = (ptrdiff_t)im.vertices_3d_head * sizeof(Layout_Vec3Color4B);
+                            const ptrdiff_t vertices_2d_size = (ptrdiff_t)im.vertices_2d_head * sizeof(Layout_Vec2Color4B);
+                            const ptrdiff_t indices_2d_size = (ptrdiff_t)(im.vertices_2d_head * 3 / 2) * sizeof(u32);
+                            const f32 v3d_barwidth = barwidth * vertices_3d_size / (f32)memory_size;
+                            const f32 v2d_barwidth = barwidth * vertices_2d_size / (f32)memory_size;
+                            const f32 i2d_barwidth = barwidth * indices_2d_size / (f32)memory_size;
+
+                            textParamsCenter.color = used3dCol;
+                            Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParamsCenter, "im 3d: %lu bytes", vertices_3d_size);
+                            textParamsCenter.pos.y -= 15.f;
+                            textParamsCenter.color = used2dCol;
+                            Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParamsCenter, "im 3d: %lu bytes", vertices_2d_size);
+                            textParamsCenter.pos.y -= 15.f;
+                            textParamsCenter.color = used2didxCol;
+                            Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParamsCenter, "im 3d: %lu bytes", indices_2d_size);
+                            textParamsCenter.pos.y -= 15.f;
+                            textParamsCenter.color = defaultCol;
+
+                            Renderer::Immediate::box_2d(game.renderMgr.immediateBuffer
+                                , Vec2(textParamsCenter.pos.x, textParamsCenter.pos.y - barheight)
+                                , Vec2(textParamsCenter.pos.x + barwidth, textParamsCenter.pos.y)
+                                , baseCol);
+                            Renderer::Immediate::box_2d(game.renderMgr.immediateBuffer
+                                , Vec2(textParamsCenter.pos.x, textParamsCenter.pos.y - barheight)
+                                , Vec2(textParamsCenter.pos.x + v3d_barwidth, textParamsCenter.pos.y)
+                                , used3dCol);
+                            Renderer::Immediate::box_2d(game.renderMgr.immediateBuffer
+                                , Vec2(textParamsCenter.pos.x + v3d_barwidth, textParamsCenter.pos.y - barheight)
+                                , Vec2(textParamsCenter.pos.x + v3d_barwidth + v2d_barwidth, textParamsCenter.pos.y)
+                                , used2dCol);
+                            Renderer::Immediate::box_2d(game.renderMgr.immediateBuffer
+                                , Vec2(textParamsCenter.pos.x + v3d_barwidth + v2d_barwidth, textParamsCenter.pos.y - barheight)
+                                , Vec2(textParamsCenter.pos.x + v3d_barwidth + v2d_barwidth + i2d_barwidth, textParamsCenter.pos.y)
+                                , used2didxCol);
+                        }
+                    }
                 }
             }
             #endif

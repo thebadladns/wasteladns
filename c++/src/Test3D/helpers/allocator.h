@@ -16,7 +16,7 @@ namespace Allocator {
     void* alloc_arena(Arena& arena, ptrdiff_t size, ptrdiff_t align) {
         assert((align & (align - 1)) == 0); // Alignment needs to be a power of two
         uintptr_t curr_aligned = ((uintptr_t)arena.curr + (align - 1)) & -align;
-        if (curr_aligned + size < (uintptr_t)arena.end) {
+        if (curr_aligned + size <= (uintptr_t)arena.end) {
             arena.curr = (u8*)(curr_aligned + size);
             __DEBUGEXP(arena.highmark = Math::max(arena.highmark, arena.curr));
             return (void*)curr_aligned;

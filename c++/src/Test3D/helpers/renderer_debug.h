@@ -22,9 +22,10 @@ namespace Immediate
     constexpr u32 vertexSizeToIndexCount(const u32 count) { return 3 * count / 2; }
     
     struct Buffer {
-        Layout_Vec3Color4B vertices_3d[max_3d_vertices];
-        Layout_Vec2Color4B vertices_2d[max_2d_vertices];
-        u32 indices_2d[ vertexSizeToIndexCount(max_2d_vertices) ];
+        Allocator::Arena backing_memory;
+        Layout_Vec3Color4B* vertices_3d;
+        Layout_Vec2Color4B* vertices_2d;
+        u32* indices_2d;
         
         Driver::RscBuffer<Layout_Vec3Color4B> perspVertex;
         Driver::RscIndexedBuffer<Layout_Vec2Color4B> orthoVertex;
@@ -33,7 +34,7 @@ namespace Immediate
         Driver::RscCBuffer cbuffers[Layout_CBuffer_DebugScene::Buffers::Count];
         Driver::RscRasterizerState rasterizerState;
         Driver::RscDepthStencilState orthoDepthState, perspDepthState;
-        
+
         u32 vertices_3d_head;
         u32 vertices_2d_head;
 
@@ -205,7 +206,7 @@ namespace Immediate
         color[3] = params.color.getAu();
         u8* vertexBuffer = (u8*) &buffer.vertices_2d[buffer.vertices_2d_head];
         s32 vertexBufferSize = (max_2d_vertices - buffer.vertices_2d_head) * sizeof(Layout_Vec2Color4B);
-        // negate y, since our (0,0) is top left, stb's is bottom left
+        // negate y, since our (0,0) is the center of the screen, stb's is bottom left
         u32 quadCount = stb_easy_font_print(params.pos.x, -params.pos.y, params.scale, text, color, vertexBuffer, vertexBufferSize);
         buffer.vertices_2d_head += quadCount * 4;
 
@@ -243,33 +244,47 @@ namespace Immediate
 #endif // __WASTELADNS_DEBUG_TEXT__
     
     void load(Buffer& buffer) {
-        
+
+        buffer = {};
+
         Driver::create_cbuffer<Layout_CBuffer_DebugScene::GroupData>(buffer.cbuffers[Layout_CBuffer_DebugScene::Buffers::GroupData], {});
-        
-        // 3d
+
         {
-            Renderer::Driver::BufferParams bufferParams;
-            bufferParams.vertexData = nullptr;
-            bufferParams.vertexSize = sizeof(Buffer::vertices_3d);
-            bufferParams.memoryUsage = Renderer::Driver::BufferMemoryUsage::CPU;
-            bufferParams.accessType = Renderer::Driver::BufferAccessType::CPU;
-            bufferParams.type = Renderer::Driver::BufferTopologyType::Lines;
-            bufferParams.vertexCount = 0;
-            Driver::create_vertex_buffer(buffer.perspVertex, bufferParams);
-        }
-        // 2d
-        {
-            Renderer::Driver::IndexedBufferParams bufferParams;
-            bufferParams.vertexData = nullptr;
-            bufferParams.indexData = nullptr;
-            bufferParams.vertexSize = sizeof(Buffer::vertices_2d);
-            bufferParams.indexSize = sizeof(Buffer::indices_2d);
-            bufferParams.memoryUsage = Renderer::Driver::BufferMemoryUsage::CPU;
-            bufferParams.accessType = Renderer::Driver::BufferAccessType::CPU;
-            bufferParams.indexType = Renderer::Driver::BufferItemType::U32;
-            bufferParams.type = Renderer::Driver::BufferTopologyType::Triangles;
-            bufferParams.indexCount = 0;
-            Driver::create_indexed_vertex_buffer(buffer.orthoVertex, bufferParams);
+            // reserve memory for buffers
+            u32 vertices_3d_size = max_3d_vertices * sizeof(Layout_Vec3Color4B);
+            u32 vertices_2d_size = max_2d_vertices * sizeof(Layout_Vec2Color4B);
+            u32 indices_2d_size = vertexSizeToIndexCount(max_2d_vertices) * sizeof(u32);
+            u32 memory_size = vertices_3d_size + vertices_2d_size + indices_2d_size;
+            Allocator::init_arena(buffer.backing_memory, memory_size);
+            buffer.vertices_3d = (Layout_Vec3Color4B*)Allocator::alloc_arena(buffer.backing_memory, vertices_3d_size, alignof(Layout_Vec3Color4B));
+            buffer.vertices_2d = (Layout_Vec2Color4B*)Allocator::alloc_arena(buffer.backing_memory, vertices_2d_size, alignof(Layout_Vec2Color4B));
+            buffer.indices_2d = (u32*)Allocator::alloc_arena(buffer.backing_memory, indices_2d_size, alignof(u32));
+
+            // 3d
+            {
+                Renderer::Driver::BufferParams bufferParams;
+                bufferParams.vertexData = nullptr;
+                bufferParams.vertexSize = vertices_3d_size;
+                bufferParams.memoryUsage = Renderer::Driver::BufferMemoryUsage::CPU;
+                bufferParams.accessType = Renderer::Driver::BufferAccessType::CPU;
+                bufferParams.type = Renderer::Driver::BufferTopologyType::Lines;
+                bufferParams.vertexCount = 0;
+                Driver::create_vertex_buffer(buffer.perspVertex, bufferParams);
+            }
+            // 2d
+            {
+                Renderer::Driver::IndexedBufferParams bufferParams;
+                bufferParams.vertexData = nullptr;
+                bufferParams.indexData = nullptr;
+                bufferParams.vertexSize = vertices_2d_size;
+                bufferParams.indexSize = indices_2d_size;
+                bufferParams.memoryUsage = Renderer::Driver::BufferMemoryUsage::CPU;
+                bufferParams.accessType = Renderer::Driver::BufferAccessType::CPU;
+                bufferParams.indexType = Renderer::Driver::BufferItemType::U32;
+                bufferParams.type = Renderer::Driver::BufferTopologyType::Triangles;
+                bufferParams.indexCount = 0;
+                Driver::create_indexed_vertex_buffer(buffer.orthoVertex, bufferParams);
+            }
         }
         
         {
@@ -300,7 +315,7 @@ namespace Immediate
         Renderer::Driver::bind_DS(buffer.perspDepthState);
         
         Driver::BufferUpdateParams bufferUpdateParams;
-        bufferUpdateParams.vertexData = &buffer.vertices_3d;
+        bufferUpdateParams.vertexData = buffer.vertices_3d;
         bufferUpdateParams.vertexSize = sizeof(Layout_Vec3Color4B) * buffer.vertices_3d_head;
         bufferUpdateParams.vertexCount = buffer.vertices_3d_head;
         Driver::update_vertex_buffer(buffer.perspVertex, bufferUpdateParams);
@@ -319,12 +334,11 @@ namespace Immediate
         Renderer::Driver::bind_RS(buffer.rasterizerState);
         Renderer::Driver::bind_DS(buffer.orthoDepthState);
 
-
         u32 indexCount = vertexSizeToIndexCount(buffer.vertices_2d_head);
         Driver::IndexedBufferUpdateParams bufferUpdateParams;
-        bufferUpdateParams.vertexData = &buffer.vertices_2d;
+        bufferUpdateParams.vertexData = buffer.vertices_2d;
         bufferUpdateParams.vertexSize = sizeof(Layout_Vec2Color4B) * buffer.vertices_2d_head;
-        bufferUpdateParams.indexData = &buffer.indices_2d;
+        bufferUpdateParams.indexData = buffer.indices_2d;
         bufferUpdateParams.indexSize = indexCount * sizeof(u32);
         bufferUpdateParams.indexCount = indexCount;
         Driver::update_indexed_vertex_buffer(buffer.orthoVertex, bufferUpdateParams);
