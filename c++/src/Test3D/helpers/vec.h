@@ -9,9 +9,9 @@
 #define VEC2_FORMAT(format) "(" format ", " format ")"
 #define VEC3_FORMAT(format) "(" format ", " format ", " format ")"
 #define VEC4_FORMAT(format) "(" format ", " format ", " format ", " format ")"
-#define VEC2_PARAMS(v) v.x, v.y
-#define VEC3_PARAMS(v) v.x, v.y, v.z
-#define VEC4_PARAMS(v) v.x, v.y, v.z, v.w
+#define VEC2_PARAMS(v) (v).x, (v).y
+#define VEC3_PARAMS(v) (v).x, (v).y, (v).z
+#define VEC4_PARAMS(v) (v).x, (v).y, (v).z, (v).w
 
 template <typename _T>
 struct Vector2 {

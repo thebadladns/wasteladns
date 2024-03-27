@@ -3,6 +3,17 @@
 
 #include "gameplay.h"
 
+struct Scene_ModelLoadData {
+    const char* path;
+    Vec3 origin;
+    float scale;
+};
+// from blender: export fbx -> Apply Scalings: FBX All -> Forward: the one in Blender -> Use Space Transform: yes 
+const Scene_ModelLoadData assets[] = {
+      { "assets/meshes/boar.fbx", {5.f, 10.f, 2.30885f}, 1.f }
+    , { "assets/meshes/bird.fbx", {1.f, 3.f, 2.23879f}, 1.f }
+};
+
 namespace Game
 {
     struct Time {
@@ -52,12 +63,12 @@ namespace Game
         Transform localTransform;
     };
     struct RenderScene {
-        RenderItemModel<Renderer::Layout_Vec3Color4B> inputMeshGroupBuffer;
+        tinystl::vector<RenderItemModel<Renderer::Layout_Vec3Color4B>> inputMeshGroupBuffers;
         RenderItemModel<Renderer::Layout_Vec3> inputMeshUnlitGroupBuffer;
         RenderItemModel<Renderer::Layout_Vec3> untexturedCubeGroupBuffer;
         RenderItemTexturedGeo texturedCubeGroupBuffer;
         Renderer::Driver::RscCBuffer cbuffers[Renderer::Layout_CBuffer_3DScene::Buffers::Count];
-        Renderer::Driver::RscRasterizerState rasterizerStateFill, rasterizerStateLine, rasterizerStateFillCulledBack;
+        Renderer::Driver::RscRasterizerState rasterizerStateFill, rasterizerStateLine;
         Renderer::Driver::RscBlendState blendStateOn;
         Renderer::Driver::RscBlendState blendStateOff;
         Renderer::Driver::RscMainRenderTarget mainRenderTarget;
@@ -166,7 +177,6 @@ namespace Game
             // rasterizer states
             Renderer::Driver::create_blend_state(rscene.blendStateOn, { true });
             Renderer::Driver::create_RS(rscene.rasterizerStateFill, { Renderer::Driver::RasterizerFillMode::Fill, Renderer::Driver::RasterizerCullMode::CullBack });
-            Renderer::Driver::create_RS(rscene.rasterizerStateFillCulledBack, { Renderer::Driver::RasterizerFillMode::Fill, Renderer::Driver::RasterizerCullMode::CullFront });
             Renderer::Driver::create_RS(rscene.rasterizerStateLine, { Renderer::Driver::RasterizerFillMode::Line, Renderer::Driver::RasterizerCullMode::CullNone });
 
             // cbuffers
@@ -206,34 +216,21 @@ namespace Game
                 Renderer::create_shader_from_technique(rscene.sceneInstancedShader, params);
             }
 
-            // input mesh vertex buffer
+            // input mesh vertex buffers
             {
-                {
-                    auto& r = rscene.inputMeshGroupBuffer;
+                for (const Scene_ModelLoadData& asset : assets) {
+                    RenderItemModel<Renderer::Layout_Vec3Color4B> r;
                     Math::identity4x4(r.transform);
-                    const float scale = 1.f;
                     Math::identity4x4(r.localTransform);
-                    r.localTransform.matrix.col0.x *= scale;
-                    r.localTransform.matrix.col1.y *= -scale;
-                    r.localTransform.matrix.col2.z *= scale;
-                    // reverse culling, since we are inverting the model's y
-                    r.rasterizerState = rscene.rasterizerStateFillCulledBack;
+                    r.localTransform.matrix.col0.x *= asset.scale;
+                    r.localTransform.matrix.col1.y *= asset.scale;
+                    r.localTransform.matrix.col2.z *= asset.scale;
+                    r.transform.pos = asset.origin;
+                    r.rasterizerState = rscene.rasterizerStateFill;
                     r.groupColor = Col(0.3f, 0.3f, 0.3f, 1.f);
-                    Renderer::FBX::load(r.buffer, "assets/meshes/boar.fbx");
-                }
+                    Renderer::FBX::load(r.buffer, asset.path);
 
-                {
-                    auto& r = rscene.inputMeshUnlitGroupBuffer;
-                    Math::identity4x4(r.transform);
-                    const float scale = 1.f;
-                    Math::identity4x4(r.localTransform);
-                    r.localTransform.matrix.col0.x *= scale;
-                    r.localTransform.matrix.col1.y *= -scale;
-                    r.localTransform.matrix.col2.z *= scale;
-                    // reverse culling, since we are inverting the model's y
-                    r.rasterizerState = rscene.rasterizerStateLine;
-                    r.groupColor = Col(1.f, 1.f, 1.f, 1.f);
-                    Renderer::FBX::load(r.buffer, "assets/meshes/boar.fbx");
+                    rscene.inputMeshGroupBuffers.push_back(r);
                 }
             }
 
@@ -261,7 +258,7 @@ namespace Game
         game.player = {};
         {
             Math::identity4x4(game.player.transform);
-            game.player.transform.pos = Vec3(5.f, 10.f, 0.f);
+            game.player.transform = game.renderMgr.renderScene.inputMeshGroupBuffers[0].transform;
         }
 
         game.cameraMgr = {};
@@ -271,7 +268,7 @@ namespace Game
             mgr.activeCam = &cam;
 
             mgr.orbitCamera.offset = Vec3(0.f, -100.f, 0.f);
-            mgr.orbitCamera.eulers = Vec3(0.f, 0.f, 0.f);
+            mgr.orbitCamera.eulers = Vec3(45.f * Math::d2r<f32>, 0.f, -25.f * Math::d2r<f32>);
             mgr.orbitCamera.scale = 1.f;
             mgr.orbitCamera.origin = Vec3(0.f, 0.f, 0.f);
         }
@@ -334,7 +331,7 @@ namespace Game
             {
                 Gameplay::Movement::process(game.player.control, keyboard, { Input::UP, Input::DOWN, Input::LEFT, Input::RIGHT }, dt);
                 Gameplay::Movement::process_cameraRelative(game.player.transform, game.player.movementController, game.player.control, activeCam->transform, dt);
-                game.renderMgr.renderScene.inputMeshGroupBuffer.transform = game.player.transform;
+                game.renderMgr.renderScene.inputMeshGroupBuffers[0].transform = game.player.transform;
             }
 
             // camera update
@@ -370,17 +367,18 @@ namespace Game
 
                 // mesh
                 {
-                    const auto& r = rscene.inputMeshGroupBuffer;
-                    Renderer::Layout_CBuffer_3DScene::GroupData buffer;
-                    buffer.worldMatrix = Math::mult(r.transform.matrix, r.localTransform.matrix);
-                    buffer.groupColor = r.groupColor.RGBAv4();
-                    Renderer::Driver::update_cbuffer(rscene.cbuffers[Renderer::Layout_CBuffer_3DScene::Buffers::GroupData], buffer);
+                    for (const auto& r : rscene.inputMeshGroupBuffers) {
+                        Renderer::Layout_CBuffer_3DScene::GroupData buffer;
+                        buffer.worldMatrix = Math::mult(r.transform.matrix, r.localTransform.matrix);
+                        buffer.groupColor = r.groupColor.RGBAv4();
+                        Renderer::Driver::update_cbuffer(rscene.cbuffers[Renderer::Layout_CBuffer_3DScene::Buffers::GroupData], buffer);
 
-                    Renderer::Driver::bind_cbuffers(rscene.cbuffers, Renderer::Layout_CBuffer_3DScene::Buffers::Count, { true, false });
-                    Renderer::Driver::bind_shader(rscene.sceneShader);
-                    Renderer::Driver::bind_RS(r.rasterizerState);
-                    Renderer::Driver::bind_indexed_vertex_buffer(r.buffer);
-                    Renderer::Driver::draw_indexed_vertex_buffer(r.buffer);
+                        Renderer::Driver::bind_cbuffers(rscene.cbuffers, Renderer::Layout_CBuffer_3DScene::Buffers::Count, { true, false });
+                        Renderer::Driver::bind_shader(rscene.sceneShader);
+                        Renderer::Driver::bind_RS(r.rasterizerState);
+                        Renderer::Driver::bind_indexed_vertex_buffer(r.buffer);
+                        Renderer::Driver::draw_indexed_vertex_buffer(r.buffer);
+                    }
                 }
                 {
                     const auto& r = rscene.inputMeshUnlitGroupBuffer;
@@ -436,7 +434,7 @@ namespace Game
                         for (u32 i = begin; i < end; i++) {
                             Transform t;
                             Math::identity4x4(t);
-                            t.pos = Math::add(rscene.inputMeshGroupBuffer.transform.pos, Math::scale(rscene.inputMeshGroupBuffer.transform.front, -5.f * i));
+                            t.pos = Math::add(rscene.inputMeshGroupBuffers[0].transform.pos, Math::scale(rscene.inputMeshGroupBuffers[0].transform.front, -5.f * i));
                             t.matrix.col0.x = 0.2f;
                             t.matrix.col1.y = 0.2f;
                             t.matrix.col2.z = 0.2f;
@@ -464,6 +462,24 @@ namespace Game
                     Immediate::segment(mgr.immediateBuffer, pos, Math::add(pos, Math::scale(Vec3(1.f, 0.f, 0.f), axisSize)), axisX);
                     Immediate::segment(mgr.immediateBuffer, pos, Math::add(pos, Math::scale(Vec3(0.f, 1.f, 0.f), axisSize)), axisY);
                     Immediate::segment(mgr.immediateBuffer, pos, Math::add(pos, Math::scale(Vec3(0.f, 0.f, 1.f), axisSize)), axisZ);
+
+                    const f32 thickness = 0.1f;
+                    const u32 steps = 10;
+                    const f32 spacing = 1.f / (f32)steps;
+                    for (int i = 1; i <= steps; i++) {
+                        Immediate::segment(mgr.immediateBuffer, 
+                              Math::add(pos, Vec3(spacing * i, 0.f, -thickness))
+                            , Math::add(pos, Vec3(spacing * i, 0.f, thickness))
+                            , axisX);
+                        Immediate::segment(mgr.immediateBuffer,
+                            Math::add(pos, Vec3(0.f, spacing * i, -thickness))
+                            , Math::add(pos, Vec3(0.f, spacing * i, thickness))
+                            , axisY);
+                        Immediate::segment(mgr.immediateBuffer,
+                            Math::add(pos, Vec3(-thickness, thickness, spacing * i))
+                            , Math::add(pos, Vec3(thickness, -thickness, spacing * i))
+                            , axisZ);
+                    }
                 }
                 // Some debug decoration
                 if (game.debugVis.help)
@@ -485,6 +501,11 @@ namespace Game
                     textParams.color = keyboard.pressed(Input::TOGGLE_HELP) ? activeCol : defaultCol;
                     Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParams, "H to hide");
                     textParams.pos.y -= 15.f;
+                    {
+                        Vec3 eulers_deg = Math::scale(game.cameraMgr.orbitCamera.eulers, Math::r2d<f32>);
+                        Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParams, "Camera eulers: " VEC3_FORMAT("% .3f"), VEC3_PARAMS(eulers_deg));
+                        textParams.pos.y -= 15.f;
+                    }
                     Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParams, "Arena end of frame max: %lu bytes", game.debugVis.arena_maxEOF);
                     textParams.pos.y -= 15.f;
                     Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParams, "Arena highmark: %lu bytes", game.debugVis.arena_highmark );

@@ -255,6 +255,7 @@ namespace Driver {
         glPolygonMode(GL_FRONT_AND_BACK, rs.fillMode);
         glEnable(GL_CULL_FACE);
         glCullFace(rs.cullFace);
+        glFrontFace(GL_CW); // match dx
     }
     
     template <typename _layout>

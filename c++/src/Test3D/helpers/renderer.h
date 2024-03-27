@@ -224,14 +224,14 @@ namespace Renderer {
 
         u16* i = c.indices;
 
-        i[0] = 0; i[1] = 1; i[2] = 2; i[3] = 3; i[4] = 0; i[5] = 2;             // +y tris
-        i[6] = 4; i[7] = 5; i[8] = 6; i[9] = 7; i[10] = 4; i[11] = 6;           // -y tris
+		i[0] = 2; i[1] = 1; i[2] = 0; i[3] = 2; i[4] = 0; i[5] = 3;             // +y tris
+		i[6] = 6; i[7] = 5; i[8] = 4; i[9] = 6; i[10] = 4; i[11] = 7;           // -y tris
 
-        i[12] = 8; i[13] = 9; i[14] = 10; i[15] = 11; i[16] = 8; i[17] = 10;    // +x tris
-        i[18] = 12; i[19] = 13; i[20] = 14; i[21] = 15; i[22] = 12; i[23] = 14; // -x tris
+		i[12] = 10; i[13] = 9; i[14] = 8; i[15] = 10; i[16] = 8; i[17] = 11;    // +x tris
+		i[18] = 14; i[19] = 13; i[20] = 12; i[21] = 14; i[22] = 12; i[23] = 15; // -x tris
 
-        i[24] = 16; i[25] = 17; i[26] = 18; i[27] = 19; i[28] = 16; i[29] = 18; // +z tris
-        i[30] = 20; i[31] = 21; i[32] = 22; i[33] = 23; i[34] = 20; i[35] = 22; // -z tris
+		i[24] = 18; i[25] = 17; i[26] = 16; i[27] = 18; i[28] = 16; i[29] = 19; // +z tris
+		i[30] = 22; i[31] = 21; i[32] = 20; i[33] = 22; i[34] = 20; i[35] = 23; // -z tris
     }
 	void create_untextured_cube_coords(UntexturedCube& c, const CubeCreateParams& params) {
 
@@ -252,14 +252,14 @@ namespace Renderer {
 
 		u16* i = c.indices;
 
-		i[0] = 0; i[1] = 1; i[2] = 2; i[3] = 3; i[4] = 0; i[5] = 2;             // +y tris
-		i[6] = 4; i[7] = 5; i[8] = 6; i[9] = 7; i[10] = 4; i[11] = 6;           // -y tris
+		i[0] = 2; i[1] = 1; i[2] = 0; i[3] = 2; i[4] = 0; i[5] = 3;             // +y tris
+		i[6] = 6; i[7] = 5; i[8] = 4; i[9] = 6; i[10] = 4; i[11] = 7;           // -y tris
 
-		i[12] = 8; i[13] = 9; i[14] = 10; i[15] = 11; i[16] = 8; i[17] = 10;    // +x tris
-		i[18] = 12; i[19] = 13; i[20] = 14; i[21] = 15; i[22] = 12; i[23] = 14; // -x tris
+		i[12] = 10; i[13] = 9; i[14] = 8; i[15] = 10; i[16] = 8; i[17] = 11;    // +x tris
+		i[18] = 14; i[19] = 13; i[20] = 12; i[21] = 14; i[22] = 12; i[23] = 15; // -x tris
 
-		i[24] = 16; i[25] = 17; i[26] = 18; i[27] = 19; i[28] = 16; i[29] = 18; // +z tris
-		i[30] = 20; i[31] = 21; i[32] = 22; i[33] = 23; i[34] = 20; i[35] = 22; // -z tris
+		i[24] = 18; i[25] = 17; i[26] = 16; i[27] = 18; i[28] = 16; i[29] = 19; // +z tris
+		i[30] = 22; i[31] = 21; i[32] = 20; i[33] = 22; i[34] = 20; i[35] = 23; // -z tris
 	}
 };
 
@@ -514,11 +514,17 @@ namespace FBX {
                 Col32 color(c.x, c.y, c.z, c.w);
                 vertices[mesh.vertex_indices[index]].color = color.ABGR();
             }
+        } else {
+            for (size_t index = 0; index < mesh.num_indices; index++) {
+                Col32 color(1.f, 1.f, 1.f, 0.5f);
+                vertices[mesh.vertex_indices[index]].color = color.ABGR();
+            }
         }
     }
     template <typename _vertexLayout>
     void load(Driver::RscIndexedBuffer<_vertexLayout>& rscBuffer, const char* path) {
         ufbx_load_opts opts = {};
+        opts.target_axes = { UFBX_COORDINATE_AXIS_POSITIVE_X, UFBX_COORDINATE_AXIS_POSITIVE_Z, UFBX_COORDINATE_AXIS_POSITIVE_Y };
         opts.allow_null_material = true;
         ufbx_error error;
         ufbx_scene* scene = ufbx_load_file(path, &opts, &error);
@@ -535,15 +541,28 @@ namespace FBX {
             for (size_t i = 0; i < scene->meshes.count; i++) {
                 ufbx_mesh& mesh = *scene->meshes.data[i];
 
-                for (size_t i = 0; i < mesh.num_vertices; i++) {
-                    _vertexLayout vertex;
-                    extract_vertex(vertex, mesh.vertices[i]);
-                    vertices.push_back(vertex);
+                {
+                    // Extract vertices from this mesh and flatten any transform trees
+                    // This assumes there's only one instance of this mesh, we don't support more at the moment
+                    assert(mesh.instances.count == 1);
+                    const ufbx_matrix& m = mesh.instances.data[0]->geometry_to_world;
+                    for (size_t v = 0; v < mesh.num_vertices; v++) {
+                        _vertexLayout vertex;
+
+                        ufbx_vec3 v_fbx_ws;
+                        const ufbx_vec3& v_fbx_ls = mesh.vertices[v];
+                        v_fbx_ws.x = v_fbx_ls.x * m.m00 + v_fbx_ls.y * m.m01 + v_fbx_ls.z * m.m02 + m.m03;
+                        v_fbx_ws.y = v_fbx_ls.x * m.m10 + v_fbx_ls.y * m.m11 + v_fbx_ls.z * m.m12 + m.m13;
+                        v_fbx_ws.z = v_fbx_ls.x * m.m20 + v_fbx_ls.y * m.m21 + v_fbx_ls.z * m.m22 + m.m23;
+
+                        extract_vertex(vertex, v_fbx_ws);
+                        vertices.push_back(vertex);
+                    }
                 }
 
                 // can't copy the face indexes directly, need to de-triangulate
-                for (size_t i = 0; i < mesh.num_faces; i++) {
-                    ufbx_face& face = mesh.faces[i];
+                for (size_t f = 0; f < mesh.num_faces; f++) {
+                    ufbx_face& face = mesh.faces[f];
                     const u32 maxTriIndices = 32;
                     u32 triIndices[maxTriIndices];
                     u32 numTris = ufbx_triangulate_face(triIndices, maxTriIndices, &mesh, face);
@@ -553,8 +572,10 @@ namespace FBX {
                         indices.push_back(vertexIndex + vertexOffset);
                     }
                 }
+                // load vertex data (uv coords, vertex colors, etc)
                 _vertexLayout* meshFirstVertex = &vertices[vertexOffset];
                 extract_vertex_attrib(meshFirstVertex, mesh);
+
                 vertexOffset += (u32)mesh.num_vertices;
             }
 

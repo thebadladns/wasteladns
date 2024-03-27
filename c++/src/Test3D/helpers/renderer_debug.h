@@ -195,19 +195,21 @@ namespace Immediate
         color[2] = params.color.getBu();
         color[3] = params.color.getAu();
         u8* vertexBuffer = &buffer.charVertexMemory[buffer.charVertexIndex];
+        // negate y, since our (0,0) is top left, stb's is bottom left
         u32 quadCount = stb_easy_font_print(params.pos.x, -params.pos.y, params.scale, text, color, vertexBuffer, kMaxCharVertexCount - buffer.charVertexIndex);
         buffer.charVertexIndex += quadCount * 4 * sizeof(Layout_Vec2Color4B);
 
+        // stb uses ccw winding, but we are negating the y, so it matches our cw winding
         for(u32 i = 0; i < quadCount; i++) {
             const u32 vertexIndex = vertexCount + i * 4;
             const u32 indexIndex = indexCount + i * 6;
-            buffer.charIndexVertexMemory[indexIndex] = vertexIndex+3;
-            buffer.charIndexVertexMemory[indexIndex+1] = vertexIndex+2;
-            buffer.charIndexVertexMemory[indexIndex+2] = vertexIndex+1;
+            buffer.charIndexVertexMemory[indexIndex] = vertexIndex + 1;
+            buffer.charIndexVertexMemory[indexIndex+1] = vertexIndex + 2;
+            buffer.charIndexVertexMemory[indexIndex+2] = vertexIndex + 3;
 
-            buffer.charIndexVertexMemory[indexIndex+3] = vertexIndex+1;
-            buffer.charIndexVertexMemory[indexIndex+4] = vertexIndex+0;
-            buffer.charIndexVertexMemory[indexIndex+5] = vertexIndex+3;
+            buffer.charIndexVertexMemory[indexIndex+3] = vertexIndex + 3;
+            buffer.charIndexVertexMemory[indexIndex+4] = vertexIndex + 0;
+            buffer.charIndexVertexMemory[indexIndex+5] = vertexIndex + 1;
         }
     }
 
