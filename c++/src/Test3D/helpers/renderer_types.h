@@ -11,6 +11,7 @@ namespace Renderer {
         struct RscTexture;
         struct RscBlendState;
         struct RscRasterizerState;
+        struct RscDepthState;
         template <typename _vertexLayout, typename _cbufferLayout>
         struct RscVertexShader;
         struct RscPixelShader;

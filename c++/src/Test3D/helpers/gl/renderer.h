@@ -257,6 +257,20 @@ namespace Driver {
         glCullFace(rs.cullFace);
         glFrontFace(GL_CW); // match dx
     }
+
+    void create_DS(RscDepthState& ds, const DepthStateParams& params) {
+        ds.enable = params.enable;
+        ds.func = (GLenum) params.func;
+    }
+    void bind_DS(const RscDepthState ds) {
+        if (ds.enable) {
+            glEnable(GL_DEPTH_TEST);
+            glDepthFunc(ds.func);
+        }
+        else {
+            glDisable(GL_DEPTH_TEST);
+        }
+    }
     
     template <typename _layout>
     void create_vertex_buffer(RscBuffer<_layout>& t, const BufferParams& params) {

@@ -340,10 +340,17 @@ namespace Driver {
 
     struct RasterizerStateParams {
         RasterizerFillMode::Enum fill;
-         RasterizerCullMode::Enum cull;
+        RasterizerCullMode::Enum cull;
     };
     void create_RS(RscRasterizerState&, const RasterizerStateParams&);
     void bind_RS(const RscRasterizerState rs);
+
+    struct DepthStateParams {
+        bool enable;
+        DepthFunc::Enum func;
+    };
+    void create_DS(RscDepthState&, const DepthStateParams&);
+    void bind_DS(const RscDepthState rs);
 
     struct BufferParams {
         void* vertexData;

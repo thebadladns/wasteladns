@@ -16,27 +16,29 @@ namespace Renderer
 {
 namespace Immediate
 {
-    constexpr u32 kMaxVertexCount = 1 << 12;
-    constexpr u32 kMaxCharVertexCount = 1 << 16;
-    // Chars vertex buffer stores quad: per 4 vertex quad, we store 6 indexes (2 tris) = 6 / 4 = 3 / 2
-    constexpr u32 vertexSizeToIndexCount(const u32 count) { return 3 * count / (2 * sizeof(Layout_Vec2Color4B)); }
+    constexpr u32 max_3d_vertices = 1 << 12;
+    constexpr u32 max_2d_vertices = 1 << 16;
+    // 2d vertices are stored in quads: per 4 vertex quad, we store 6 indexes (2 tris) = 6 / 4 = 3 / 2
+    constexpr u32 vertexSizeToIndexCount(const u32 count) { return 3 * count / 2; }
     
     struct Buffer {
-        Layout_Vec3Color4B vertexMemory[kMaxVertexCount];
+        Layout_Vec3Color4B vertices_3d[max_3d_vertices];
+        Layout_Vec2Color4B vertices_2d[max_2d_vertices];
+        u32 indices_2d[ vertexSizeToIndexCount(max_2d_vertices) ];
         
-        u8 charVertexMemory[kMaxCharVertexCount];
-        u32 charIndexVertexMemory[ vertexSizeToIndexCount(kMaxCharVertexCount) ];
+        //u8 charVertexMemory[kMaxCharVertexCount];
+        //u32 vertexMemory_2d[ vertexSizeToIndexCount(kMaxCharVertexCount) ];
         
         Driver::RscBuffer<Layout_Vec3Color4B> perspVertex;
         Driver::RscIndexedBuffer<Layout_Vec2Color4B> orthoVertex;
         Driver::RscShaderSet<Layout_Vec3Color4B, Layout_CBuffer_DebugScene::Buffers> shaderSetPersp;
         Driver::RscShaderSet<Layout_Vec2Color4B, Layout_CBuffer_DebugScene::Buffers> shaderSetOrtho;
         Driver::RscCBuffer cbuffers[Layout_CBuffer_DebugScene::Buffers::Count];
-        Driver::RscRasterizerState orthoRasterizerState;
+        Driver::RscRasterizerState rasterizerState;
+        Driver::RscDepthState orthoDepthState, perspDepthState;
         
-        u32 vertexIndex;
-        u32 vertexSize;
-        u32 charVertexIndex;
+        u32 vertices_3d_head;
+        u32 vertices_2d_head;
 
         u32 vertexBufferIndex;
         u32 layoutBufferIndex;
@@ -55,9 +57,8 @@ namespace Immediate
     };
     
     void clear(Buffer& buffer) {
-        buffer.vertexIndex = 0;
-        buffer.vertexSize = 0;
-        buffer.charVertexIndex = 0;
+        buffer.vertices_3d_head = 0;
+        buffer.vertices_2d_head = 0;
     }
     
     void segment(Buffer& buffer, const Vec3& v1, const Vec3& v2, const Col color) {
@@ -65,39 +66,31 @@ namespace Immediate
         // Too many vertex pushed during immediate mode
         // Either bump Buffer::kMaxVertexCount or re-implement
         // complex primitives to avoid vertex usage
-        assert(buffer.vertexIndex < kMaxVertexCount);
-        if (buffer.vertexIndex + 2 >= kMaxVertexCount) {
-            buffer.vertexIndex = 0;
-        }
+        assert(buffer.vertices_3d_head + 2 < max_3d_vertices);
         
-        Layout_Vec3Color4B& vertexStart = buffer.vertexMemory[buffer.vertexIndex];
-        Layout_Vec3Color4B& vertexEnd = buffer.vertexMemory[buffer.vertexIndex + 1];
-        buffer.vertexIndex = buffer.vertexIndex + 2;
-        buffer.vertexSize = Math::min(buffer.vertexSize + 2, kMaxVertexCount);
+        Layout_Vec3Color4B& vertexStart = buffer.vertices_3d[buffer.vertices_3d_head];
+        Layout_Vec3Color4B& vertexEnd = buffer.vertices_3d[buffer.vertices_3d_head + 1];
+        buffer.vertices_3d_head = buffer.vertices_3d_head + 2;
 
         vertexStart.pos = v1;
         vertexStart.color = color.ABGR();
         vertexEnd.pos = v2;
         vertexEnd.color = color.ABGR();
     }
-    
     void openSegment(Buffer& buffer, const Vec3& start, const Vec3& dir, Col color) {
         const f32 segmentLength = 10000.f;
         const Vec3 end = Math::add(start, Math::scale(dir, segmentLength));
         segment(buffer, start, end, color);
     }
-    
     void ray(Buffer& buffer, const Vec3& start, const Vec3& dir, Col color) {
         openSegment(buffer, start, dir, color);
     }
-    
     void line(Buffer& buffer, const Vec3& pos, const Vec3& dir, Col color) {
         const f32 extents = 10000.f;
         const Vec3 start = Math::subtract(pos, Math::scale(dir, extents));
         const Vec3 end = Math::add(pos, Math::scale(dir, extents));
         segment(buffer, start, end, color);
     }
-    
     void poly(Buffer& buffer, const Vec3* vertices, const u8 count, Col color) {
         for (u8 i = 0; i < count; i++) {
             const Vec3 prev = vertices[i];
@@ -105,7 +98,6 @@ namespace Immediate
             segment(buffer, prev, next, color);
         }
     }
-
     void box(Buffer& buffer, const Vec3 min, const Vec3 max, Col color) {
 
         Vec3 leftNearBottom(min.x, min.y, min.z);
@@ -136,7 +128,6 @@ namespace Immediate
         segment(buffer, leftNearBottom, rightNearBottom, color);
         segment(buffer, leftFarBottom, rightFarBottom, color);
     }
-    
     void circle(Buffer& buffer, const Vec3& center, const Vec3& normal, const f32 radius, const Col color) {
         Transform33 m = Math::fromUp(normal);
         
@@ -151,7 +142,6 @@ namespace Immediate
         }
         poly(buffer, vertices, kVertexCount, color);
     }
-    
     void sphere(Buffer& buffer, const Vec3& center, const f32 radius, const Col color) {
         
         static constexpr u32 kSectionCount = 2;
@@ -175,41 +165,64 @@ namespace Immediate
         }
     }
     
+    void box_2d(Buffer& buffer, const Vec2 min, const Vec2 max, Col color) {
+
+        u32 vertexStart = buffer.vertices_2d_head;
+        Layout_Vec2Color4B& bottomLeft = buffer.vertices_2d[vertexStart];
+        bottomLeft.pos = { min.x, max.y };
+        Layout_Vec2Color4B& topLeft = buffer.vertices_2d[vertexStart + 1];
+        topLeft.pos = { min.x, min.y };
+        Layout_Vec2Color4B& topRight = buffer.vertices_2d[vertexStart + 2];
+        topRight.pos = { max.x, min.y };
+        Layout_Vec2Color4B& bottomRigth = buffer.vertices_2d[vertexStart + 3];
+        bottomRigth.pos = { max.x, max.y };
+        
+        u32 indexStart = vertexSizeToIndexCount(vertexStart);
+        buffer.indices_2d[indexStart + 0] = vertexStart + 2;
+        buffer.indices_2d[indexStart + 1] = vertexStart + 1;
+        buffer.indices_2d[indexStart + 2] = vertexStart + 0;
+        buffer.indices_2d[indexStart + 3] = vertexStart + 0;
+        buffer.indices_2d[indexStart + 4] = vertexStart + 3;
+        buffer.indices_2d[indexStart + 5] = vertexStart + 2;
+        
+        buffer.vertices_2d_head += 4;
+        
+        bottomLeft.color = color.ABGR();
+        topLeft.color = color.ABGR();
+        topRight.color = color.ABGR();
+        bottomRigth.color = color.ABGR();
+    }
 #ifdef __WASTELADNS_DEBUG_TEXT__
     void text2d(Buffer& buffer, const TextParams& params, const char* format, va_list argList) {
         
         char text[256];
         Platform::format_va(text, sizeof(text), format, argList);
-
-        // Too many chars pushed during immediate mode
-        // Bump Buffer::kMaxCharVertexCount
-        // stb prevents array overflow so this assert is likely to never hit
-//        assert(buffer.charVertexIndex < kMaxCharVertexCount);
         
-        u32 vertexCount = buffer.charVertexIndex / sizeof(Layout_Vec2Color4B);
-        u32 indexCount = vertexSizeToIndexCount(buffer.charVertexIndex);
+        u32 vertexCount = buffer.vertices_2d_head;
+        u32 indexCount = vertexSizeToIndexCount(buffer.vertices_2d_head);
         
         unsigned char color[4];
         color[0] = params.color.getRu();
         color[1] = params.color.getGu();
         color[2] = params.color.getBu();
         color[3] = params.color.getAu();
-        u8* vertexBuffer = &buffer.charVertexMemory[buffer.charVertexIndex];
+        u8* vertexBuffer = (u8*) &buffer.vertices_2d[buffer.vertices_2d_head];
+        s32 vertexBufferSize = (max_2d_vertices - buffer.vertices_2d_head) * sizeof(Layout_Vec2Color4B);
         // negate y, since our (0,0) is top left, stb's is bottom left
-        u32 quadCount = stb_easy_font_print(params.pos.x, -params.pos.y, params.scale, text, color, vertexBuffer, kMaxCharVertexCount - buffer.charVertexIndex);
-        buffer.charVertexIndex += quadCount * 4 * sizeof(Layout_Vec2Color4B);
+        u32 quadCount = stb_easy_font_print(params.pos.x, -params.pos.y, params.scale, text, color, vertexBuffer, vertexBufferSize);
+        buffer.vertices_2d_head += quadCount * 4;
 
         // stb uses ccw winding, but we are negating the y, so it matches our cw winding
         for(u32 i = 0; i < quadCount; i++) {
             const u32 vertexIndex = vertexCount + i * 4;
             const u32 indexIndex = indexCount + i * 6;
-            buffer.charIndexVertexMemory[indexIndex] = vertexIndex + 1;
-            buffer.charIndexVertexMemory[indexIndex+1] = vertexIndex + 2;
-            buffer.charIndexVertexMemory[indexIndex+2] = vertexIndex + 3;
+            buffer.indices_2d[indexIndex] = vertexIndex + 1;
+            buffer.indices_2d[indexIndex+1] = vertexIndex + 2;
+            buffer.indices_2d[indexIndex+2] = vertexIndex + 3;
 
-            buffer.charIndexVertexMemory[indexIndex+3] = vertexIndex + 3;
-            buffer.charIndexVertexMemory[indexIndex+4] = vertexIndex + 0;
-            buffer.charIndexVertexMemory[indexIndex+5] = vertexIndex + 1;
+            buffer.indices_2d[indexIndex+3] = vertexIndex + 3;
+            buffer.indices_2d[indexIndex+4] = vertexIndex + 0;
+            buffer.indices_2d[indexIndex+5] = vertexIndex + 1;
         }
     }
 
@@ -240,7 +253,7 @@ namespace Immediate
         {
             Renderer::Driver::BufferParams bufferParams;
             bufferParams.vertexData = nullptr;
-            bufferParams.vertexSize = sizeof(Buffer::vertexMemory);
+            bufferParams.vertexSize = sizeof(Buffer::vertices_3d);
             bufferParams.memoryUsage = Renderer::Driver::BufferMemoryUsage::CPU;
             bufferParams.accessType = Renderer::Driver::BufferAccessType::CPU;
             bufferParams.type = Renderer::Driver::BufferTopologyType::Lines;
@@ -252,8 +265,8 @@ namespace Immediate
             Renderer::Driver::IndexedBufferParams bufferParams;
             bufferParams.vertexData = nullptr;
             bufferParams.indexData = nullptr;
-            bufferParams.vertexSize = sizeof(Buffer::charVertexMemory);
-            bufferParams.indexSize = sizeof(Buffer::charIndexVertexMemory);
+            bufferParams.vertexSize = sizeof(Buffer::vertices_2d);
+            bufferParams.indexSize = sizeof(Buffer::indices_2d);
             bufferParams.memoryUsage = Renderer::Driver::BufferMemoryUsage::CPU;
             bufferParams.accessType = Renderer::Driver::BufferAccessType::CPU;
             bufferParams.indexType = Renderer::Driver::BufferItemType::U32;
@@ -279,15 +292,20 @@ namespace Immediate
             Renderer::create_shader_from_technique(buffer.shaderSetOrtho, params);
         }
         
-        Renderer::Driver::create_RS(buffer.orthoRasterizerState, { Renderer::Driver::RasterizerFillMode::Fill, Renderer::Driver::RasterizerCullMode::CullBack });
+        Renderer::Driver::create_RS(buffer.rasterizerState, { Renderer::Driver::RasterizerFillMode::Fill, Renderer::Driver::RasterizerCullMode::CullBack });
+        Renderer::Driver::create_DS(buffer.orthoDepthState, { false });
+        Renderer::Driver::create_DS(buffer.perspDepthState, { true, Renderer::Driver::DepthFunc::Less });
     }
     
     void present3d(Buffer& buffer, const Mat4& projMatrix, const Mat4& viewMatrix) {
-
+        
+        Renderer::Driver::bind_RS(buffer.rasterizerState);
+        Renderer::Driver::bind_DS(buffer.perspDepthState);
+        
         Driver::BufferUpdateParams bufferUpdateParams;
-        bufferUpdateParams.vertexData = &buffer.vertexMemory;
-        bufferUpdateParams.vertexSize = sizeof(Layout_Vec3Color4B) * buffer.vertexSize;
-        bufferUpdateParams.vertexCount = buffer.vertexSize;
+        bufferUpdateParams.vertexData = &buffer.vertices_3d;
+        bufferUpdateParams.vertexSize = sizeof(Layout_Vec3Color4B) * buffer.vertices_3d_head;
+        bufferUpdateParams.vertexCount = buffer.vertices_3d_head;
         Driver::update_vertex_buffer(buffer.perspVertex, bufferUpdateParams);
 
         Mat4 mvp = Math::mult(projMatrix, viewMatrix);
@@ -301,13 +319,15 @@ namespace Immediate
     
     void present2d(Buffer& buffer, const Mat4& projMatrix) {
         
-        Renderer::Driver::bind_RS(buffer.orthoRasterizerState);
+        Renderer::Driver::bind_RS(buffer.rasterizerState);
+        Renderer::Driver::bind_DS(buffer.orthoDepthState);
 
-        u32 indexCount = vertexSizeToIndexCount(buffer.charVertexIndex);
+
+        u32 indexCount = vertexSizeToIndexCount(buffer.vertices_2d_head);
         Driver::IndexedBufferUpdateParams bufferUpdateParams;
-        bufferUpdateParams.vertexData = &buffer.charVertexMemory;
-        bufferUpdateParams.vertexSize = buffer.charVertexIndex;
-        bufferUpdateParams.indexData = &buffer.charIndexVertexMemory;
+        bufferUpdateParams.vertexData = &buffer.vertices_2d;
+        bufferUpdateParams.vertexSize = sizeof(Layout_Vec2Color4B) * buffer.vertices_2d_head;
+        bufferUpdateParams.indexData = &buffer.indices_2d;
         bufferUpdateParams.indexSize = indexCount * sizeof(u32);
         bufferUpdateParams.indexCount = indexCount;
         Driver::update_indexed_vertex_buffer(buffer.orthoVertex, bufferUpdateParams);

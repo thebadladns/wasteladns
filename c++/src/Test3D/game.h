@@ -69,6 +69,7 @@ namespace Game
         RenderItemTexturedGeo texturedCubeGroupBuffer;
         Renderer::Driver::RscCBuffer cbuffers[Renderer::Layout_CBuffer_3DScene::Buffers::Count];
         Renderer::Driver::RscRasterizerState rasterizerStateFill, rasterizerStateLine;
+        Renderer::Driver::RscDepthState depthStateOn;
         Renderer::Driver::RscBlendState blendStateOn;
         Renderer::Driver::RscBlendState blendStateOff;
         Renderer::Driver::RscMainRenderTarget mainRenderTarget;
@@ -178,6 +179,7 @@ namespace Game
             Renderer::Driver::create_blend_state(rscene.blendStateOn, { true });
             Renderer::Driver::create_RS(rscene.rasterizerStateFill, { Renderer::Driver::RasterizerFillMode::Fill, Renderer::Driver::RasterizerCullMode::CullBack });
             Renderer::Driver::create_RS(rscene.rasterizerStateLine, { Renderer::Driver::RasterizerFillMode::Line, Renderer::Driver::RasterizerCullMode::CullNone });
+            Renderer::Driver::create_DS(rscene.depthStateOn, { true, Renderer::Driver::DepthFunc::Less });
 
             // cbuffers
             Renderer::create_cbuffers_3DScene(rscene.cbuffers);
@@ -362,6 +364,7 @@ namespace Game
 
             {
                 Renderer::Driver::bind_blend_state(rscene.blendStateOn);
+                Renderer::Driver::bind_DS(rscene.depthStateOn);
                 Renderer::Driver::bind_main_RT(rscene.mainRenderTarget);
                 Renderer::Driver::clear_main_RT(rscene.mainRenderTarget, Col(0.f, 0.f, 0.f, 1.f));
 
@@ -506,10 +509,40 @@ namespace Game
                         Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParams, "Camera eulers: " VEC3_FORMAT("% .3f"), VEC3_PARAMS(eulers_deg));
                         textParams.pos.y -= 15.f;
                     }
-                    Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParams, "Arena end of frame max: %lu bytes", game.debugVis.arena_maxEOF);
-                    textParams.pos.y -= 15.f;
-                    Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParams, "Arena highmark: %lu bytes", game.debugVis.arena_highmark );
-                    textParams.pos.y -= 15.f;
+                    
+                    {
+                        const Col arenabaseCol(0.65f, 0.65f, 0.65f, 0.4f);
+                        const Col arenamaxEOFCol(0.35f, 0.95f, 0.8f, 1.f);
+                        const Col arenahighmarkCol(0.95f, 0.35f, 0.8f, 1.f);
+                        
+                        textParams.color = arenamaxEOFCol;
+                        Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParams, "Arena end of frame max: %lu bytes", game.debugVis.arena_maxEOF);
+                        textParams.pos.y -= 15.f;
+                        textParams.color = arenahighmarkCol;
+                        Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParams, "Arena highmark: %lu bytes", game.debugVis.arena_highmark );
+                        textParams.pos.y -= 15.f;
+                        textParams.color = defaultCol;
+                        
+                        const f32 max_barwidth = 150.f;
+                        const f32 barheight = 10.f;
+                        const ptrdiff_t arenaTotal = (ptrdiff_t)Allocator::frameArena.end - (ptrdiff_t)game.memory.frameArenaBuffer;
+                        const f32 arenaHighmark_barwidth = max_barwidth * (game.debugVis.arena_highmark / (f32)arenaTotal);
+                        const f32 arenaMaxEOF_barwidth = max_barwidth * (game.debugVis.arena_maxEOF / (f32)arenaTotal);
+
+                        Renderer::Immediate::box_2d(game.renderMgr.immediateBuffer
+                                                , Vec2(textParams.pos.x, textParams.pos.y - barheight)
+                                                , Vec2(textParams.pos.x + max_barwidth, textParams.pos.y)
+                                                , arenabaseCol);
+                        Renderer::Immediate::box_2d(game.renderMgr.immediateBuffer
+                                                , Vec2(textParams.pos.x, textParams.pos.y - barheight)
+                                                , Vec2(textParams.pos.x + arenaHighmark_barwidth, textParams.pos.y)
+                                                , arenahighmarkCol);
+                          Renderer::Immediate::box_2d(game.renderMgr.immediateBuffer
+                                                , Vec2(textParams.pos.x, textParams.pos.y - barheight)
+                                                , Vec2(textParams.pos.x + arenaMaxEOF_barwidth, textParams.pos.y)
+                                                , arenamaxEOFCol);
+                        textParams.pos.y -= barheight + 5.f;
+                    }
 
                     textParams.pos = Vec3(game.renderMgr.orthoProjection.config.right - 60.f, game.renderMgr.orthoProjection.config.top - 15.f, -50);
                     textParams.color = defaultCol;
