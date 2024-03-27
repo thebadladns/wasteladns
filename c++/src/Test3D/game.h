@@ -69,7 +69,7 @@ namespace Game
         RenderItemTexturedGeo texturedCubeGroupBuffer;
         Renderer::Driver::RscCBuffer cbuffers[Renderer::Layout_CBuffer_3DScene::Buffers::Count];
         Renderer::Driver::RscRasterizerState rasterizerStateFill, rasterizerStateLine;
-        Renderer::Driver::RscDepthState depthStateOn;
+        Renderer::Driver::RscDepthStencilState depthStateOn;
         Renderer::Driver::RscBlendState blendStateOn;
         Renderer::Driver::RscBlendState blendStateOff;
         Renderer::Driver::RscMainRenderTarget mainRenderTarget;
@@ -537,7 +537,7 @@ namespace Game
                                                 , Vec2(textParams.pos.x, textParams.pos.y - barheight)
                                                 , Vec2(textParams.pos.x + arenaHighmark_barwidth, textParams.pos.y)
                                                 , arenahighmarkCol);
-                          Renderer::Immediate::box_2d(game.renderMgr.immediateBuffer
+                        Renderer::Immediate::box_2d(game.renderMgr.immediateBuffer
                                                 , Vec2(textParams.pos.x, textParams.pos.y - barheight)
                                                 , Vec2(textParams.pos.x + arenaMaxEOF_barwidth, textParams.pos.y)
                                                 , arenamaxEOFCol);

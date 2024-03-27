@@ -52,17 +52,6 @@ namespace Driver {
 
             // same format as texture, 0 minmap
             d3ddev->CreateDepthStencilView(stencil, nullptr, &rt.depthStencilView);
-
-            ID3D11DepthStencilState* stencilState;
-            D3D11_DEPTH_STENCIL_DESC stencilStateDesc = {};
-            stencilStateDesc.DepthEnable = true;
-            stencilStateDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ALL;
-            stencilStateDesc.DepthFunc = D3D11_COMPARISON_LESS;
-            stencilStateDesc.StencilEnable = false;
-            d3ddev->CreateDepthStencilState(&stencilStateDesc, &stencilState);
-
-            // Todo: eventually this may not belong here
-            d3dcontext->OMSetDepthStencilState(stencilState, 1);
         }
     }
     void clear_main_RT(const RscMainRenderTarget& rt, Col color) {
@@ -340,7 +329,7 @@ namespace Driver {
 
         bs.bs = blendState;
     }
-    void bind_blend_state(const RscBlendState bs) {
+    void bind_blend_state(const RscBlendState& bs) {
         d3dcontext->OMSetBlendState(bs.bs, 0, 0xffffffff);
     }
     
@@ -360,8 +349,22 @@ namespace Driver {
         d3ddev->CreateRasterizerState(&rasterizerDesc, &rasterizerState);
         rs.rs = rasterizerState;
     }
-    void bind_RS(const RscRasterizerState rs) {
+    void bind_RS(const RscRasterizerState& rs) {
         d3dcontext->RSSetState(rs.rs);
+    }
+
+    void create_DS(RscDepthStencilState& ds, const DepthStencilStateParams& params) {
+        ID3D11DepthStencilState* depthStencilState;
+        D3D11_DEPTH_STENCIL_DESC depthStencilStateDesc = {};
+        depthStencilStateDesc.DepthEnable = params.enable;
+        depthStencilStateDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ALL;
+        depthStencilStateDesc.DepthFunc = (D3D11_COMPARISON_FUNC) params.func;
+        depthStencilStateDesc.StencilEnable = false;
+        d3ddev->CreateDepthStencilState(&depthStencilStateDesc, &depthStencilState);
+        ds.ds = depthStencilState;
+    }
+    void bind_DS(const RscDepthStencilState& ds) {
+        d3dcontext->OMSetDepthStencilState(ds.ds, 1);
     }
     
     template <typename _layout>

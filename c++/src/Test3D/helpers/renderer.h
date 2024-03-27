@@ -336,21 +336,21 @@ namespace Driver {
         bool enable;
     };
     void create_blend_state(RscBlendState&, const BlendStateParams&);
-    void bind_blend_state(const RscBlendState bs);
+    void bind_blend_state(const RscBlendState& bs);
 
     struct RasterizerStateParams {
         RasterizerFillMode::Enum fill;
         RasterizerCullMode::Enum cull;
     };
     void create_RS(RscRasterizerState&, const RasterizerStateParams&);
-    void bind_RS(const RscRasterizerState rs);
+    void bind_RS(const RscRasterizerState& rs);
 
-    struct DepthStateParams {
+    struct DepthStencilStateParams {
         bool enable;
         DepthFunc::Enum func;
     };
-    void create_DS(RscDepthState&, const DepthStateParams&);
-    void bind_DS(const RscDepthState rs);
+    void create_DS(RscDepthStencilState&, const DepthStencilStateParams&);
+    void bind_DS(const RscDepthStencilState& ds);
 
     struct BufferParams {
         void* vertexData;

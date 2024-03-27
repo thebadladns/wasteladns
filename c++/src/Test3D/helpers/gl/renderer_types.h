@@ -58,7 +58,7 @@ namespace Driver {
         GLenum cullFace;
     };
 
-    struct RscDepthState {
+    struct RscDepthStencilState {
         bool enable;
         GLenum func;
     };

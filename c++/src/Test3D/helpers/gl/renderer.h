@@ -29,7 +29,6 @@ namespace Driver {
         rt.mask = GL_COLOR_BUFFER_BIT;
         if (params.depth) {
             rt.mask = rt.mask | GL_DEPTH_BUFFER_BIT;
-            glEnable(GL_DEPTH_TEST);
         }
     }
     void clear_main_RT(RscMainRenderTarget& rt, Col color) {
@@ -238,7 +237,7 @@ namespace Driver {
     void create_blend_state(RscBlendState& bs, const BlendStateParams& params) {
         bs.enable = params.enable;
     }
-    void bind_blend_state(const RscBlendState bs) {
+    void bind_blend_state(const RscBlendState& bs) {
         if (bs.enable) {
             glEnable(GL_BLEND);
             glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -251,18 +250,18 @@ namespace Driver {
         rs.fillMode = (GLenum) params.fill;
         rs.cullFace = (GLenum) params.cull;
     }
-    void bind_RS(const RscRasterizerState rs) {
+    void bind_RS(const RscRasterizerState& rs) {
         glPolygonMode(GL_FRONT_AND_BACK, rs.fillMode);
         glEnable(GL_CULL_FACE);
         glCullFace(rs.cullFace);
         glFrontFace(GL_CW); // match dx
     }
 
-    void create_DS(RscDepthState& ds, const DepthStateParams& params) {
+    void create_DS(RscDepthStencilState& ds, const DepthStencilStateParams& params) {
         ds.enable = params.enable;
         ds.func = (GLenum) params.func;
     }
-    void bind_DS(const RscDepthState ds) {
+    void bind_DS(const RscDepthStencilState& ds) {
         if (ds.enable) {
             glEnable(GL_DEPTH_TEST);
             glDepthFunc(ds.func);

@@ -16,6 +16,7 @@ namespace Driver {
     struct TextureFormat { enum Enum { V316 = DXGI_FORMAT_R16G16B16A16_FLOAT }; };
     struct RasterizerFillMode { enum Enum { Fill = D3D11_FILL_SOLID, Line = D3D11_FILL_WIREFRAME }; };
     struct RasterizerCullMode { enum Enum { CullFront = D3D11_CULL_FRONT, CullBack = D3D11_CULL_BACK, CullNone = D3D11_CULL_NONE}; };
+    struct DepthFunc { enum Enum { Less = D3D11_COMPARISON_LESS }; }; // TODO
     struct BufferMemoryUsage { enum Enum { GPU = D3D11_USAGE_IMMUTABLE, CPU = D3D11_USAGE_DYNAMIC }; };
     struct BufferAccessType { enum Enum { GPU = 0, CPU = D3D11_CPU_ACCESS_WRITE }; };
     struct BufferItemType { enum Enum { U16 = DXGI_FORMAT_R16_UINT, U32 = DXGI_FORMAT_R32_UINT }; };
@@ -59,6 +60,10 @@ namespace Driver {
     
     struct RscRasterizerState {
         ID3D11RasterizerState* rs;
+    };
+
+    struct RscDepthStencilState {
+        ID3D11DepthStencilState* ds;
     };
     
     template <typename _layout>

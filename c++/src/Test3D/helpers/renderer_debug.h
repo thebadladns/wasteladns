@@ -17,7 +17,7 @@ namespace Renderer
 namespace Immediate
 {
     constexpr u32 max_3d_vertices = 1 << 12;
-    constexpr u32 max_2d_vertices = 1 << 16;
+    constexpr u32 max_2d_vertices = 1 << 12;
     // 2d vertices are stored in quads: per 4 vertex quad, we store 6 indexes (2 tris) = 6 / 4 = 3 / 2
     constexpr u32 vertexSizeToIndexCount(const u32 count) { return 3 * count / 2; }
     
@@ -26,16 +26,13 @@ namespace Immediate
         Layout_Vec2Color4B vertices_2d[max_2d_vertices];
         u32 indices_2d[ vertexSizeToIndexCount(max_2d_vertices) ];
         
-        //u8 charVertexMemory[kMaxCharVertexCount];
-        //u32 vertexMemory_2d[ vertexSizeToIndexCount(kMaxCharVertexCount) ];
-        
         Driver::RscBuffer<Layout_Vec3Color4B> perspVertex;
         Driver::RscIndexedBuffer<Layout_Vec2Color4B> orthoVertex;
         Driver::RscShaderSet<Layout_Vec3Color4B, Layout_CBuffer_DebugScene::Buffers> shaderSetPersp;
         Driver::RscShaderSet<Layout_Vec2Color4B, Layout_CBuffer_DebugScene::Buffers> shaderSetOrtho;
         Driver::RscCBuffer cbuffers[Layout_CBuffer_DebugScene::Buffers::Count];
         Driver::RscRasterizerState rasterizerState;
-        Driver::RscDepthState orthoDepthState, perspDepthState;
+        Driver::RscDepthStencilState orthoDepthState, perspDepthState;
         
         u32 vertices_3d_head;
         u32 vertices_2d_head;
