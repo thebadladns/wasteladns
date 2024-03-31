@@ -44,7 +44,7 @@
 #define __DEBUGDEF(a) a
 #define __DEBUGEXP(a) \
 do { \
-  (a); \
+  a; \
 } while (0)
 #endif
 

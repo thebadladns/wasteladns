@@ -17,12 +17,15 @@ namespace Renderer
 namespace Immediate
 {
     constexpr u32 max_3d_vertices = 1 << 12;
-    constexpr u32 max_2d_vertices = 1 << 12;
+    constexpr u32 max_2d_vertices = 1 << 14;
     // 2d vertices are stored in quads: per 4 vertex quad, we store 6 indexes (2 tris) = 6 / 4 = 3 / 2
     constexpr u32 vertexSizeToIndexCount(const u32 count) { return 3 * count / 2; }
+    constexpr size_t arena_size =
+          max_3d_vertices * sizeof(Layout_Vec3Color4B)
+        + max_2d_vertices * sizeof(Layout_Vec3Color4B)
+        + vertexSizeToIndexCount(max_2d_vertices) * sizeof(u32);
     
     struct Buffer {
-        Allocator::Arena backing_memory;
         Layout_Vec3Color4B* vertices_3d;
         Layout_Vec2Color4B* vertices_2d;
         u32* indices_2d;
@@ -62,7 +65,7 @@ namespace Immediate
     void segment(Buffer& buffer, const Vec3& v1, const Vec3& v2, const Col color) {
 
         // Too many vertex pushed during immediate mode
-        // Either bump Buffer::kMaxVertexCount or re-implement
+        // Either bump Buffer::vertices_3d_head or re-implement
         // complex primitives to avoid vertex usage
         assert(buffer.vertices_3d_head + 2 < max_3d_vertices);
         
@@ -210,6 +213,8 @@ namespace Immediate
         u32 quadCount = stb_easy_font_print(params.pos.x, -params.pos.y, params.scale, text, color, vertexBuffer, vertexBufferSize);
         buffer.vertices_2d_head += quadCount * 4;
 
+        assert(buffer.vertices_2d_head < max_2d_vertices); // increase max_2d_vertices
+
         // stb uses ccw winding, but we are negating the y, so it matches our cw winding
         for(u32 i = 0; i < quadCount; i++) {
             const u32 vertexIndex = vertexCount + i * 4;
@@ -243,7 +248,7 @@ namespace Immediate
     }
 #endif // __WASTELADNS_DEBUG_TEXT__
     
-    void load(Buffer& buffer) {
+    void load(Buffer& buffer, Allocator::Arena& arena) {
 
         buffer = {};
 
@@ -254,11 +259,9 @@ namespace Immediate
             u32 vertices_3d_size = max_3d_vertices * sizeof(Layout_Vec3Color4B);
             u32 vertices_2d_size = max_2d_vertices * sizeof(Layout_Vec2Color4B);
             u32 indices_2d_size = vertexSizeToIndexCount(max_2d_vertices) * sizeof(u32);
-            u32 memory_size = vertices_3d_size + vertices_2d_size + indices_2d_size;
-            Allocator::init_arena(buffer.backing_memory, memory_size);
-            buffer.vertices_3d = (Layout_Vec3Color4B*)Allocator::alloc_arena(buffer.backing_memory, vertices_3d_size, alignof(Layout_Vec3Color4B));
-            buffer.vertices_2d = (Layout_Vec2Color4B*)Allocator::alloc_arena(buffer.backing_memory, vertices_2d_size, alignof(Layout_Vec2Color4B));
-            buffer.indices_2d = (u32*)Allocator::alloc_arena(buffer.backing_memory, indices_2d_size, alignof(u32));
+            buffer.vertices_3d = (Layout_Vec3Color4B*)Allocator::alloc_arena(arena, vertices_3d_size, alignof(Layout_Vec3Color4B));
+            buffer.vertices_2d = (Layout_Vec2Color4B*)Allocator::alloc_arena(arena, vertices_2d_size, alignof(Layout_Vec2Color4B));
+            buffer.indices_2d = (u32*)Allocator::alloc_arena(arena, indices_2d_size, alignof(u32));
 
             // 3d
             {

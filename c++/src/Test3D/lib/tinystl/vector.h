@@ -37,6 +37,7 @@ namespace tinystl {
 	class vector {
 	public:
 		vector();
+		vector(void* alloc);
 		vector(const vector& other);
 		vector(vector&& other);
 		vector(size_t size);
@@ -102,6 +103,8 @@ namespace tinystl {
 		iterator erase_unordered(iterator where);
 		iterator erase_unordered(iterator first, iterator last);
 
+		void set_alloc(void* alloc);
+
 	private:
 		buffer<T, Alloc> m_buffer;
 	};
@@ -109,6 +112,11 @@ namespace tinystl {
 	template<typename T, typename Alloc>
 	inline vector<T, Alloc>::vector() {
 		buffer_init(&m_buffer);
+	}
+	template<typename T, typename Alloc>
+	inline vector<T, Alloc>::vector(void* alloc) {
+		buffer_init(&m_buffer);
+		buffer_set_alloc(&m_buffer, alloc);
 	}
 
 	template<typename T, typename Alloc>
@@ -327,10 +335,16 @@ namespace tinystl {
 	}
 
 	template<typename T, typename Alloc>
+	inline void vector<T, Alloc>::set_alloc(void* alloc) {
+		buffer_set_alloc(&m_buffer, alloc);
+	}
+
+	template<typename T, typename Alloc>
 	template<typename Param>
 	void vector<T, Alloc>::emplace(typename vector::iterator where, const Param& param) {
 		buffer_insert(&m_buffer, where, &param, &param + 1);
 	}
+
 }
 
 #endif // TINYSTL_VECTOR_H

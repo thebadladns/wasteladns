@@ -101,13 +101,16 @@ namespace Game
         f64 frameHistory[60];
         f64 frameAvg = 0;
         u64 frameHistoryIdx = 0;
-        u64 arena_highmark = 0;
         OverlayMode::Enum overlaymode = OverlayMode::Enum::All;
     };
     #endif
 
     struct Memory {
+        Allocator::Arena scratchArenaRoot; // to be always passed by copy, so it auto-resets
+        __DEBUGDEF(Allocator::Arena imDebugArena;)
         u8* frameArenaBuffer; // used to reset Allocator::frameArena every frame
+        __DEBUGDEF(u8* frameArenaHighmark;)
+        __DEBUGDEF(u8* scratchArenaHighmark;)
     };
 
     struct Instance {
@@ -138,8 +141,12 @@ namespace Game
         config.nextFrame = platform.time.now;
 
         {
-            Allocator::init_arena(Allocator::frameArena, 1 << 16);
+            Allocator::init_arena(Allocator::frameArena, 1 << 20); // 1MB
             game.memory.frameArenaBuffer = Allocator::frameArena.curr;
+            __DEBUGEXP(game.memory.frameArenaHighmark = Allocator::frameArena.curr; Allocator::frameArena.highmark = &game.memory.frameArenaHighmark);
+            Allocator::init_arena(game.memory.scratchArenaRoot, 1 << 20); // 1MB
+            __DEBUGEXP(game.memory.scratchArenaHighmark = game.memory.scratchArenaRoot.curr; game.memory.scratchArenaRoot.highmark = &game.memory.scratchArenaHighmark);
+            __DEBUGEXP(Allocator::init_arena(game.memory.imDebugArena, Renderer::Immediate::arena_size));
         }
 
         // camera set up
@@ -231,7 +238,7 @@ namespace Game
                     r.transform.pos = asset.origin;
                     r.rasterizerState = rscene.rasterizerStateFill;
                     r.groupColor = Col(0.3f, 0.3f, 0.3f, 1.f);
-                    Renderer::FBX::load(r.buffer, asset.path);
+                    Renderer::FBX::load(r.buffer, asset.path, game.memory.scratchArenaRoot);
 
                     rscene.inputMeshGroupBuffers.push_back(r);
                 }
@@ -255,7 +262,7 @@ namespace Game
                 Math::identity4x4(textured.localTransform);
             }
 
-            __DEBUGEXP(Renderer::Immediate::load(game.renderMgr.immediateBuffer));
+            __DEBUGEXP(Renderer::Immediate::load(game.renderMgr.immediateBuffer, game.memory.imDebugArena));
         }
 
         game.player = {};
@@ -280,7 +287,6 @@ namespace Game
     void update(Instance& game, Platform::GameConfig& config, const Platform::State& platform) {
 
         // frame arena reset
-        __DEBUGEXP(game.debugVis.arena_highmark = Math::max(game.debugVis.arena_highmark, (u64)((uintptr_t)Allocator::frameArena.highmark - (uintptr_t)game.memory.frameArenaBuffer)));
         Allocator::frameArena.curr = game.memory.frameArenaBuffer;
 
         // frame timing calculations
@@ -532,24 +538,48 @@ namespace Game
 
                     if (game.debugVis.overlaymode == DebugVis::OverlayMode::All || game.debugVis.overlaymode == DebugVis::OverlayMode::ArenaOnly)
                     {
+                        const f32 barwidth = 150.f;
+                        const f32 barheight = 10.f;
+                        textParamsCenter.pos.x -= barwidth / 2.f;
                         {
                             const Col arenabaseCol(0.65f, 0.65f, 0.65f, 0.4f);
                             const Col arenahighmarkCol(0.95f, 0.35f, 0.8f, 1.f);
-                            const f32 max_barwidth = 150.f;
-                            const f32 barheight = 10.f;
 
-                            textParamsCenter.pos.x -= max_barwidth / 2.f;
+                            const ptrdiff_t arenaTotal = (ptrdiff_t)Allocator::frameArena.end - (ptrdiff_t)game.memory.frameArenaBuffer;
+                            const ptrdiff_t arenaHighmark = (ptrdiff_t)game.memory.frameArenaHighmark - (ptrdiff_t)game.memory.frameArenaBuffer;
+                            const f32 arenaHighmark_barwidth = barwidth * (arenaHighmark / (f32)arenaTotal);
+
                             textParamsCenter.color = arenahighmarkCol;
-                            Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParamsCenter, "Frame arena highmark: %lu bytes", game.debugVis.arena_highmark);
+                            Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParamsCenter, "Frame arena highmark: %lu bytes", arenaHighmark);
                             textParamsCenter.pos.y -= 15.f;
                             textParamsCenter.color = defaultCol;
 
-                            const ptrdiff_t arenaTotal = (ptrdiff_t)Allocator::frameArena.end - (ptrdiff_t)game.memory.frameArenaBuffer;
-                            const f32 arenaHighmark_barwidth = max_barwidth * (game.debugVis.arena_highmark / (f32)arenaTotal);
+                            Renderer::Immediate::box_2d(game.renderMgr.immediateBuffer
+                                , Vec2(textParamsCenter.pos.x, textParamsCenter.pos.y - barheight)
+                                , Vec2(textParamsCenter.pos.x + barwidth, textParamsCenter.pos.y)
+                                , arenabaseCol);
+                            Renderer::Immediate::box_2d(game.renderMgr.immediateBuffer
+                                , Vec2(textParamsCenter.pos.x, textParamsCenter.pos.y - barheight)
+                                , Vec2(textParamsCenter.pos.x + arenaHighmark_barwidth, textParamsCenter.pos.y)
+                                , arenahighmarkCol);
+                            textParamsCenter.pos.y -= barheight + 5.f;
+                        }
+                        {
+                            const Col arenabaseCol(0.65f, 0.65f, 0.65f, 0.4f);
+                            const Col arenahighmarkCol(0.95f, 0.35f, 0.8f, 1.f);
+
+                            const ptrdiff_t arenaTotal = (ptrdiff_t)game.memory.scratchArenaRoot.end - (ptrdiff_t)game.memory.scratchArenaRoot.curr;
+                            const ptrdiff_t arenaHighmark = (ptrdiff_t)game.memory.scratchArenaHighmark - (ptrdiff_t)game.memory.scratchArenaRoot.curr;
+                            const f32 arenaHighmark_barwidth = barwidth * (arenaHighmark / (f32)arenaTotal);
+
+                            textParamsCenter.color = arenahighmarkCol;
+                            Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParamsCenter, "Scratch arena highmark: %lu bytes", arenaHighmark);
+                            textParamsCenter.pos.y -= 15.f;
+                            textParamsCenter.color = defaultCol;
 
                             Renderer::Immediate::box_2d(game.renderMgr.immediateBuffer
                                 , Vec2(textParamsCenter.pos.x, textParamsCenter.pos.y - barheight)
-                                , Vec2(textParamsCenter.pos.x + max_barwidth, textParamsCenter.pos.y)
+                                , Vec2(textParamsCenter.pos.x + barwidth, textParamsCenter.pos.y)
                                 , arenabaseCol);
                             Renderer::Immediate::box_2d(game.renderMgr.immediateBuffer
                                 , Vec2(textParamsCenter.pos.x, textParamsCenter.pos.y - barheight)
@@ -563,15 +593,19 @@ namespace Game
                             const Col used3dCol(0.95f, 0.35f, 0.8f, 1.f);
                             const Col used2dCol(0.35f, 0.95f, 0.8f, 1.f);
                             const Col used2didxCol(0.8f, 0.95f, 0.8f, 1.f);
-                            const f32 barwidth = 150.f;
-                            const f32 barheight = 10.f;
 
-                            const ptrdiff_t memory_size = (ptrdiff_t)im.backing_memory.curr - (ptrdiff_t)im.vertices_3d;
+                            const ptrdiff_t memory_size = (ptrdiff_t)game.memory.imDebugArena.curr - (ptrdiff_t)im.vertices_3d;
+                            const ptrdiff_t vertices_3d_start = (ptrdiff_t)im.vertices_3d - (ptrdiff_t)im.vertices_3d;
                             const ptrdiff_t vertices_3d_size = (ptrdiff_t)im.vertices_3d_head * sizeof(Layout_Vec3Color4B);
+                            const ptrdiff_t vertices_2d_start = (ptrdiff_t)im.vertices_2d - (ptrdiff_t)im.vertices_3d;
                             const ptrdiff_t vertices_2d_size = (ptrdiff_t)im.vertices_2d_head * sizeof(Layout_Vec2Color4B);
+                            const ptrdiff_t indices_2d_start = (ptrdiff_t)im.indices_2d - (ptrdiff_t)im.vertices_3d;
                             const ptrdiff_t indices_2d_size = (ptrdiff_t)(im.vertices_2d_head * 3 / 2) * sizeof(u32);
+                            const f32 v3d_barstart = barwidth * vertices_3d_start / (f32)memory_size;
                             const f32 v3d_barwidth = barwidth * vertices_3d_size / (f32)memory_size;
+                            const f32 v2d_barstart = barwidth * vertices_2d_start / (f32)memory_size;
                             const f32 v2d_barwidth = barwidth * vertices_2d_size / (f32)memory_size;
+                            const f32 i2d_barstart = barwidth * indices_2d_start / (f32)memory_size;
                             const f32 i2d_barwidth = barwidth * indices_2d_size / (f32)memory_size;
 
                             textParamsCenter.color = used3dCol;
@@ -590,16 +624,16 @@ namespace Game
                                 , Vec2(textParamsCenter.pos.x + barwidth, textParamsCenter.pos.y)
                                 , baseCol);
                             Renderer::Immediate::box_2d(game.renderMgr.immediateBuffer
-                                , Vec2(textParamsCenter.pos.x, textParamsCenter.pos.y - barheight)
+                                , Vec2(textParamsCenter.pos.x + v3d_barstart, textParamsCenter.pos.y - barheight)
                                 , Vec2(textParamsCenter.pos.x + v3d_barwidth, textParamsCenter.pos.y)
                                 , used3dCol);
                             Renderer::Immediate::box_2d(game.renderMgr.immediateBuffer
-                                , Vec2(textParamsCenter.pos.x + v3d_barwidth, textParamsCenter.pos.y - barheight)
-                                , Vec2(textParamsCenter.pos.x + v3d_barwidth + v2d_barwidth, textParamsCenter.pos.y)
+                                , Vec2(textParamsCenter.pos.x + v2d_barstart, textParamsCenter.pos.y - barheight)
+                                , Vec2(textParamsCenter.pos.x + v2d_barstart + v2d_barwidth, textParamsCenter.pos.y)
                                 , used2dCol);
                             Renderer::Immediate::box_2d(game.renderMgr.immediateBuffer
-                                , Vec2(textParamsCenter.pos.x + v3d_barwidth + v2d_barwidth, textParamsCenter.pos.y - barheight)
-                                , Vec2(textParamsCenter.pos.x + v3d_barwidth + v2d_barwidth + i2d_barwidth, textParamsCenter.pos.y)
+                                , Vec2(textParamsCenter.pos.x + i2d_barstart, textParamsCenter.pos.y - barheight)
+                                , Vec2(textParamsCenter.pos.x + i2d_barstart + i2d_barwidth, textParamsCenter.pos.y)
                                 , used2didxCol);
                         }
                     }

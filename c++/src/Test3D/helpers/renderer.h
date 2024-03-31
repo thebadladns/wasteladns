@@ -529,7 +529,7 @@ namespace FBX {
         }
     }
     template <typename _vertexLayout>
-    void load(Driver::RscIndexedBuffer<_vertexLayout>& rscBuffer, const char* path) {
+    void load(Driver::RscIndexedBuffer<_vertexLayout>& rscBuffer, const char* path, Allocator::Arena scratchArena) {
         ufbx_load_opts opts = {};
         opts.target_axes = { UFBX_COORDINATE_AXIS_POSITIVE_X, UFBX_COORDINATE_AXIS_POSITIVE_Z, UFBX_COORDINATE_AXIS_POSITIVE_Y };
         opts.allow_null_material = true;
@@ -538,6 +538,8 @@ namespace FBX {
         if (scene) {
             tinystl::vector<_vertexLayout, Allocator::ArenaSTL<_vertexLayout>> vertices;
             tinystl::vector<u32, Allocator::ArenaSTL<u32>> indices;
+            vertices.set_alloc(&scratchArena);
+            indices.set_alloc(&scratchArena);
 
             u32 maxVertices = 0;
             for (size_t i = 0; i < scene->meshes.count; i++) { maxVertices += (u32)scene->meshes.data[i]->num_vertices; }

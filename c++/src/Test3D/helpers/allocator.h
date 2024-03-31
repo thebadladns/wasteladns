@@ -5,12 +5,14 @@ namespace Allocator {
     struct Arena {
         u8* curr;
         u8* end;
-        __DEBUGDEF(u8* highmark = 0;)
+        __DEBUGDEF(u8** highmark;)
     };
+    Arena frameArena;
 
     void init_arena(Arena& arena, size_t capacity) {
         arena.curr = (u8*)malloc(capacity);
         arena.end = arena.curr + capacity;
+        __DEBUGEXP(arena.highmark = nullptr);
     }
 
     void* alloc_arena(Arena& arena, ptrdiff_t size, ptrdiff_t align) {
@@ -18,9 +20,10 @@ namespace Allocator {
         uintptr_t curr_aligned = ((uintptr_t)arena.curr + (align - 1)) & -align;
         if (curr_aligned + size <= (uintptr_t)arena.end) {
             arena.curr = (u8*)(curr_aligned + size);
-            __DEBUGEXP(arena.highmark = Math::max(arena.highmark, arena.curr));
+            __DEBUGEXP(if (arena.highmark) { *arena.highmark = Math::max(*arena.highmark, arena.curr); });
             return (void*)curr_aligned;
         }
+        assert(0);
         return 0;
     }
 
@@ -33,8 +36,6 @@ namespace Allocator {
             arena.curr = (u8*)oldbuff;
         }
     }
-
-    Allocator::Arena frameArena;
 
     template <class T>
     struct ArenaSTL {
@@ -52,34 +53,38 @@ namespace Allocator {
         pointer address(reference value) const { return &value; }
         const_pointer address(const_reference value) const { return &value; }
 
-        ArenaSTL() {}
-        ArenaSTL(const ArenaSTL&) {}
+        ArenaSTL(Arena* a) : arena(a) {}
+        ArenaSTL(const ArenaSTL& v) : arena(v.arena) {}
         template <class U>
-        ArenaSTL(const ArenaSTL<U>&) {}
-        ~ArenaSTL() {}
+        ArenaSTL(const ArenaSTL<U>& v) : arena(v.arena) {}
+        virtual ~ArenaSTL() {}
 
-        size_type max_size() const {
-            return ((uintptr_t)Allocator::frameArena.end - (uintptr_t)Allocator::frameArena.curr) / sizeof(T);
-        }
-        pointer allocate(size_type num, const void* = 0) {
-            return (pointer)alloc_arena(Allocator::frameArena, num * sizeof(T), alignof(T));
-        }
         void construct(pointer p, const T& value) {
             new((void*)p)T(value);
         }
         void destroy(pointer p) {
             p->~T();
         }
+
+        size_type max_size() const {
+            return ((uintptr_t)arena->end - (uintptr_t)arena->curr) / sizeof(T);
+        }
+        pointer allocate(size_type num, const void* = 0) {
+            return (pointer)alloc_arena(*arena, num * sizeof(T), alignof(T));
+        }
         void deallocate(pointer p, size_type num) {
-            return free_arena(Allocator::frameArena, p, num * sizeof(T));
+            return free_arena(*arena, p, num * sizeof(T));
         }
-        
-        static void* static_allocate(size_t bytes) {
-            return alloc_arena(Allocator::frameArena, bytes, alignof(T));
+        static void* static_allocate(void* alloc, size_t bytes) {
+            if (alloc) { return alloc_arena(*(Arena*)alloc, bytes, alignof(T)); }
+            else { return alloc_arena(frameArena, bytes, alignof(T)); } // default to frame arena
         }
-        static void static_deallocate(void* ptr, size_t bytes) {
-            return free_arena(Allocator::frameArena, ptr, bytes);
+        static void static_deallocate(void* alloc, void* ptr, size_t bytes) {
+            if (alloc) { return free_arena(*(Arena*)alloc, ptr, bytes); }
+            else { return free_arena(Allocator::frameArena, ptr, bytes); } // default to frame arena
         }
+
+        Arena* arena;
     };
 
     template <class T1, class T2>
@@ -90,6 +95,8 @@ namespace Allocator {
     bool operator!= (const ArenaSTL<T1>&, const ArenaSTL<T2>&) throw() {
         return false;
     }
+
+    Arena* arena;
 }
 
 #endif // __WASTELADNS_ALLOCATOR_H__

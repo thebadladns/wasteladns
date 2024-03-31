@@ -38,6 +38,7 @@ namespace tinystl {
 		T* first;
 		T* last;
 		T* capacity;
+		void* alloc;
 	};
 
 	template<typename T>
@@ -130,13 +131,18 @@ namespace tinystl {
 
 	template<typename T, typename Alloc>
 	static inline void buffer_init(buffer<T, Alloc>* b) {
-		b->first = b->last = b->capacity = 0;
+		b->first = b->last = b->capacity = 0; b->alloc = 0;
+	}
+
+	template<typename T, typename Alloc>
+	static inline void buffer_set_alloc(buffer<T, Alloc>* b, void* alloc) {
+		b->alloc = alloc;
 	}
 
 	template<typename T, typename Alloc>
 	static inline void buffer_destroy(buffer<T, Alloc>* b) {
 		buffer_destroy_range(b->first, b->last);
-		Alloc::static_deallocate(b->first, (size_t)((char*)b->capacity - (char*)b->first));
+		Alloc::static_deallocate(b->alloc, b->first, (size_t)((char*)b->capacity - (char*)b->first));
 	}
 
 	template<typename T, typename Alloc>
@@ -146,9 +152,9 @@ namespace tinystl {
 
 		typedef T* pointer;
 		const size_t size = (size_t)(b->last - b->first);
-		pointer newfirst = (pointer)Alloc::static_allocate(sizeof(T) * capacity);
+		pointer newfirst = (pointer)Alloc::static_allocate(b->alloc, sizeof(T) * capacity);
 		buffer_move_urange(newfirst, b->first, b->last);
-		Alloc::static_deallocate(b->first, sizeof(T) * capacity);
+		Alloc::static_deallocate(b->alloc, b->first, sizeof(T) * capacity);
 
 		b->first = newfirst;
 		b->last = newfirst + size;
@@ -178,14 +184,14 @@ namespace tinystl {
 		if (b->capacity != b->last) {
 			if (b->last == b->first) {
 				const size_t capacity = (size_t)(b->capacity - b->first);
-				Alloc::static_deallocate(b->first, sizeof(T)*capacity);
+				Alloc::static_deallocate(b->alloc, b->first, sizeof(T)*capacity);
 				b->capacity = b->first = b->last = nullptr;
 			} else {
 				const size_t capacity = (size_t)(b->capacity - b->first);
 				const size_t size = (size_t)(b->last - b->first);
-				T* newfirst = (T*)Alloc::static_allocate(sizeof(T) * size);
+				T* newfirst = (T*)Alloc::static_allocate(b->alloc, sizeof(T) * size);
 				buffer_move_urange(newfirst, b->first, b->last);
-				Alloc::static_deallocate(b->first, sizeof(T) * capacity);
+				Alloc::static_deallocate(b->alloc, b->first, sizeof(T) * capacity);
 				b->first = newfirst;
 				b->last = newfirst + size;
 				b->capacity = b->last;
@@ -302,7 +308,7 @@ namespace tinystl {
 
 	template<typename T, typename Alloc>
 	static inline void buffer_move(buffer<T, Alloc>* dst, buffer<T, Alloc>* src) {
-		dst->first = src->first, dst->last = src->last, dst->capacity = src->capacity;
+		dst->first = src->first, dst->last = src->last, dst->capacity = src->capacity, dst->alloc = src->alloc;
 		src->first = src->last = src->capacity = nullptr;
 	}
 }
