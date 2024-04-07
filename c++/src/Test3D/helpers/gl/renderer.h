@@ -124,8 +124,8 @@ namespace Driver {
             glBindTexture(GL_TEXTURE_2D, textures[i].texId);
         }
     }
-    template <typename _vertexLayout, typename _cbufferLayout>
-    void bind_shader_samplers(RscShaderSet<_vertexLayout, _cbufferLayout>& ss, const char** params, const u32 count) {
+    template <typename _vertexLayout, typename _cbufferLayout, Shaders::PSCBufferUsage::Enum _cbufferUsage, Shaders::VSDrawType::Enum _drawType>
+    void bind_shader_samplers(RscShaderSet<_vertexLayout, _cbufferLayout, _cbufferUsage, _drawType>& ss, const char** params, const u32 count) {
         glUseProgram(ss.shaderObject);
         for (u32 i = 0; i < count; i++) {
             const s32 samplerLoc = glGetUniformLocation(ss.shaderObject, params[i]);
@@ -145,8 +145,8 @@ namespace Driver {
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
     }
     
-    template <typename _vertexLayout, typename _cbufferLayout>
-    ShaderResult create_shader_vs(RscVertexShader<_vertexLayout, _cbufferLayout>& vs, const VertexShaderRuntimeCompileParams& params) {
+    template <typename _vertexLayout, typename _cbufferLayout, Shaders::VSDrawType::Enum _drawType>
+    ShaderResult create_shader_vs(RscVertexShader<_vertexLayout, _cbufferLayout, _drawType>& vs, const VertexShaderRuntimeCompileParams& params) {
         GLuint vertexShader;
         
         vertexShader = glCreateShader(GL_VERTEX_SHADER);
@@ -170,7 +170,8 @@ namespace Driver {
 
         return result;
     }
-    ShaderResult create_shader_ps(RscPixelShader& ps, const PixelShaderRuntimeCompileParams& params) {
+    template <Shaders::PSCBufferUsage::Enum _cbufferUsage>
+    ShaderResult create_shader_ps(RscPixelShader<_cbufferUsage>& ps, const PixelShaderRuntimeCompileParams& params) {
         GLuint pixelShader;
         
         pixelShader = glCreateShader(GL_FRAGMENT_SHADER);
@@ -194,8 +195,8 @@ namespace Driver {
 
         return result;
     }
-    template <typename _vertexLayout, typename _cbufferLayout>
-    ShaderResult create_shader_set(RscShaderSet<_vertexLayout, _cbufferLayout>& ss, const ShaderSetRuntimeCompileParams<_vertexLayout, _cbufferLayout>& params) {
+    template <typename _vertexLayout, typename _cbufferLayout, Shaders::PSCBufferUsage::Enum _cbufferUsage, Shaders::VSDrawType::Enum _drawType>
+    ShaderResult create_shader_set(RscShaderSet<_vertexLayout, _cbufferLayout, _cbufferUsage, _drawType>& ss, const ShaderSetRuntimeCompileParams<_vertexLayout, _cbufferLayout, _cbufferUsage, _drawType>& params) {
         GLuint shader;
         GLuint vs = params.rscVS.shaderObject;
         GLuint ps = params.rscPS.shaderObject;
@@ -229,8 +230,8 @@ namespace Driver {
         
         return result;
     }
-    template <typename _vertexLayout, typename _cbufferLayout>
-    void bind_shader(const RscShaderSet<_vertexLayout, _cbufferLayout>& ss) {
+    template <typename _vertexLayout, typename _cbufferLayout, Shaders::PSCBufferUsage::Enum _cbufferUsage, Shaders::VSDrawType::Enum _drawType>
+    void bind_shader(const RscShaderSet<_vertexLayout, _cbufferLayout, _cbufferUsage, _drawType>& ss) {
         glUseProgram(ss.shaderObject);
     }
     
@@ -426,14 +427,13 @@ namespace Driver {
         glEnableVertexAttribArray(0);
         glEnableVertexAttribArray(1);
     }
-    template <typename _vertexLayout>
-    void bind_cbuffers_to_shader(RscShaderSet<_vertexLayout, Layout_CNone::Buffers>& ss, const RscCBuffer* cbuffers) {}
-    template <typename _vertexLayout>
-    void bind_cbuffers_to_shader(RscShaderSet<_vertexLayout, Layout_CBuffer_3DScene::Buffers>& ss, const RscCBuffer* cbuffers) {
+    template <typename _vertexLayout, Shaders::PSCBufferUsage::Enum _cbufferUsage, Shaders::VSDrawType::Enum _drawType>
+    void bind_cbuffers_to_shader(RscShaderSet<_vertexLayout, Layout_CNone, _cbufferUsage, _drawType>& ss, const RscCBuffer* cbuffers) {}
+    template <typename _vertexLayout, Shaders::PSCBufferUsage::Enum _cbufferUsage, Shaders::VSDrawType::Enum _drawType>
+    void bind_cbuffers_to_shader(RscShaderSet<_vertexLayout, Layout_CBuffer_3DScene, _cbufferUsage, _drawType>& ss, const RscCBuffer* cbuffers) {
         GLuint perScene = glGetUniformBlockIndex(ss.shaderObject, "type_PerScene");
         GLuint perRenderGroup = glGetUniformBlockIndex(ss.shaderObject, "type_PerGroup");
         GLuint perInstance = glGetUniformBlockIndex(ss.shaderObject, "type_PerInstance");
-        
         if (perScene != GL_INVALID_INDEX)
             glUniformBlockBinding(ss.shaderObject, perScene, cbuffers[Layout_CBuffer_3DScene::Buffers::SceneData].index);
         if (perRenderGroup != GL_INVALID_INDEX)
@@ -441,14 +441,13 @@ namespace Driver {
         if (perInstance != GL_INVALID_INDEX)
             glUniformBlockBinding(ss.shaderObject, perInstance, cbuffers[Layout_CBuffer_3DScene::Buffers::InstanceData].index);
     }
-    template <typename _vertexLayout>
-    void bind_cbuffers_to_shader(RscShaderSet<_vertexLayout, Layout_CBuffer_LightPass::Buffers>& ss, const RscCBuffer* cbuffers) {
+    template <typename _vertexLayout, Shaders::PSCBufferUsage::Enum _cbufferUsage, Shaders::VSDrawType::Enum _drawType>
+    void bind_cbuffers_to_shader(RscShaderSet<_vertexLayout, Layout_CBuffer_LightPass, _cbufferUsage, _drawType>& ss, const RscCBuffer* cbuffers) {
         GLuint perScene = glGetUniformBlockIndex(ss.shaderObject, "type_PerScene");
-        
         glUniformBlockBinding(ss.shaderObject, perScene, cbuffers[Layout_CBuffer_LightPass::Buffers::SceneData].index);
     }
-    template <typename _vertexLayout>
-    void bind_cbuffers_to_shader(RscShaderSet<_vertexLayout, Layout_CBuffer_DebugScene::Buffers>& ss, const RscCBuffer* cbuffers) {
+    template <typename _vertexLayout, Shaders::PSCBufferUsage::Enum _cbufferUsage, Shaders::VSDrawType::Enum _drawType>
+    void bind_cbuffers_to_shader(RscShaderSet<_vertexLayout, Layout_CBuffer_DebugScene, _cbufferUsage, _drawType>& ss, const RscCBuffer* cbuffers) {
         u32 renderGroupBlock = glGetUniformBlockIndex(ss.shaderObject, "type_PerGroup");
         glUniformBlockBinding(ss.shaderObject, renderGroupBlock, cbuffers[Layout_CBuffer_DebugScene::Buffers::GroupData].index);
     }

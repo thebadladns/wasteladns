@@ -37,14 +37,15 @@ namespace Driver {
         GLuint texId;
     };
 
-    template <typename _vertexLayout, typename _cbufferLayout>
+    template <typename _vertexLayout, typename _cbufferLayout, Shaders::VSDrawType::Enum _drawType>
     struct RscVertexShader {
         GLuint shaderObject;
     };
+    template <Shaders::PSCBufferUsage::Enum _cbufferUsage>
     struct RscPixelShader {
         GLuint shaderObject;
     };
-    template <typename _vertexLayout, typename _cbufferLayout>
+    template <typename _vertexLayout, typename _cbufferLayout, Shaders::PSCBufferUsage::Enum _cbufferUsage, Shaders::VSDrawType::Enum _drawType>
     struct RscShaderSet {
         GLuint shaderObject;
     };

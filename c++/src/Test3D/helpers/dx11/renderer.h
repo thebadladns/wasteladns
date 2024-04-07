@@ -225,8 +225,8 @@ namespace Driver {
         d3dcontext->PSSetShaderResources(0, count, textureViews);
         d3dcontext->PSSetSamplers(0, count, samplers);
     }
-    template <typename _vertexLayout, typename _cbufferLayout>
-    void bind_shader_samplers(RscShaderSet<_vertexLayout, _cbufferLayout>& ss, const char** params, const u32 count) {}
+    template <typename _vertexLayout, typename _cbufferLayout, Shaders::PSCBufferUsage::Enum _cbufferUsage, typename Shaders::VSDrawType::Enum _drawType>
+    void bind_shader_samplers(RscShaderSet<_vertexLayout, _cbufferLayout, _cbufferUsage, _drawType>& ss, const char** params, const u32 count) {}
     void bind_RTs(RscRenderTarget& b, const RscTexture* textures, const u32 count) {
         for (u32 i = 0; i < count; i++) {
             D3D11_RENDER_TARGET_VIEW_DESC rtViewDesc = {};
@@ -238,8 +238,8 @@ namespace Driver {
         b.viewCount = count;
     }
 
-    template <typename _vertexLayout, typename _cbufferLayout>
-    ShaderResult create_shader_vs(RscVertexShader<_vertexLayout, _cbufferLayout>& vs, const VertexShaderRuntimeCompileParams& params) {
+    template <typename _vertexLayout, typename _cbufferLayout, Shaders::VSDrawType::Enum _drawType>
+    ShaderResult create_shader_vs(RscVertexShader<_vertexLayout, _cbufferLayout, _drawType>& vs, const VertexShaderRuntimeCompileParams& params) {
         ID3D11VertexShader* vertexShader = nullptr;
         ID3DBlob* pShaderBlob = nullptr;
         ID3DBlob* pErrorBlob = nullptr;
@@ -269,7 +269,8 @@ namespace Driver {
 
         return result;
     }
-    ShaderResult create_shader_ps(RscPixelShader& ps, const PixelShaderRuntimeCompileParams& params) {
+    template <Shaders::PSCBufferUsage::Enum _cbufferUsage>
+    ShaderResult create_shader_ps(RscPixelShader<_cbufferUsage>& ps, const PixelShaderRuntimeCompileParams& params) {
         ID3D11PixelShader* pixelShader = nullptr;
         ID3DBlob* pShaderBlob = nullptr;
         ID3DBlob* pErrorBlob = nullptr;
@@ -298,16 +299,16 @@ namespace Driver {
 
         return result;
     }
-    template <typename _vertexLayout, typename _cbufferLayout>
-    ShaderResult create_shader_set(RscShaderSet<_vertexLayout, _cbufferLayout>& ss, const ShaderSetRuntimeCompileParams<_vertexLayout, _cbufferLayout>& params) {
+    template <typename _vertexLayout, typename _cbufferLayout, Shaders::PSCBufferUsage::Enum _cbufferUsage, Shaders::VSDrawType::Enum _drawType>
+    ShaderResult create_shader_set(RscShaderSet<_vertexLayout, _cbufferLayout, _cbufferUsage, _drawType>& ss, const ShaderSetRuntimeCompileParams<_vertexLayout, _cbufferLayout, _cbufferUsage, _drawType>& params) {
         ss.vs = params.rscVS;
         ss.ps = params.rscPS;
         ShaderResult result;
         result.compiled = true;
         return result;
     }
-    template <typename _vertexLayout, typename _cbufferLayout>
-    void bind_shader(const RscShaderSet<_vertexLayout, _cbufferLayout>& ss) {
+    template <typename _vertexLayout, typename _cbufferLayout, Shaders::PSCBufferUsage::Enum _cbufferUsage, Shaders::VSDrawType::Enum _drawType>
+    void bind_shader(const RscShaderSet<_vertexLayout, _cbufferLayout, _cbufferUsage, _drawType>& ss) {
         d3dcontext->VSSetShader(ss.vs.shaderObject, nullptr, 0);
         d3dcontext->PSSetShader(ss.ps.shaderObject, nullptr, 0);
         d3dcontext->IASetInputLayout(ss.vs.inputLayout);
@@ -496,8 +497,8 @@ namespace Driver {
 namespace Renderer {
 namespace Driver {
     
-    template <typename _bufferLayout>
-    void create_vertex_layout(RscVertexShader<Layout_Vec3, _bufferLayout>& vs, void* shaderBufferPointer, u32 shaderBufferSize) {
+    template <typename _bufferLayout, Shaders::VSDrawType::Enum _drawType>
+    void create_vertex_layout(RscVertexShader<Layout_Vec3, _bufferLayout, _drawType>& vs, void* shaderBufferPointer, u32 shaderBufferSize) {
         ID3D11InputLayout* inputLayout;
         D3D11_INPUT_ELEMENT_DESC vertexLayoutDesc[] = {
                 { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 }
@@ -506,8 +507,8 @@ namespace Driver {
 
         vs.inputLayout = inputLayout;
     }
-    template <typename _bufferLayout>
-    void create_vertex_layout(RscVertexShader<Layout_TexturedVec2, _bufferLayout>& vs, void* shaderBufferPointer, u32 shaderBufferSize) {
+    template <typename _bufferLayout, Shaders::VSDrawType::Enum _drawType>
+    void create_vertex_layout(RscVertexShader<Layout_TexturedVec2, _bufferLayout, _drawType>& vs, void* shaderBufferPointer, u32 shaderBufferSize) {
         ID3D11InputLayout* inputLayout;
         D3D11_INPUT_ELEMENT_DESC vertexLayoutDesc[] = {
               { "POSITION", 0, DXGI_FORMAT_R32G32_FLOAT, 0, offsetof(Layout_TexturedVec2, pos), D3D11_INPUT_PER_VERTEX_DATA, 0 }
@@ -517,8 +518,8 @@ namespace Driver {
 
         vs.inputLayout = inputLayout;
     }
-    template <typename _bufferLayout>
-    void create_vertex_layout(RscVertexShader<Layout_TexturedVec3, _bufferLayout>& vs, void* shaderBufferPointer, u32 shaderBufferSize) {
+    template <typename _bufferLayout, Shaders::VSDrawType::Enum _drawType>
+    void create_vertex_layout(RscVertexShader<Layout_TexturedVec3, _bufferLayout, _drawType>& vs, void* shaderBufferPointer, u32 shaderBufferSize) {
         ID3D11InputLayout* inputLayout;
         D3D11_INPUT_ELEMENT_DESC vertexLayoutDesc[] = {
               { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, offsetof(Layout_TexturedVec3, pos), D3D11_INPUT_PER_VERTEX_DATA, 0 }
@@ -531,8 +532,8 @@ namespace Driver {
 
         vs.inputLayout = inputLayout;
     }
-    template <typename _bufferLayout>
-    void create_vertex_layout(RscVertexShader<Layout_Vec2Color4B, _bufferLayout>& vs, void* shaderBufferPointer, u32 shaderBufferSize) {
+    template <typename _bufferLayout, Shaders::VSDrawType::Enum _drawType>
+    void create_vertex_layout(RscVertexShader<Layout_Vec2Color4B, _bufferLayout, _drawType>& vs, void* shaderBufferPointer, u32 shaderBufferSize) {
         ID3D11InputLayout* inputLayout;
         D3D11_INPUT_ELEMENT_DESC vertexLayoutDesc[] = {
               { "POSITION", 0, DXGI_FORMAT_R32G32_FLOAT, 0, offsetof(Layout_Vec2Color4B, pos), D3D11_INPUT_PER_VERTEX_DATA, 0 }
@@ -542,8 +543,8 @@ namespace Driver {
 
         vs.inputLayout = inputLayout;
     }
-    template <typename _bufferLayout>
-    void create_vertex_layout(RscVertexShader<Layout_Vec3Color4B, _bufferLayout>& vs, void* shaderBufferPointer, u32 shaderBufferSize) {
+    template <typename _bufferLayout, Shaders::VSDrawType::Enum _drawType>
+    void create_vertex_layout(RscVertexShader<Layout_Vec3Color4B, _bufferLayout, _drawType>& vs, void* shaderBufferPointer, u32 shaderBufferSize) {
         ID3D11InputLayout* inputLayout;
         D3D11_INPUT_ELEMENT_DESC vertexLayoutDesc[] = {
               { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, offsetof(Layout_Vec3Color4B, pos), D3D11_INPUT_PER_VERTEX_DATA, 0 }

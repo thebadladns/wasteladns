@@ -4,12 +4,7 @@
 namespace Renderer {
 namespace Shaders {
 
-template <>
-const VSSrc vsSrc<
-    VSTechnique::forward_base,
-    Layout_Vec3Color4B,
-    Layout_CBuffer_DebugScene::Buffers,
-    VSDrawType::Standard> = {
+constexpr VS_src vs_forward_base_Vec3Color4B_CBuffer_DebugScene_Standard = {
 "forward_base_Vec3Color4B_CBuffer_DebugScene_Standard",
 R"(
 #version 330
@@ -38,22 +33,24 @@ void main()
 };
 
 template <>
-const VSSrc vsSrc <
+struct VS_src_selector<
     VSTechnique::forward_base,
-    Layout_Vec2Color4B,
-    Layout_CBuffer_DebugScene::Buffers,
-    VSDrawType::Standard> = vsSrc<
-        VSTechnique::forward_base,
-        Layout_Vec3Color4B,
-        Layout_CBuffer_DebugScene::Buffers,
-        VSDrawType::Standard>;
+    Layout_Vec3Color4B,
+    Layout_CBuffer_DebugScene,
+    VSDrawType::Standard> {
+    static const VS_src& value() { return vs_forward_base_Vec3Color4B_CBuffer_DebugScene_Standard; }
+};
 
 template <>
-const VSSrc vsSrc <
+struct VS_src_selector<
     VSTechnique::forward_base,
-    Layout_Vec3,
-    Layout_CBuffer_3DScene::Buffers,
-    VSDrawType::Standard> = {
+    Layout_Vec2Color4B,
+    Layout_CBuffer_DebugScene,
+    VSDrawType::Standard> {
+    static const VS_src& value() { return vs_forward_base_Vec3Color4B_CBuffer_DebugScene_Standard; }
+};
+
+constexpr VS_src vs_forward_base_Vec3_CBuffer_3DScene_Sandard = {
 "forward_base_Vec3_CBuffer_3DScene_Sandard",
 R"(
 #version 330
@@ -92,11 +89,15 @@ void main()
 };
 
 template <>
-const VSSrc vsSrc <
+struct VS_src_selector<
     VSTechnique::forward_base,
-    Layout_Vec3Color4B,
-    Layout_CBuffer_3DScene::Buffers,
-    VSDrawType::Standard> = {
+    Layout_Vec3,
+    Layout_CBuffer_3DScene,
+    VSDrawType::Standard> {
+    static const VS_src& value() { return vs_forward_base_Vec3_CBuffer_3DScene_Sandard; }
+};
+
+constexpr VS_src vs_forward_base_Vec3Color4B_CBuffer_3DScene_Standard = {
 "forward_base_Vec3Color4B_CBuffer_3DScene_Standard",
 R"(
 #version 330
@@ -136,11 +137,15 @@ void main()
 };
 
 template <>
-const VSSrc vsSrc <
+struct VS_src_selector<
     VSTechnique::forward_base,
-    Layout_Vec3,
-    Layout_CBuffer_3DScene::Buffers,
-    VSDrawType::Instanced> = {
+    Layout_Vec3Color4B,
+    Layout_CBuffer_3DScene,
+    VSDrawType::Standard> {
+    static const VS_src& value() { return vs_forward_base_Vec3Color4B_CBuffer_3DScene_Standard; }
+};
+
+constexpr VS_src vs_forward_base_Vec3_CBuffer_3DScene_Instanced = {
 "forward_base_Vec3_CBuffer_3DScene_Instanced"
 , R"(
 #version 330
@@ -188,11 +193,15 @@ void main()
 };
 
 template <>
-const VSSrc vsSrc <
+struct VS_src_selector<
     VSTechnique::forward_base,
-    Layout_TexturedVec3,
-    Layout_CBuffer_3DScene::Buffers,
-    VSDrawType::Standard> = {
+    Layout_Vec3,
+    Layout_CBuffer_3DScene,
+    VSDrawType::Instanced> {
+    static const VS_src& value() { return vs_forward_base_Vec3_CBuffer_3DScene_Instanced; }
+};
+
+constexpr VS_src vs_forward_base_TexturedVec3_CBuffer_3DScene_Standard = {
 "forward_base_TexturedVec3_CBuffer_3DScene_Standard",
 R"(
 #version 330
@@ -247,11 +256,16 @@ void main()
 };
 
 template <>
-const PSSrc psSrc <
-    PSTechnique::forward_untextured_unlit,
-    Layout_Vec3,
-    Layout_CBuffer_3DScene::Buffers> = {
-"forward_untextured_unlit", // used for multiple vertex and buffer layouts
+struct VS_src_selector<
+    VSTechnique::forward_base,
+    Layout_TexturedVec3,
+    Layout_CBuffer_3DScene,
+    VSDrawType::Standard> {
+    static const VS_src& value() { return vs_forward_base_TexturedVec3_CBuffer_3DScene_Standard; }
+};
+
+constexpr PS_src ps_forward_untextured_unlit = { // used for multiple vertex and buffer layouts
+"forward_untextured_unlit",
 nullptr, 0, // no samplers
 R"(
 #version 330
@@ -266,45 +280,35 @@ void main()
 }
 )"
 };
-template <>
-const PSSrc psSrc <
-    PSTechnique::forward_untextured_unlit,
-    Layout_Vec2Color4B,
-    Layout_CBuffer_3DScene::Buffers> = psSrc <
-        PSTechnique::forward_untextured_unlit,
-        Layout_Vec3,
-        Layout_CBuffer_3DScene::Buffers>;
-template <>
-const PSSrc psSrc <
-    PSTechnique::forward_untextured_unlit,
-    Layout_Vec3Color4B,
-    Layout_CBuffer_3DScene::Buffers> = psSrc <
-        PSTechnique::forward_untextured_unlit,
-        Layout_Vec3,
-        Layout_CBuffer_3DScene::Buffers>;
-template <>
-const PSSrc psSrc <
-    PSTechnique::forward_untextured_unlit,
-    Layout_Vec2Color4B,
-    Layout_CBuffer_DebugScene::Buffers> = psSrc <
-        PSTechnique::forward_untextured_unlit,
-        Layout_Vec3,
-        Layout_CBuffer_3DScene::Buffers>;
-template <>
-const PSSrc psSrc <
-    PSTechnique::forward_untextured_unlit,
-    Layout_Vec3Color4B,
-    Layout_CBuffer_DebugScene::Buffers> = psSrc <
-        PSTechnique::forward_untextured_unlit,
-        Layout_Vec3,
-        Layout_CBuffer_3DScene::Buffers>;
 
-const char* textured_lit_normalmapped_samplers[] = {"texDiffuse", "texNormal", "texDepth"};
 template <>
-const PSSrc psSrc <
-    PSTechnique::forward_textured_lit_normalmapped,
-    Layout_TexturedVec3,
-    Layout_CBuffer_3DScene::Buffers> = {
+struct PS_src_selector<
+    PSTechnique::forward_untextured_unlit,
+    Layout_Vec3,
+    Layout_CNone> {
+    static const PSMaterialUsage::Enum materialUsage = PSMaterialUsage::None;
+    static const PS_src& value() { return ps_forward_untextured_unlit; }
+};
+
+template <>
+struct PS_src_selector<
+    PSTechnique::forward_untextured_unlit,
+    Layout_Vec2Color4B,
+    Layout_CNone> {
+    static const PSMaterialUsage::Enum materialUsage = PSMaterialUsage::None;
+    static const PS_src& value() { return ps_forward_untextured_unlit; }
+};
+template <>
+struct PS_src_selector<
+    PSTechnique::forward_untextured_unlit,
+    Layout_Vec3Color4B,
+    Layout_CNone> {
+    static const PSMaterialUsage::Enum materialUsage = PSMaterialUsage::None;
+    static const PS_src& value() { return ps_forward_untextured_unlit; }
+};
+
+const char* textured_lit_normalmapped_samplers[] = { "texDiffuse", "texNormal", "texDepth" };
+constexpr PS_src ps_forward_textured_lit_normalmapped_TexturedVec3_CBuffer_3DScene = {
 "forward_textured_lit_normalmapped_TexturedVec3_CBuffer_3DScene",
 textured_lit_normalmapped_samplers,
 sizeof(textured_lit_normalmapped_samplers) / sizeof(textured_lit_normalmapped_samplers[0]),
@@ -357,7 +361,15 @@ void main()
 )"
 };
 
-}
-}
+template <>
+struct PS_src_selector<
+    PSTechnique::forward_textured_lit_normalmapped,
+    Layout_TexturedVec3,
+    Layout_CBuffer_3DScene> {
+    static const PSMaterialUsage::Enum materialUsage = PSMaterialUsage::Uses;
+    static const PS_src& value() { return ps_forward_textured_lit_normalmapped_TexturedVec3_CBuffer_3DScene; }
+};
 
+}
+}
 #endif // __WASTELADNS_SHADERS_GL_H__

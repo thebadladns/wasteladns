@@ -22,18 +22,28 @@ namespace Immediate
     constexpr u32 vertexSizeToIndexCount(const u32 count) { return 3 * count / 2; }
     constexpr size_t arena_size =
           max_3d_vertices * sizeof(Layout_Vec3Color4B)
-        + max_2d_vertices * sizeof(Layout_Vec3Color4B)
+        + max_2d_vertices * sizeof(Layout_Vec2Color4B)
         + vertexSizeToIndexCount(max_2d_vertices) * sizeof(u32);
     
     struct Buffer {
+
+        typedef Shader_Params<
+              Renderer::Shaders::VSTechnique::forward_base, Renderer::Shaders::PSTechnique::forward_untextured_unlit
+            , Renderer::Layout_Vec3Color4B, Layout_CBuffer_DebugScene, Layout_CNone
+            , Renderer::Shaders::VSDrawType::Standard> ShaderParams_3D;
+        typedef Shader_Params<
+              Renderer::Shaders::VSTechnique::forward_base, Renderer::Shaders::PSTechnique::forward_untextured_unlit
+            , Renderer::Layout_Vec2Color4B, Layout_CBuffer_DebugScene, Layout_CNone
+            , Renderer::Shaders::VSDrawType::Standard> ShaderParams_2D;
+
         Layout_Vec3Color4B* vertices_3d;
         Layout_Vec2Color4B* vertices_2d;
         u32* indices_2d;
         
-        Driver::RscBuffer<Layout_Vec3Color4B> perspVertex;
-        Driver::RscIndexedBuffer<Layout_Vec2Color4B> orthoVertex;
-        Driver::RscShaderSet<Layout_Vec3Color4B, Layout_CBuffer_DebugScene::Buffers> shaderSetPersp;
-        Driver::RscShaderSet<Layout_Vec2Color4B, Layout_CBuffer_DebugScene::Buffers> shaderSetOrtho;
+        Driver::RscBuffer<Layout_Vec3Color4B> buffer_3d;
+        Driver::RscIndexedBuffer<Layout_Vec2Color4B> buffer_2d;
+        ShaderParams_3D::ShaderSet shader_3d;
+        ShaderParams_2D::ShaderSet shader_2d;
         Driver::RscCBuffer cbuffers[Layout_CBuffer_DebugScene::Buffers::Count];
         Driver::RscRasterizerState rasterizerState;
         Driver::RscDepthStencilState orthoDepthState, perspDepthState;
@@ -272,7 +282,7 @@ namespace Immediate
                 bufferParams.accessType = Renderer::Driver::BufferAccessType::CPU;
                 bufferParams.type = Renderer::Driver::BufferTopologyType::Lines;
                 bufferParams.vertexCount = 0;
-                Driver::create_vertex_buffer(buffer.perspVertex, bufferParams);
+                Driver::create_vertex_buffer(buffer.buffer_3d, bufferParams);
             }
             // 2d
             {
@@ -286,25 +296,13 @@ namespace Immediate
                 bufferParams.indexType = Renderer::Driver::BufferItemType::U32;
                 bufferParams.type = Renderer::Driver::BufferTopologyType::Triangles;
                 bufferParams.indexCount = 0;
-                Driver::create_indexed_vertex_buffer(buffer.orthoVertex, bufferParams);
+                Driver::create_indexed_vertex_buffer(buffer.buffer_2d, bufferParams);
             }
         }
         
         {
-            Renderer::TechniqueSrcParams< Renderer::Layout_Vec3Color4B, Layout_CBuffer_DebugScene::Buffers> params;
-            Renderer::create_technique<Renderer::Shaders::VSTechnique::forward_base
-                           , Renderer::Shaders::PSTechnique::forward_untextured_unlit
-                           , Renderer::Shaders::VSDrawType::Standard>
-                (params, buffer.cbuffers);
-            Renderer::create_shader_from_technique(buffer.shaderSetPersp, params);
-        }
-        {
-            Renderer::TechniqueSrcParams< Renderer::Layout_Vec2Color4B, Layout_CBuffer_DebugScene::Buffers> params;
-            Renderer::create_technique<Renderer::Shaders::VSTechnique::forward_base
-                           , Renderer::Shaders::PSTechnique::forward_untextured_unlit
-                           , Renderer::Shaders::VSDrawType::Standard>
-                (params, buffer.cbuffers);
-            Renderer::create_shader_from_technique(buffer.shaderSetOrtho, params);
+            Buffer::ShaderParams_3D::create_shader_from_techniques(buffer.shader_3d, buffer.cbuffers);
+            Buffer::ShaderParams_2D::create_shader_from_techniques(buffer.shader_2d, buffer.cbuffers);
         }
         
         Renderer::Driver::create_RS(buffer.rasterizerState, { Renderer::Driver::RasterizerFillMode::Fill, Renderer::Driver::RasterizerCullMode::CullBack });
@@ -321,15 +319,15 @@ namespace Immediate
         bufferUpdateParams.vertexData = buffer.vertices_3d;
         bufferUpdateParams.vertexSize = sizeof(Layout_Vec3Color4B) * buffer.vertices_3d_head;
         bufferUpdateParams.vertexCount = buffer.vertices_3d_head;
-        Driver::update_vertex_buffer(buffer.perspVertex, bufferUpdateParams);
+        Driver::update_vertex_buffer(buffer.buffer_3d, bufferUpdateParams);
 
         Mat4 mvp = Math::mult(projMatrix, viewMatrix);
         Driver::update_cbuffer(buffer.cbuffers[Layout_CBuffer_DebugScene::Buffers::GroupData], mvp);
 
-        Driver::bind_shader(buffer.shaderSetPersp);
-        Driver::bind_vertex_buffer(buffer.perspVertex);
+        Driver::bind_shader(buffer.shader_3d);
+        Driver::bind_vertex_buffer(buffer.buffer_3d);
         Driver::bind_cbuffers(buffer.cbuffers, Layout_CBuffer_DebugScene::Buffers::Count, { true, false });
-        Driver::draw_vertex_buffer(buffer.perspVertex);
+        Driver::draw_vertex_buffer(buffer.buffer_3d);
     }
     
     void present2d(Buffer& buffer, const Mat4& projMatrix) {
@@ -344,14 +342,14 @@ namespace Immediate
         bufferUpdateParams.indexData = buffer.indices_2d;
         bufferUpdateParams.indexSize = indexCount * sizeof(u32);
         bufferUpdateParams.indexCount = indexCount;
-        Driver::update_indexed_vertex_buffer(buffer.orthoVertex, bufferUpdateParams);
+        Driver::update_indexed_vertex_buffer(buffer.buffer_2d, bufferUpdateParams);
 
         Driver::update_cbuffer(buffer.cbuffers[Layout_CBuffer_DebugScene::Buffers::GroupData], projMatrix);
         
-        Driver::bind_shader(buffer.shaderSetOrtho);
-        Driver::bind_indexed_vertex_buffer(buffer.orthoVertex);
+        Driver::bind_shader(buffer.shader_2d);
+        Driver::bind_indexed_vertex_buffer(buffer.buffer_2d);
         Driver::bind_cbuffers(buffer.cbuffers, Layout_CBuffer_DebugScene::Buffers::Count, { true, false });
-        Driver::draw_indexed_vertex_buffer(buffer.orthoVertex);
+        Driver::draw_indexed_vertex_buffer(buffer.buffer_2d);
     }
     
 }

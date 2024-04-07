@@ -5,6 +5,38 @@ namespace Renderer {
 
     struct ProjectionType { enum Enum { Z0to1, Zminus1to1 }; };
 
+    namespace Shaders {
+        struct VS_src {
+            const char* name;
+            const char* src;
+        };
+        struct VSDrawType { enum Enum { Standard, Instanced }; };
+        struct VSTechnique {
+            enum Enum {
+                forward_base
+            };
+        };
+        template<VSTechnique::Enum _technique, typename _vertexLayout, typename _cbufferLayout, VSDrawType::Enum _type>
+        struct VS_src_selector;
+
+        struct PS_src {
+            const char* name;
+            const char** samplerNames;
+            u32 numSamplers;
+            const char* src;
+        };
+        struct PSMaterialUsage { enum Enum : bool { None, Uses }; };
+        struct PSCBufferUsage { enum Enum : bool { None, Uses }; };
+        struct PSTechnique {
+            enum Enum {
+                  forward_untextured_unlit
+                , forward_textured_lit_normalmapped
+            };
+        };
+        template <PSTechnique::Enum _technique, typename _vertexLayoutIn, typename _cbufferLayout>
+        struct PS_src_selector;
+    }
+    
     namespace Driver {
         struct RscMainRenderTarget;
         struct RscRenderTarget;
@@ -12,12 +44,11 @@ namespace Renderer {
         struct RscBlendState;
         struct RscRasterizerState;
         struct RscDepthStencilState;
-        template <typename _vertexLayout, typename _cbufferLayout>
+        template <typename _vertexLayout, typename _cbufferLayout, Shaders::VSDrawType::Enum _drawType>
         struct RscVertexShader;
+        template <Shaders::PSCBufferUsage::Enum _cbufferUsage>
         struct RscPixelShader;
-        template <typename _vertexLayout, typename _cbufferLayout>
-        struct RscShaderSet;
-        template <typename _vertexLayout, typename _cbufferLayout>
+        template <typename _vertexLayout, typename _cbufferLayout, Shaders::PSCBufferUsage::Enum _cbufferUsage, Shaders::VSDrawType::Enum _drawType>
         struct RscShaderSet;
         template <typename _layout>
         struct RscBuffer;
@@ -47,13 +78,11 @@ namespace Renderer {
         Vec3 pos;
         u32 color;
     };
-    namespace Layout_CNone {
+    struct Layout_CNone {
         struct Buffers { enum Enum { Count }; };
     };
-    namespace Layout_CBuffer_3DScene {
-
-        constexpr u32 max_instances = 256; // makes InstanceData 16kb, anything higher could be risky
-
+    constexpr u32 max_instances = 256; // makes InstanceData 16kb, anything higher could be risky
+    struct Layout_CBuffer_3DScene {
         struct SceneData {
             Mat4 projectionMatrix;
             Mat4 viewMatrix;
@@ -66,22 +95,36 @@ namespace Renderer {
             Mat4 worldMatrix;
             Vec4 groupColor;
         };
+        typedef Mat4 Instance;
         struct InstanceData {
-            Mat4 instanceMatrices[max_instances]; // xyz=pos z=padding
+            Instance instanceMatrices[max_instances];
         };
         struct Buffers { enum Enum { SceneData, GroupData, InstanceData, Count }; };
     };
-    namespace Layout_CBuffer_LightPass {
+    struct Layout_CBuffer_LightPass {
         struct SceneData {
             Vec4 viewPosWS;
             Vec4 lightPosWS;
         };
         struct Buffers { enum Enum { SceneData, Count }; };
     };
-    namespace Layout_CBuffer_DebugScene {
+    struct Layout_CBuffer_DebugScene {
         typedef Mat4 GroupData;
         struct Buffers { enum Enum { GroupData, Count }; };
     };
+
+    namespace Shaders {
+        template<typename _vsCBufferLayout, typename _psCBufferLayout>
+        struct PSCBufferOpts;
+        template<typename _vsCBufferLayout>
+        struct PSCBufferOpts<_vsCBufferLayout, _vsCBufferLayout> {
+            static const PSCBufferUsage::Enum cbufferUsage = PSCBufferUsage::Uses;
+        };
+        template<typename _vsCBufferLayout>
+        struct PSCBufferOpts<_vsCBufferLayout, Layout_CNone> {
+            static const PSCBufferUsage::Enum cbufferUsage = PSCBufferUsage::None;
+        };
+    }
 
     // Convenience shapes
     struct RenderTargetTexturedQuad {
@@ -96,34 +139,6 @@ namespace Renderer {
         Renderer::Layout_Vec3 vertices[24];
         u16 indices[36];
     };
-
-namespace Shaders {
-
-    struct VSSrc {
-        const char* name;
-        const char* src;
-    };
-    struct VSDrawType { enum Enum { Standard, Instanced }; };
-
-    struct VSTechnique { enum Enum {
-        forward_base
-    }; };
-    template<VSTechnique::Enum _technique, typename _vertexLayout, typename _cbufferLayout, VSDrawType::Enum _type>
-    VSSrc vsSrc;
-
-    struct PSSrc {
-        const char* name;
-        const char** samplerNames;
-        u32 numSamplers;
-        const char* src;
-    };
-    struct PSTechnique { enum Enum {
-          forward_untextured_unlit
-        , forward_textured_lit_normalmapped
-    }; };
-    template <PSTechnique::Enum _technique, typename _vertexLayoutIn, typename _cbufferLayout>
-    PSSrc psSrc;
-}
 }
 
 #endif // __WASTELADNS_RENDERER_TYPES_H__

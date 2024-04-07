@@ -77,12 +77,20 @@ namespace Allocator {
         }
         static void* static_allocate(void* alloc, size_t bytes) {
             if (alloc) { return alloc_arena(*(Arena*)alloc, bytes, alignof(T)); }
-            else { return alloc_arena(frameArena, bytes, alignof(T)); } // default to frame arena
+            else { return Frame::static_allocate(alloc, bytes); } // default to frame arena
         }
         static void static_deallocate(void* alloc, void* ptr, size_t bytes) {
             if (alloc) { return free_arena(*(Arena*)alloc, ptr, bytes); }
-            else { return free_arena(Allocator::frameArena, ptr, bytes); } // default to frame arena
+            else { return Frame::static_deallocate(alloc, ptr, bytes); }  // default to frame arena
         }
+        struct Frame {
+            static void* static_allocate(void* alloc, size_t bytes) {
+                return alloc_arena(frameArena, bytes, alignof(T));
+            }
+            static void static_deallocate(void* alloc, void* ptr, size_t bytes) {
+                return free_arena(Allocator::frameArena, ptr, bytes);
+            }
+        };
 
         Arena* arena;
     };

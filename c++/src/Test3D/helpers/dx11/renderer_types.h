@@ -39,19 +39,20 @@ namespace Driver {
         DXGI_FORMAT format;
     };
 
-    template <typename _vertexLayout, typename _cbufferLayout>
+    template <typename _vertexLayout, typename _cbufferLayout, Shaders::VSDrawType::Enum _drawType>
     struct RscVertexShader {
         ID3D11VertexShader* shaderObject;
         ID3D11InputLayout* inputLayout;
     };
+    template <Shaders::PSCBufferUsage::Enum _cbufferUsage>
     struct RscPixelShader {
         ID3D11PixelShader* shaderObject;
     };
-    template <typename _vertexLayout, typename _cbufferLayout>
+    template <typename _vertexLayout, typename _cbufferLayout, Shaders::PSCBufferUsage::Enum _cbufferUsage, Shaders::VSDrawType::Enum _drawType>
     struct RscShaderSet {
         ~RscShaderSet() {}
-        RscVertexShader<_vertexLayout, _cbufferLayout> vs;
-        RscPixelShader ps;
+        RscVertexShader<_vertexLayout, _cbufferLayout, _drawType> vs;
+        RscPixelShader<_cbufferUsage> ps;
     };
     
     struct RscBlendState {

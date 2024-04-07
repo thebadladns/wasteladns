@@ -302,8 +302,8 @@ namespace Driver {
     };
     void create_texture_empty(RscTexture& t, const TextureRenderTargetCreateParams& params);
     void bind_textures(const RscTexture* textures, const u32 count);
-    template <typename _vertexLayout, typename _cbufferLayout>
-    void bind_shader_samplers(RscShaderSet<_vertexLayout, _cbufferLayout>& ss, const char** params, const u32 count);
+    template <typename _vertexLayout, typename _cbufferLayout, Shaders::PSCBufferUsage::Enum _cbufferUsage, Shaders::VSDrawType::Enum _drawType>
+    void bind_shader_samplers(RscShaderSet<_vertexLayout, _cbufferLayout, _cbufferUsage, _drawType>& ss, const char** params, const u32 count);
     void bind_RTs(RscRenderTarget& b, const RscTexture* textures, const u32 count);
 
     struct ShaderResult {
@@ -314,23 +314,24 @@ namespace Driver {
         const char* shaderStr;
         u32 length;
     };
-    template <typename _vertexLayout, typename _cbufferLayout>
-    ShaderResult create_shader_vs(RscVertexShader<_vertexLayout, _cbufferLayout>&, const VertexShaderRuntimeCompileParams&);
+    template <typename _vertexLayout, typename _cbufferLayout, Shaders::VSDrawType::Enum _drawType>
+    ShaderResult create_shader_vs(RscVertexShader<_vertexLayout, _cbufferLayout, _drawType>&, const VertexShaderRuntimeCompileParams&);
     struct PixelShaderRuntimeCompileParams {
         const char* shaderStr;
         u32 length;
     };
-    ShaderResult create_shader_ps(RscPixelShader&, const PixelShaderRuntimeCompileParams&);
-    template <typename _vertexLayout, typename _cbufferLayout>
+    template <Shaders::PSCBufferUsage::Enum _cbufferUsage>
+    ShaderResult create_shader_ps(RscPixelShader<_cbufferUsage>&, const PixelShaderRuntimeCompileParams&);
+    template <typename _vertexLayout, typename _vsCBufferLayout, Shaders::PSCBufferUsage::Enum _cbufferUsage, Shaders::VSDrawType::Enum _drawType>
     struct ShaderSetRuntimeCompileParams {
-        RscVertexShader<_vertexLayout, _cbufferLayout>& rscVS;
-        RscPixelShader& rscPS;
+        RscVertexShader<_vertexLayout, _vsCBufferLayout, _drawType>& rscVS;
+        RscPixelShader<_cbufferUsage>& rscPS;
         const RscCBuffer* cbuffers;
     };
-    template <typename _vertexLayout, typename _cbufferLayout>
-    ShaderResult create_shader_set(RscShaderSet<_vertexLayout, _cbufferLayout>&, const ShaderSetRuntimeCompileParams<_vertexLayout, _cbufferLayout>&);
-    template <typename _vertexLayout, typename _cbufferLayout>
-    void bind_shader(const RscShaderSet<_vertexLayout, _cbufferLayout>& ss);
+    template <typename _vertexLayout, typename _cbufferLayout, Shaders::PSCBufferUsage::Enum _cbufferUsage, Shaders::VSDrawType::Enum _drawType>
+    ShaderResult create_shader_set(RscShaderSet<_vertexLayout, _cbufferLayout, _cbufferUsage, _drawType>&, const ShaderSetRuntimeCompileParams<_vertexLayout, _cbufferLayout, _cbufferUsage, _drawType>&);
+    template <typename _vertexLayout, typename _cbufferLayout, Shaders::PSCBufferUsage::Enum _cbufferUsage, Shaders::VSDrawType::Enum _drawType>
+    void bind_shader(const RscShaderSet<_vertexLayout, _cbufferLayout, _cbufferUsage, _drawType>& ss);
 
     struct BlendStateParams {
         bool enable;
@@ -413,60 +414,14 @@ namespace Driver {
     };
     void bind_cbuffers(const RscCBuffer* cb, const u32 count, const CBufferBindParams& params);
 
-    template <typename _vertexLayout, typename _bufferLayout>
-    void create_vertex_layout(RscVertexShader<_vertexLayout, _bufferLayout>& vs, void* shaderBufferPointer, u32 shaderBufferSize);
+    template <typename _vertexLayout, typename _bufferLayout, Shaders::VSDrawType::Enum _drawType>
+    void create_vertex_layout(RscVertexShader<_vertexLayout, _bufferLayout, _drawType>& vs, void* shaderBufferPointer, u32 shaderBufferSize);
     template <typename _layout>
     void bind_vertex_layout();
-    template <typename _vertexLayout, typename _bufferLayout>
-    void bind_cbuffers_to_shader(RscShaderSet<_vertexLayout, _bufferLayout>&, const RscCBuffer* cbuffers);
-}
-template <typename _vertexLayout, typename _cbufferLayout>
-struct TechniqueSrcParams {
-    const Renderer::Driver::RscCBuffer* cbuffers;
-    const char* vertexSrc; const char* vertexShaderName;
-    const char* pixelSrc; const char* pixelShaderName;
-    const char** samplerNames; u32 numSamplers;
-};
-template <Shaders::VSTechnique::Enum _vsTechnique, Shaders::PSTechnique::Enum _psTechnique
-        , Shaders::VSDrawType::Enum _drawType
-        , typename _vertexLayout, typename _cbufferLayout>
-void create_technique(TechniqueSrcParams< _vertexLayout, _cbufferLayout>& params
-          , const Renderer::Driver::RscCBuffer* cbuffers) {
-    params.cbuffers = cbuffers;
-    const Shaders::VSSrc& vsSrc = Shaders::vsSrc<_vsTechnique, _vertexLayout, _cbufferLayout, _drawType>;
-    const Shaders::PSSrc& psSrc = Shaders::psSrc<_psTechnique, _vertexLayout, _cbufferLayout>;
-    params.vertexSrc = vsSrc.src;
-    params.vertexShaderName = vsSrc.name;
-    params.pixelSrc = psSrc.src;
-    params.pixelShaderName = psSrc.name;
-    params.samplerNames = psSrc.samplerNames; params.numSamplers = psSrc.numSamplers;
-}
-template <typename _vertexLayout, typename _cbufferLayout>
-void create_shader_from_technique(Renderer::Driver::RscShaderSet<_vertexLayout, _cbufferLayout>& shaderSet, const TechniqueSrcParams<_vertexLayout, _cbufferLayout>& params) {
-    Renderer::Driver::RscVertexShader<_vertexLayout, _cbufferLayout> rscVS;
-    Renderer::Driver::RscPixelShader rscPS;
-    Renderer::Driver::ShaderResult pixelResult;
-    Renderer::Driver::ShaderResult vertexResult;
-    pixelResult = Renderer::Driver::create_shader_ps(rscPS, { params.pixelSrc, (u32)strlen(params.pixelSrc) });
-    if (!pixelResult.compiled) {
-        Platform::debuglog("%s: %s\n", params.pixelShaderName, pixelResult.error);
-        return;
-    }
-    vertexResult = Renderer::Driver::create_shader_vs(rscVS, { params.vertexSrc, (u32)strlen(params.vertexSrc) });
-    if (!vertexResult.compiled) {
-        Platform::debuglog("%s: %s\n", params.vertexShaderName, vertexResult.error);
-        return;
-    }
-    // Todo: can't reuse pixel or vertex shader after this. Is that bad?
-    Renderer::Driver::ShaderResult result = Renderer::Driver::create_shader_set(shaderSet, { rscVS, rscPS, params.cbuffers });
-    if (!result.compiled) {
-        Platform::debuglog("Linking %s & %s: %s\n", params.vertexShaderName, params.pixelShaderName, result.error);
-    }
+    template <typename _vertexLayout, typename _bufferLayout, Shaders::PSCBufferUsage::Enum _cbufferUsage, Shaders::VSDrawType::Enum _drawType>
+    void bind_cbuffers_to_shader(RscShaderSet<_vertexLayout, _bufferLayout, _cbufferUsage, _drawType>&, const RscCBuffer* cbuffers);
+} // Driver
 
-    if (params.numSamplers) {
-        Renderer::Driver::bind_shader_samplers(shaderSet, params.samplerNames, params.numSamplers);
-    }
-}
 void create_cbuffers_3DScene(Renderer::Driver::RscCBuffer (&buffers)[Renderer::Layout_CBuffer_3DScene::Buffers::Count]) {
     Driver::create_cbuffer<Renderer::Layout_CBuffer_3DScene::SceneData>(buffers[Renderer::Layout_CBuffer_3DScene::Buffers::SceneData], {});
     Driver::create_cbuffer<Renderer::Layout_CBuffer_3DScene::GroupData>(buffers[Renderer::Layout_CBuffer_3DScene::Buffers::GroupData], {});
@@ -606,6 +561,179 @@ namespace FBX {
     }
 }
 
+template <typename _vertexLayout, typename _cbufferLayout, typename Shaders::VSDrawType::Enum _drawType>
+struct Drawlist_PerVertexBuffer;
+template <typename _vertexLayout, typename _cbufferLayout>
+struct Drawlist_PerVertexBuffer<_vertexLayout, _cbufferLayout, Shaders::VSDrawType::Standard>{
+    Driver::RscIndexedBuffer<_vertexLayout> buffer;
+    typename _cbufferLayout::GroupData groupData;
+};
+template <typename _vertexLayout, typename _cbufferLayout>
+struct Drawlist_PerVertexBuffer<_vertexLayout, _cbufferLayout, Shaders::VSDrawType::Instanced> {
+
+    Driver::RscIndexedBuffer<_vertexLayout> buffer;
+    tinystl::vector<typename _cbufferLayout::Instance> instancedData;
+    typename _cbufferLayout::GroupData groupData;
+};
+template<typename _vertexLayout, typename _cbufferLayout, Shaders::PSCBufferUsage::Enum _cbufferUsage>
+void dl_bind_and_draw_buffer(const Drawlist_PerVertexBuffer<_vertexLayout, _cbufferLayout, Shaders::VSDrawType::Standard>& buffer, Driver::RscCBuffer* cbuffers) {
+    Driver::update_cbuffer(cbuffers[_cbufferLayout::Buffers::GroupData], buffer.groupData);
+    Driver::bind_cbuffers(cbuffers, _cbufferLayout::Buffers::Count, { true, _cbufferUsage });
+    Driver::bind_indexed_vertex_buffer(buffer.buffer);
+    Driver::draw_indexed_vertex_buffer(buffer.buffer);
+}
+template<typename _vertexLayout, typename _cbufferLayout, Shaders::PSCBufferUsage::Enum _cbufferUsage>
+void dl_bind_and_draw_buffer(const Drawlist_PerVertexBuffer<_vertexLayout, _cbufferLayout, Shaders::VSDrawType::Instanced>& buffer, Driver::RscCBuffer* cbuffers) {
+    Driver::update_cbuffer(cbuffers[_cbufferLayout::Buffers::GroupData], buffer.groupData);
+    typename _cbufferLayout::InstanceData instancedBuffer;
+    u32 size = (u32)buffer.instancedData.size();
+    for (u32 k = 0; k < size; k++) {
+        instancedBuffer.instanceMatrices[k] = buffer.instancedData[k];
+    }
+    Driver::update_cbuffer(cbuffers[_cbufferLayout::Buffers::InstanceData], instancedBuffer);
+    Renderer::Driver::bind_cbuffers(cbuffers, _cbufferLayout::Buffers::Count, { true, (bool)_cbufferUsage });
+    Renderer::Driver::bind_indexed_vertex_buffer(buffer.buffer);
+    draw_instances_indexed_vertex_buffer(buffer.buffer, size);
+}
+
+template <typename _vertexLayout, typename _cbufferLayout, Shaders::PSTechnique::Enum _psTechnique, Shaders::VSDrawType::Enum _drawType>
+struct Drawlist_PerMaterial;
+template <typename _vertexLayout, typename _cbufferLayout, Shaders::VSDrawType::Enum _drawType>
+struct Drawlist_PerMaterial<_vertexLayout, _cbufferLayout, Shaders::PSTechnique::forward_untextured_unlit, _drawType> {
+    using DL_VertexBuffer = Drawlist_PerVertexBuffer<_vertexLayout, _cbufferLayout, _drawType>;
+    struct TextureTypes { enum Enum { Albedo, NormalMap, DepthMap, Count }; };
+    Driver::RscTexture textures[TextureTypes::Count];
+    Renderer::Driver::RscRasterizerState* rasterizerState;
+    tinystl::vector<DL_VertexBuffer> dl_perVertexBuffer;
+};
+template <typename _vertexLayout, typename _cbufferLayout, Shaders::VSDrawType::Enum _drawType>
+struct Drawlist_PerMaterial<_vertexLayout, _cbufferLayout, Shaders::PSTechnique::forward_textured_lit_normalmapped, _drawType> {
+    using DL_VertexBuffer = Drawlist_PerVertexBuffer<_vertexLayout, _cbufferLayout, _drawType>;
+    struct TextureTypes { enum Enum { Albedo, NormalMap, DepthMap, Count }; };
+    Driver::RscTexture textures[TextureTypes::Count];
+    Renderer::Driver::RscRasterizerState* rasterizerState;
+    tinystl::vector<DL_VertexBuffer> dl_perVertexBuffer;
+};
+template<Shaders::PSTechnique::Enum _psTechnique, typename _vertexLayout, typename _cbufferLayout, Shaders::VSDrawType::Enum _drawType>
+void dl_bind_material(const Drawlist_PerMaterial<_vertexLayout, _cbufferLayout, _psTechnique, _drawType>& material) {
+    Driver::bind_RS(*(material.rasterizerState));
+}
+template< typename _vertexLayout, typename _cbufferLayout, Shaders::VSDrawType::Enum _drawType>
+void dl_bind_material(const Drawlist_PerMaterial<_vertexLayout, _cbufferLayout, Shaders::PSTechnique::forward_textured_lit_normalmapped, _drawType>& material) {
+    Driver::bind_RS(*(material.rasterizerState));
+    Renderer::Driver::bind_textures(
+        material.textures
+        , Drawlist_PerMaterial<_vertexLayout, _cbufferLayout, Shaders::PSTechnique::forward_textured_lit_normalmapped, _drawType>::TextureTypes::Count
+    );
+}
+
+template <
+      Shaders::VSTechnique::Enum _vsTechnique, Shaders::PSTechnique::Enum _psTechnique, Shaders::PSMaterialUsage::Enum _materialUsage
+    , typename _vertexLayout, typename _cbufferLayout, Shaders::PSCBufferUsage::Enum _cbufferUsage, Shaders::VSDrawType::Enum _drawType>
+struct Drawlist_PerShader;
+template <
+      Shaders::VSTechnique::Enum _vsTechnique, Shaders::PSTechnique::Enum _psTechnique
+    , typename _vertexLayout, typename _cbufferLayout, Shaders::PSCBufferUsage::Enum _cbufferUsage, Shaders::VSDrawType::Enum _drawType>
+struct Drawlist_PerShader<_vsTechnique, _psTechnique, Shaders::PSMaterialUsage::None, _vertexLayout, _cbufferLayout, _cbufferUsage, _drawType> {
+    using DL_VertexBuffer = Drawlist_PerVertexBuffer<_vertexLayout, _cbufferLayout, _drawType>;
+    Renderer::Driver::RscShaderSet<_vertexLayout, _cbufferLayout, _cbufferUsage, _drawType> shader;
+    Renderer::Driver::RscRasterizerState* rasterizerState;
+    tinystl::vector<DL_VertexBuffer> dl_perVertexBuffer;
+};
+template <
+      Shaders::VSTechnique::Enum _vsTechnique, Shaders::PSTechnique::Enum _psTechnique
+    , typename _vertexLayout, typename _cbufferLayout, Shaders::PSCBufferUsage::Enum _cbufferUsage, Shaders::VSDrawType::Enum _drawType>
+struct Drawlist_PerShader<_vsTechnique, _psTechnique, Shaders::PSMaterialUsage::Uses, _vertexLayout, _cbufferLayout, _cbufferUsage, _drawType> {
+    using DL_VertexBuffer = Drawlist_PerVertexBuffer<_vertexLayout, _cbufferLayout, _drawType>;
+    using DL_Material = Drawlist_PerMaterial<_vertexLayout, _cbufferLayout, _psTechnique, _drawType>;
+    Renderer::Driver::RscShaderSet<_vertexLayout, _cbufferLayout, _cbufferUsage, _drawType> shader;
+    tinystl::vector<DL_Material> dl_perMaterial;
+};
+
+template <
+    Shaders::VSTechnique::Enum _vsTechnique, Shaders::PSTechnique::Enum _psTechnique
+    , typename _vertexLayout, typename _vsCBufferLayout, typename _psCBufferLayout, Shaders::VSDrawType::Enum _drawType>
+struct Shader_Params {
+    typedef Shaders::VS_src_selector<_vsTechnique, _vertexLayout, _vsCBufferLayout, _drawType> vs_selector;
+    typedef Shaders::PS_src_selector<_psTechnique, _vertexLayout, _psCBufferLayout> ps_selector;
+    typedef Shaders::PSCBufferOpts<_vsCBufferLayout, _psCBufferLayout> cbufferOpts;
+    typedef Renderer::Driver::RscShaderSet<_vertexLayout, _vsCBufferLayout, cbufferOpts::cbufferUsage, _drawType> ShaderSet;
+
+    static void create_shader_from_techniques(ShaderSet& shaderSet, Driver::RscCBuffer* cbuffers) {
+
+        const Shaders::VS_src& vsSrc = vs_selector::value();
+        const Shaders::PS_src& psSrc = ps_selector::value();
+
+        Renderer::Driver::RscVertexShader<_vertexLayout, _vsCBufferLayout, _drawType> rscVS;
+        Renderer::Driver::RscPixelShader<cbufferOpts::cbufferUsage> rscPS;
+        Renderer::Driver::ShaderResult pixelResult;
+        Renderer::Driver::ShaderResult vertexResult;
+        pixelResult = Renderer::Driver::create_shader_ps(rscPS, { psSrc.src, (u32)strlen(psSrc.src) });
+        if (!pixelResult.compiled) {
+            Platform::debuglog("%s: %s\n", psSrc.name, pixelResult.error);
+            return;
+        }
+        vertexResult = Renderer::Driver::create_shader_vs(rscVS, { vsSrc.src, (u32)strlen(vsSrc.src) });
+        if (!vertexResult.compiled) {
+            Platform::debuglog("%s: %s\n", vsSrc.name, vertexResult.error);
+            return;
+        }
+        // Todo: can't reuse pixel or vertex shader after this. Is that bad?
+        Renderer::Driver::ShaderResult result = Renderer::Driver::create_shader_set(shaderSet, { rscVS, rscPS, cbuffers });
+        if (!result.compiled) {
+            Platform::debuglog("Linking %s & %s: %s\n", vsSrc.name, psSrc.name, result.error);
+        }
+
+        if (psSrc.numSamplers) {
+            Renderer::Driver::bind_shader_samplers(shaderSet, psSrc.samplerNames, psSrc.numSamplers);
+        }
+    }
+};
+
+template <
+    Shaders::VSTechnique::Enum _vsTechnique, Shaders::PSTechnique::Enum _psTechnique
+    , typename _vertexLayout, typename _vsCBufferLayout, typename _psCBufferLayout, Shaders::VSDrawType::Enum _drawType>
+struct Drawlist_TypeContext {
+    using shader_params = Shader_Params<_vsTechnique, _psTechnique, _vertexLayout, _vsCBufferLayout, _psCBufferLayout, _drawType>;
+    using type = Drawlist_PerShader < _vsTechnique, _psTechnique, shader_params::ps_selector::materialUsage, _vertexLayout, _vsCBufferLayout, shader_params::cbufferOpts::cbufferUsage, _drawType>;
+
+    static void load_dl_technique(type& dl_shader, Renderer::Driver::RscCBuffer* cbuffers) {
+        shader_params::create_shader_from_techniques(dl_shader.shader, cbuffers);
+    }
+};
+
+template<
+      Shaders::VSTechnique::Enum _vsTechnique, Shaders::PSTechnique::Enum _psTechnique
+    , typename _vertexLayout, typename _cbufferLayout, Shaders::PSCBufferUsage::Enum _cbufferUsage, Shaders::VSDrawType::Enum _drawType>
+void dl_drawPerShader(
+      const Drawlist_PerShader<_vsTechnique, _psTechnique, Shaders::PSMaterialUsage::None, _vertexLayout, _cbufferLayout, _cbufferUsage, _drawType>& dl_shader
+    , Driver::RscCBuffer* cbuffers) {
+    Driver::bind_shader(dl_shader.shader);
+    Driver::bind_RS(*(dl_shader.rasterizerState));
+    size_t bufferCount = dl_shader.dl_perVertexBuffer.size();
+    for (size_t i = 0; i < bufferCount; i++) {
+        const auto& buffer = dl_shader.dl_perVertexBuffer[i];
+        dl_bind_and_draw_buffer<_vertexLayout, _cbufferLayout, _cbufferUsage>(buffer, cbuffers);
+    }
+}
+template<
+    Shaders::VSTechnique::Enum _vsTechnique, Shaders::PSTechnique::Enum _psTechnique
+    , typename _vertexLayout, typename _cbufferLayout, Shaders::PSCBufferUsage::Enum _cbufferUsage, Shaders::VSDrawType::Enum _drawType>
+void dl_drawPerShader(
+    const Drawlist_PerShader<_vsTechnique, _psTechnique, Shaders::PSMaterialUsage::Uses, _vertexLayout, _cbufferLayout, _cbufferUsage, _drawType>& dl_shader
+    , Driver::RscCBuffer* cbuffers) {
+    Driver::bind_shader(dl_shader.shader);
+    const size_t materialCount = dl_shader.dl_perMaterial.size();
+    for (size_t i = 0; i < materialCount; i++) {
+        const auto& dl_material = dl_shader.dl_perMaterial[i];
+        dl_bind_material(dl_material);
+        size_t bufferCount = dl_material.dl_perVertexBuffer.size();
+        for (size_t j = 0; j < bufferCount; j++) {
+            const auto& buffer = dl_material.dl_perVertexBuffer[j];
+            dl_bind_and_draw_buffer<_vertexLayout, _cbufferLayout, _cbufferUsage>(buffer, cbuffers);
+        }
+    }
+}
 };
 
 #endif // __WASTELADNS_RENDERER_H__

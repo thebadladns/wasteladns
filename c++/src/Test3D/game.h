@@ -14,6 +14,47 @@ const Scene_ModelLoadData assets[] = {
     , { "assets/meshes/bird.fbx", {1.f, 3.f, 2.23879f}, 1.f }
 };
 
+namespace Renderer {
+
+    struct Drawlist {
+
+        using DL_opaque_3d_color = Drawlist_TypeContext <
+              Shaders::VSTechnique::forward_base, Shaders::PSTechnique::forward_untextured_unlit
+            , Layout_Vec3Color4B
+            , Layout_CBuffer_3DScene
+            , Layout_CNone
+            , Shaders::VSDrawType::Standard
+        >;
+        using DL_opaque_3d_textured = Drawlist_TypeContext <
+              Shaders::VSTechnique::forward_base, Shaders::PSTechnique::forward_textured_lit_normalmapped
+            , Layout_TexturedVec3
+            , Layout_CBuffer_3DScene
+            , Layout_CBuffer_3DScene
+            , Shaders::VSDrawType::Standard
+        >;
+        using DL_opaque_3d_unlit = Drawlist_TypeContext <
+              Shaders::VSTechnique::forward_base, Shaders::PSTechnique::forward_untextured_unlit
+            , Layout_Vec3
+            , Layout_CBuffer_3DScene
+            , Layout_CNone
+            , Shaders::VSDrawType::Standard
+        >;
+        using DL_opaque_3d_unlit_instanced = Drawlist_TypeContext <
+              Shaders::VSTechnique::forward_base, Shaders::PSTechnique::forward_untextured_unlit
+            , Layout_Vec3
+            , Layout_CBuffer_3DScene
+            , Layout_CNone
+            , Shaders::VSDrawType::Instanced
+        >;
+
+        Renderer::Driver::RscCBuffer cbuffers[Renderer::Layout_CBuffer_3DScene::Buffers::Count];
+        DL_opaque_3d_color::type dl_opaque_3d_color;
+        DL_opaque_3d_textured::type dl_opaque_3d_textured;
+        DL_opaque_3d_unlit::type dl_opaque_3d_unlit;
+        DL_opaque_3d_unlit_instanced::type dl_opaque_3d_unlit_instanced;\
+    };
+}
+
 namespace Game
 {
     struct Time {
@@ -45,38 +86,13 @@ namespace Game
             ;
     };
 
-    template<typename _vertexLayout>
-    struct RenderItemModel {
-        Renderer::Driver::RscIndexedBuffer<_vertexLayout> buffer;
-        Transform transform;
-        Transform localTransform;
-        Renderer::Driver::RscRasterizerState rasterizerState;
-        Col groupColor;
-        bool fill;
-    };
-    struct RenderItemTexturedGeo {
-        Renderer::Driver::RscIndexedBuffer<Renderer::Layout_TexturedVec3> buffer;
-        Renderer::Driver::RscTexture albedo;
-        Renderer::Driver::RscTexture normal;
-        Renderer::Driver::RscTexture depth;
-        Transform transform;
-        Transform localTransform;
-    };
     struct RenderScene {
-        tinystl::vector<RenderItemModel<Renderer::Layout_Vec3Color4B>> inputMeshGroupBuffers;
-        RenderItemModel<Renderer::Layout_Vec3> inputMeshUnlitGroupBuffer;
-        RenderItemModel<Renderer::Layout_Vec3> untexturedCubeGroupBuffer;
-        RenderItemTexturedGeo texturedCubeGroupBuffer;
-        Renderer::Driver::RscCBuffer cbuffers[Renderer::Layout_CBuffer_3DScene::Buffers::Count];
+        Renderer::Drawlist drawlist;
         Renderer::Driver::RscRasterizerState rasterizerStateFill, rasterizerStateLine;
         Renderer::Driver::RscDepthStencilState depthStateOn;
         Renderer::Driver::RscBlendState blendStateOn;
         Renderer::Driver::RscBlendState blendStateOff;
         Renderer::Driver::RscMainRenderTarget mainRenderTarget;
-        Renderer::Driver::RscShaderSet<Renderer::Layout_Vec3Color4B, Renderer::Layout_CBuffer_3DScene::Buffers> sceneShader;
-        Renderer::Driver::RscShaderSet<Renderer::Layout_Vec3, Renderer::Layout_CBuffer_3DScene::Buffers> sceneUnlitShader;
-        Renderer::Driver::RscShaderSet<Renderer::Layout_Vec3, Renderer::Layout_CBuffer_3DScene::Buffers> sceneInstancedShader;
-        Renderer::Driver::RscShaderSet<Renderer::Layout_TexturedVec3, Renderer::Layout_CBuffer_3DScene::Buffers> sceneTexturedShader;
     };
 
     struct CameraManager {
@@ -189,77 +205,75 @@ namespace Game
             Renderer::Driver::create_RS(rscene.rasterizerStateLine, { Renderer::Driver::RasterizerFillMode::Line, Renderer::Driver::RasterizerCullMode::CullNone });
             Renderer::Driver::create_DS(rscene.depthStateOn, { true, Renderer::Driver::DepthFunc::Less });
 
-            // cbuffers
-            Renderer::create_cbuffers_3DScene(rscene.cbuffers);
-
-            // shaders
             {
-                Renderer::TechniqueSrcParams< Renderer::Layout_Vec3Color4B, Renderer::Layout_CBuffer_3DScene::Buffers> params;
-                Renderer::create_technique<Renderer::Shaders::VSTechnique::forward_base
-                               , Renderer::Shaders::PSTechnique::forward_untextured_unlit
-                               , Renderer::Shaders::VSDrawType::Standard>
-                    (params, rscene.cbuffers);
-                Renderer::create_shader_from_technique(rscene.sceneShader, params);
-            }
-            {
-                Renderer::TechniqueSrcParams< Renderer::Layout_Vec3, Renderer::Layout_CBuffer_3DScene::Buffers> params;
-                Renderer::create_technique<Renderer::Shaders::VSTechnique::forward_base
-                               , Renderer::Shaders::PSTechnique::forward_untextured_unlit
-                               , Renderer::Shaders::VSDrawType::Standard>
-                    (params, rscene.cbuffers);
-                Renderer::create_shader_from_technique(rscene.sceneUnlitShader, params);
-            }
-            {
-                Renderer::TechniqueSrcParams< Renderer::Layout_TexturedVec3, Renderer::Layout_CBuffer_3DScene::Buffers> params;
-                Renderer::create_technique<Renderer::Shaders::VSTechnique::forward_base
-                               , Renderer::Shaders::PSTechnique::forward_textured_lit_normalmapped
-                               , Renderer::Shaders::VSDrawType::Standard>
-                    (params, rscene.cbuffers);
-                Renderer::create_shader_from_technique(rscene.sceneTexturedShader, params);
-            }
-            {
-                Renderer::TechniqueSrcParams< Renderer::Layout_Vec3, Renderer::Layout_CBuffer_3DScene::Buffers> params;
-                Renderer::create_technique<Renderer::Shaders::VSTechnique::forward_base
-                               , Renderer::Shaders::PSTechnique::forward_untextured_unlit
-                               , Renderer::Shaders::VSDrawType::Instanced>
-                    (params, rscene.cbuffers);
-                Renderer::create_shader_from_technique(rscene.sceneInstancedShader, params);
-            }
-
-            // input mesh vertex buffers
-            {
-                for (const Scene_ModelLoadData& asset : assets) {
-                    RenderItemModel<Renderer::Layout_Vec3Color4B> r;
-                    Math::identity4x4(r.transform);
-                    Math::identity4x4(r.localTransform);
-                    r.localTransform.matrix.col0.x *= asset.scale;
-                    r.localTransform.matrix.col1.y *= asset.scale;
-                    r.localTransform.matrix.col2.z *= asset.scale;
-                    r.transform.pos = asset.origin;
-                    r.rasterizerState = rscene.rasterizerStateFill;
-                    r.groupColor = Col(0.3f, 0.3f, 0.3f, 1.f);
-                    Renderer::FBX::load(r.buffer, asset.path, game.memory.scratchArenaRoot);
-
-                    rscene.inputMeshGroupBuffers.push_back(r);
+                auto& dl = game.renderMgr.renderScene.drawlist;
+                dl = {};
+                Renderer::create_cbuffers_3DScene(dl.cbuffers);
+                {
+                    dl.dl_opaque_3d_color.rasterizerState = &rscene.rasterizerStateFill;
+                    Renderer::Drawlist::DL_opaque_3d_color::load_dl_technique(dl.dl_opaque_3d_color, dl.cbuffers);
+                }
+                {
+                    Renderer::Drawlist::DL_opaque_3d_textured::load_dl_technique(dl.dl_opaque_3d_textured, dl.cbuffers);
+                }
+                {
+                    dl.dl_opaque_3d_unlit.rasterizerState = &rscene.rasterizerStateFill;
+                    Renderer::Drawlist::DL_opaque_3d_unlit::load_dl_technique(dl.dl_opaque_3d_unlit, dl.cbuffers);
+                }
+                {
+                    dl.dl_opaque_3d_unlit_instanced.rasterizerState = &rscene.rasterizerStateFill;
+                    Renderer::Drawlist::DL_opaque_3d_unlit_instanced::load_dl_technique(dl.dl_opaque_3d_unlit_instanced, dl.cbuffers);
                 }
             }
 
-            // unit cube vertex buffers
+            // meshes in the scene
             {
-                RenderItemModel<Renderer::Layout_Vec3>& untextured = rscene.untexturedCubeGroupBuffer;
-                untextured.rasterizerState = rscene.rasterizerStateFill;
-                untextured.groupColor = Col(0.9f, 0.1f, 0.8f, 1.f);
-                Renderer::create_indexed_vertex_buffer_from_untextured_cube(untextured.buffer, { 1.f, 1.f, 1.f });
-                Math::identity4x4(untextured.transform);
-                Math::identity4x4(untextured.localTransform);
+                for (const Scene_ModelLoadData& asset : assets) {
+                    Transform transform;
+                    Transform localTransform;
+                    Math::identity4x4(transform);
+                    Math::identity4x4(localTransform);
+                    localTransform.matrix.col0.x *= asset.scale;
+                    localTransform.matrix.col1.y *= asset.scale;
+                    localTransform.matrix.col2.z *= asset.scale;
+                    transform.pos = asset.origin;
 
-                RenderItemTexturedGeo& textured = rscene.texturedCubeGroupBuffer;
-                Renderer::Driver::create_texture_from_file(textured.albedo, { "assets/pbr/material04-albedo.png" });
-                Renderer::Driver::create_texture_from_file(textured.normal, { "assets/pbr/material04-normal.png" });
-                Renderer::Driver::create_texture_from_file(textured.depth, { "assets/pbr/material04-depth.png" });
-                Renderer::create_indexed_vertex_buffer_from_textured_cube(textured.buffer, { 1.f, 1.f, 1.f });
-                Math::identity4x4(textured.transform);
-                Math::identity4x4(textured.localTransform);
+                    Renderer::Drawlist::DL_opaque_3d_color::type::DL_VertexBuffer buffer = {};
+                    buffer.groupData.worldMatrix = Math::mult(transform.matrix, localTransform.matrix);
+                    buffer.groupData.groupColor = Col(0.3f, 0.3f, 0.3f, 1.f).RGBAv4();
+                    Renderer::FBX::load(buffer.buffer, asset.path, game.memory.scratchArenaRoot);
+
+                    rscene.drawlist.dl_opaque_3d_color.dl_perVertexBuffer.push_back(buffer);
+                }
+                // unit cubes
+                {
+                    Renderer::Drawlist::DL_opaque_3d_unlit_instanced::type::DL_VertexBuffer buffer = {};
+                    Transform t; Math::identity4x4(t);
+                    buffer.groupData.worldMatrix = t.matrix;
+                    buffer.groupData.groupColor = Col(0.9f, 0.1f, 0.8f, 1.f).RGBAv4();
+                    buffer.instancedData.resize(4);
+                    Renderer::create_indexed_vertex_buffer_from_untextured_cube(buffer.buffer, { 1.f, 1.f, 1.f });
+
+                    rscene.drawlist.dl_opaque_3d_unlit_instanced.dl_perVertexBuffer.push_back(buffer);
+                }
+                {
+                    using DL_VertexBuffer = Renderer::Drawlist::DL_opaque_3d_textured::type::DL_VertexBuffer;
+                    using DL_Material = Renderer::Drawlist::DL_opaque_3d_textured::type::DL_Material;
+                    DL_VertexBuffer buffer = {};
+                    Transform t; Math::identity4x4(t);
+                    buffer.groupData.worldMatrix = t.matrix;
+                    buffer.groupData.groupColor = Col(0.f, 0.f, 0.f, 0.f).RGBAv4();
+                    Renderer::create_indexed_vertex_buffer_from_textured_cube(buffer.buffer, { 1.f, 1.f, 1.f });
+
+                    DL_Material material = {};
+                    material.rasterizerState = &rscene.rasterizerStateFill;
+                    Renderer::Driver::create_texture_from_file(material.textures[DL_Material::TextureTypes::Albedo], { "assets/pbr/material04-albedo.png" });
+                    Renderer::Driver::create_texture_from_file(material.textures[DL_Material::TextureTypes::NormalMap], { "assets/pbr/material04-normal.png" });
+                    Renderer::Driver::create_texture_from_file(material.textures[DL_Material::TextureTypes::DepthMap], { "assets/pbr/material04-depth.png" });
+                    material.dl_perVertexBuffer.push_back(buffer);
+
+                    rscene.drawlist.dl_opaque_3d_textured.dl_perMaterial.push_back(material);
+                }
             }
 
             __DEBUGEXP(Renderer::Immediate::load(game.renderMgr.immediateBuffer, game.memory.imDebugArena));
@@ -268,7 +282,7 @@ namespace Game
         game.player = {};
         {
             Math::identity4x4(game.player.transform);
-            game.player.transform = game.renderMgr.renderScene.inputMeshGroupBuffers[0].transform;
+            game.player.transform.pos = assets[0].origin;
         }
 
         game.cameraMgr = {};
@@ -339,7 +353,28 @@ namespace Game
             {
                 Gameplay::Movement::process(game.player.control, keyboard, { Input::UP, Input::DOWN, Input::LEFT, Input::RIGHT }, dt);
                 Gameplay::Movement::process_cameraRelative(game.player.transform, game.player.movementController, game.player.control, activeCam->transform, dt);
-                game.renderMgr.renderScene.inputMeshGroupBuffers[0].transform = game.player.transform;
+
+                // TODO: ABSOLUTE HACK
+                // update the drawlist directly, until we have a system that connects gameplay and render data
+                Transform localTransform;
+                const float playerScale = assets[0].scale;
+                Math::identity4x4(localTransform);
+                localTransform.matrix.col0.x *= playerScale;
+                localTransform.matrix.col1.y *= playerScale;
+                localTransform.matrix.col2.z *= playerScale;
+                auto& colorBuffer = game.renderMgr.renderScene.drawlist.dl_opaque_3d_color.dl_perVertexBuffer[0];
+                colorBuffer.groupData.worldMatrix = Math::mult(game.player.transform.matrix, localTransform.matrix);
+                auto& instancedBuffer = game.renderMgr.renderScene.drawlist.dl_opaque_3d_unlit_instanced.dl_perVertexBuffer[0];
+                u32 instanceSize = (u32)instancedBuffer.instancedData.size();
+                for (u32 i = 0; i < instanceSize; i++) {
+                    Transform t;
+                    Math::identity4x4(t);
+                    t.pos = Math::add(game.player.transform.pos, Math::scale(game.player.transform.front, -5.f * i));
+                    t.matrix.col0.x = 0.2f;
+                    t.matrix.col1.y = 0.2f;
+                    t.matrix.col2.z = 0.2f;
+                    instancedBuffer.instancedData[i] = t.matrix;
+                }
             }
 
             // camera update
@@ -365,7 +400,7 @@ namespace Game
                 cbufferPerScene.viewMatrix = activeCam->viewMatrix;
                 cbufferPerScene.viewPos = activeCam->transform.pos;
                 cbufferPerScene.lightPos = Vec3(3.f, 8.f, 15.f);
-                Renderer::Driver::update_cbuffer(rscene.cbuffers[Renderer::Layout_CBuffer_3DScene::Buffers::SceneData], cbufferPerScene);
+                Renderer::Driver::update_cbuffer(rscene.drawlist.cbuffers[Renderer::Layout_CBuffer_3DScene::Buffers::SceneData], cbufferPerScene);
             }
 
             {
@@ -373,88 +408,13 @@ namespace Game
                 Renderer::Driver::bind_DS(rscene.depthStateOn);
                 Renderer::Driver::bind_main_RT(rscene.mainRenderTarget);
                 Renderer::Driver::clear_main_RT(rscene.mainRenderTarget, Col(0.f, 0.f, 0.f, 1.f));
+            
+                auto& dl = rscene.drawlist;
 
-                // mesh
-                {
-                    for (const auto& r : rscene.inputMeshGroupBuffers) {
-                        Renderer::Layout_CBuffer_3DScene::GroupData buffer;
-                        buffer.worldMatrix = Math::mult(r.transform.matrix, r.localTransform.matrix);
-                        buffer.groupColor = r.groupColor.RGBAv4();
-                        Renderer::Driver::update_cbuffer(rscene.cbuffers[Renderer::Layout_CBuffer_3DScene::Buffers::GroupData], buffer);
-
-                        Renderer::Driver::bind_cbuffers(rscene.cbuffers, Renderer::Layout_CBuffer_3DScene::Buffers::Count, { true, false });
-                        Renderer::Driver::bind_shader(rscene.sceneShader);
-                        Renderer::Driver::bind_RS(r.rasterizerState);
-                        Renderer::Driver::bind_indexed_vertex_buffer(r.buffer);
-                        Renderer::Driver::draw_indexed_vertex_buffer(r.buffer);
-                    }
-                }
-                {
-                    const auto& r = rscene.inputMeshUnlitGroupBuffer;
-                    Renderer::Layout_CBuffer_3DScene::GroupData buffer;
-                    buffer.worldMatrix = Math::mult(r.transform.matrix, r.localTransform.matrix);
-                    buffer.groupColor = r.groupColor.RGBAv4();
-                    Renderer::Driver::update_cbuffer(rscene.cbuffers[Renderer::Layout_CBuffer_3DScene::Buffers::GroupData], buffer);
-
-                    Renderer::Driver::bind_cbuffers(rscene.cbuffers, Renderer::Layout_CBuffer_3DScene::Buffers::Count, { true, false });
-                    Renderer::Driver::bind_shader(rscene.sceneUnlitShader);
-                    Renderer::Driver::bind_RS(r.rasterizerState);
-                    Renderer::Driver::bind_indexed_vertex_buffer(r.buffer);
-                    Renderer::Driver::draw_indexed_vertex_buffer(r.buffer);
-                }
-                
-                // unit cubes
-                {
-                    {
-                        const RenderItemTexturedGeo& r = rscene.texturedCubeGroupBuffer;
-                        Renderer::Layout_CBuffer_3DScene::GroupData buffer;
-                        buffer.worldMatrix = Math::mult(r.transform.matrix, r.localTransform.matrix);
-                        Renderer::Driver::update_cbuffer(rscene.cbuffers[Renderer::Layout_CBuffer_3DScene::Buffers::GroupData], buffer);
-
-                        // TODO: handle visibility of constant buffers better than this (or include it in the compile data of the shader)
-                        Renderer::Driver::bind_cbuffers(rscene.cbuffers, Renderer::Layout_CBuffer_3DScene::Buffers::Count, { true, true });
-                        Renderer::Driver::bind_shader(rscene.sceneTexturedShader);
-                        Renderer::Driver::bind_RS(rscene.rasterizerStateFill);
-                        Renderer::Driver::RscTexture textures[] = { r.albedo, r.normal, r.depth };
-                        const u32 textureCount = sizeof(textures) / sizeof(textures[0]);
-                        Renderer::Driver::bind_textures(textures, textureCount);
-                        Renderer::Driver::bind_indexed_vertex_buffer(r.buffer);
-                        draw_indexed_vertex_buffer(r.buffer);
-                        Renderer::Driver::RscTexture nullTex[] = { {}, {}, {} };
-                        Renderer::Driver::bind_textures(nullTex, textureCount);
-                    }
-
-                    {
-                        const auto& r = rscene.untexturedCubeGroupBuffer;
-                        Renderer::Layout_CBuffer_3DScene::GroupData buffer;
-                        buffer.worldMatrix = Math::mult(r.transform.matrix, r.localTransform.matrix);
-                        buffer.groupColor = r.groupColor.RGBAv4();
-                        Renderer::Driver::update_cbuffer(rscene.cbuffers[Renderer::Layout_CBuffer_3DScene::Buffers::GroupData], buffer);
-
-                        Renderer::Driver::bind_shader(rscene.sceneInstancedShader);
-                        Renderer::Driver::bind_RS(r.rasterizerState);
-                        Renderer::Driver::bind_indexed_vertex_buffer(r.buffer);
-                        Renderer::Driver::bind_cbuffers(rscene.cbuffers, Renderer::Layout_CBuffer_3DScene::Buffers::Count, { true, false });
-
-                        Renderer::Layout_CBuffer_3DScene::InstanceData instancedBuffer;
-                        u32 bufferId = 0;
-                        u32 begin = 1;
-                        u32 end = 4;
-                        for (u32 i = begin; i < end; i++) {
-                            Transform t;
-                            Math::identity4x4(t);
-                            t.pos = Math::add(rscene.inputMeshGroupBuffers[0].transform.pos, Math::scale(rscene.inputMeshGroupBuffers[0].transform.front, -5.f * i));
-                            t.matrix.col0.x = 0.2f;
-                            t.matrix.col1.y = 0.2f;
-                            t.matrix.col2.z = 0.2f;
-                            instancedBuffer.instanceMatrices[bufferId++] = t.matrix;
-                        }
-
-                        Renderer::Driver::update_cbuffer(rscene.cbuffers[Renderer::Layout_CBuffer_3DScene::Buffers::InstanceData], instancedBuffer);
-                        draw_instances_indexed_vertex_buffer(r.buffer, end - begin);
-                    }
-
-                }
+                Renderer::dl_drawPerShader(dl.dl_opaque_3d_color, dl.cbuffers);
+                Renderer::dl_drawPerShader(dl.dl_opaque_3d_textured, dl.cbuffers);
+                Renderer::dl_drawPerShader(dl.dl_opaque_3d_unlit, dl.cbuffers);
+                Renderer::dl_drawPerShader(dl.dl_opaque_3d_unlit_instanced, dl.cbuffers);
             }
 
             // Immediate-mode debug. Can be moved out of the render update, it only pushes data to cpu buffers
