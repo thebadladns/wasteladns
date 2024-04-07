@@ -398,6 +398,8 @@ namespace Driver {
     template <typename _layout>
     void update_indexed_vertex_buffer(RscIndexedBuffer<_layout>&, const IndexedBufferUpdateParams&);
     template <typename _layout>
+    void bind_indexed_vertex_buffer(const RscIndexedBuffer<_layout>&);
+    template <typename _layout>
     void draw_indexed_vertex_buffer(const RscIndexedBuffer<_layout>&);
     template <typename _layout>
     void draw_instances_indexed_vertex_buffer(const RscIndexedBuffer<_layout>&, const u32);
