@@ -10,8 +10,9 @@ set(CMAKE_BINARY_DIR ${CMAKE_SOURCE_DIR}/bin)
 set(EXECUTABLE_OUTPUT_PATH ${CMAKE_BINARY_DIR})
 
 if (WIN32)
-# only add main; other files will be found in the Solution Explorer of Visual Studio
-set(SOURCES "src/main.cpp")
+# only add main.cpp as a source; other files will be found in the Solution Explorer of Visual Studio
+# also add natvis file
+set(SOURCES "src/main.cpp" "wasteladns.natvis")
 else()
 # add "src" which will be used as a reference folder
 set(SOURCES "src/main.cpp" "src")
