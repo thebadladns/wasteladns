@@ -107,7 +107,6 @@ namespace Game
         __DEBUGDEF(Renderer::Immediate::Buffer immediateBuffer;)
         Renderer::OrthoProjection orthoProjection;
         Renderer::PerspProjection perspProjection;
-        Mat4 viewMatrix;
     };
 
     #if __DEBUG
