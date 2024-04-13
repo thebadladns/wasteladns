@@ -349,6 +349,7 @@ namespace Driver {
     struct DepthStencilStateParams {
         bool enable;
         DepthFunc::Enum func;
+        DepthWriteMask::Enum writemask;
     };
     void create_DS(RscDepthStencilState&, const DepthStencilStateParams&);
     void bind_DS(const RscDepthStencilState& ds);
@@ -601,30 +602,18 @@ void dl_bind_and_draw_buffer(const Drawlist_PerVertexBuffer<_vertexLayout, _cbuf
 template <typename _vertexLayout, typename _cbufferLayout, Shaders::PSTechnique::Enum _psTechnique, Shaders::VSDrawType::Enum _drawType>
 struct Drawlist_PerMaterial;
 template <typename _vertexLayout, typename _cbufferLayout, Shaders::VSDrawType::Enum _drawType>
-struct Drawlist_PerMaterial<_vertexLayout, _cbufferLayout, Shaders::PSTechnique::forward_untextured_unlit, _drawType> {
-    using DL_VertexBuffer = Drawlist_PerVertexBuffer<_vertexLayout, _cbufferLayout, _drawType>;
-    struct TextureTypes { enum Enum { Albedo, NormalMap, DepthMap, Count }; };
-    Driver::RscTexture textures[TextureTypes::Count];
-    Renderer::Driver::RscRasterizerState* rasterizerState;
-    tinystl::vector<DL_VertexBuffer> dl_perVertexBuffer;
-};
-template <typename _vertexLayout, typename _cbufferLayout, Shaders::VSDrawType::Enum _drawType>
 struct Drawlist_PerMaterial<_vertexLayout, _cbufferLayout, Shaders::PSTechnique::forward_textured_lit_normalmapped, _drawType> {
     using DL_VertexBuffer = Drawlist_PerVertexBuffer<_vertexLayout, _cbufferLayout, _drawType>;
     struct TextureTypes { enum Enum { Albedo, NormalMap, DepthMap, Count }; };
     Driver::RscTexture textures[TextureTypes::Count];
-    Renderer::Driver::RscRasterizerState* rasterizerState;
     tinystl::vector<DL_VertexBuffer> dl_perVertexBuffer;
 };
 template<Shaders::PSTechnique::Enum _psTechnique, typename _vertexLayout, typename _cbufferLayout, Shaders::VSDrawType::Enum _drawType>
-void dl_bind_material(const Drawlist_PerMaterial<_vertexLayout, _cbufferLayout, _psTechnique, _drawType>& material) {
-    Driver::bind_RS(*(material.rasterizerState));
-}
+void dl_bind_material(const Drawlist_PerMaterial<_vertexLayout, _cbufferLayout, _psTechnique, _drawType>& material);
 template< typename _vertexLayout, typename _cbufferLayout, Shaders::VSDrawType::Enum _drawType>
-void dl_bind_material(const Drawlist_PerMaterial<_vertexLayout, _cbufferLayout, Shaders::PSTechnique::forward_textured_lit_normalmapped, _drawType>& material) {
-    Driver::bind_RS(*(material.rasterizerState));
+void dl_bind_material(const Drawlist_PerMaterial<_vertexLayout, _cbufferLayout, Shaders::PSTechnique::forward_textured_lit_normalmapped, _drawType>& dl_material) {
     Renderer::Driver::bind_textures(
-        material.textures
+          dl_material.textures
         , Drawlist_PerMaterial<_vertexLayout, _cbufferLayout, Shaders::PSTechnique::forward_textured_lit_normalmapped, _drawType>::TextureTypes::Count
     );
 }
@@ -640,6 +629,8 @@ struct Drawlist_PerShader<_vsTechnique, _psTechnique, Shaders::PSMaterialUsage::
     using DL_VertexBuffer = Drawlist_PerVertexBuffer<_vertexLayout, _cbufferLayout, _drawType>;
     Renderer::Driver::RscShaderSet<_vertexLayout, _cbufferLayout, _cbufferUsage, _drawType> shader;
     Renderer::Driver::RscRasterizerState* rasterizerState;
+    Renderer::Driver::RscBlendState* blendState;
+    Renderer::Driver::RscDepthStencilState* depthStencilState;
     tinystl::vector<DL_VertexBuffer> dl_perVertexBuffer;
 };
 template <
@@ -649,6 +640,9 @@ struct Drawlist_PerShader<_vsTechnique, _psTechnique, Shaders::PSMaterialUsage::
     using DL_VertexBuffer = Drawlist_PerVertexBuffer<_vertexLayout, _cbufferLayout, _drawType>;
     using DL_Material = Drawlist_PerMaterial<_vertexLayout, _cbufferLayout, _psTechnique, _drawType>;
     Renderer::Driver::RscShaderSet<_vertexLayout, _cbufferLayout, _cbufferUsage, _drawType> shader;
+    Renderer::Driver::RscRasterizerState* rasterizerState;
+    Renderer::Driver::RscBlendState* blendState;
+    Renderer::Driver::RscDepthStencilState* depthStencilState;
     tinystl::vector<DL_Material> dl_perMaterial;
 };
 
@@ -711,7 +705,9 @@ void dl_drawPerShader(
       const Drawlist_PerShader<_vsTechnique, _psTechnique, Shaders::PSMaterialUsage::None, _vertexLayout, _cbufferLayout, _cbufferUsage, _drawType>& dl_shader
     , Driver::RscCBuffer* cbuffers) {
     Driver::bind_shader(dl_shader.shader);
+    Driver::bind_DS(*(dl_shader.depthStencilState));
     Driver::bind_RS(*(dl_shader.rasterizerState));
+    Driver::bind_blend_state(*(dl_shader.blendState));
     size_t bufferCount = dl_shader.dl_perVertexBuffer.size();
     for (size_t i = 0; i < bufferCount; i++) {
         const auto& buffer = dl_shader.dl_perVertexBuffer[i];
@@ -725,6 +721,9 @@ void dl_drawPerShader(
     const Drawlist_PerShader<_vsTechnique, _psTechnique, Shaders::PSMaterialUsage::Uses, _vertexLayout, _cbufferLayout, _cbufferUsage, _drawType>& dl_shader
     , Driver::RscCBuffer* cbuffers) {
     Driver::bind_shader(dl_shader.shader);
+    Driver::bind_DS(*(dl_shader.depthStencilState));
+    Driver::bind_RS(*(dl_shader.rasterizerState));
+    Driver::bind_blend_state(*(dl_shader.blendState));
     const size_t materialCount = dl_shader.dl_perMaterial.size();
     for (size_t i = 0; i < materialCount; i++) {
         const auto& dl_material = dl_shader.dl_perMaterial[i];
@@ -736,6 +735,7 @@ void dl_drawPerShader(
         }
     }
 }
+
 };
 
 #endif // __WASTELADNS_RENDERER_H__

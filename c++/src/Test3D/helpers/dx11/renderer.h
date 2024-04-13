@@ -125,7 +125,6 @@ namespace Driver {
             t.format = format;
 
             // Do not initialize data here, since we'll use auto mipmapss
-            ID3D11Texture2D* texture;
             D3D11_TEXTURE2D_DESC texDesc = {};
             texDesc.Width = w;
             texDesc.Height = h;
@@ -138,17 +137,17 @@ namespace Driver {
             texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE|D3D11_BIND_RENDER_TARGET;
             texDesc.CPUAccessFlags = 0;
             texDesc.MiscFlags = D3D11_RESOURCE_MISC_GENERATE_MIPS;
-            d3ddev->CreateTexture2D(&texDesc, nullptr, &texture);
+            d3ddev->CreateTexture2D(&texDesc, nullptr, &t.texture);
 
             D3D11_SHADER_RESOURCE_VIEW_DESC texViewDesc = {};
             texViewDesc.Format = format;
             texViewDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
             texViewDesc.Texture2D.MipLevels = -1;
             texViewDesc.Texture2D.MostDetailedMip = 0;
-            d3ddev->CreateShaderResourceView(texture, &texViewDesc, &t.view);
+            d3ddev->CreateShaderResourceView(t.texture, &texViewDesc, &t.view);
             
             // Initialize data and generate mips
-            d3dcontext->UpdateSubresource(texture, 0, nullptr, data, typeSize * w, typeSize * w * h);
+            d3dcontext->UpdateSubresource(t.texture, 0, nullptr, data, typeSize * w, typeSize * w * h);
             d3dcontext->GenerateMips(t.view);
 
             // Sampler tied to texture resource, for now
@@ -358,7 +357,7 @@ namespace Driver {
         ID3D11DepthStencilState* depthStencilState;
         D3D11_DEPTH_STENCIL_DESC depthStencilStateDesc = {};
         depthStencilStateDesc.DepthEnable = params.enable;
-        depthStencilStateDesc.DepthWriteMask = D3D11_DEPTH_WRITE_MASK_ALL;
+        depthStencilStateDesc.DepthWriteMask = (D3D11_DEPTH_WRITE_MASK) params.writemask;
         depthStencilStateDesc.DepthFunc = (D3D11_COMPARISON_FUNC) params.func;
         depthStencilStateDesc.StencilEnable = false;
         d3ddev->CreateDepthStencilState(&depthStencilStateDesc, &depthStencilState);

@@ -17,6 +17,7 @@ namespace Driver {
     struct RasterizerFillMode { enum Enum { Fill = GL_FILL, Line = GL_LINE }; };
     struct RasterizerCullMode { enum Enum { CullFront = GL_FRONT, CullBack = GL_BACK, CullNone = 0 }; };
     struct DepthFunc { enum Enum { Less = GL_LESS }; }; // TODO
+    struct DepthWriteMask { enum Enum { All = GL_TRUE, Zero = GL_FALSE }; };
     struct BufferMemoryUsage { enum Enum { GPU = GL_STATIC_DRAW, CPU = GL_DYNAMIC_DRAW }; };
     struct BufferAccessType { enum Enum { GPU = GL_STATIC_DRAW, CPU = GL_DYNAMIC_DRAW }; }; // repeated, compatibility-only
     struct BufferItemType { enum Enum { U16 = GL_UNSIGNED_SHORT, U32 = GL_UNSIGNED_INT }; };
@@ -62,6 +63,7 @@ namespace Driver {
     struct RscDepthStencilState {
         bool enable;
         GLenum func;
+        GLenum writemask;
     };
     
     template <typename _layout>

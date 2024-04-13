@@ -12,34 +12,28 @@ struct Scene_ModelLoadData {
 const Scene_ModelLoadData assets[] = {
       { "assets/meshes/boar.fbx", {5.f, 10.f, 2.30885f}, 1.f }
     , { "assets/meshes/bird.fbx", {1.f, 3.f, 2.23879f}, 1.f }
+    , { "assets/meshes/bird.fbx", {0.f, 0.f, 2.23879f}, 1.f }
 };
 
 namespace Renderer {
 
     struct Drawlist {
 
-        using DL_opaque_3d_color = Drawlist_TypeContext <
+        using DL_3d_color = Drawlist_TypeContext <
               Shaders::VSTechnique::forward_base, Shaders::PSTechnique::forward_untextured_unlit
             , Layout_Vec3Color4B
             , Layout_CBuffer_3DScene
             , Layout_CNone
             , Shaders::VSDrawType::Standard
         >;
-        using DL_opaque_3d_textured = Drawlist_TypeContext <
+        using DL_3d_textured = Drawlist_TypeContext <
               Shaders::VSTechnique::forward_base, Shaders::PSTechnique::forward_textured_lit_normalmapped
             , Layout_TexturedVec3
             , Layout_CBuffer_3DScene
             , Layout_CBuffer_3DScene
             , Shaders::VSDrawType::Standard
         >;
-        using DL_opaque_3d_unlit = Drawlist_TypeContext <
-              Shaders::VSTechnique::forward_base, Shaders::PSTechnique::forward_untextured_unlit
-            , Layout_Vec3
-            , Layout_CBuffer_3DScene
-            , Layout_CNone
-            , Shaders::VSDrawType::Standard
-        >;
-        using DL_opaque_3d_unlit_instanced = Drawlist_TypeContext <
+        using DL_3d_unlit_instanced = Drawlist_TypeContext <
               Shaders::VSTechnique::forward_base, Shaders::PSTechnique::forward_untextured_unlit
             , Layout_Vec3
             , Layout_CBuffer_3DScene
@@ -48,10 +42,10 @@ namespace Renderer {
         >;
 
         Renderer::Driver::RscCBuffer cbuffers[Renderer::Layout_CBuffer_3DScene::Buffers::Count];
-        DL_opaque_3d_color::type dl_opaque_3d_color;
-        DL_opaque_3d_textured::type dl_opaque_3d_textured;
-        DL_opaque_3d_unlit::type dl_opaque_3d_unlit;
-        DL_opaque_3d_unlit_instanced::type dl_opaque_3d_unlit_instanced;\
+        DL_3d_color::type dl_opaque_3d_color;
+        DL_3d_textured::type dl_opaque_3d_textured;
+        DL_3d_unlit_instanced::type dl_opaque_3d_unlit_instanced;
+        DL_3d_color::type dl_transparent_3d_color;
     };
 }
 
@@ -89,7 +83,7 @@ namespace Game
     struct RenderScene {
         Renderer::Drawlist drawlist;
         Renderer::Driver::RscRasterizerState rasterizerStateFill, rasterizerStateLine;
-        Renderer::Driver::RscDepthStencilState depthStateOn;
+        Renderer::Driver::RscDepthStencilState depthStateOn, depthStateReadOnly;
         Renderer::Driver::RscBlendState blendStateOn;
         Renderer::Driver::RscBlendState blendStateOff;
         Renderer::Driver::RscMainRenderTarget mainRenderTarget;
@@ -200,9 +194,11 @@ namespace Game
 
             // rasterizer states
             Renderer::Driver::create_blend_state(rscene.blendStateOn, { true });
+            Renderer::Driver::create_blend_state(rscene.blendStateOff, { false });
             Renderer::Driver::create_RS(rscene.rasterizerStateFill, { Renderer::Driver::RasterizerFillMode::Fill, Renderer::Driver::RasterizerCullMode::CullBack });
             Renderer::Driver::create_RS(rscene.rasterizerStateLine, { Renderer::Driver::RasterizerFillMode::Line, Renderer::Driver::RasterizerCullMode::CullNone });
-            Renderer::Driver::create_DS(rscene.depthStateOn, { true, Renderer::Driver::DepthFunc::Less });
+            Renderer::Driver::create_DS(rscene.depthStateOn, { true, Renderer::Driver::DepthFunc::Less, Renderer::Driver::DepthWriteMask::All });
+            Renderer::Driver::create_DS(rscene.depthStateReadOnly, { true, Renderer::Driver::DepthFunc::Less, Renderer::Driver::DepthWriteMask::Zero });
 
             {
                 auto& dl = game.renderMgr.renderScene.drawlist;
@@ -210,23 +206,33 @@ namespace Game
                 Renderer::create_cbuffers_3DScene(dl.cbuffers);
                 {
                     dl.dl_opaque_3d_color.rasterizerState = &rscene.rasterizerStateFill;
-                    Renderer::Drawlist::DL_opaque_3d_color::load_dl_technique(dl.dl_opaque_3d_color, dl.cbuffers);
+                    dl.dl_opaque_3d_color.blendState = &rscene.blendStateOff;
+                    dl.dl_opaque_3d_color.depthStencilState = &rscene.depthStateOn;
+                    Renderer::Drawlist::DL_3d_color::load_dl_technique(dl.dl_opaque_3d_color, dl.cbuffers);
                 }
                 {
-                    Renderer::Drawlist::DL_opaque_3d_textured::load_dl_technique(dl.dl_opaque_3d_textured, dl.cbuffers);
-                }
-                {
-                    dl.dl_opaque_3d_unlit.rasterizerState = &rscene.rasterizerStateFill;
-                    Renderer::Drawlist::DL_opaque_3d_unlit::load_dl_technique(dl.dl_opaque_3d_unlit, dl.cbuffers);
+                    dl.dl_opaque_3d_textured.rasterizerState = &rscene.rasterizerStateFill;
+                    dl.dl_opaque_3d_textured.blendState = &rscene.blendStateOff;
+                    dl.dl_opaque_3d_textured.depthStencilState = &rscene.depthStateOn;
+                    Renderer::Drawlist::DL_3d_textured::load_dl_technique(dl.dl_opaque_3d_textured, dl.cbuffers);
                 }
                 {
                     dl.dl_opaque_3d_unlit_instanced.rasterizerState = &rscene.rasterizerStateFill;
-                    Renderer::Drawlist::DL_opaque_3d_unlit_instanced::load_dl_technique(dl.dl_opaque_3d_unlit_instanced, dl.cbuffers);
+                    dl.dl_opaque_3d_unlit_instanced.blendState = &rscene.blendStateOff;
+                    dl.dl_opaque_3d_unlit_instanced.depthStencilState = &rscene.depthStateOn;
+                    Renderer::Drawlist::DL_3d_unlit_instanced::load_dl_technique(dl.dl_opaque_3d_unlit_instanced, dl.cbuffers);
+                }
+                {
+                    dl.dl_transparent_3d_color.rasterizerState = &rscene.rasterizerStateFill;
+                    dl.dl_transparent_3d_color.blendState = &rscene.blendStateOn;
+                    dl.dl_transparent_3d_color.depthStencilState = &rscene.depthStateReadOnly;
+                    Renderer::Drawlist::DL_3d_color::load_dl_technique(dl.dl_transparent_3d_color, dl.cbuffers);
                 }
             }
 
             // meshes in the scene
             {
+                bool expectsplayer = true; // guess, hack
                 for (const Scene_ModelLoadData& asset : assets) {
                     Transform transform;
                     Transform localTransform;
@@ -237,16 +243,20 @@ namespace Game
                     localTransform.matrix.col2.z *= asset.scale;
                     transform.pos = asset.origin;
 
-                    Renderer::Drawlist::DL_opaque_3d_color::type::DL_VertexBuffer buffer = {};
+                    Renderer::Drawlist::DL_3d_color::type::DL_VertexBuffer buffer = {};
                     buffer.groupData.worldMatrix = Math::mult(transform.matrix, localTransform.matrix);
                     buffer.groupData.groupColor = Col(0.3f, 0.3f, 0.3f, 1.f).RGBAv4();
                     Renderer::FBX::load(buffer.buffer, asset.path, game.memory.scratchArenaRoot);
-
-                    rscene.drawlist.dl_opaque_3d_color.dl_perVertexBuffer.push_back(buffer);
+                    if (expectsplayer) {
+                        expectsplayer = false;
+                        rscene.drawlist.dl_opaque_3d_color.dl_perVertexBuffer.push_back(buffer);
+                    } else {
+                        rscene.drawlist.dl_transparent_3d_color.dl_perVertexBuffer.push_back(buffer);
+                    }
                 }
                 // unit cubes
                 {
-                    Renderer::Drawlist::DL_opaque_3d_unlit_instanced::type::DL_VertexBuffer buffer = {};
+                    Renderer::Drawlist::DL_3d_unlit_instanced::type::DL_VertexBuffer buffer = {};
                     Transform t; Math::identity4x4(t);
                     buffer.groupData.worldMatrix = t.matrix;
                     buffer.groupData.groupColor = Col(0.9f, 0.1f, 0.8f, 1.f).RGBAv4();
@@ -256,8 +266,8 @@ namespace Game
                     rscene.drawlist.dl_opaque_3d_unlit_instanced.dl_perVertexBuffer.push_back(buffer);
                 }
                 {
-                    using DL_VertexBuffer = Renderer::Drawlist::DL_opaque_3d_textured::type::DL_VertexBuffer;
-                    using DL_Material = Renderer::Drawlist::DL_opaque_3d_textured::type::DL_Material;
+                    using DL_VertexBuffer = Renderer::Drawlist::DL_3d_textured::type::DL_VertexBuffer;
+                    using DL_Material = Renderer::Drawlist::DL_3d_textured::type::DL_Material;
                     DL_VertexBuffer buffer = {};
                     Transform t; Math::identity4x4(t);
                     buffer.groupData.worldMatrix = t.matrix;
@@ -265,7 +275,6 @@ namespace Game
                     Renderer::create_indexed_vertex_buffer_from_textured_cube(buffer.buffer, { 1.f, 1.f, 1.f });
 
                     DL_Material material = {};
-                    material.rasterizerState = &rscene.rasterizerStateFill;
                     Renderer::Driver::create_texture_from_file(material.textures[DL_Material::TextureTypes::Albedo], { "assets/pbr/material04-albedo.png" });
                     Renderer::Driver::create_texture_from_file(material.textures[DL_Material::TextureTypes::NormalMap], { "assets/pbr/material04-normal.png" });
                     Renderer::Driver::create_texture_from_file(material.textures[DL_Material::TextureTypes::DepthMap], { "assets/pbr/material04-depth.png" });
@@ -412,8 +421,8 @@ namespace Game
 
                 Renderer::dl_drawPerShader(dl.dl_opaque_3d_color, dl.cbuffers);
                 Renderer::dl_drawPerShader(dl.dl_opaque_3d_textured, dl.cbuffers);
-                Renderer::dl_drawPerShader(dl.dl_opaque_3d_unlit, dl.cbuffers);
                 Renderer::dl_drawPerShader(dl.dl_opaque_3d_unlit_instanced, dl.cbuffers);
+                Renderer::dl_drawPerShader(dl.dl_transparent_3d_color, dl.cbuffers);
             }
 
             // Immediate-mode debug. Can be moved out of the render update, it only pushes data to cpu buffers

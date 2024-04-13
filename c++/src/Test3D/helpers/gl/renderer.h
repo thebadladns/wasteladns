@@ -261,11 +261,13 @@ namespace Driver {
     void create_DS(RscDepthStencilState& ds, const DepthStencilStateParams& params) {
         ds.enable = params.enable;
         ds.func = (GLenum) params.func;
+        ds.writemask = (GLenum) params.writemask;
     }
     void bind_DS(const RscDepthStencilState& ds) {
         if (ds.enable) {
             glEnable(GL_DEPTH_TEST);
             glDepthFunc(ds.func);
+            glDepthMask(ds.writemask);
         }
         else {
             glDisable(GL_DEPTH_TEST);

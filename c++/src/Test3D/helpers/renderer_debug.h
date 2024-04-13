@@ -307,7 +307,7 @@ namespace Immediate
         
         Renderer::Driver::create_RS(buffer.rasterizerState, { Renderer::Driver::RasterizerFillMode::Fill, Renderer::Driver::RasterizerCullMode::CullBack });
         Renderer::Driver::create_DS(buffer.orthoDepthState, { false });
-        Renderer::Driver::create_DS(buffer.perspDepthState, { true, Renderer::Driver::DepthFunc::Less });
+        Renderer::Driver::create_DS(buffer.perspDepthState, { true, Renderer::Driver::DepthFunc::Less, Renderer::Driver::DepthWriteMask::All });
     }
     
     void present3d(Buffer& buffer, const Mat4& projMatrix, const Mat4& viewMatrix) {
