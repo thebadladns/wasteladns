@@ -423,6 +423,11 @@ namespace Driver {
     void bind_vertex_layout();
     template <typename _vertexLayout, typename _bufferLayout, Shaders::PSCBufferUsage::Enum _cbufferUsage, Shaders::VSDrawType::Enum _drawType>
     void bind_cbuffers_to_shader(RscShaderSet<_vertexLayout, _bufferLayout, _cbufferUsage, _drawType>&, const RscCBuffer* cbuffers);
+
+    void set_marker(Marker_t);
+    void start_event(Marker_t);
+    void end_event();
+
 } // Driver
 
 void create_cbuffers_3DScene(Renderer::Driver::RscCBuffer (&buffers)[Renderer::Layout_CBuffer_3DScene::Buffers::Count]) {

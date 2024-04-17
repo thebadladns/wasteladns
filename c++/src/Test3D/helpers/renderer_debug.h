@@ -312,44 +312,54 @@ namespace Immediate
     
     void present3d(Buffer& buffer, const Mat4& projMatrix, const Mat4& viewMatrix) {
         
-        Renderer::Driver::bind_RS(buffer.rasterizerState);
-        Renderer::Driver::bind_DS(buffer.perspDepthState);
-        
-        Driver::BufferUpdateParams bufferUpdateParams;
-        bufferUpdateParams.vertexData = buffer.vertices_3d;
-        bufferUpdateParams.vertexSize = sizeof(Layout_Vec3Color4B) * buffer.vertices_3d_head;
-        bufferUpdateParams.vertexCount = buffer.vertices_3d_head;
-        Driver::update_vertex_buffer(buffer.buffer_3d, bufferUpdateParams);
+        SET_MARKER_NAME(Driver::Marker_t marker, "DEBUG 3D")
+        Driver::start_event(marker);
+        {
+            Renderer::Driver::bind_RS(buffer.rasterizerState);
+            Renderer::Driver::bind_DS(buffer.perspDepthState);
 
-        Mat4 mvp = Math::mult(projMatrix, viewMatrix);
-        Driver::update_cbuffer(buffer.cbuffers[Layout_CBuffer_DebugScene::Buffers::GroupData], mvp);
+            Driver::BufferUpdateParams bufferUpdateParams;
+            bufferUpdateParams.vertexData = buffer.vertices_3d;
+            bufferUpdateParams.vertexSize = sizeof(Layout_Vec3Color4B) * buffer.vertices_3d_head;
+            bufferUpdateParams.vertexCount = buffer.vertices_3d_head;
+            Driver::update_vertex_buffer(buffer.buffer_3d, bufferUpdateParams);
 
-        Driver::bind_shader(buffer.shader_3d);
-        Driver::bind_vertex_buffer(buffer.buffer_3d);
-        Driver::bind_cbuffers(buffer.cbuffers, Layout_CBuffer_DebugScene::Buffers::Count, { true, false });
-        Driver::draw_vertex_buffer(buffer.buffer_3d);
+            Mat4 mvp = Math::mult(projMatrix, viewMatrix);
+            Driver::update_cbuffer(buffer.cbuffers[Layout_CBuffer_DebugScene::Buffers::GroupData], mvp);
+
+            Driver::bind_shader(buffer.shader_3d);
+            Driver::bind_vertex_buffer(buffer.buffer_3d);
+            Driver::bind_cbuffers(buffer.cbuffers, Layout_CBuffer_DebugScene::Buffers::Count, { true, false });
+            Driver::draw_vertex_buffer(buffer.buffer_3d);
+        }
+        Driver::end_event();
     }
     
     void present2d(Buffer& buffer, const Mat4& projMatrix) {
-        
-        Renderer::Driver::bind_RS(buffer.rasterizerState);
-        Renderer::Driver::bind_DS(buffer.orthoDepthState);
 
-        u32 indexCount = vertexSizeToIndexCount(buffer.vertices_2d_head);
-        Driver::IndexedBufferUpdateParams bufferUpdateParams;
-        bufferUpdateParams.vertexData = buffer.vertices_2d;
-        bufferUpdateParams.vertexSize = sizeof(Layout_Vec2Color4B) * buffer.vertices_2d_head;
-        bufferUpdateParams.indexData = buffer.indices_2d;
-        bufferUpdateParams.indexSize = indexCount * sizeof(u32);
-        bufferUpdateParams.indexCount = indexCount;
-        Driver::update_indexed_vertex_buffer(buffer.buffer_2d, bufferUpdateParams);
+        SET_MARKER_NAME(Driver::Marker_t marker, "DEBUG 2D")
+        Driver::start_event(marker);
+        {
+            Renderer::Driver::bind_RS(buffer.rasterizerState);
+            Renderer::Driver::bind_DS(buffer.orthoDepthState);
 
-        Driver::update_cbuffer(buffer.cbuffers[Layout_CBuffer_DebugScene::Buffers::GroupData], projMatrix);
-        
-        Driver::bind_shader(buffer.shader_2d);
-        Driver::bind_indexed_vertex_buffer(buffer.buffer_2d);
-        Driver::bind_cbuffers(buffer.cbuffers, Layout_CBuffer_DebugScene::Buffers::Count, { true, false });
-        Driver::draw_indexed_vertex_buffer(buffer.buffer_2d);
+            u32 indexCount = vertexSizeToIndexCount(buffer.vertices_2d_head);
+            Driver::IndexedBufferUpdateParams bufferUpdateParams;
+            bufferUpdateParams.vertexData = buffer.vertices_2d;
+            bufferUpdateParams.vertexSize = sizeof(Layout_Vec2Color4B) * buffer.vertices_2d_head;
+            bufferUpdateParams.indexData = buffer.indices_2d;
+            bufferUpdateParams.indexSize = indexCount * sizeof(u32);
+            bufferUpdateParams.indexCount = indexCount;
+            Driver::update_indexed_vertex_buffer(buffer.buffer_2d, bufferUpdateParams);
+
+            Driver::update_cbuffer(buffer.cbuffers[Layout_CBuffer_DebugScene::Buffers::GroupData], projMatrix);
+
+            Driver::bind_shader(buffer.shader_2d);
+            Driver::bind_indexed_vertex_buffer(buffer.buffer_2d);
+            Driver::bind_cbuffers(buffer.cbuffers, Layout_CBuffer_DebugScene::Buffers::Count, { true, false });
+            Driver::draw_indexed_vertex_buffer(buffer.buffer_2d);
+        }
+        Driver::end_event();
     }
     
 }
