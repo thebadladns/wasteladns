@@ -158,8 +158,8 @@ out gl_PerVertex
 
 layout(std140) uniform type_PerScene
 {
-    mat4 projectionMatrix;
-    mat4 viewMatrix;
+    layout(row_major) mat4 projectionMatrix;
+    layout(row_major) mat4 viewMatrix;
     vec3 viewPosWS;
     float padding1;
     vec3 lightPosWS;
@@ -168,7 +168,7 @@ layout(std140) uniform type_PerScene
 
 layout(std140) uniform type_PerGroup
 {
-    mat4 modelMatrix;
+    layout(row_major) mat4 modelMatrix;
     vec4 groupColor;
 } PerGroup;
 
@@ -200,9 +200,56 @@ struct VS_src_selector<
     VSDrawType::Instanced> {
     static const VS_src& value() { return vs_forward_base_Vec3_CBuffer_3DScene_Instanced; }
 };
-
 constexpr VS_src vs_forward_base_TexturedVec3_CBuffer_3DScene_Standard = {
 "forward_base_TexturedVec3_CBuffer_3DScene_Standard",
+R"(
+#version 330
+#extension GL_ARB_separate_shader_objects : require
+
+out gl_PerVertex
+{
+    vec4 gl_Position;
+};
+
+layout(std140) uniform type_PerScene
+{
+    layout(row_major) mat4 projectionMatrix;
+    layout(row_major) mat4 viewMatrix;
+    vec3 viewPosWS;
+    float padding1;
+    vec3 lightPosWS;
+    float padding2;
+} PerScene;
+
+layout(std140) uniform type_PerGroup
+{
+    layout(row_major) mat4 modelMatrix;
+    vec4 groupColor;
+} PerGroup;
+
+layout(location = 0) in vec3 in_var_POSITION;
+layout(location = 1) in vec2 in_var_TEXCOORD;
+layout(location = 0) out vec2 varying_TEXCOORD;
+
+void main()
+{
+    varying_TEXCOORD = in_var_TEXCOORD;
+    gl_Position = (vec4(in_var_POSITION, 1.0) * PerGroup.modelMatrix) * (PerScene.viewMatrix * PerScene.projectionMatrix);
+}
+)"
+};
+
+template <>
+struct VS_src_selector<
+    VSTechnique::forward_base,
+    Layout_TexturedVec3,
+    Layout_CBuffer_3DScene,
+    VSDrawType::Standard> {
+    static const VS_src& value() { return vs_forward_base_TexturedVec3_CBuffer_3DScene_Standard; }
+};
+
+constexpr VS_src vs_forward_base_Vec3TexturedMapped_CBuffer_3DScene_Standard = {
+"forward_base_Vec3TexturedMapped_CBuffer_3DScene_Standard",
 R"(
 #version 330
 #extension GL_ARB_separate_shader_objects : require
@@ -258,10 +305,10 @@ void main()
 template <>
 struct VS_src_selector<
     VSTechnique::forward_base,
-    Layout_TexturedVec3,
+    Layout_Vec3TexturedMapped,
     Layout_CBuffer_3DScene,
     VSDrawType::Standard> {
-    static const VS_src& value() { return vs_forward_base_TexturedVec3_CBuffer_3DScene_Standard; }
+    static const VS_src& value() { return vs_forward_base_Vec3TexturedMapped_CBuffer_3DScene_Standard; }
 };
 
 constexpr PS_src ps_forward_untextured_unlit = { // used for multiple vertex and buffer layouts
@@ -307,8 +354,95 @@ struct PS_src_selector<
     static const PS_src& value() { return ps_forward_untextured_unlit; }
 };
 
+const char* textured_unlit_samplers[] = { "texDiffuse" };
+constexpr PS_src ps_forward_textured_unlit_TexturedVec3_CBuffer_3DScene = {
+"forward_textured_unlit_TexturedVec3_CBuffer_3DScene",
+textured_unlit_samplers,
+sizeof(textured_unlit_samplers) / sizeof(textured_unlit_samplers[0]),
+R"(
+#version 330
+#extension GL_ARB_separate_shader_objects : require
+
+layout(std140) uniform type_PerScene
+{
+    layout(row_major) mat4 projectionMatrix;
+    layout(row_major) mat4 viewMatrix;
+    vec3 viewPosWS;
+    float padding1;
+    vec3 lightPosWS;
+    float padding2;
+} PerScene;
+
+uniform sampler2D texDiffuse;
+
+layout(location = 0) in vec2 varying_TEXCOORD;
+layout(location = 0) out vec4 out_var_SV_TARGET;
+
+void main()
+{
+    vec4 diffuse = texture(texDiffuse, varying_TEXCOORD).rgba;
+    //vec3 color = diffuse.a * diffuse.rgb + (1.0-diffuse.a) * varying_COLOR.rgb;
+    //out_var_SV_TARGET = color;
+    out_var_SV_TARGET = diffuse.rgba;
+}
+)"
+};
+
+template <>
+struct PS_src_selector<
+    PSTechnique::forward_textured_unlit,
+    Layout_TexturedVec3,
+    Layout_CBuffer_3DScene> {
+    static const PSMaterialUsage::Enum materialUsage = PSMaterialUsage::Uses;
+    static const PS_src& value() { return ps_forward_textured_unlit_TexturedVec3_CBuffer_3DScene; }
+};
+
+constexpr PS_src ps_forward_textured_unlitalphaclip_TexturedVec3_CBuffer_3DScene = {
+"forward_textured_unlitalphaclip_TexturedVec3_CBuffer_3DScene",
+textured_unlit_samplers,
+sizeof(textured_unlit_samplers) / sizeof(textured_unlit_samplers[0]),
+R"(
+#version 330
+#extension GL_ARB_separate_shader_objects : require
+
+layout(std140) uniform type_PerScene
+{
+    layout(row_major) mat4 projectionMatrix;
+    layout(row_major) mat4 viewMatrix;
+    vec3 viewPosWS;
+    float padding1;
+    vec3 lightPosWS;
+    float padding2;
+} PerScene;
+
+uniform sampler2D texDiffuse;
+
+layout(location = 0) in vec2 varying_TEXCOORD;
+layout(location = 0) out vec4 out_var_SV_TARGET;
+
+void main()
+{
+    vec4 diffuse = texture(texDiffuse, varying_TEXCOORD).rgba;
+    if (diffuse.w < 0.1)
+        discard;
+    //vec3 color = diffuse.a * diffuse.rgb + (1.0-diffuse.a) * varying_COLOR.rgb;
+    //out_var_SV_TARGET = color;
+    out_var_SV_TARGET = diffuse.rgba;
+}
+)"
+};
+
+template <>
+struct PS_src_selector<
+    PSTechnique::forward_textured_unlitalphaclip,
+    Layout_TexturedVec3,
+    Layout_CBuffer_3DScene> {
+    static const PSMaterialUsage::Enum materialUsage = PSMaterialUsage::Uses;
+    static const PS_src& value() { return ps_forward_textured_unlitalphaclip_TexturedVec3_CBuffer_3DScene; }
+};
+
 const char* textured_lit_normalmapped_samplers[] = { "texDiffuse", "texNormal", "texDepth" };
-constexpr PS_src ps_forward_textured_lit_normalmapped_TexturedVec3_CBuffer_3DScene = {
+constexpr PS_src ps_forward_textured_lit_normalmapped_Vec3TexturedMapped_CBuffer_3DScene = {
 "forward_textured_lit_normalmapped_TexturedVec3_CBuffer_3DScene",
 textured_lit_normalmapped_samplers,
 sizeof(textured_lit_normalmapped_samplers) / sizeof(textured_lit_normalmapped_samplers[0]),
@@ -364,10 +498,10 @@ void main()
 template <>
 struct PS_src_selector<
     PSTechnique::forward_textured_lit_normalmapped,
-    Layout_TexturedVec3,
+    Layout_Vec3TexturedMapped,
     Layout_CBuffer_3DScene> {
     static const PSMaterialUsage::Enum materialUsage = PSMaterialUsage::Uses;
-    static const PS_src& value() { return ps_forward_textured_lit_normalmapped_TexturedVec3_CBuffer_3DScene; }
+    static const PS_src& value() { return ps_forward_textured_lit_normalmapped_Vec3TexturedMapped_CBuffer_3DScene; }
 };
 
 }

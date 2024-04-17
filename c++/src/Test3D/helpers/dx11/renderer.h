@@ -113,10 +113,10 @@ namespace Driver {
 
     void create_texture_from_file(RscTexture& t, const TextureFromFileParams& params) {
         s32 w, h, channels;
-        u8* data = stbi_load(params.path, &w, &h, &channels, 0);
+        u8* data = stbi_load(params.path, &w, &h, &channels, 4);
         if (data) {
-            DXGI_FORMAT format = DXGI_FORMAT_UNKNOWN;
-            u32 typeSize = 0;
+            DXGI_FORMAT format = DXGI_FORMAT_R8G8B8A8_UNORM;
+            u32 typeSize = 4;
             switch (channels) {
             case 1: format = DXGI_FORMAT_R32_FLOAT; typeSize = 4; break;
             case 4: format = DXGI_FORMAT_R8G8B8A8_UNORM; typeSize = 4; break;
@@ -150,9 +150,17 @@ namespace Driver {
             d3dcontext->UpdateSubresource(t.texture, 0, nullptr, data, typeSize * w, typeSize * w * h);
             d3dcontext->GenerateMips(t.view);
 
+            // TODO: parameters!!
+            D3D11_FILTER filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
+            FLOAT maxlod = D3D11_FLOAT32_MAX;
+            if (w <= 64) {
+                filter = D3D11_FILTER_MIN_MAG_MIP_POINT;
+                maxlod = 0;
+            }
+
             // Sampler tied to texture resource, for now
             D3D11_SAMPLER_DESC samplerDesc = {};
-            samplerDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
+            samplerDesc.Filter = filter;
             samplerDesc.AddressU = D3D11_TEXTURE_ADDRESS_WRAP;
             samplerDesc.AddressV = D3D11_TEXTURE_ADDRESS_WRAP;
             samplerDesc.AddressW = D3D11_TEXTURE_ADDRESS_WRAP;
@@ -164,7 +172,7 @@ namespace Driver {
             samplerDesc.BorderColor[2] = 0;
             samplerDesc.BorderColor[3] = 0;
             samplerDesc.MinLOD = 0;
-            samplerDesc.MaxLOD = D3D11_FLOAT32_MAX;
+            samplerDesc.MaxLOD = maxlod;
 
             d3ddev->CreateSamplerState(&samplerDesc, &t.samplerState);
             stbi_image_free(data);
@@ -523,9 +531,20 @@ namespace Driver {
         D3D11_INPUT_ELEMENT_DESC vertexLayoutDesc[] = {
               { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, offsetof(Layout_TexturedVec3, pos), D3D11_INPUT_PER_VERTEX_DATA, 0 }
             , { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, offsetof(Layout_TexturedVec3, uv), D3D11_INPUT_PER_VERTEX_DATA, 0 }
-            , { "NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, offsetof(Layout_TexturedVec3, normal), D3D11_INPUT_PER_VERTEX_DATA, 0 }
-            , { "TANGENT", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, offsetof(Layout_TexturedVec3, tangent), D3D11_INPUT_PER_VERTEX_DATA, 0 }
-            , { "BITANGENT", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, offsetof(Layout_TexturedVec3, bitangent), D3D11_INPUT_PER_VERTEX_DATA, 0 }
+        };
+        d3ddev->CreateInputLayout(vertexLayoutDesc, ARRAYSIZE(vertexLayoutDesc), shaderBufferPointer, shaderBufferSize, &inputLayout);
+
+        vs.inputLayout = inputLayout;
+    }
+    template <typename _bufferLayout, Shaders::VSDrawType::Enum _drawType>
+    void create_vertex_layout(RscVertexShader<Layout_Vec3TexturedMapped, _bufferLayout, _drawType>& vs, void* shaderBufferPointer, u32 shaderBufferSize) {
+        ID3D11InputLayout* inputLayout;
+        D3D11_INPUT_ELEMENT_DESC vertexLayoutDesc[] = {
+              { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, offsetof(Layout_Vec3TexturedMapped, pos), D3D11_INPUT_PER_VERTEX_DATA, 0 }
+            , { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, offsetof(Layout_Vec3TexturedMapped, uv), D3D11_INPUT_PER_VERTEX_DATA, 0 }
+            , { "NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, offsetof(Layout_Vec3TexturedMapped, normal), D3D11_INPUT_PER_VERTEX_DATA, 0 }
+            , { "TANGENT", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, offsetof(Layout_Vec3TexturedMapped, tangent), D3D11_INPUT_PER_VERTEX_DATA, 0 }
+            , { "BITANGENT", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, offsetof(Layout_Vec3TexturedMapped, bitangent), D3D11_INPUT_PER_VERTEX_DATA, 0 }
         };
         d3ddev->CreateInputLayout(vertexLayoutDesc, ARRAYSIZE(vertexLayoutDesc), shaderBufferPointer, shaderBufferSize, &inputLayout);
 

@@ -77,10 +77,10 @@ namespace Driver {
     
     void create_texture_from_file(RscTexture& t, const TextureFromFileParams& params) {
         s32 w, h, channels;
-        u8* data = stbi_load(params.path, &w, &h, &channels, 0);
+        u8* data = stbi_load(params.path, &w, &h, &channels, 4);
         if (data) {
-            GLenum format = 0;
-            GLenum type = 0;
+            GLenum format = GL_RGBA;
+            GLenum type = GL_UNSIGNED_BYTE;
             switch (channels) {
             case 1: format = GL_RED; type = GL_FLOAT; break;
             case 4: format = GL_RGBA; type = GL_UNSIGNED_BYTE;  break;
@@ -96,10 +96,17 @@ namespace Driver {
             glTexImage2D(GL_TEXTURE_2D, 0, format, w, h, 0, format, type, data);
             glGenerateMipmap(GL_TEXTURE_2D);
             
+            // TODO: parameters!!
+            if (w <= 64) {
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+            } else {
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+            }
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
             glBindTexture(GL_TEXTURE_2D, 0);
 
             t.texId = texId;
@@ -253,8 +260,12 @@ namespace Driver {
     }
     void bind_RS(const RscRasterizerState& rs) {
         glPolygonMode(GL_FRONT_AND_BACK, rs.fillMode);
-        glEnable(GL_CULL_FACE);
-        glCullFace(rs.cullFace);
+        if (rs.cullFace != 0) {
+            glEnable(GL_CULL_FACE);
+            glCullFace(rs.cullFace);
+        } else {
+            glDisable(GL_CULL_FACE);
+        }
         glFrontFace(GL_CW); // match dx
     }
 
@@ -406,9 +417,16 @@ namespace Driver {
     void bind_vertex_layout<Layout_TexturedVec3>() {
         glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Layout_TexturedVec3), &(((Layout_TexturedVec3*)0)->pos));
         glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(Layout_TexturedVec3), &(((Layout_TexturedVec3*)0)->uv));
-        glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(Layout_TexturedVec3), &(((Layout_TexturedVec3*)0)->normal));
-        glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, sizeof(Layout_TexturedVec3), &(((Layout_TexturedVec3*)0)->tangent));
-        glVertexAttribPointer(4, 3, GL_FLOAT, GL_FALSE, sizeof(Layout_TexturedVec3), &(((Layout_TexturedVec3*)0)->bitangent));
+        glEnableVertexAttribArray(0);
+        glEnableVertexAttribArray(1);
+    }
+    template <>
+    void bind_vertex_layout<Layout_Vec3TexturedMapped>() {
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Layout_Vec3TexturedMapped), &(((Layout_Vec3TexturedMapped*)0)->pos));
+        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(Layout_Vec3TexturedMapped), &(((Layout_Vec3TexturedMapped*)0)->uv));
+        glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(Layout_Vec3TexturedMapped), &(((Layout_Vec3TexturedMapped*)0)->normal));
+        glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, sizeof(Layout_Vec3TexturedMapped), &(((Layout_Vec3TexturedMapped*)0)->tangent));
+        glVertexAttribPointer(4, 3, GL_FLOAT, GL_FALSE, sizeof(Layout_Vec3TexturedMapped), &(((Layout_Vec3TexturedMapped*)0)->bitangent));
         glEnableVertexAttribArray(0);
         glEnableVertexAttribArray(1);
         glEnableVertexAttribArray(2);

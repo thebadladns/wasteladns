@@ -171,7 +171,7 @@ namespace Renderer {
         f32 w = params.width;
         f32 h = params.height;
         f32 d = params.depth;
-        Renderer::Layout_TexturedVec3* v = c.vertices;
+        Renderer::Layout_Vec3TexturedMapped* v = c.vertices;
 
         // vertex and texture coords
         v[0] = { { w, d, -h } }; v[1] = { { -w, d, -h } }; v[2] = { { -w, d, h } }; v[3] = { { w, d, h } };           // +y quad
@@ -445,7 +445,7 @@ void create_indexed_vertex_buffer_from_untextured_cube(Renderer::Driver::RscInde
     bufferParams.type = Renderer::Driver::BufferTopologyType::Triangles;
     Renderer::Driver::create_indexed_vertex_buffer(buffer, bufferParams);
 }
-void create_indexed_vertex_buffer_from_textured_cube(Renderer::Driver::RscIndexedBuffer<Renderer::Layout_TexturedVec3>& buffer, const CubeCreateParams& params) {
+void create_indexed_vertex_buffer_from_textured_cube(Renderer::Driver::RscIndexedBuffer<Renderer::Layout_Vec3TexturedMapped>& buffer, const CubeCreateParams& params) {
     Renderer::TexturedCube cube;
     Renderer::create_textured_cube_coords(cube, { 1.f, 1.f, 1.f });
     Renderer::Driver::IndexedBufferParams bufferParams;
@@ -460,6 +460,7 @@ void create_indexed_vertex_buffer_from_textured_cube(Renderer::Driver::RscIndexe
     bufferParams.type = Renderer::Driver::BufferTopologyType::Triangles;
     Renderer::Driver::create_indexed_vertex_buffer(buffer, bufferParams);
 }
+
 namespace FBX {
     void extract_vertex(Renderer::Layout_Vec3& vertexout, const ufbx_vec3& vertexin) {
         vertexout.x = vertexin.x;
@@ -467,6 +468,11 @@ namespace FBX {
         vertexout.z = vertexin.z;
     }
     void extract_vertex(Renderer::Layout_Vec3Color4B& vertexout, const ufbx_vec3& vertexin) {
+        vertexout.pos.x = vertexin.x;
+        vertexout.pos.y = vertexin.y;
+        vertexout.pos.z = vertexin.z;
+    }
+    void extract_vertex(Renderer::Layout_Vec3TexturedMapped& vertexout, const ufbx_vec3& vertexin) {
         vertexout.pos.x = vertexin.x;
         vertexout.pos.y = vertexin.y;
         vertexout.pos.z = vertexin.z;
@@ -486,8 +492,22 @@ namespace FBX {
             }
         }
     }
+    void extract_vertex_attrib(Renderer::Layout_Vec3TexturedMapped* vertices, const ufbx_mesh& mesh) {
+        if (mesh.vertex_uv.exists && mesh.vertex_normal.exists && mesh.vertex_tangent.exists && mesh.vertex_bitangent.exists) {
+            for (size_t index = 0; index < mesh.num_indices; index++) {
+                auto& uv = mesh.vertex_uv[index];
+                auto& normal = mesh.vertex_normal[index];
+                auto& tangent = mesh.vertex_tangent[index];
+                auto& bitangent = mesh.vertex_bitangent[index];
+                vertices[mesh.vertex_indices[index]].uv = Vec2(uv.x, uv.y);
+                vertices[mesh.vertex_indices[index]].normal = Vec3(normal.x, normal.y, normal.z);
+                vertices[mesh.vertex_indices[index]].tangent = Vec3(tangent.x, tangent.y, tangent.z);
+                vertices[mesh.vertex_indices[index]].bitangent = Vec3(bitangent.x, bitangent.y, bitangent.z);
+            }
+        }
+    }
     template <typename _vertexLayout>
-    void load(Driver::RscIndexedBuffer<_vertexLayout>& rscBuffer, const char* path, Allocator::Arena scratchArena) {
+    void load_flat(Driver::RscIndexedBuffer<_vertexLayout>& rscBuffer, const char* path, Allocator::Arena scratchArena) {
         ufbx_load_opts opts = {};
         opts.target_axes = { UFBX_COORDINATE_AXIS_POSITIVE_X, UFBX_COORDINATE_AXIS_POSITIVE_Z, UFBX_COORDINATE_AXIS_POSITIVE_Y };
         opts.allow_null_material = true;
@@ -568,15 +588,22 @@ template <typename _vertexLayout, typename _cbufferLayout, typename Shaders::VSD
 struct Drawlist_PerVertexBuffer;
 template <typename _vertexLayout, typename _cbufferLayout>
 struct Drawlist_PerVertexBuffer<_vertexLayout, _cbufferLayout, Shaders::VSDrawType::Standard>{
+    typedef typename _cbufferLayout::GroupData GroupData;
+    typedef Drawlist_PerVertexBuffer<_vertexLayout, _cbufferLayout, Shaders::VSDrawType::Standard> Type;
     Driver::RscIndexedBuffer<_vertexLayout> buffer;
-    typename _cbufferLayout::GroupData groupData;
+    GroupData groupData;
+    static Type& null() { static Type data = {}; return data; }
 };
 template <typename _vertexLayout, typename _cbufferLayout>
 struct Drawlist_PerVertexBuffer<_vertexLayout, _cbufferLayout, Shaders::VSDrawType::Instanced> {
+    typedef typename _cbufferLayout::GroupData GroupData;
+    typedef typename _cbufferLayout::Instance Instance;
+    typedef Drawlist_PerVertexBuffer<_vertexLayout, _cbufferLayout, Shaders::VSDrawType::Instanced> Type;
 
     Driver::RscIndexedBuffer<_vertexLayout> buffer;
-    tinystl::vector<typename _cbufferLayout::Instance> instancedData;
-    typename _cbufferLayout::GroupData groupData;
+    tinystl::vector<Instance> instancedData;
+    GroupData groupData;
+    static Type& null() { static Type data = {}; return data; }
 };
 template<typename _vertexLayout, typename _cbufferLayout, Shaders::PSCBufferUsage::Enum _cbufferUsage>
 void dl_bind_and_draw_buffer(const Drawlist_PerVertexBuffer<_vertexLayout, _cbufferLayout, Shaders::VSDrawType::Standard>& buffer, Driver::RscCBuffer* cbuffers) {
@@ -608,6 +635,20 @@ struct Drawlist_PerMaterial<_vertexLayout, _cbufferLayout, Shaders::PSTechnique:
     Driver::RscTexture textures[TextureTypes::Count];
     tinystl::vector<DL_VertexBuffer> dl_perVertexBuffer;
 };
+template <typename _vertexLayout, typename _cbufferLayout, Shaders::VSDrawType::Enum _drawType>
+struct Drawlist_PerMaterial<_vertexLayout, _cbufferLayout, Shaders::PSTechnique::forward_textured_unlit, _drawType> {
+    using DL_VertexBuffer = Drawlist_PerVertexBuffer<_vertexLayout, _cbufferLayout, _drawType>;
+    struct TextureTypes { enum Enum { Diffuse, Count }; };
+    Driver::RscTexture textures[TextureTypes::Count];
+    tinystl::vector<DL_VertexBuffer> dl_perVertexBuffer;
+};
+template <typename _vertexLayout, typename _cbufferLayout, Shaders::VSDrawType::Enum _drawType>
+struct Drawlist_PerMaterial<_vertexLayout, _cbufferLayout, Shaders::PSTechnique::forward_textured_unlitalphaclip, _drawType> {
+    using DL_VertexBuffer = Drawlist_PerVertexBuffer<_vertexLayout, _cbufferLayout, _drawType>;
+    struct TextureTypes { enum Enum { Diffuse, Count }; };
+    Driver::RscTexture textures[TextureTypes::Count];
+    tinystl::vector<DL_VertexBuffer> dl_perVertexBuffer;
+};
 template<Shaders::PSTechnique::Enum _psTechnique, typename _vertexLayout, typename _cbufferLayout, Shaders::VSDrawType::Enum _drawType>
 void dl_bind_material(const Drawlist_PerMaterial<_vertexLayout, _cbufferLayout, _psTechnique, _drawType>& material);
 template< typename _vertexLayout, typename _cbufferLayout, Shaders::VSDrawType::Enum _drawType>
@@ -615,6 +656,20 @@ void dl_bind_material(const Drawlist_PerMaterial<_vertexLayout, _cbufferLayout, 
     Renderer::Driver::bind_textures(
           dl_material.textures
         , Drawlist_PerMaterial<_vertexLayout, _cbufferLayout, Shaders::PSTechnique::forward_textured_lit_normalmapped, _drawType>::TextureTypes::Count
+    );
+}
+template< typename _vertexLayout, typename _cbufferLayout, Shaders::VSDrawType::Enum _drawType>
+void dl_bind_material(const Drawlist_PerMaterial<_vertexLayout, _cbufferLayout, Shaders::PSTechnique::forward_textured_unlit, _drawType>& dl_material) {
+    Renderer::Driver::bind_textures(
+          dl_material.textures
+        , Drawlist_PerMaterial<_vertexLayout, _cbufferLayout, Shaders::PSTechnique::forward_textured_unlit, _drawType>::TextureTypes::Count
+    );
+}
+template< typename _vertexLayout, typename _cbufferLayout, Shaders::VSDrawType::Enum _drawType>
+void dl_bind_material(const Drawlist_PerMaterial<_vertexLayout, _cbufferLayout, Shaders::PSTechnique::forward_textured_unlitalphaclip, _drawType>& dl_material) {
+    Renderer::Driver::bind_textures(
+          dl_material.textures
+        , Drawlist_PerMaterial<_vertexLayout, _cbufferLayout, Shaders::PSTechnique::forward_textured_unlitalphaclip, _drawType>::TextureTypes::Count
     );
 }
 
@@ -627,11 +682,22 @@ template <
     , typename _vertexLayout, typename _cbufferLayout, Shaders::PSCBufferUsage::Enum _cbufferUsage, Shaders::VSDrawType::Enum _drawType>
 struct Drawlist_PerShader<_vsTechnique, _psTechnique, Shaders::PSMaterialUsage::None, _vertexLayout, _cbufferLayout, _cbufferUsage, _drawType> {
     using DL_VertexBuffer = Drawlist_PerVertexBuffer<_vertexLayout, _cbufferLayout, _drawType>;
+    enum : u32 { DL_id_null = 0xffffffff };
+    struct Handle {
+        u32 id = DL_id_null;
+    };
     Renderer::Driver::RscShaderSet<_vertexLayout, _cbufferLayout, _cbufferUsage, _drawType> shader;
     Renderer::Driver::RscRasterizerState* rasterizerState;
     Renderer::Driver::RscBlendState* blendState;
     Renderer::Driver::RscDepthStencilState* depthStencilState;
     tinystl::vector<DL_VertexBuffer> dl_perVertexBuffer;
+
+    DL_VertexBuffer& get_leaf(Handle& handle) {
+        if (handle.id != DL_id_null) {
+            return dl_perVertexBuffer[handle.id];
+        }
+        return DL_VertexBuffer::null();
+    }
 };
 template <
       Shaders::VSTechnique::Enum _vsTechnique, Shaders::PSTechnique::Enum _psTechnique
@@ -639,11 +705,28 @@ template <
 struct Drawlist_PerShader<_vsTechnique, _psTechnique, Shaders::PSMaterialUsage::Uses, _vertexLayout, _cbufferLayout, _cbufferUsage, _drawType> {
     using DL_VertexBuffer = Drawlist_PerVertexBuffer<_vertexLayout, _cbufferLayout, _drawType>;
     using DL_Material = Drawlist_PerMaterial<_vertexLayout, _cbufferLayout, _psTechnique, _drawType>;
+    enum : u32 { DL_id_null = 0xffffffff };
+    struct Handle {
+        union {
+            struct {
+                u16 material;
+                u16 buffer;
+            };
+            u32 id = DL_id_null;
+        };
+    };
     Renderer::Driver::RscShaderSet<_vertexLayout, _cbufferLayout, _cbufferUsage, _drawType> shader;
     Renderer::Driver::RscRasterizerState* rasterizerState;
     Renderer::Driver::RscBlendState* blendState;
     Renderer::Driver::RscDepthStencilState* depthStencilState;
     tinystl::vector<DL_Material> dl_perMaterial;
+
+    DL_VertexBuffer& get_leaf(Handle& handle) {
+        if (handle.id != DL_id_null) {
+            return dl_perMaterial[handle.material].dl_perVertexBuffer[handle.buffer];
+        }
+        return DL_VertexBuffer::null();
+    }
 };
 
 template <

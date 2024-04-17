@@ -30,6 +30,8 @@ namespace Renderer {
         struct PSTechnique {
             enum Enum {
                   forward_untextured_unlit
+                , forward_textured_unlit
+                , forward_textured_unlitalphaclip
                 , forward_textured_lit_normalmapped
             };
         };
@@ -64,6 +66,10 @@ namespace Renderer {
         Vec2 uv;
     };
     struct Layout_TexturedVec3 {
+        Vec3 pos;
+        Vec2 uv;
+    };
+    struct Layout_Vec3TexturedMapped {
         Vec3 pos;
         Vec2 uv;
         Vec3 normal;
@@ -132,7 +138,7 @@ namespace Renderer {
         u16 indices[6];
     };
     struct TexturedCube {
-        Renderer::Layout_TexturedVec3 vertices[24];
+        Renderer::Layout_Vec3TexturedMapped vertices[24];
         u16 indices[36];
     };
     struct UntexturedCube {

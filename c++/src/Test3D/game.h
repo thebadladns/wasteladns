@@ -2,52 +2,20 @@
 #define __WASTELADNS_GAME_H__
 
 #include "gameplay.h"
+#include "game_renderer.h"
 
 struct Scene_ModelLoadData {
     const char* path;
     Vec3 origin;
     float scale;
+    bool player;
 };
 // from blender: export fbx -> Apply Scalings: FBX All -> Forward: the one in Blender -> Use Space Transform: yes 
 const Scene_ModelLoadData assets[] = {
-      { "assets/meshes/boar.fbx", {5.f, 10.f, 2.30885f}, 1.f }
-    , { "assets/meshes/bird.fbx", {1.f, 3.f, 2.23879f}, 1.f }
-    , { "assets/meshes/bird.fbx", {0.f, 0.f, 2.23879f}, 1.f }
+      { "assets/meshes/boar.fbx", {5.f, 10.f, 2.30885f}, 1.f, false }
+    , { "assets/meshes/bird.fbx", {1.f, 3.f, 2.23879f}, 1.f, true }
+    , { "assets/meshes/bird.fbx", {0.f, 5.f, 2.23879f}, 1.f, false }
 };
-
-namespace Renderer {
-
-    struct Drawlist {
-
-        using DL_3d_color = Drawlist_TypeContext <
-              Shaders::VSTechnique::forward_base, Shaders::PSTechnique::forward_untextured_unlit
-            , Layout_Vec3Color4B
-            , Layout_CBuffer_3DScene
-            , Layout_CNone
-            , Shaders::VSDrawType::Standard
-        >;
-        using DL_3d_textured = Drawlist_TypeContext <
-              Shaders::VSTechnique::forward_base, Shaders::PSTechnique::forward_textured_lit_normalmapped
-            , Layout_TexturedVec3
-            , Layout_CBuffer_3DScene
-            , Layout_CBuffer_3DScene
-            , Shaders::VSDrawType::Standard
-        >;
-        using DL_3d_unlit_instanced = Drawlist_TypeContext <
-              Shaders::VSTechnique::forward_base, Shaders::PSTechnique::forward_untextured_unlit
-            , Layout_Vec3
-            , Layout_CBuffer_3DScene
-            , Layout_CNone
-            , Shaders::VSDrawType::Instanced
-        >;
-
-        Renderer::Driver::RscCBuffer cbuffers[Renderer::Layout_CBuffer_3DScene::Buffers::Count];
-        DL_3d_color::type dl_opaque_3d_color;
-        DL_3d_textured::type dl_opaque_3d_textured;
-        DL_3d_unlit_instanced::type dl_opaque_3d_unlit_instanced;
-        DL_3d_color::type dl_transparent_3d_color;
-    };
-}
 
 namespace Game
 {
@@ -81,12 +49,7 @@ namespace Game
     };
 
     struct RenderScene {
-        Renderer::Drawlist drawlist;
-        Renderer::Driver::RscRasterizerState rasterizerStateFill, rasterizerStateLine;
-        Renderer::Driver::RscDepthStencilState depthStateOn, depthStateReadOnly;
-        Renderer::Driver::RscBlendState blendStateOn;
-        Renderer::Driver::RscBlendState blendStateOff;
-        Renderer::Driver::RscMainRenderTarget mainRenderTarget;
+        Renderer::Store store;
     };
 
     struct CameraManager {
@@ -99,8 +62,9 @@ namespace Game
     struct RenderManager {
         RenderScene renderScene;
         __DEBUGDEF(Renderer::Immediate::Buffer immediateBuffer;)
-        Renderer::OrthoProjection orthoProjection;
+            Renderer::OrthoProjection orthoProjection;
         Renderer::PerspProjection perspProjection;
+        Renderer::Drawlist::Drawlist_node player_DLnode, particles_DLnode;
     };
 
     #if __DEBUG
@@ -182,115 +146,70 @@ namespace Game
             generate_matrix_persp(mgr.perspProjection.matrix, frustum);
         }
 
-        game.renderMgr.renderScene = {};
         {
-            RenderScene& rscene = game.renderMgr.renderScene;
-
-            Renderer::Driver::MainRenderTargetParams renderTargetParams = {};
-            renderTargetParams.depth = true;
-            renderTargetParams.width = platform.screen.width;
-            renderTargetParams.height = platform.screen.height;
-            Renderer::Driver::create_main_RT(rscene.mainRenderTarget, renderTargetParams);
-
-            // rasterizer states
-            Renderer::Driver::create_blend_state(rscene.blendStateOn, { true });
-            Renderer::Driver::create_blend_state(rscene.blendStateOff, { false });
-            Renderer::Driver::create_RS(rscene.rasterizerStateFill, { Renderer::Driver::RasterizerFillMode::Fill, Renderer::Driver::RasterizerCullMode::CullBack });
-            Renderer::Driver::create_RS(rscene.rasterizerStateLine, { Renderer::Driver::RasterizerFillMode::Line, Renderer::Driver::RasterizerCullMode::CullNone });
-            Renderer::Driver::create_DS(rscene.depthStateOn, { true, Renderer::Driver::DepthFunc::Less, Renderer::Driver::DepthWriteMask::All });
-            Renderer::Driver::create_DS(rscene.depthStateReadOnly, { true, Renderer::Driver::DepthFunc::Less, Renderer::Driver::DepthWriteMask::Zero });
-
-            {
-                auto& dl = game.renderMgr.renderScene.drawlist;
-                dl = {};
-                Renderer::create_cbuffers_3DScene(dl.cbuffers);
-                {
-                    dl.dl_opaque_3d_color.rasterizerState = &rscene.rasterizerStateFill;
-                    dl.dl_opaque_3d_color.blendState = &rscene.blendStateOff;
-                    dl.dl_opaque_3d_color.depthStencilState = &rscene.depthStateOn;
-                    Renderer::Drawlist::DL_3d_color::load_dl_technique(dl.dl_opaque_3d_color, dl.cbuffers);
-                }
-                {
-                    dl.dl_opaque_3d_textured.rasterizerState = &rscene.rasterizerStateFill;
-                    dl.dl_opaque_3d_textured.blendState = &rscene.blendStateOff;
-                    dl.dl_opaque_3d_textured.depthStencilState = &rscene.depthStateOn;
-                    Renderer::Drawlist::DL_3d_textured::load_dl_technique(dl.dl_opaque_3d_textured, dl.cbuffers);
-                }
-                {
-                    dl.dl_opaque_3d_unlit_instanced.rasterizerState = &rscene.rasterizerStateFill;
-                    dl.dl_opaque_3d_unlit_instanced.blendState = &rscene.blendStateOff;
-                    dl.dl_opaque_3d_unlit_instanced.depthStencilState = &rscene.depthStateOn;
-                    Renderer::Drawlist::DL_3d_unlit_instanced::load_dl_technique(dl.dl_opaque_3d_unlit_instanced, dl.cbuffers);
-                }
-                {
-                    dl.dl_transparent_3d_color.rasterizerState = &rscene.rasterizerStateFill;
-                    dl.dl_transparent_3d_color.blendState = &rscene.blendStateOn;
-                    dl.dl_transparent_3d_color.depthStencilState = &rscene.depthStateReadOnly;
-                    Renderer::Drawlist::DL_3d_color::load_dl_technique(dl.dl_transparent_3d_color, dl.cbuffers);
-                }
-            }
-
             // meshes in the scene
-            {
-                bool expectsplayer = true; // guess, hack
-                for (const Scene_ModelLoadData& asset : assets) {
-                    Transform transform;
-                    Transform localTransform;
-                    Math::identity4x4(transform);
-                    Math::identity4x4(localTransform);
-                    localTransform.matrix.col0.x *= asset.scale;
-                    localTransform.matrix.col1.y *= asset.scale;
-                    localTransform.matrix.col2.z *= asset.scale;
-                    transform.pos = asset.origin;
+            auto& store = game.renderMgr.renderScene.store;
 
-                    Renderer::Drawlist::DL_3d_color::type::DL_VertexBuffer buffer = {};
-                    buffer.groupData.worldMatrix = Math::mult(transform.matrix, localTransform.matrix);
-                    buffer.groupData.groupColor = Col(0.3f, 0.3f, 0.3f, 1.f).RGBAv4();
-                    Renderer::FBX::load(buffer.buffer, asset.path, game.memory.scratchArenaRoot);
-                    if (expectsplayer) {
-                        expectsplayer = false;
-                        rscene.drawlist.dl_opaque_3d_color.dl_perVertexBuffer.push_back(buffer);
-                    } else {
-                        rscene.drawlist.dl_transparent_3d_color.dl_perVertexBuffer.push_back(buffer);
-                    }
-                }
-                // unit cubes
-                {
-                    Renderer::Drawlist::DL_3d_unlit_instanced::type::DL_VertexBuffer buffer = {};
-                    Transform t; Math::identity4x4(t);
-                    buffer.groupData.worldMatrix = t.matrix;
-                    buffer.groupData.groupColor = Col(0.9f, 0.1f, 0.8f, 1.f).RGBAv4();
-                    buffer.instancedData.resize(4);
-                    Renderer::create_indexed_vertex_buffer_from_untextured_cube(buffer.buffer, { 1.f, 1.f, 1.f });
+            store = {};
+            Renderer::start_store(game.renderMgr.renderScene.store, platform, game.memory.scratchArenaRoot);
+            __DEBUGEXP(Renderer::Immediate::load(game.renderMgr.immediateBuffer, game.memory.imDebugArena));
 
-                    rscene.drawlist.dl_opaque_3d_unlit_instanced.dl_perVertexBuffer.push_back(buffer);
-                }
-                {
-                    using DL_VertexBuffer = Renderer::Drawlist::DL_3d_textured::type::DL_VertexBuffer;
-                    using DL_Material = Renderer::Drawlist::DL_3d_textured::type::DL_Material;
-                    DL_VertexBuffer buffer = {};
-                    Transform t; Math::identity4x4(t);
-                    buffer.groupData.worldMatrix = t.matrix;
-                    buffer.groupData.groupColor = Col(0.f, 0.f, 0.f, 0.f).RGBAv4();
-                    Renderer::create_indexed_vertex_buffer_from_textured_cube(buffer.buffer, { 1.f, 1.f, 1.f });
+            for (const Scene_ModelLoadData& asset : assets) {
+                Renderer::Drawlist::Drawlist_node nodeToAdd = {};
+                Math::identity4x4(nodeToAdd.localTransform);
+                Math::identity4x4(nodeToAdd.worldTransform);
+                nodeToAdd.localTransform.matrix.col0.x *= asset.scale;
+                nodeToAdd.localTransform.matrix.col1.y *= asset.scale;
+                nodeToAdd.localTransform.matrix.col2.z *= asset.scale;
+                nodeToAdd.worldTransform.pos = asset.origin;
 
-                    DL_Material material = {};
-                    Renderer::Driver::create_texture_from_file(material.textures[DL_Material::TextureTypes::Albedo], { "assets/pbr/material04-albedo.png" });
-                    Renderer::Driver::create_texture_from_file(material.textures[DL_Material::TextureTypes::NormalMap], { "assets/pbr/material04-normal.png" });
-                    Renderer::Driver::create_texture_from_file(material.textures[DL_Material::TextureTypes::DepthMap], { "assets/pbr/material04-depth.png" });
-                    material.dl_perVertexBuffer.push_back(buffer);
+                Renderer::FBX::load_with_material(nodeToAdd, store, asset.path, game.memory.scratchArenaRoot);
 
-                    rscene.drawlist.dl_opaque_3d_textured.dl_perMaterial.push_back(material);
+                if (asset.player) {
+                    game.renderMgr.player_DLnode = nodeToAdd;
                 }
             }
+            // unit cubes
+            {
+                using DL = Renderer::Drawlist::DL_unlit_instanced_t;
+                using DL_id = Renderer::Drawlist::DL_unlit_instanced_id;
 
-            __DEBUGEXP(Renderer::Immediate::load(game.renderMgr.immediateBuffer, game.memory.imDebugArena));
+                Renderer::Drawlist::DL_unlit_instanced_vb buffer = {};
+                Transform t; Math::identity4x4(t);
+                buffer.groupData.worldMatrix = t.matrix;
+                buffer.groupData.groupColor = Col(0.9f, 0.7f, 0.8f, 0.6f).RGBAv4();
+                buffer.instancedData.resize(4);
+                Renderer::create_indexed_vertex_buffer_from_untextured_cube(buffer.buffer, { 1.f, 1.f, 1.f });
+
+                Renderer::Drawlist::Drawlist_node nodeToAdd = {};
+                nodeToAdd.handle.DL_id::id = (u32)store.drawlist.DL::dl_perVertexBuffer.size();
+                game.renderMgr.particles_DLnode = nodeToAdd;
+                store.drawlist.DL::dl_perVertexBuffer.push_back(buffer);
+            }
+            {
+                using DL = Renderer::Drawlist::DL_textureMapped_t;
+                using DL_VertexBuffer = Renderer::Drawlist::DL_textureMapped_vb;
+                using DL_Material = Renderer::Drawlist::DL_textureMapped_mat;
+                DL_VertexBuffer buffer = {};
+                Transform t; Math::identity4x4(t);
+                buffer.groupData.worldMatrix = t.matrix;
+                buffer.groupData.groupColor = Col(0.f, 0.f, 0.f, 0.f).RGBAv4();
+                Renderer::create_indexed_vertex_buffer_from_textured_cube(buffer.buffer, { 1.f, 1.f, 1.f });
+
+                DL_Material material = {};
+                Renderer::Driver::create_texture_from_file(material.textures[DL_Material::TextureTypes::Albedo], { "assets/pbr/material04-albedo.png" });
+                Renderer::Driver::create_texture_from_file(material.textures[DL_Material::TextureTypes::NormalMap], { "assets/pbr/material04-normal.png" });
+                Renderer::Driver::create_texture_from_file(material.textures[DL_Material::TextureTypes::DepthMap], { "assets/pbr/material04-depth.png" });
+                material.dl_perVertexBuffer.push_back(buffer);
+
+                store.drawlist.DL::dl_perMaterial.push_back(material);
+            }
         }
 
         game.player = {};
         {
             Math::identity4x4(game.player.transform);
-            game.player.transform.pos = assets[0].origin;
+            game.player.transform.pos = game.renderMgr.player_DLnode.worldTransform.pos;
         }
 
         game.cameraMgr = {};
@@ -362,26 +281,24 @@ namespace Game
                 Gameplay::Movement::process(game.player.control, keyboard, { Input::UP, Input::DOWN, Input::LEFT, Input::RIGHT }, dt);
                 Gameplay::Movement::process_cameraRelative(game.player.transform, game.player.movementController, game.player.control, activeCam->transform, dt);
 
-                // TODO: ABSOLUTE HACK
-                // update the drawlist directly, until we have a system that connects gameplay and render data
-                Transform localTransform;
-                const float playerScale = assets[0].scale;
-                Math::identity4x4(localTransform);
-                localTransform.matrix.col0.x *= playerScale;
-                localTransform.matrix.col1.y *= playerScale;
-                localTransform.matrix.col2.z *= playerScale;
-                auto& colorBuffer = game.renderMgr.renderScene.drawlist.dl_opaque_3d_color.dl_perVertexBuffer[0];
-                colorBuffer.groupData.worldMatrix = Math::mult(game.player.transform.matrix, localTransform.matrix);
-                auto& instancedBuffer = game.renderMgr.renderScene.drawlist.dl_opaque_3d_unlit_instanced.dl_perVertexBuffer[0];
-                u32 instanceSize = (u32)instancedBuffer.instancedData.size();
+                // update drawlist
+                game.renderMgr.player_DLnode.worldTransform.matrix = Math::mult(game.player.transform.matrix, game.renderMgr.player_DLnode.localTransform.matrix);
+                Renderer::Drawlist::update_dl_node_matrix(game.renderMgr.renderScene.store.drawlist, game.renderMgr.player_DLnode);
+
+                using DL_instanced = Renderer::Drawlist::DL_unlit_instanced_t;
+                auto& instancedBuffer = game.renderMgr.renderScene.store.drawlist.DL_instanced::get_leaf(game.renderMgr.particles_DLnode.handle).instancedData;
+                u32 instanceSize = (u32)instancedBuffer.size();
                 for (u32 i = 0; i < instanceSize; i++) {
+                    float scaley = -1.f * Math::clamp(game.player.movementController.speed, 0.f, 1.5f);
+                    float scalez = 0.5f * Math::clamp(game.player.movementController.speed, 0.f, 1.f);
                     Transform t;
                     Math::identity4x4(t);
-                    t.pos = Math::add(game.player.transform.pos, Math::scale(game.player.transform.front, -5.f * i));
+                    t.pos = Math::add(game.player.transform.pos, Math::scale(game.player.transform.front, scaley * (i + 2)));
+                    t.pos.z = t.pos.z + scalez * (Math::cos((f32)platform.time.now * 10.f + i*2.f) - 1.5f);
                     t.matrix.col0.x = 0.2f;
                     t.matrix.col1.y = 0.2f;
                     t.matrix.col2.z = 0.2f;
-                    instancedBuffer.instancedData[i] = t.matrix;
+                    instancedBuffer[i] = t.matrix;
                 }
             }
 
@@ -408,21 +325,24 @@ namespace Game
                 cbufferPerScene.viewMatrix = activeCam->viewMatrix;
                 cbufferPerScene.viewPos = activeCam->transform.pos;
                 cbufferPerScene.lightPos = Vec3(3.f, 8.f, 15.f);
-                Renderer::Driver::update_cbuffer(rscene.drawlist.cbuffers[Renderer::Layout_CBuffer_3DScene::Buffers::SceneData], cbufferPerScene);
+                Renderer::Driver::update_cbuffer(rscene.store.cbuffers[Renderer::Layout_CBuffer_3DScene::Buffers::SceneData], cbufferPerScene);
             }
 
             {
-                Renderer::Driver::bind_blend_state(rscene.blendStateOn);
-                Renderer::Driver::bind_DS(rscene.depthStateOn);
-                Renderer::Driver::bind_main_RT(rscene.mainRenderTarget);
-                Renderer::Driver::clear_main_RT(rscene.mainRenderTarget, Col(0.f, 0.f, 0.f, 1.f));
-            
-                auto& dl = rscene.drawlist;
+                auto& store = rscene.store;
+                auto& dl = store.drawlist;
 
-                Renderer::dl_drawPerShader(dl.dl_opaque_3d_color, dl.cbuffers);
-                Renderer::dl_drawPerShader(dl.dl_opaque_3d_textured, dl.cbuffers);
-                Renderer::dl_drawPerShader(dl.dl_opaque_3d_unlit_instanced, dl.cbuffers);
-                Renderer::dl_drawPerShader(dl.dl_transparent_3d_color, dl.cbuffers);
+                Renderer::Driver::bind_blend_state(store.blendStateOn);
+                Renderer::Driver::bind_DS(store.depthStateOn);
+                Renderer::Driver::bind_main_RT(store.mainRenderTarget);
+                Renderer::Driver::clear_main_RT(store.mainRenderTarget, Col(0.2f, 0.344f, 0.59f, 1.f));
+            
+
+                Renderer::dl_drawPerShader((Renderer::Drawlist::DL_color_t&)dl, store.cbuffers);
+                Renderer::dl_drawPerShader((Renderer::Drawlist::DL_textured_t&)dl, store.cbuffers);
+                Renderer::dl_drawPerShader((Renderer::Drawlist::DL_texturedalphaclip_t&)dl, store.cbuffers);
+                Renderer::dl_drawPerShader((Renderer::Drawlist::DL_textureMapped_t&)dl, store.cbuffers);
+                Renderer::dl_drawPerShader((Renderer::Drawlist::DL_unlit_instanced_t&)dl, store.cbuffers);
             }
 
             // Immediate-mode debug. Can be moved out of the render update, it only pushes data to cpu buffers

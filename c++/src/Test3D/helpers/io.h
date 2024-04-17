@@ -10,8 +10,6 @@ namespace Platform {
     const auto format = stbsp_snprintf;
     const auto format_va = stbsp_vsnprintf;
 #if __DEBUG
-    const void debuglog(const char* format, ...) {}
-#else
     const void debuglog(const char* format, ...) {
         char text[1024];
         va_list va;
@@ -21,6 +19,8 @@ namespace Platform {
 
         consoleLog(text);
     }
+#else
+    const void debuglog(const char* format, ...) {}
 #endif
 #if _MSC_VER
     int fopen(FILE** f, const char* name, const char* mode) { return ::fopen_s(f, name, mode); }
