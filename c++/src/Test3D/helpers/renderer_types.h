@@ -57,6 +57,7 @@ namespace Renderer {
         template <typename _layout>
         struct RscIndexedBuffer;
         struct RscCBuffer;
+        //typedef (something) Marker_t;
     };
 
     // Supported layouts

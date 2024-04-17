@@ -394,6 +394,19 @@ namespace Driver {
     }
     void bind_cbuffers(const RscCBuffer* cb, const u32 count, const CBufferBindParams& params) {}
 
+#define SET_MARKER_NAME(a, b) a = b;
+    void set_marker(Marker_t) {
+    }
+    void start_event(Marker_t data) {
+        if (glPushDebugGroup) {
+            glPushDebugGroup(GL_DEBUG_SOURCE_APPLICATION, 0, -1, data);
+        }
+    }
+    void end_event() {
+        if (glPopDebugGroup) {
+            glPopDebugGroup();
+        }
+    }
 }
 }
 

@@ -337,12 +337,7 @@ namespace Game
                 Renderer::Driver::bind_main_RT(store.mainRenderTarget);
                 Renderer::Driver::clear_main_RT(store.mainRenderTarget, Col(0.2f, 0.344f, 0.59f, 1.f));
             
-
-                Renderer::dl_drawPerShader((Renderer::Drawlist::DL_color_t&)dl, store.cbuffers);
-                Renderer::dl_drawPerShader((Renderer::Drawlist::DL_textured_t&)dl, store.cbuffers);
-                Renderer::dl_drawPerShader((Renderer::Drawlist::DL_texturedalphaclip_t&)dl, store.cbuffers);
-                Renderer::dl_drawPerShader((Renderer::Drawlist::DL_textureMapped_t&)dl, store.cbuffers);
-                Renderer::dl_drawPerShader((Renderer::Drawlist::DL_unlit_instanced_t&)dl, store.cbuffers);
+                draw_drawlists(dl, store.cbuffers);
             }
 
             // Immediate-mode debug. Can be moved out of the render update, it only pushes data to cpu buffers

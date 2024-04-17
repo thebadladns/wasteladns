@@ -24,6 +24,7 @@ namespace Driver {
     ID3D11Device1* d3ddev;
     ID3D11DeviceContext1* d3dcontext;
     IDXGISwapChain1* swapchain;
+    ID3DUserDefinedAnnotation* perf;
 
     void create_main_RT(RscMainRenderTarget& rt, const MainRenderTargetParams& params) {
         ID3D11RenderTargetView* targetView;
@@ -496,6 +497,16 @@ namespace Driver {
         if (params.pixel) {
             d3dcontext->PSSetConstantBuffers(0, count, &(cb[0].bufferObject));
         }
+    }
+#define SET_MARKER_NAME(a, b) a = L##b;
+    void set_marker(Marker_t data) {
+        perf->SetMarker(data);
+    }
+    void start_event(Marker_t data) {
+        perf->BeginEvent(data);
+    }
+    void end_event() {
+        perf->EndEvent();
     }
 }
 }

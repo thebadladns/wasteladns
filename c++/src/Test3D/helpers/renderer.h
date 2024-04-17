@@ -691,6 +691,7 @@ struct Drawlist_PerShader<_vsTechnique, _psTechnique, Shaders::PSMaterialUsage::
     Renderer::Driver::RscBlendState* blendState;
     Renderer::Driver::RscDepthStencilState* depthStencilState;
     tinystl::vector<DL_VertexBuffer> dl_perVertexBuffer;
+    Renderer::Driver::Marker_t markerName;
 
     DL_VertexBuffer& get_leaf(Handle& handle) {
         if (handle.id != DL_id_null) {
@@ -720,6 +721,7 @@ struct Drawlist_PerShader<_vsTechnique, _psTechnique, Shaders::PSMaterialUsage::
     Renderer::Driver::RscBlendState* blendState;
     Renderer::Driver::RscDepthStencilState* depthStencilState;
     tinystl::vector<DL_Material> dl_perMaterial;
+    Renderer::Driver::Marker_t markerName;
 
     DL_VertexBuffer& get_leaf(Handle& handle) {
         if (handle.id != DL_id_null) {
@@ -787,15 +789,19 @@ template<
 void dl_drawPerShader(
       const Drawlist_PerShader<_vsTechnique, _psTechnique, Shaders::PSMaterialUsage::None, _vertexLayout, _cbufferLayout, _cbufferUsage, _drawType>& dl_shader
     , Driver::RscCBuffer* cbuffers) {
-    Driver::bind_shader(dl_shader.shader);
-    Driver::bind_DS(*(dl_shader.depthStencilState));
-    Driver::bind_RS(*(dl_shader.rasterizerState));
-    Driver::bind_blend_state(*(dl_shader.blendState));
-    size_t bufferCount = dl_shader.dl_perVertexBuffer.size();
-    for (size_t i = 0; i < bufferCount; i++) {
-        const auto& buffer = dl_shader.dl_perVertexBuffer[i];
-        dl_bind_and_draw_buffer<_vertexLayout, _cbufferLayout, _cbufferUsage>(buffer, cbuffers);
+    Driver::start_event(dl_shader.markerName);
+    {
+        Driver::bind_shader(dl_shader.shader);
+        Driver::bind_DS(*(dl_shader.depthStencilState));
+        Driver::bind_RS(*(dl_shader.rasterizerState));
+        Driver::bind_blend_state(*(dl_shader.blendState));
+        size_t bufferCount = dl_shader.dl_perVertexBuffer.size();
+        for (size_t i = 0; i < bufferCount; i++) {
+            const auto& buffer = dl_shader.dl_perVertexBuffer[i];
+            dl_bind_and_draw_buffer<_vertexLayout, _cbufferLayout, _cbufferUsage>(buffer, cbuffers);
+        }
     }
+    Driver::end_event();
 }
 template<
     Shaders::VSTechnique::Enum _vsTechnique, Shaders::PSTechnique::Enum _psTechnique
@@ -803,20 +809,24 @@ template<
 void dl_drawPerShader(
     const Drawlist_PerShader<_vsTechnique, _psTechnique, Shaders::PSMaterialUsage::Uses, _vertexLayout, _cbufferLayout, _cbufferUsage, _drawType>& dl_shader
     , Driver::RscCBuffer* cbuffers) {
-    Driver::bind_shader(dl_shader.shader);
-    Driver::bind_DS(*(dl_shader.depthStencilState));
-    Driver::bind_RS(*(dl_shader.rasterizerState));
-    Driver::bind_blend_state(*(dl_shader.blendState));
-    const size_t materialCount = dl_shader.dl_perMaterial.size();
-    for (size_t i = 0; i < materialCount; i++) {
-        const auto& dl_material = dl_shader.dl_perMaterial[i];
-        dl_bind_material(dl_material);
-        size_t bufferCount = dl_material.dl_perVertexBuffer.size();
-        for (size_t j = 0; j < bufferCount; j++) {
-            const auto& buffer = dl_material.dl_perVertexBuffer[j];
-            dl_bind_and_draw_buffer<_vertexLayout, _cbufferLayout, _cbufferUsage>(buffer, cbuffers);
+    Driver::start_event(dl_shader.markerName);
+    {
+        Driver::bind_shader(dl_shader.shader);
+        Driver::bind_DS(*(dl_shader.depthStencilState));
+        Driver::bind_RS(*(dl_shader.rasterizerState));
+        Driver::bind_blend_state(*(dl_shader.blendState));
+        const size_t materialCount = dl_shader.dl_perMaterial.size();
+        for (size_t i = 0; i < materialCount; i++) {
+            const auto& dl_material = dl_shader.dl_perMaterial[i];
+            dl_bind_material(dl_material);
+            size_t bufferCount = dl_material.dl_perVertexBuffer.size();
+            for (size_t j = 0; j < bufferCount; j++) {
+                const auto& buffer = dl_material.dl_perVertexBuffer[j];
+                dl_bind_and_draw_buffer<_vertexLayout, _cbufferLayout, _cbufferUsage>(buffer, cbuffers);
+            }
         }
     }
+    Driver::end_event();
 }
 
 };

@@ -88,6 +88,8 @@ namespace Driver {
         GLuint bufferObject;
         GLuint index;
     };
+
+    typedef const char* Marker_t;
 }
 }
 #endif // __WASTELADNS_RENDERER_TYPES_GLFW_H__

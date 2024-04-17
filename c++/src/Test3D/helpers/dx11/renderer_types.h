@@ -88,6 +88,8 @@ namespace Driver {
     struct RscCBuffer {
         ID3D11Buffer* bufferObject;
     };
+
+    typedef LPCWSTR Marker_t;
 }
 }
 #endif // __WASTELADNS_RENDERER_TYPES_DX11_H__

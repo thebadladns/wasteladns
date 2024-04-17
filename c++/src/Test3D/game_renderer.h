@@ -64,7 +64,7 @@ namespace Renderer {
         struct Drawlist_set : _T... {
             using Handle = Drawlist_handle<_T...>;
             template<typename _Op, typename... _Args>
-            void for_each(_Args&&... args) {
+            void for_each(_Args&&... args) const {
                 int dummy[] = { 0, (_Op::template execute<_T>(args...), void(), 0)... };
                 (void)dummy;
                 //(_Op::execute<_T>(args...), ...); // c++17 only
@@ -93,6 +93,15 @@ namespace Renderer {
         };
         void update_dl_node_matrix(Drawlist_game& drawlist, const Drawlist_node& node) {
             drawlist.for_each<update_worldmatrix_t>(drawlist, node);
+        }
+        struct draw_drawlist_t {
+            template <typename _T>
+            static void execute(const Drawlist_game& drawlist, Driver::RscCBuffer* cbuffers) {
+                dl_drawPerShader((const _T&)drawlist, cbuffers);
+            }
+        };
+        void draw_drawlists(const Drawlist_game& drawlist, Driver::RscCBuffer* cbuffers) {
+            drawlist.for_each<draw_drawlist_t>(drawlist, cbuffers);
         }
     }
 
@@ -133,18 +142,21 @@ namespace Renderer {
                 dl.DL_color_t::rasterizerState = &store.rasterizerStateFill;
                 dl.DL_color_t::blendState = &store.blendStateOff;
                 dl.DL_color_t::depthStencilState = &store.depthStateOn;
+                SET_MARKER_NAME(dl.DL_color_t::markerName, "OPAQUE COLOR")
                 DL_color_ctx::load_dl_technique((DL_color_t&)dl, store.cbuffers);
             }
             {
                 dl.DL_textureMapped_t::rasterizerState = &store.rasterizerStateFill;
                 dl.DL_textureMapped_t::blendState = &store.blendStateOff;
                 dl.DL_textureMapped_t::depthStencilState = &store.depthStateOn;
+                SET_MARKER_NAME(dl.DL_textureMapped_t::markerName, "OPAQUE TEXTURE MAPPED")
                 DL_textureMapped_ctx::load_dl_technique((DL_textureMapped_t&)dl, store.cbuffers);
             }
             {
                 dl.DL_textured_t::rasterizerState = &store.rasterizerStateFill;
                 dl.DL_textured_t::blendState = &store.blendStateOff;
                 dl.DL_textured_t::depthStencilState = &store.depthStateOn;
+                SET_MARKER_NAME(dl.DL_textured_t::markerName, "OPAQUE TEXTURED")
                 DL_textured_ctx::load_dl_technique((DL_textured_t&)dl, store.cbuffers);
             }
             {
@@ -152,12 +164,14 @@ namespace Renderer {
                 dl.DL_texturedalphaclip_t::rasterizerState = &store.rasterizerStateFillCullNone;
                 dl.DL_texturedalphaclip_t::blendState = &store.blendStateOn;
                 dl.DL_texturedalphaclip_t::depthStencilState = &store.depthStateOn;
+                SET_MARKER_NAME(dl.DL_texturedalphaclip_t::markerName, "OPAQUE TEXTURED ALPHACLIP")
                 DL_texturedalphaclip_ctx::load_dl_technique((DL_texturedalphaclip_t&)dl, store.cbuffers);
             }
             {
                 dl.DL_unlit_instanced_t::rasterizerState = &store.rasterizerStateFill;
                 dl.DL_unlit_instanced_t::blendState = &store.blendStateOn;
                 dl.DL_unlit_instanced_t::depthStencilState = &store.depthStateReadOnly;
+                SET_MARKER_NAME(dl.DL_unlit_instanced_t::markerName, "TRANSPARENT INSTANCED")
                 DL_unlit_instanced_ctx::load_dl_technique((DL_unlit_instanced_t&)dl, store.cbuffers);
             }
         }

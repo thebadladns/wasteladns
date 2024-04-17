@@ -119,6 +119,7 @@ int WINAPI WinMain(
     ID3D11Device1* d3ddev;
     ID3D11DeviceContext1* d3dcontext;
     IDXGISwapChain1* swapchain;
+    ID3DUserDefinedAnnotation* pPerf;
         
     u32 flags = 0;
 #if __GPU_DEBUG
@@ -163,10 +164,15 @@ int WINAPI WinMain(
             nullptr,
             &swapchain);
 
+        // todo: check for errors
+        d3dcontext->QueryInterface(__uuidof(pPerf), reinterpret_cast<void**>(&pPerf));
+
         // TODO: Handle more nicely
         Renderer::Driver::d3ddev = d3ddev;
         Renderer::Driver::d3dcontext = d3dcontext;
         Renderer::Driver::swapchain = swapchain;
+        Renderer::Driver::perf = pPerf;
+
 
         // TODO: assumes depth usage, should go inside game code (as driver resource)
         D3D11_VIEWPORT viewport = {};
