@@ -106,7 +106,7 @@ namespace Renderer {
         struct draw_drawlist_nodes_t {
             template <typename _T>
             static void execute(const Drawlist_node& node, const Drawlist_game& drawlist, Driver::RscCBuffer* cbuffers) {
-                dl_drawPerNode((const _T&)drawlist, (typename const _T::Handle&)(node.handle), cbuffers);
+                dl_drawPerNode((const _T&)drawlist, (const typename _T::Handle&)(node.handle), cbuffers);
             }
         };
         void draw_drawlist_nodes(const Drawlist_node* nodes, const u32 node_count, const Drawlist_game& drawlist, Driver::RscCBuffer* cbuffers) {
