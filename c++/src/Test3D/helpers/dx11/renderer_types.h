@@ -90,6 +90,10 @@ namespace Driver {
     };
 
     typedef LPCWSTR Marker_t;
+#define SET_MARKER_NAME(a, b) a = L##b;
+    void set_marker(Marker_t data);
+    void start_event(Marker_t data);
+    void end_event();
 }
 }
 #endif // __WASTELADNS_RENDERER_TYPES_DX11_H__

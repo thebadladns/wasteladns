@@ -183,26 +183,36 @@ namespace Game
 
                 Renderer::Drawlist::Drawlist_node nodeToAdd = {};
                 nodeToAdd.handle.DL_id::id = (u32)store.drawlist.DL::dl_perVertexBuffer.size();
+                nodeToAdd.worldTransform = t;
+                Math::identity4x4(nodeToAdd.localTransform);
                 game.renderMgr.particles_DLnode = nodeToAdd;
                 store.drawlist.DL::dl_perVertexBuffer.push_back(buffer);
+                store.drawlist_nodes.push_back(nodeToAdd);
             }
             {
                 using DL = Renderer::Drawlist::DL_textureMapped_t;
                 using DL_VertexBuffer = Renderer::Drawlist::DL_textureMapped_vb;
                 using DL_Material = Renderer::Drawlist::DL_textureMapped_mat;
+                using DL_id = Renderer::Drawlist::DL_textureMapped_id;
                 DL_VertexBuffer buffer = {};
                 Transform t; Math::identity4x4(t);
                 buffer.groupData.worldMatrix = t.matrix;
                 buffer.groupData.groupColor = Col(0.f, 0.f, 0.f, 0.f).RGBAv4();
                 Renderer::create_indexed_vertex_buffer_from_textured_cube(buffer.buffer, { 1.f, 1.f, 1.f });
 
+                Renderer::Drawlist::Drawlist_node nodeToAdd = {};
+                nodeToAdd.worldTransform = t;
+                Math::identity4x4(nodeToAdd.localTransform);
+                nodeToAdd.handle.DL_id::material = (u16)store.drawlist.DL::dl_perMaterial.size();
                 DL_Material material = {};
                 Renderer::Driver::create_texture_from_file(material.textures[DL_Material::TextureTypes::Albedo], { "assets/pbr/material04-albedo.png" });
                 Renderer::Driver::create_texture_from_file(material.textures[DL_Material::TextureTypes::NormalMap], { "assets/pbr/material04-normal.png" });
                 Renderer::Driver::create_texture_from_file(material.textures[DL_Material::TextureTypes::DepthMap], { "assets/pbr/material04-depth.png" });
+                nodeToAdd.handle.DL_id::buffer = (u16)material.dl_perVertexBuffer.size();
                 material.dl_perVertexBuffer.push_back(buffer);
 
                 store.drawlist.DL::dl_perMaterial.push_back(material);
+                store.drawlist_nodes.push_back(nodeToAdd);
             }
         }
 

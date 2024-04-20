@@ -89,7 +89,11 @@ namespace Driver {
         GLuint index;
     };
 
+#define SET_MARKER_NAME(a, b) a = b;
     typedef const char* Marker_t;
+    void set_marker(Marker_t);
+    void start_event(Marker_t data);
+    void end_event();
 }
 }
 #endif // __WASTELADNS_RENDERER_TYPES_GLFW_H__

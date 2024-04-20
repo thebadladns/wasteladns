@@ -834,6 +834,59 @@ void dl_drawPerShader(
     Driver::end_event();
 }
 
+template<
+      Shaders::VSTechnique::Enum _vsTechnique, Shaders::PSTechnique::Enum _psTechnique
+    , typename _vertexLayout, typename _cbufferLayout, Shaders::PSCBufferUsage::Enum _cbufferUsage, Shaders::VSDrawType::Enum _drawType>
+void dl_drawPerNode(
+      const Drawlist_PerShader<_vsTechnique, _psTechnique, Shaders::PSMaterialUsage::None, _vertexLayout, _cbufferLayout, _cbufferUsage, _drawType>& dl_shader
+    , typename const Drawlist_PerShader<_vsTechnique, _psTechnique, Shaders::PSMaterialUsage::None, _vertexLayout, _cbufferLayout, _cbufferUsage, _drawType>::Handle& handle
+    , Driver::RscCBuffer* cbuffers) {
+    using Type = Drawlist_PerShader<_vsTechnique, _psTechnique, Shaders::PSMaterialUsage::None, _vertexLayout, _cbufferLayout, _cbufferUsage, _drawType>;
+    if (handle.id != Type::DL_id_null) {
+        SET_MARKER_NAME(Driver::Marker_t marker, "NON MATERIAL NODE");
+        Renderer::Driver::start_event(marker);
+        {
+            Driver::bind_shader(dl_shader.shader);
+            Driver::bind_DS(*(dl_shader.depthStencilState));
+            Driver::bind_RS(*(dl_shader.rasterizerState));
+            Driver::bind_blend_state(*(dl_shader.blendState));
+            Renderer::Driver::start_event(marker);
+            auto& dl_buffer = dl_shader.dl_perVertexBuffer[handle.id];
+            dl_bind_and_draw_buffer<_vertexLayout, _cbufferLayout, _cbufferUsage>(dl_buffer, cbuffers);
+        }
+    }
+    Renderer::Driver::end_event();
+}
+template<
+      Shaders::VSTechnique::Enum _vsTechnique, Shaders::PSTechnique::Enum _psTechnique
+    , typename _vertexLayout, typename _cbufferLayout, Shaders::PSCBufferUsage::Enum _cbufferUsage, Shaders::VSDrawType::Enum _drawType>
+void dl_drawPerNode(
+      const Drawlist_PerShader<_vsTechnique, _psTechnique, Shaders::PSMaterialUsage::Uses, _vertexLayout, _cbufferLayout, _cbufferUsage, _drawType>& dl_shader
+    , typename const Drawlist_PerShader<_vsTechnique, _psTechnique, Shaders::PSMaterialUsage::Uses, _vertexLayout, _cbufferLayout, _cbufferUsage, _drawType>::Handle& handle
+    , Driver::RscCBuffer* cbuffers) {
+    using Type = Drawlist_PerShader<_vsTechnique, _psTechnique, Shaders::PSMaterialUsage::Uses, _vertexLayout, _cbufferLayout, _cbufferUsage, _drawType>;
+    if (handle.id != Type::DL_id_null) {
+        SET_MARKER_NAME(Driver::Marker_t marker, "MATERIAL NODE");
+        Renderer::Driver::start_event(marker);
+        {
+            Driver::bind_shader(dl_shader.shader);
+            Driver::bind_DS(*(dl_shader.depthStencilState));
+            Driver::bind_RS(*(dl_shader.rasterizerState));
+            Driver::bind_blend_state(*(dl_shader.blendState));
+            SET_MARKER_NAME(Driver::Marker_t marker, "MATERIAL PART");
+            Renderer::Driver::start_event(marker);
+            {
+                auto& dl_material = dl_shader.dl_perMaterial[handle.material];
+                dl_bind_material(dl_material);
+                auto& dl_buffer = dl_material.dl_perVertexBuffer[handle.buffer];
+                dl_bind_and_draw_buffer<_vertexLayout, _cbufferLayout, _cbufferUsage>(dl_buffer, cbuffers);
+            }
+            Renderer::Driver::end_event();
+        }
+    }
+    Renderer::Driver::end_event();
+}
+
 };
 
 #endif // __WASTELADNS_RENDERER_H__

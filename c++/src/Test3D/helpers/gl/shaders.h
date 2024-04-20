@@ -50,7 +50,7 @@ struct VS_src_selector<
     static const VS_src& value() { return vs_forward_base_Vec3Color4B_CBuffer_DebugScene_Standard; }
 };
 
-constexpr VS_src vs_forward_base_Vec3_CBuffer_3DScene_Sandard = {
+constexpr VS_src vs_forward_base_Vec3_CBuffer_3DScene_Standard = {
 "forward_base_Vec3_CBuffer_3DScene_Sandard",
 R"(
 #version 330
@@ -94,7 +94,7 @@ struct VS_src_selector<
     Layout_Vec3,
     Layout_CBuffer_3DScene,
     VSDrawType::Standard> {
-    static const VS_src& value() { return vs_forward_base_Vec3_CBuffer_3DScene_Sandard; }
+    static const VS_src& value() { return vs_forward_base_Vec3_CBuffer_3DScene_Standard; }
 };
 
 constexpr VS_src vs_forward_base_Vec3Color4B_CBuffer_3DScene_Standard = {
@@ -158,8 +158,8 @@ out gl_PerVertex
 
 layout(std140) uniform type_PerScene
 {
-    layout(row_major) mat4 projectionMatrix;
-    layout(row_major) mat4 viewMatrix;
+    mat4 projectionMatrix;
+    mat4 viewMatrix;
     vec3 viewPosWS;
     float padding1;
     vec3 lightPosWS;
@@ -168,7 +168,7 @@ layout(std140) uniform type_PerScene
 
 layout(std140) uniform type_PerGroup
 {
-    layout(row_major) mat4 modelMatrix;
+    mat4 modelMatrix;
     vec4 groupColor;
 } PerGroup;
 

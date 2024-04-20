@@ -103,9 +103,21 @@ namespace Renderer {
         void draw_drawlists(const Drawlist_game& drawlist, Driver::RscCBuffer* cbuffers) {
             drawlist.for_each<draw_drawlist_t>(drawlist, cbuffers);
         }
+        struct draw_drawlist_nodes_t {
+            template <typename _T>
+            static void execute(const Drawlist_node& node, const Drawlist_game& drawlist, Driver::RscCBuffer* cbuffers) {
+                dl_drawPerNode((const _T&)drawlist, (typename const _T::Handle&)(node.handle), cbuffers);
+            }
+        };
+        void draw_drawlist_nodes(const Drawlist_node* nodes, const u32 node_count, const Drawlist_game& drawlist, Driver::RscCBuffer* cbuffers) {
+            for (u32 i = 0; i < node_count; i++) {
+                drawlist.for_each<draw_drawlist_nodes_t>(nodes[i], drawlist, cbuffers);
+            }
+        }
     }
 
     struct Store {
+        tinystl::vector<Drawlist::Drawlist_node> drawlist_nodes;
         Renderer::Driver::RscCBuffer cbuffers[Renderer::Layout_CBuffer_3DScene::Buffers::Count];
         Drawlist::Drawlist_game drawlist;
         Renderer::Driver::RscRasterizerState rasterizerStateFill, rasterizerStateFillCullNone, rasterizerStateLine;
@@ -410,6 +422,7 @@ namespace Renderer {
                             renderStore.drawlist.DL_texturedalphaclip_t::dl_perMaterial.push_back(material);
                         }
                     }
+                    renderStore.drawlist_nodes.push_back(nodeToAdd);
                 }
             }
         }

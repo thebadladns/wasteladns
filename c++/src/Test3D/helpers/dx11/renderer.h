@@ -125,40 +125,61 @@ namespace Driver {
             }
             t.format = format;
 
-            // Do not initialize data here, since we'll use auto mipmapss
-            D3D11_TEXTURE2D_DESC texDesc = {};
-            texDesc.Width = w;
-            texDesc.Height = h;
-            texDesc.MipLevels = 0;
-            texDesc.ArraySize = 1;
-            texDesc.SampleDesc.Count = 1;
-            texDesc.SampleDesc.Quality = 0;
-            texDesc.Usage = D3D11_USAGE_DEFAULT;
-            texDesc.Format = format;
-            texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE|D3D11_BIND_RENDER_TARGET;
-            texDesc.CPUAccessFlags = 0;
-            texDesc.MiscFlags = D3D11_RESOURCE_MISC_GENERATE_MIPS;
-            d3ddev->CreateTexture2D(&texDesc, nullptr, &t.texture);
-
-            D3D11_SHADER_RESOURCE_VIEW_DESC texViewDesc = {};
-            texViewDesc.Format = format;
-            texViewDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
-            texViewDesc.Texture2D.MipLevels = -1;
-            texViewDesc.Texture2D.MostDetailedMip = 0;
-            d3ddev->CreateShaderResourceView(t.texture, &texViewDesc, &t.view);
-            
-            // Initialize data and generate mips
-            d3dcontext->UpdateSubresource(t.texture, 0, nullptr, data, typeSize * w, typeSize * w * h);
-            d3dcontext->GenerateMips(t.view);
-
             // TODO: parameters!!
+            bool mipsautogen = true;
+            UINT miplevelsDesc = 0;
+            UINT miplevelsGen = -1;
+            UINT bindflags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
+            UINT miscflags = D3D11_RESOURCE_MISC_GENERATE_MIPS;
             D3D11_FILTER filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
             FLOAT maxlod = D3D11_FLOAT32_MAX;
             if (w <= 64) {
                 filter = D3D11_FILTER_MIN_MAG_MIP_POINT;
                 maxlod = 0;
+                mipsautogen = false;
+                miscflags = 0;
+                miplevelsDesc = miplevelsGen = 1;
+                bindflags = D3D11_BIND_SHADER_RESOURCE;
             }
 
+            // Do not initialize data here, since we'll use auto mipmapss
+            D3D11_TEXTURE2D_DESC texDesc = {};
+            texDesc.Width = w;
+            texDesc.Height = h;
+            texDesc.MipLevels = miplevelsDesc;
+            texDesc.ArraySize = 1;
+            texDesc.SampleDesc.Count = 1;
+            texDesc.SampleDesc.Quality = 0;
+            texDesc.Usage = D3D11_USAGE_DEFAULT;
+            texDesc.Format = format;
+            texDesc.BindFlags = bindflags;
+            texDesc.CPUAccessFlags = 0;
+            texDesc.MiscFlags = miscflags;
+
+            // Initialize data and generate mips
+            if (mipsautogen) {
+                d3ddev->CreateTexture2D(&texDesc, nullptr, &t.texture);
+            }
+            else {
+                D3D11_SUBRESOURCE_DATA initData;
+                initData.pSysMem = data;
+                initData.SysMemPitch = (UINT)(typeSize * w);
+                initData.SysMemSlicePitch = (UINT)(typeSize * w * h);
+                d3ddev->CreateTexture2D(&texDesc, &initData, &t.texture);
+            }
+
+            D3D11_SHADER_RESOURCE_VIEW_DESC texViewDesc = {};
+            texViewDesc.Format = format;
+            texViewDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+            texViewDesc.Texture2D.MipLevels = miplevelsGen;
+            texViewDesc.Texture2D.MostDetailedMip = 0;
+            d3ddev->CreateShaderResourceView(t.texture, &texViewDesc, &t.view);
+
+            if (mipsautogen) {
+                d3dcontext->UpdateSubresource(t.texture, 0, nullptr, data, typeSize * w, typeSize * w * h);
+                d3dcontext->GenerateMips(t.view);
+            }
+            
             // Sampler tied to texture resource, for now
             D3D11_SAMPLER_DESC samplerDesc = {};
             samplerDesc.Filter = filter;
@@ -498,7 +519,6 @@ namespace Driver {
             d3dcontext->PSSetConstantBuffers(0, count, &(cb[0].bufferObject));
         }
     }
-#define SET_MARKER_NAME(a, b) a = L##b;
     void set_marker(Marker_t data) {
         perf->SetMarker(data);
     }
