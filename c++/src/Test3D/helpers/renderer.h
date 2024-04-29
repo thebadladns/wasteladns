@@ -850,7 +850,6 @@ void dl_drawPerNode(
             Driver::bind_DS(*(dl_shader.depthStencilState));
             Driver::bind_RS(*(dl_shader.rasterizerState));
             Driver::bind_blend_state(*(dl_shader.blendState));
-            Renderer::Driver::start_event(marker);
             auto& dl_buffer = dl_shader.dl_perVertexBuffer[handle.id];
             dl_bind_and_draw_buffer<_vertexLayout, _cbufferLayout, _cbufferUsage>(dl_buffer, cbuffers);
         }

@@ -392,7 +392,7 @@ template <>
 struct PS_src_selector<
     PSTechnique::forward_textured_unlit,
     Layout_TexturedVec3,
-    Layout_CBuffer_3DScene> {
+    Layout_CNone> {
     static const PSMaterialUsage::Enum materialUsage = PSMaterialUsage::Uses;
     static const PS_src& value() { return ps_forward_textured_unlit_TexturedVec3_CBuffer_3DScene; }
 };
@@ -436,7 +436,7 @@ template <>
 struct PS_src_selector<
     PSTechnique::forward_textured_unlitalphaclip,
     Layout_TexturedVec3,
-    Layout_CBuffer_3DScene> {
+    Layout_CNone> {
     static const PSMaterialUsage::Enum materialUsage = PSMaterialUsage::Uses;
     static const PS_src& value() { return ps_forward_textured_unlitalphaclip_TexturedVec3_CBuffer_3DScene; }
 };

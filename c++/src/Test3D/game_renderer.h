@@ -22,14 +22,14 @@ namespace Renderer {
               Shaders::VSTechnique::forward_base, Shaders::PSTechnique::forward_textured_unlit
             , Layout_TexturedVec3
             , Layout_CBuffer_3DScene
-            , Layout_CBuffer_3DScene
+            , Layout_CNone
             , Shaders::VSDrawType::Standard
         >;
         using DL_texturedalphaclip_ctx = Drawlist_TypeContext <
               Shaders::VSTechnique::forward_base, Shaders::PSTechnique::forward_textured_unlitalphaclip
             , Layout_TexturedVec3
             , Layout_CBuffer_3DScene
-            , Layout_CBuffer_3DScene
+            , Layout_CNone
             , Shaders::VSDrawType::Standard
         >;
         using DL_unlit_instanced_ctx = Drawlist_TypeContext <
