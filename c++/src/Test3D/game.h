@@ -405,13 +405,13 @@ namespace Game
                     f32 lineheight = 15.f * textscale;
 
                     Renderer::Immediate::TextParams textParamsLeft, textParamsRight, textParamsCenter;
-                    textParamsLeft.scale = platform.screen.text_scale;
+                    textParamsLeft.scale = (u8)platform.screen.text_scale;
                     textParamsLeft.pos = Vec3(game.renderMgr.windowProjection.config.left + 10.f * textscale, game.renderMgr.windowProjection.config.top - 10.f * textscale, -50);
                     textParamsLeft.color = defaultCol;
-                    textParamsRight.scale = platform.screen.text_scale;
+                    textParamsRight.scale = (u8)platform.screen.text_scale;
                     textParamsRight.pos = Vec3(game.renderMgr.windowProjection.config.right - 60.f * textscale, game.renderMgr.windowProjection.config.top - 10.f * textscale, -50);
                     textParamsRight.color = defaultCol;
-                    textParamsCenter.scale = platform.screen.text_scale;
+                    textParamsCenter.scale = (u8)platform.screen.text_scale;
                     textParamsCenter.pos = Vec3(0.f, game.renderMgr.windowProjection.config.top - 10.f * textscale, -50);
                     textParamsCenter.color = defaultCol;
 
