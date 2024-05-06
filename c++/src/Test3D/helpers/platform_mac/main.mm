@@ -109,12 +109,14 @@ int main(int , char** ) {
             
             NSSize windowSize = [contentView frame].size;
             
-            platform.screen.window_width = windowSize.width;
-            platform.screen.window_height = windowSize.height;
-            platform.screen.width = windowSize.width;
-            platform.screen.height = windowSize.height;
+            f32 scale = [contentView convertSizeToBacking:CGSizeMake(1,1)].width;
+            platform.screen.window_width = windowSize.width * scale;
+            platform.screen.window_height = windowSize.height * scale;
+            platform.screen.width = config.game_width;
+            platform.screen.height = config.game_height;
             platform.screen.desiredRatio = platform.screen.width / (f32)platform.screen.height;
             platform.screen.fullscreen = config.fullscreen;
+            __DEBUGEXP(platform.screen.text_scale = scale);
         }
 
         ::Input::Keyboard::PollData keyboardPollData;

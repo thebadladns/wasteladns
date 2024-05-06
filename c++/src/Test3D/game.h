@@ -97,8 +97,8 @@ namespace Game
 
     void loadLaunchConfig(Platform::WindowConfig& config) {
         // hardcoded for now
-        config.window_width = 1280;
-        config.window_height = 960;
+        config.window_width = 320 * 3;
+        config.window_height = 240 * 3;
         config.game_width = 320 * 1;
         config.game_height = 240 * 1;
         config.fullscreen = false;
@@ -400,51 +400,54 @@ namespace Game
                 {
                     Col defaultCol(0.7f, 0.8f, 0.15f, 1.0f);
                     Col activeCol(1.0f, 0.2f, 0.1f, 1.0f);
+                    
+                    f32 textscale = platform.screen.text_scale;
+                    f32 lineheight = 15.f * textscale;
 
                     Renderer::Immediate::TextParams textParamsLeft, textParamsRight, textParamsCenter;
-                    textParamsLeft.scale = 1;
-                    textParamsLeft.pos = Vec3(game.renderMgr.windowProjection.config.left + 10.f, game.renderMgr.windowProjection.config.top - 15.f, -50);
+                    textParamsLeft.scale = platform.screen.text_scale;
+                    textParamsLeft.pos = Vec3(game.renderMgr.windowProjection.config.left + 10.f * textscale, game.renderMgr.windowProjection.config.top - 10.f * textscale, -50);
                     textParamsLeft.color = defaultCol;
-                    textParamsRight.scale = 1;
-                    textParamsRight.pos = Vec3(game.renderMgr.windowProjection.config.right - 60.f, game.renderMgr.windowProjection.config.top - 15.f, -50);
+                    textParamsRight.scale = platform.screen.text_scale;
+                    textParamsRight.pos = Vec3(game.renderMgr.windowProjection.config.right - 60.f * textscale, game.renderMgr.windowProjection.config.top - 10.f * textscale, -50);
                     textParamsRight.color = defaultCol;
-                    textParamsCenter.scale = 1;
-                    textParamsCenter.pos = Vec3(0.f, game.renderMgr.windowProjection.config.top - 15.f, -50);
+                    textParamsCenter.scale = platform.screen.text_scale;
+                    textParamsCenter.pos = Vec3(0.f, game.renderMgr.windowProjection.config.top - 10.f * textscale, -50);
                     textParamsCenter.color = defaultCol;
 
                     const char* overlaynames[] = { "All", "Help Only", "Arenas only", "None" };
                     textParamsLeft.color = keyboard.pressed(Input::TOGGLE_OVERLAY) ? activeCol : defaultCol;
                     Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParamsLeft, "H to toggle overlays: %s", overlaynames[game.debugVis.overlaymode]);
-                    textParamsLeft.pos.y -= 15.f;
+                    textParamsLeft.pos.y -= lineheight;
 
                     if (game.debugVis.overlaymode == DebugVis::OverlayMode::All || game.debugVis.overlaymode == DebugVis::OverlayMode::HelpOnly) {
                         textParamsLeft.color = platform.input.mouse.down(::Input::Mouse::Keys::BUTTON_LEFT) ? activeCol : defaultCol;
                         Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParamsLeft, "left mouse click and drag to orbit");
-                        textParamsLeft.pos.y -= 15.f;
+                        textParamsLeft.pos.y -= lineheight;
                         textParamsLeft.color = platform.input.mouse.down(::Input::Mouse::Keys::BUTTON_RIGHT) ? activeCol : defaultCol;
                         Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParamsLeft, "right mouse click and drag to pan");
-                        textParamsLeft.pos.y -= 15.f;
+                        textParamsLeft.pos.y -= lineheight;
                         textParamsLeft.color = platform.input.mouse.scrolldy != 0 ? activeCol : defaultCol;
                         Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParamsLeft, "mouse wheel to scale");
-                        textParamsLeft.pos.y -= 15.f;
+                        textParamsLeft.pos.y -= lineheight;
                         {
                             Vec3 eulers_deg = Math::scale(game.cameraMgr.orbitCamera.eulers, Math::r2d<f32>);
                             Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParamsLeft, "Camera eulers: " VEC3_FORMAT("% .3f"), VEC3_PARAMS(eulers_deg));
-                            textParamsLeft.pos.y -= 15.f;
+                            textParamsLeft.pos.y -= lineheight;
                         }
 
                         textParamsRight.color = defaultCol;
                         Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParamsRight, "%s", Platform::name);
-                        textParamsRight.pos.y -= 15.f;
-                        textParamsRight.pos.x -= 30.f;
+                        textParamsRight.pos.y -= lineheight;
+                        textParamsRight.pos.x -= 30.f * textscale;
                         Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParamsRight, "%.3lf fps", 1. / game.debugVis.frameAvg);
-                        textParamsRight.pos.y -= 15.f;
+                        textParamsRight.pos.y -= lineheight;
                     }
 
                     if (game.debugVis.overlaymode == DebugVis::OverlayMode::All || game.debugVis.overlaymode == DebugVis::OverlayMode::ArenaOnly)
                     {
-                        const f32 barwidth = 150.f;
-                        const f32 barheight = 10.f;
+                        const f32 barwidth = 150.f * textscale;
+                        const f32 barheight = 10.f * textscale;
                         textParamsCenter.pos.x -= barwidth / 2.f;
                         {
                             const Col arenabaseCol(0.65f, 0.65f, 0.65f, 0.4f);
@@ -456,7 +459,7 @@ namespace Game
 
                             textParamsCenter.color = arenahighmarkCol;
                             Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParamsCenter, "Frame arena highmark: %lu bytes", arenaHighmark);
-                            textParamsCenter.pos.y -= 15.f;
+                            textParamsCenter.pos.y -= lineheight;
                             textParamsCenter.color = defaultCol;
 
                             Renderer::Immediate::box_2d(game.renderMgr.immediateBuffer
@@ -467,7 +470,7 @@ namespace Game
                                 , Vec2(textParamsCenter.pos.x, textParamsCenter.pos.y - barheight)
                                 , Vec2(textParamsCenter.pos.x + arenaHighmark_barwidth, textParamsCenter.pos.y)
                                 , arenahighmarkCol);
-                            textParamsCenter.pos.y -= barheight + 5.f;
+                            textParamsCenter.pos.y -= barheight + 5.f * textscale;
                         }
                         {
                             const Col arenabaseCol(0.65f, 0.65f, 0.65f, 0.4f);
@@ -479,7 +482,7 @@ namespace Game
 
                             textParamsCenter.color = arenahighmarkCol;
                             Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParamsCenter, "Scratch arena highmark: %lu bytes", arenaHighmark);
-                            textParamsCenter.pos.y -= 15.f;
+                            textParamsCenter.pos.y -= lineheight;
                             textParamsCenter.color = defaultCol;
 
                             Renderer::Immediate::box_2d(game.renderMgr.immediateBuffer
@@ -490,7 +493,7 @@ namespace Game
                                 , Vec2(textParamsCenter.pos.x, textParamsCenter.pos.y - barheight)
                                 , Vec2(textParamsCenter.pos.x + arenaHighmark_barwidth, textParamsCenter.pos.y)
                                 , arenahighmarkCol);
-                            textParamsCenter.pos.y -= barheight + 5.f;
+                            textParamsCenter.pos.y -= barheight + 5.f * textscale;
                         }
                         {
                             auto& im = game.renderMgr.immediateBuffer;
@@ -515,13 +518,13 @@ namespace Game
 
                             textParamsCenter.color = used3dCol;
                             Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParamsCenter, "im 3d: %lu bytes", vertices_3d_size);
-                            textParamsCenter.pos.y -= 15.f;
+                            textParamsCenter.pos.y -= lineheight;
                             textParamsCenter.color = used2dCol;
                             Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParamsCenter, "im 3d: %lu bytes", vertices_2d_size);
-                            textParamsCenter.pos.y -= 15.f;
+                            textParamsCenter.pos.y -= lineheight;
                             textParamsCenter.color = used2didxCol;
                             Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParamsCenter, "im 3d: %lu bytes", indices_2d_size);
-                            textParamsCenter.pos.y -= 15.f;
+                            textParamsCenter.pos.y -= lineheight;
                             textParamsCenter.color = defaultCol;
 
                             Renderer::Immediate::box_2d(game.renderMgr.immediateBuffer
@@ -574,16 +577,14 @@ namespace Game
                     Renderer::Driver::bind_DS(rscene.store.depthStateOff);
                     Renderer::Driver::bind_RS(rscene.store.rasterizerStateFill);
                     Renderer::Driver::bind_main_RT(rscene.store.windowRT);
-                    Renderer::Driver::clear_main_RT(rscene.store.windowRT, Col(0.0f, 0.0f, 0.0f, 0.f));
 
-                    //Renderer::Driver::clear_main_RT(store.mainRenderTarget, Col(0.2f, 0.344f, 0.59f, 1.f));
                     Driver::bind_shader(rscene.store.shader_blit);
                     Driver::bind_textures(&rscene.store.gameRT.textures[0], 1);
                     Driver::draw_fullscreen();
                 }
                 Renderer::Driver::end_event();
                 Renderer::Driver::bind_blend_state(rscene.store.blendStateOff);
-                Renderer::Driver::bind_DS(rscene.store.depthStateOn);
+                Renderer::Driver::bind_DS(rscene.store.depthStateOff);
                 Renderer::Driver::bind_main_RT(rscene.store.windowRT);
             }
             // Batched 2d debug (clear cpu buffers onto the screen)

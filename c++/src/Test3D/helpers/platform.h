@@ -27,6 +27,7 @@ namespace Platform
         u32 height; // game
         u32 window_width;
         u32 window_height;
+        __DEBUGDEF(f32 text_scale = 1.f;)
         bool fullscreen = false;
     };
     
