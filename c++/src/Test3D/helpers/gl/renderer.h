@@ -37,8 +37,10 @@ namespace Driver {
     }
     void bind_main_RT(RscMainRenderTarget& rt) {
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
     }
-    void create_RT(RscRenderTarget& rt, const RenderTargetParams& params) {
+    template<u32 _attachments>
+    void create_RT(RscRenderTarget<_attachments>& rt, const RenderTargetParams& params) {
         GLuint buffer;
         glGenFramebuffers(1, &buffer);
         glBindFramebuffer(GL_FRAMEBUFFER, buffer);
@@ -56,23 +58,61 @@ namespace Driver {
             rt.mask = rt.mask | GL_DEPTH_BUFFER_BIT;
             glBindFramebuffer(GL_FRAMEBUFFER, 0);
         }
+
+        {
+            glBindFramebuffer(GL_FRAMEBUFFER, rt.buffer);
+            GLuint attachments[_attachments];
+            for (u32 i = 0; i < _attachments; i++) {
+                Renderer::Driver::TextureRenderTargetCreateParams texParams;
+                texParams.width = params.width;
+                texParams.height = params.height;
+                texParams.format = params.textureFormat;
+                texParams.internalFormat = params.textureInternalFormat;
+                texParams.type = params.textureFormatType;
+
+                create_texture_empty(rt.textures[i], texParams);
+                u32 colorAttachment = GL_COLOR_ATTACHMENT0 + i;
+                glFramebufferTexture2D(GL_FRAMEBUFFER, colorAttachment, GL_TEXTURE_2D, rt.textures[i].texId, 0);
+                attachments[i] = colorAttachment;
+            }
+            glDrawBuffers(_attachments, attachments);
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        }
     }
-    void bind_RT(const RscRenderTarget& rt) {
+    template<u32 _attachments>
+    void bind_RT(const RscRenderTarget<_attachments>& rt) {
         glBindFramebuffer(GL_FRAMEBUFFER, rt.buffer);
     }
-    void clear_RT(const RscRenderTarget& rt) {
+    template<u32 _attachments>
+    void clear_RT(const RscRenderTarget<_attachments>& rt) {
         glClear(rt.mask | GL_STENCIL_BUFFER_BIT);
     }
-    void copy_RT_to_main_RT(RscMainRenderTarget& dst, const RscRenderTarget& src, const RenderTargetCopyParams& params) {
+    template<u32 _attachments>
+    void clear_RT(const RscRenderTarget<_attachments>& rt, Col color) {
+        glClearColor(RGBA_PARAMS(color));
+        glClear(rt.mask | GL_STENCIL_BUFFER_BIT);
+    }
+    template<u32 _attachments>
+    void copy_RT_to_main_RT(RscMainRenderTarget& dst, const RscRenderTarget<_attachments>& src, const RenderTargetCopyParams& params) {
+        // TODO: UNTESTED
         glBindFramebuffer(GL_READ_FRAMEBUFFER, src.buffer);
         glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+
+        // backbuffer only has one attachment
+        glReadBuffer(GL_COLOR_ATTACHMENT0);
+        glDrawBuffer(GL_COLOR_ATTACHMENT0);
+
         // Todo: ensure matching formats?
         GLuint flags = 0;
         if (params.depth) {
             flags = flags | GL_DEPTH_BUFFER_BIT;
         }
         glBlitFramebuffer(0, 0, src.width, src.height, 0, 0, src.width, src.height, flags, GL_NEAREST);
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        //glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    }
+
+    void set_VP(const ViewportParams& params) {
+        glViewport((GLint)params.topLeftX, (GLint)params.topLeftY, (GLsizei)params.width, (GLsizei)params.height);
     }
     
     void create_texture_from_file(RscTexture& t, const TextureFromFileParams& params) {
@@ -138,18 +178,6 @@ namespace Driver {
             const s32 samplerLoc = glGetUniformLocation(ss.shaderObject, params[i]);
             glUniform1i(samplerLoc, i);
         }
-    }
-    void bind_RTs(RscRenderTarget& b, const RscTexture* textures, const u32 count) {
-        GLuint attachments[16]; // hack
-        glBindFramebuffer(GL_FRAMEBUFFER, b.buffer);
-        for (u32 i = 0; i < count; i++) {
-            // todo: assert on incompatible size?
-            u32 colorAttachment = GL_COLOR_ATTACHMENT0 + i;
-            glFramebufferTexture2D(GL_FRAMEBUFFER, colorAttachment, GL_TEXTURE_2D, textures[i].texId, 0);
-            attachments[i] = colorAttachment;
-        }
-        glDrawBuffers(count, attachments);
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
     }
     
     template <typename _vertexLayout, typename _cbufferLayout, Shaders::VSDrawType::Enum _drawType>
@@ -221,7 +249,9 @@ namespace Driver {
         ShaderResult result;
         result.compiled = compiled != 0;
         if (result.compiled) {
-            bind_cbuffers_to_shader(ss, params.cbuffers);
+            if (params.cbuffers) {
+                bind_cbuffers_to_shader(ss, params.cbuffers);
+            }
         } else {
             GLint infoLogLength;
             glGetProgramiv(ss.shaderObject, GL_INFO_LOG_LENGTH, &infoLogLength);
@@ -370,6 +400,10 @@ namespace Driver {
     template <typename _layout>
     void draw_instances_indexed_vertex_buffer(const RscIndexedBuffer<_layout>& b, const u32 instanceCount) {
         glDrawElementsInstanced(b.type, b.indexCount, b.indexType, nullptr, instanceCount);
+    }
+
+    void draw_fullscreen() {
+        glDrawArrays(GL_TRIANGLES, 0, 3);
     }
     
     template <typename _layout>

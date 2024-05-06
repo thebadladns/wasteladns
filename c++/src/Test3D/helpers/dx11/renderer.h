@@ -66,11 +66,11 @@ namespace Driver {
         d3dcontext->OMSetRenderTargets(1, &rt.view, rt.depthStencilView);
     }
 
-    void create_RT(RscRenderTarget& rt, const RenderTargetParams& params) {
+    template <u32 _attachments>
+    void create_RT(RscRenderTarget<_attachments>& rt, const RenderTargetParams& params) {
 
-        // Make depth buffer a part of the main render target, for now
         if (params.depth) {
-
+            // same format as texture, 0 minmap
             ID3D11Texture2D* stencil = nullptr;
             D3D11_TEXTURE2D_DESC stencilDesc = {};
             stencilDesc.Width = params.width;
@@ -85,24 +85,61 @@ namespace Driver {
             stencilDesc.CPUAccessFlags = 0;
             stencilDesc.MiscFlags = 0;
             d3ddev->CreateTexture2D(&stencilDesc, nullptr, &stencil);
-
-            // same format as texture, 0 minmap
             d3ddev->CreateDepthStencilView(stencil, nullptr, &rt.depthStencilView);
         }
+
+        {
+            for (u32 i = 0; i < _attachments; i++) {
+                Renderer::Driver::TextureRenderTargetCreateParams texParams;
+                texParams.width = params.width;
+                texParams.height = params.height;
+                texParams.format = params.textureFormat;
+                texParams.internalFormat = params.textureInternalFormat;
+                texParams.type = params.textureFormatType;
+                create_texture_empty(rt.textures[i], texParams);
+
+                D3D11_RENDER_TARGET_VIEW_DESC rtViewDesc = {};
+                rtViewDesc.Format = (DXGI_FORMAT) texParams.format;
+                rtViewDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
+                rtViewDesc.Texture2D.MipSlice = 0;
+                d3ddev->CreateRenderTargetView(rt.textures[i].texture, &rtViewDesc, &rt.views[i]);
+            }
+        }
     }
-    void bind_RT(const RscRenderTarget& rt) {
-        d3dcontext->OMSetRenderTargets(rt.viewCount, rt.views, rt.depthStencilView);
+    template <u32 _attachments>
+    void bind_RT(const RscRenderTarget<_attachments>& rt) {
+        d3dcontext->OMSetRenderTargets(_attachments, rt.views, rt.depthStencilView);
     }
-    void clear_RT(const RscRenderTarget& rt) {
+    template <u32 _attachments>
+    void clear_RT(const RscRenderTarget<_attachments>& rt) {
         float colorv[] = { 0.f, 0.f, 0.f, 0.f };
-        for (u32 i = 0; i < rt.viewCount; i++) {
+        for (u32 i = 0; i < _attachments; i++) {
             d3dcontext->ClearRenderTargetView(rt.views[i], colorv);
         }
         if (rt.depthStencilView) {
             d3dcontext->ClearDepthStencilView(rt.depthStencilView, D3D11_CLEAR_DEPTH, 1.f, 0);
         }
     }
-    void copy_RT_to_main_RT(RscMainRenderTarget& dst, const RscRenderTarget& src, const RenderTargetCopyParams& params) {
+    template<u32 _attachments>
+    void clear_RT(const RscRenderTarget<_attachments>& rt, Col color) {
+        float colorv[] = { color.getRf(), color.getGf(), color.getBf(), color.getAf() };
+        for (u32 i = 0; i < _attachments; i++) {
+            d3dcontext->ClearRenderTargetView(rt.views[i], colorv);
+        }
+        if (rt.depthStencilView) {
+            d3dcontext->ClearDepthStencilView(rt.depthStencilView, D3D11_CLEAR_DEPTH, 1.f, 0);
+        }
+    }
+    // ONLY WORKS WITH SAME RESOLUTION
+    template <u32 _attachments>
+    void copy_RT_to_main_RT(RscMainRenderTarget& dst, const RscRenderTarget<_attachments>& src, const RenderTargetCopyParams& params) {
+        {
+            ID3D11Resource* srcColor;
+            ID3D11Resource* dstColor;
+            src.views[0]->GetResource(&srcColor);
+            dst.view->GetResource(&dstColor);
+            d3dcontext->CopyResource(dstColor, srcColor);
+        }
         if (params.depth) {
             ID3D11Resource* srcDepth;
             ID3D11Resource* dstDepth;
@@ -110,6 +147,17 @@ namespace Driver {
             dst.depthStencilView->GetResource(&dstDepth);
             d3dcontext->CopyResource(dstDepth, srcDepth);
         }
+    }
+
+    void set_VP(const ViewportParams& params) {
+        D3D11_VIEWPORT viewport = {};
+        viewport.TopLeftX = params.topLeftX;
+        viewport.TopLeftY = params.topLeftY;
+        viewport.Width = params.width;
+        viewport.Height = params.height;
+        viewport.MinDepth = params.minDepth;
+        viewport.MaxDepth = params.maxDepth;
+        d3dcontext->RSSetViewports(1, &viewport);
     }
 
     void create_texture_from_file(RscTexture& t, const TextureFromFileParams& params) {
@@ -225,9 +273,9 @@ namespace Driver {
         texViewDesc.Texture2D.MostDetailedMip = 0;
         d3ddev->CreateShaderResourceView(t.texture, &texViewDesc, &t.view);
 
-        // Sampler tied to texture resource, for now
+        // TODO: sampler params
         D3D11_SAMPLER_DESC samplerDesc = {};
-        samplerDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
+        samplerDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_POINT;// D3D11_FILTER_MIN_MAG_MIP_LINEAR;
         samplerDesc.AddressU = D3D11_TEXTURE_ADDRESS_WRAP;
         samplerDesc.AddressV = D3D11_TEXTURE_ADDRESS_WRAP;
         samplerDesc.AddressW = D3D11_TEXTURE_ADDRESS_WRAP;
@@ -239,7 +287,7 @@ namespace Driver {
         samplerDesc.BorderColor[2] = 0;
         samplerDesc.BorderColor[3] = 0;
         samplerDesc.MinLOD = 0;
-        samplerDesc.MaxLOD = D3D11_FLOAT32_MAX;
+        samplerDesc.MaxLOD = 0;// D3D11_FLOAT32_MAX;
 
         d3ddev->CreateSamplerState(&samplerDesc, &t.samplerState);
     }
@@ -256,16 +304,6 @@ namespace Driver {
     }
     template <typename _vertexLayout, typename _cbufferLayout, Shaders::PSCBufferUsage::Enum _cbufferUsage, typename Shaders::VSDrawType::Enum _drawType>
     void bind_shader_samplers(RscShaderSet<_vertexLayout, _cbufferLayout, _cbufferUsage, _drawType>& ss, const char** params, const u32 count) {}
-    void bind_RTs(RscRenderTarget& b, const RscTexture* textures, const u32 count) {
-        for (u32 i = 0; i < count; i++) {
-            D3D11_RENDER_TARGET_VIEW_DESC rtViewDesc = {};
-            rtViewDesc.Format = textures[i].format;
-            rtViewDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
-            rtViewDesc.Texture2D.MipSlice = 0;
-            d3ddev->CreateRenderTargetView(textures[i].texture, &rtViewDesc, &b.views[i]);
-        }
-        b.viewCount = count;
-    }
 
     template <typename _vertexLayout, typename _cbufferLayout, Shaders::VSDrawType::Enum _drawType>
     ShaderResult create_shader_vs(RscVertexShader<_vertexLayout, _cbufferLayout, _drawType>& vs, const VertexShaderRuntimeCompileParams& params) {
@@ -492,6 +530,11 @@ namespace Driver {
     template <typename _layout>
     void draw_instances_indexed_vertex_buffer(const RscIndexedBuffer<_layout>& b, const u32 instanceCount) {
         d3dcontext->DrawIndexedInstanced(b.indexCount, instanceCount, 0, 0, 0);
+    }
+
+    void draw_fullscreen() {
+        d3dcontext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+        d3dcontext->Draw(3, 0);
     }
 
     template <typename _layout>

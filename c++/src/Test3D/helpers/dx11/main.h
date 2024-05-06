@@ -105,8 +105,10 @@ int WINAPI WinMain(
 
         ShowWindow(hWnd, nCmdShow);
 
-        platform.screen.width = windowConfig.window_width;
-        platform.screen.height = windowConfig.window_height;
+        platform.screen.window_width = windowConfig.window_width;
+        platform.screen.window_height = windowConfig.window_height;
+        platform.screen.width = windowConfig.game_width;
+        platform.screen.height = windowConfig.game_height;
         platform.screen.desiredRatio = platform.screen.width / (f32)platform.screen.height;
         platform.screen.fullscreen = windowConfig.fullscreen;
     }
@@ -148,8 +150,9 @@ int WINAPI WinMain(
         dxgiAdapter->GetParent(__uuidof(IDXGIFactory2), (void**) &dxgiFactory);
 
         DXGI_SWAP_CHAIN_DESC1 scd = { 0 };
-        scd.Width = platform.screen.width;
-        scd.Height = platform.screen.height;
+        scd.Width = platform.screen.window_width;
+        scd.Height = platform.screen.window_height;
+        scd.Scaling = DXGI_SCALING_STRETCH;
         scd.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
         scd.BufferCount = 2;
         scd.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
@@ -172,17 +175,6 @@ int WINAPI WinMain(
         Renderer::Driver::d3dcontext = d3dcontext;
         Renderer::Driver::swapchain = swapchain;
         Renderer::Driver::perf = pPerf;
-
-
-        // TODO: assumes depth usage, should go inside game code (as driver resource)
-        D3D11_VIEWPORT viewport = {};
-        viewport.TopLeftX = 0;
-        viewport.TopLeftY = 0;
-        viewport.Width = (f32) platform.screen.width;
-        viewport.Height = (f32)platform.screen.height;
-        viewport.MinDepth = 0.f;
-        viewport.MaxDepth = 1.f;
-        d3dcontext->RSSetViewports(1, &viewport);
 
         ::Input::Gamepad::State pads[1];
         ::Input::Gamepad::KeyboardMapping keyboardPadMappings[1];

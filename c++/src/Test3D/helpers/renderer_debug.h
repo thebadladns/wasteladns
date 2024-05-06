@@ -67,11 +67,13 @@ namespace Immediate
         u8 scale;
     };
     
-    void clear(Buffer& buffer) {
+    void clear3d(Buffer& buffer) {
         buffer.vertices_3d_head = 0;
+    }
+    void clear2d(Buffer& buffer) {
         buffer.vertices_2d_head = 0;
     }
-    
+
     void segment(Buffer& buffer, const Vec3& v1, const Vec3& v2, const Col color) {
 
         // Too many vertex pushed during immediate mode

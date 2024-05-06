@@ -13,7 +13,8 @@ namespace Renderer {
         struct VSDrawType { enum Enum { Standard, Instanced }; };
         struct VSTechnique {
             enum Enum {
-                forward_base
+                  forward_base
+                , fullscreen_blit
             };
         };
         template<VSTechnique::Enum _technique, typename _vertexLayout, typename _cbufferLayout, VSDrawType::Enum _type>
@@ -33,6 +34,7 @@ namespace Renderer {
                 , forward_textured_unlit
                 , forward_textured_unlitalphaclip
                 , forward_textured_lit_normalmapped
+                , fullscreen_blit_textured
             };
         };
         template <PSTechnique::Enum _technique, typename _vertexLayoutIn, typename _cbufferLayout>
@@ -41,6 +43,7 @@ namespace Renderer {
     
     namespace Driver {
         struct RscMainRenderTarget;
+        template<u32 _attachments>
         struct RscRenderTarget;
         struct RscTexture;
         struct RscBlendState;
@@ -123,6 +126,10 @@ namespace Renderer {
     namespace Shaders {
         template<typename _vsCBufferLayout, typename _psCBufferLayout>
         struct PSCBufferOpts;
+        template<>
+        struct PSCBufferOpts<Layout_CNone, Layout_CNone> {
+            static const PSCBufferUsage::Enum cbufferUsage = PSCBufferUsage::None;
+        };
         template<typename _vsCBufferLayout>
         struct PSCBufferOpts<_vsCBufferLayout, _vsCBufferLayout> {
             static const PSCBufferUsage::Enum cbufferUsage = PSCBufferUsage::Uses;

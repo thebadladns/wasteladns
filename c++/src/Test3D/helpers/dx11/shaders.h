@@ -296,6 +296,31 @@ struct VS_src_selector<
     static const VS_src& value() { return vs_forward_base_Layout_Vec3TexturedMapped_CBuffer_3DScene_Standard; }
 };
 
+constexpr VS_src vs_fullscreen_bufferless_blit = {
+"fullscreen_bufferless_blit",
+R"(
+struct VS_Output {
+    float2 uv : TEXCOORD0;
+    float4 positionCS : SV_POSITION;
+};
+VS_Output VS(uint id : SV_VertexID) {
+    VS_Output Output;
+    Output.uv = float2((id << 1) & 2, id & 2);
+    Output.positionCS = float4(Output.uv * float2(2,-2) + float2(-1,1), 0, 1);
+    return Output;
+}
+)"
+};
+
+template <>
+struct VS_src_selector<
+    VSTechnique::fullscreen_blit,
+    Layout_TexturedVec3,
+    Layout_CNone,
+    VSDrawType::Standard> {
+    static const VS_src& value() { return vs_fullscreen_bufferless_blit; }
+};
+
 constexpr PS_src ps_forward_untextured_unlit = { // used for multiple vertex and buffer layouts
 "forward_untextured_unlit",
 nullptr, 0, // no samplers
@@ -505,6 +530,35 @@ struct PS_src_selector<
     Layout_CBuffer_3DScene> {
     static const PSMaterialUsage::Enum materialUsage = PSMaterialUsage::Uses;
     static const PS_src& value() { return ps_forward_textured_lit_normalmapped_Layout_Vec3TexturedMapped_CBuffer_3DScene; }
+};
+
+const char* fullscreen_blit_samplers[] = { "texSrc" };
+constexpr PS_src ps_fullscreen_blit_textured = {
+"fullscreen_blit_textured",
+fullscreen_blit_samplers,
+sizeof(fullscreen_blit_samplers) / sizeof(fullscreen_blit_samplers[0]),
+R"(
+Texture2D texSrc : register(t0);
+SamplerState texSrcSampler : register(s0);
+
+struct VertexOut {
+    float2 uv : TEXCOORD;
+};
+float4 PS(VertexOut IN) : SV_TARGET {
+
+    float4 albedo = texSrc.Sample(texSrcSampler, IN.uv).rgba;
+    return albedo.rgba;
+}
+)"
+};
+
+template <>
+struct PS_src_selector<
+    PSTechnique::fullscreen_blit_textured,
+    Layout_TexturedVec3,
+    Layout_CNone> {
+    static const PSMaterialUsage::Enum materialUsage = PSMaterialUsage::Uses;
+    static const PS_src& value() { return ps_fullscreen_blit_textured; }
 };
 
 }

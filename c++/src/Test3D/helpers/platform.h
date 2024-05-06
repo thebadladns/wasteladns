@@ -11,6 +11,8 @@ namespace Platform
         const char* title;
         u32 window_width;
         u32 window_height;
+        u32 game_width;
+        u32 game_height;
         bool fullscreen;
     };
     
@@ -21,8 +23,10 @@ namespace Platform
     
     struct Screen {
         f32 desiredRatio;
-        u32 width;
-        u32 height;
+        u32 width; // game
+        u32 height; // game
+        u32 window_width;
+        u32 window_height;
         bool fullscreen = false;
     };
     

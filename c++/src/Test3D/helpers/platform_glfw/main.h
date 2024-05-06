@@ -87,7 +87,7 @@ int main(int argc, char** argv) {
         glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
 #endif
         windowHandle = glfwCreateWindow(
-                config.window_width
+              config.window_width
             , config.window_height
             , config.title
             , nullptr /*monitor*/
@@ -98,8 +98,10 @@ int main(int argc, char** argv) {
         }
         s32 effectiveWidth, effectiveHeight;
         glfwGetWindowSize(windowHandle, &effectiveWidth, &effectiveHeight);
-        platform.screen.width = effectiveWidth;
-        platform.screen.height = effectiveHeight;
+        platform.screen.window_width = effectiveWidth;
+        platform.screen.window_height = effectiveHeight;
+        platform.screen.width = config.game_width;
+        platform.screen.height = config.game_height;
         platform.screen.desiredRatio = platform.screen.width / (f32)platform.screen.height;
         platform.screen.fullscreen = config.fullscreen;
     }
@@ -159,7 +161,7 @@ int main(int argc, char** argv) {
             }
 
             Game::update(game, config, platform);
-                
+              
             glfwSwapBuffers(windowHandle);
                 
             if (config.quit) {

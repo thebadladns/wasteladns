@@ -311,6 +311,34 @@ struct VS_src_selector<
     static const VS_src& value() { return vs_forward_base_Vec3TexturedMapped_CBuffer_3DScene_Standard; }
 };
 
+constexpr VS_src vs_fullscreen_bufferless_blit = {
+"fullscreen_bufferless_blit",
+R"(
+#version 330
+#extension GL_ARB_separate_shader_objects : require
+
+layout(location = 0) out vec2 varying_TEXCOORD;
+ 
+void main()
+{
+    float x = -1.0 + float((gl_VertexID & 1) << 2);
+    float y = 1.0 - float((gl_VertexID & 2) << 1);
+    varying_TEXCOORD.x = (x+1.0)*0.5;
+    varying_TEXCOORD.y = (y+1.0)*0.5;
+    gl_Position = vec4(x, y, 0, 1);
+}
+)"
+};
+
+template <>
+struct VS_src_selector<
+    VSTechnique::fullscreen_blit,
+    Layout_TexturedVec3,
+    Layout_CNone,
+    VSDrawType::Standard> {
+    static const VS_src& value() { return vs_fullscreen_bufferless_blit; }
+};
+
 constexpr PS_src ps_forward_untextured_unlit = { // used for multiple vertex and buffer layouts
 "forward_untextured_unlit",
 nullptr, 0, // no samplers
@@ -502,6 +530,37 @@ struct PS_src_selector<
     Layout_CBuffer_3DScene> {
     static const PSMaterialUsage::Enum materialUsage = PSMaterialUsage::Uses;
     static const PS_src& value() { return ps_forward_textured_lit_normalmapped_Vec3TexturedMapped_CBuffer_3DScene; }
+};
+
+const char* fullscreen_blit_samplers[] = { "texSrc" };
+constexpr PS_src ps_fullscreen_blit_textured = {
+"fullscreen_blit_textured",
+fullscreen_blit_samplers,
+sizeof(fullscreen_blit_samplers) / sizeof(fullscreen_blit_samplers[0]),
+R"(
+#version 330
+#extension GL_ARB_separate_shader_objects : require
+
+uniform sampler2D texSrc;
+
+layout(location = 0) in vec2 varying_TEXCOORD;
+layout(location = 0) out vec4 out_var_SV_TARGET;
+
+void main()
+{
+    vec4 diffuse = texture(texSrc, varying_TEXCOORD).rgba;
+    out_var_SV_TARGET = diffuse.rgba;
+}
+)"
+};
+
+template <>
+struct PS_src_selector<
+    PSTechnique::fullscreen_blit_textured,
+    Layout_TexturedVec3,
+    Layout_CNone> {
+    static const PSMaterialUsage::Enum materialUsage = PSMaterialUsage::Uses;
+    static const PS_src& value() { return ps_fullscreen_blit_textured; }
 };
 
 }

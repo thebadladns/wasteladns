@@ -109,6 +109,8 @@ int main(int , char** ) {
             
             NSSize windowSize = [contentView frame].size;
             
+            platform.screen.window_width = windowSize.width;
+            platform.screen.window_height = windowSize.height;
             platform.screen.width = windowSize.width;
             platform.screen.height = windowSize.height;
             platform.screen.desiredRatio = platform.screen.width / (f32)platform.screen.height;

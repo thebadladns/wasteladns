@@ -116,24 +116,40 @@ namespace Renderer {
         }
     }
 
+    typedef Shader_Params<
+          Renderer::Shaders::VSTechnique::fullscreen_blit, Renderer::Shaders::PSTechnique::fullscreen_blit_textured
+        , Renderer::Layout_TexturedVec3, Layout_CNone, Layout_CNone
+        , Renderer::Shaders::VSDrawType::Standard> ShaderParams_Blit;
+
     struct Store {
         tinystl::vector<Drawlist::Drawlist_node> drawlist_nodes;
         Renderer::Driver::RscCBuffer cbuffers[Renderer::Layout_CBuffer_3DScene::Buffers::Count];
         Drawlist::Drawlist_game drawlist;
+        ShaderParams_Blit::ShaderSet shader_blit;
         Renderer::Driver::RscRasterizerState rasterizerStateFill, rasterizerStateFillCullNone, rasterizerStateLine;
-        Renderer::Driver::RscDepthStencilState depthStateOn, depthStateReadOnly;
+        Renderer::Driver::RscDepthStencilState depthStateOn, depthStateReadOnly, depthStateOff;
         Renderer::Driver::RscBlendState blendStateOn;
         Renderer::Driver::RscBlendState blendStateOff;
-        Renderer::Driver::RscMainRenderTarget mainRenderTarget;
+        Renderer::Driver::RscMainRenderTarget windowRT;
+        Renderer::Driver::RscRenderTarget<1> gameRT;
     };
 
     void start_store(Store& store, const Platform::State& platform, Allocator::Arena scratchArena) {
 
-        Renderer::Driver::MainRenderTargetParams renderTargetParams = {};
-        renderTargetParams.depth = true;
-        renderTargetParams.width = platform.screen.width;
-        renderTargetParams.height = platform.screen.height;
-        Renderer::Driver::create_main_RT(store.mainRenderTarget, renderTargetParams);
+        Renderer::Driver::MainRenderTargetParams windowRTparams = {};
+        windowRTparams.depth = true;
+        windowRTparams.width = platform.screen.window_width;
+        windowRTparams.height = platform.screen.window_height;
+        Renderer::Driver::create_main_RT(store.windowRT, windowRTparams);
+
+        Renderer::Driver::RenderTargetParams gameRTparams;
+        gameRTparams.depth = true;
+        gameRTparams.width = platform.screen.width;
+        gameRTparams.height = platform.screen.height;
+        gameRTparams.textureFormat = Renderer::Driver::TextureFormat::V4_8;
+        gameRTparams.textureInternalFormat = Renderer::Driver::InternalTextureFormat::V4_8;
+        gameRTparams.textureFormatType = Renderer::Driver::Type::Float;
+        Renderer::Driver::create_RT(store.gameRT, gameRTparams);
 
         // rasterizer states
         Renderer::Driver::create_blend_state(store.blendStateOn, { true });
@@ -143,6 +159,9 @@ namespace Renderer {
         Renderer::Driver::create_RS(store.rasterizerStateLine, { Renderer::Driver::RasterizerFillMode::Line, Renderer::Driver::RasterizerCullMode::CullNone });
         Renderer::Driver::create_DS(store.depthStateOn, { true, Renderer::Driver::DepthFunc::Less, Renderer::Driver::DepthWriteMask::All });
         Renderer::Driver::create_DS(store.depthStateReadOnly, { true, Renderer::Driver::DepthFunc::Less, Renderer::Driver::DepthWriteMask::Zero });
+        Renderer::Driver::create_DS(store.depthStateOff, { false });
+
+        ShaderParams_Blit::create_shader_from_techniques(store.shader_blit, nullptr);
 
         {
             using namespace Renderer::Drawlist;

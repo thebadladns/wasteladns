@@ -7,7 +7,7 @@
 #endif
 
 namespace Renderer {
-    struct OrthoProjection {
+    struct WindowProjection {
         struct Config {
             f32 left;
             f32 right;
@@ -31,10 +31,10 @@ namespace Renderer {
     };
     
     template <ProjectionType::Enum _type = defaultProjectionType>
-    void generate_matrix_ortho(Mat4& matrix, const OrthoProjection::Config& config);
+    void generate_matrix_ortho(Mat4& matrix, const WindowProjection::Config& config);
 
     template<>
-    void generate_matrix_ortho<ProjectionType::Zminus1to1>(Mat4& matrix, const OrthoProjection::Config& config) {
+    void generate_matrix_ortho<ProjectionType::Zminus1to1>(Mat4& matrix, const WindowProjection::Config& config) {
         f32* matrixCM = matrix.dataCM;
         memset(matrixCM, 0, sizeof(f32) * 16);
         matrixCM[0] = 2.f / (config.right - config.left);
@@ -46,7 +46,7 @@ namespace Renderer {
         matrixCM[15] = 1.f;
     }
     template<>
-    void generate_matrix_ortho<ProjectionType::Z0to1>(Mat4& matrix, const OrthoProjection::Config& config) {
+    void generate_matrix_ortho<ProjectionType::Z0to1>(Mat4& matrix, const WindowProjection::Config& config) {
         f32* matrixCM = matrix.dataCM;
         memset(matrixCM, 0, sizeof(f32) * 16);
         matrixCM[0] = 2.f / (config.right - config.left);
@@ -278,16 +278,36 @@ namespace Driver {
     struct RenderTargetParams {
         u32 width;
         u32 height;
+        TextureFormat::Enum textureFormat;
+        InternalTextureFormat::Enum textureInternalFormat;
+        Type::Enum textureFormatType;
         bool depth;
     };
-    void create_RT(RscRenderTarget& rt, const RenderTargetParams& params);
-    void bind_RT(const RscRenderTarget& rt);
-    void clear_RT(const RscRenderTarget& rt);
+    template<u32 _attachments>
+    void create_RT(RscRenderTarget<_attachments>& rt, const RenderTargetParams& params);
+    template<u32 _attachments>
+    void bind_RT(const RscRenderTarget<_attachments>& rt);
+    template<u32 _attachments>
+    void clear_RT(const RscRenderTarget<_attachments>& rt);
+    template<u32 _attachments>
+    void clear_RT(const RscRenderTarget<_attachments>& rt, Col color);
     struct RenderTargetCopyParams {
         // for now
         bool depth;
     };
-    void copy_RT_to_main_RT(RscMainRenderTarget& dst, const RscRenderTarget& src, const RenderTargetCopyParams& params);
+    // ONLY WORKS WITH SAME RESOLUTION ON DX
+    template<u32 _attachments>
+    void copy_RT_to_main_RT(RscMainRenderTarget& dst, const RscRenderTarget<_attachments>& src, const RenderTargetCopyParams& params);
+
+    struct ViewportParams {
+        f32 topLeftX;
+        f32 topLeftY;
+        f32 width;
+        f32 height;
+        f32 minDepth;
+        f32 maxDepth;
+    };
+    void set_VP(const ViewportParams&);
 
     struct TextureFromFileParams {
         const char* path;
@@ -304,7 +324,6 @@ namespace Driver {
     void bind_textures(const RscTexture* textures, const u32 count);
     template <typename _vertexLayout, typename _cbufferLayout, Shaders::PSCBufferUsage::Enum _cbufferUsage, Shaders::VSDrawType::Enum _drawType>
     void bind_shader_samplers(RscShaderSet<_vertexLayout, _cbufferLayout, _cbufferUsage, _drawType>& ss, const char** params, const u32 count);
-    void bind_RTs(RscRenderTarget& b, const RscTexture* textures, const u32 count);
 
     struct ShaderResult {
         char error[128];
@@ -404,6 +423,8 @@ namespace Driver {
     void draw_indexed_vertex_buffer(const RscIndexedBuffer<_layout>&);
     template <typename _layout>
     void draw_instances_indexed_vertex_buffer(const RscIndexedBuffer<_layout>&, const u32);
+
+    void draw_fullscreen();
 
     struct CBufferCreateParams {
     };

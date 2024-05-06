@@ -62,7 +62,7 @@ namespace Game
     struct RenderManager {
         RenderScene renderScene;
         __DEBUGDEF(Renderer::Immediate::Buffer immediateBuffer;)
-            Renderer::OrthoProjection orthoProjection;
+        Renderer::WindowProjection windowProjection;
         Renderer::PerspProjection perspProjection;
         Renderer::Drawlist::Drawlist_node player_DLnode, particles_DLnode;
     };
@@ -97,8 +97,10 @@ namespace Game
 
     void loadLaunchConfig(Platform::WindowConfig& config) {
         // hardcoded for now
-        config.window_width = 640 * 2;
-        config.window_height = 480 * 2;
+        config.window_width = 1280;
+        config.window_height = 960;
+        config.game_width = 320 * 1;
+        config.game_height = 240 * 1;
         config.fullscreen = false;
         config.title = "3D Test";
     }
@@ -128,14 +130,14 @@ namespace Game
             RenderManager& mgr = game.renderMgr;
             using namespace Renderer;
 
-            OrthoProjection::Config& ortho = mgr.orthoProjection.config;
-            ortho.right = platform.screen.width * 0.5f;
-            ortho.top = platform.screen.height * 0.5f;
+            WindowProjection::Config& ortho = mgr.windowProjection.config;
+            ortho.right = platform.screen.window_width * 0.5f;
+            ortho.top = platform.screen.window_height * 0.5f;
             ortho.left = -ortho.right;
             ortho.bottom = -ortho.top;
             ortho.near = 0.f;
             ortho.far = 1000.f;
-            generate_matrix_ortho(mgr.orthoProjection.matrix, ortho);
+            generate_matrix_ortho(mgr.windowProjection.matrix, ortho);
 
             // Todo: consider whether precision needs special handling
             PerspProjection::Config& frustum = mgr.perspProjection.config;
@@ -344,8 +346,18 @@ namespace Game
 
                 Renderer::Driver::bind_blend_state(store.blendStateOn);
                 Renderer::Driver::bind_DS(store.depthStateOn);
-                Renderer::Driver::bind_main_RT(store.mainRenderTarget);
-                Renderer::Driver::clear_main_RT(store.mainRenderTarget, Col(0.2f, 0.344f, 0.59f, 1.f));
+                Renderer::Driver::bind_RT(store.gameRT);
+                Renderer::Driver::clear_RT(store.gameRT, Col(0.2f, 0.344f, 0.59f, 1.f));
+                {
+                    Renderer::Driver::ViewportParams vpParams;
+                    vpParams.topLeftX = 0;
+                    vpParams.topLeftY = 0;
+                    vpParams.width = (f32)platform.screen.width;
+                    vpParams.height = (f32)platform.screen.height;
+                    vpParams.minDepth = 0.f;
+                    vpParams.maxDepth = 1.f;
+                    Renderer::Driver::set_VP(vpParams);
+                }
             
                 draw_drawlists(dl, store.cbuffers);
             }
@@ -391,13 +403,13 @@ namespace Game
 
                     Renderer::Immediate::TextParams textParamsLeft, textParamsRight, textParamsCenter;
                     textParamsLeft.scale = 1;
-                    textParamsLeft.pos = Vec3(game.renderMgr.orthoProjection.config.left + 10.f, game.renderMgr.orthoProjection.config.top - 15.f, -50);
+                    textParamsLeft.pos = Vec3(game.renderMgr.windowProjection.config.left + 10.f, game.renderMgr.windowProjection.config.top - 15.f, -50);
                     textParamsLeft.color = defaultCol;
                     textParamsRight.scale = 1;
-                    textParamsRight.pos = Vec3(game.renderMgr.orthoProjection.config.right - 60.f, game.renderMgr.orthoProjection.config.top - 15.f, -50);
+                    textParamsRight.pos = Vec3(game.renderMgr.windowProjection.config.right - 60.f, game.renderMgr.windowProjection.config.top - 15.f, -50);
                     textParamsRight.color = defaultCol;
                     textParamsCenter.scale = 1;
-                    textParamsCenter.pos = Vec3(0.f, game.renderMgr.orthoProjection.config.top - 15.f, -50);
+                    textParamsCenter.pos = Vec3(0.f, game.renderMgr.windowProjection.config.top - 15.f, -50);
                     textParamsCenter.color = defaultCol;
 
                     const char* overlaynames[] = { "All", "Help Only", "Arenas only", "None" };
@@ -533,14 +545,55 @@ namespace Game
                 }
             }
             #endif
-            // Batched debug (clear cpu buffers onto the screen)
+            
+            //  Batched 3D debug (clear cpu buffers onto the screen)
             #if __DEBUG
             {
                 Immediate::present3d(mgr.immediateBuffer, mgr.perspProjection.matrix, game.cameraMgr.activeCam->viewMatrix);
-                Immediate::present2d(mgr.immediateBuffer, mgr.orthoProjection.matrix);
-                Immediate::clear(mgr.immediateBuffer);
+                Immediate::clear3d(mgr.immediateBuffer);
             }
             #endif
+
+            // copy backbuffer to window (upscale from game resolution to window resolution)
+            {
+                SET_MARKER_NAME(Driver::Marker_t marker, "UPSCALE TO WINDOW");
+                Renderer::Driver::start_event(marker);
+                {
+                    {
+                        Renderer::Driver::ViewportParams vpParams;
+                        vpParams.topLeftX = 0;
+                        vpParams.topLeftY = 0;
+                        vpParams.width = (f32)platform.screen.window_width;
+                        vpParams.height = (f32)platform.screen.window_height;
+                        vpParams.minDepth = 0.f;
+                        vpParams.maxDepth = 1.f;
+                        Renderer::Driver::set_VP(vpParams);
+                    }
+
+                    Renderer::Driver::bind_blend_state(rscene.store.blendStateOff);
+                    Renderer::Driver::bind_DS(rscene.store.depthStateOff);
+                    Renderer::Driver::bind_RS(rscene.store.rasterizerStateFill);
+                    Renderer::Driver::bind_main_RT(rscene.store.windowRT);
+                    Renderer::Driver::clear_main_RT(rscene.store.windowRT, Col(0.0f, 0.0f, 0.0f, 0.f));
+
+                    //Renderer::Driver::clear_main_RT(store.mainRenderTarget, Col(0.2f, 0.344f, 0.59f, 1.f));
+                    Driver::bind_shader(rscene.store.shader_blit);
+                    Driver::bind_textures(&rscene.store.gameRT.textures[0], 1);
+                    Driver::draw_fullscreen();
+                }
+                Renderer::Driver::end_event();
+                Renderer::Driver::bind_blend_state(rscene.store.blendStateOff);
+                Renderer::Driver::bind_DS(rscene.store.depthStateOn);
+                Renderer::Driver::bind_main_RT(rscene.store.windowRT);
+            }
+            // Batched 2d debug (clear cpu buffers onto the screen)
+            #if __DEBUG
+            {
+                Immediate::present2d(mgr.immediateBuffer, mgr.windowProjection.matrix);
+                Immediate::clear2d(mgr.immediateBuffer);
+            }
+            #endif
+
         }
     }
 }

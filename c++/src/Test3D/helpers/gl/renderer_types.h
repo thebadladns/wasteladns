@@ -12,8 +12,8 @@ namespace Renderer {
 namespace Driver {
 
     struct Type { enum Enum { Float = GL_FLOAT }; };
-    struct InternalTextureFormat { enum Enum { V316 = GL_RGB16F }; };
-    struct TextureFormat { enum Enum { V316 = GL_RGB }; };
+    struct InternalTextureFormat { enum Enum { V4_8 = GL_RGB8, V316 = GL_RGB16F }; };
+    struct TextureFormat { enum Enum { V4_8 = GL_RGB, V4_16 = GL_RGB }; };
     struct RasterizerFillMode { enum Enum { Fill = GL_FILL, Line = GL_LINE }; };
     struct RasterizerCullMode { enum Enum { CullFront = GL_FRONT, CullBack = GL_BACK, CullNone = 0 }; };
     struct DepthFunc { enum Enum { Less = GL_LESS }; }; // TODO
@@ -23,19 +23,20 @@ namespace Driver {
     struct BufferItemType { enum Enum { U16 = GL_UNSIGNED_SHORT, U32 = GL_UNSIGNED_INT }; };
     struct BufferTopologyType { enum Enum { Triangles = GL_TRIANGLES, Lines = GL_LINES }; };
 
+    struct RscTexture {
+        GLuint texId;
+    };
+
     struct RscMainRenderTarget {
         u32 mask;
     };
-    
+    template<u32 _attachments>
     struct RscRenderTarget {
+        RscTexture textures[_attachments];
         GLuint buffer;
         GLuint depthBuffer;
         u32 width, height;
         u32 mask;
-    };
-    
-    struct RscTexture {
-        GLuint texId;
     };
 
     template <typename _vertexLayout, typename _cbufferLayout, Shaders::VSDrawType::Enum _drawType>
