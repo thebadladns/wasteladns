@@ -17,4 +17,6 @@ typedef uint8_t u8;
 typedef float f32;
 typedef double f64;
 
+#define COUNT_OF(x) (sizeof(x)/sizeof(0[x]))
+
 #endif // __WASTELADNS_TYPES_H__

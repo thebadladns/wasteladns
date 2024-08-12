@@ -13,9 +13,9 @@
 
 #define RPC_NO_WINDOWS_H
 #define COM_NO_WINDOWS_H
-#include <windef.h> // types used by winuser
-#include <winuser.h> // api for windows stuff, PeekMessage, CreateWindowEx, etc 
-typedef LONG HRESULT; // missing type in some of the includes
+#include <windef.h> // types used by winuser // Wall time: 101.898ms
+#include <winuser.h> // api for windows stuff, PeekMessage, CreateWindowEx, etc // Wall time: 38.148ms
+//typedef LONG HRESULT; // missing type in some of the includes // TODO: ARE WE SURE?
 
 // types defined by winuser.h->libloaderapi.h->minwinbase.h,
 // that directx will try to define again via oaidl.h->objidl.h->unknwn.h->wtypes.h->wtypesbase.h
@@ -25,10 +25,20 @@ typedef LONG HRESULT; // missing type in some of the includes
 #define END_INTERFACE
 #include <basetyps.h> // defines like "interface", DECLARE_INTERFACE and so on are used by dx11
 
-#include <d3d11_1.h>
+#include <d3d11_1.h> // Wall time: 249.939ms
+
+//#define DIRECTINPUT_VERSION 0x0800 // defaults to version 8 if not present (but throws a warning)
+//#include <dinput.h>  // Wall time: 34.720ms
+//#include <dinputd.h> // Wall time: 2.453ms
+//#pragma comment(lib, "dinput8.lib")
+//#pragma comment (lib, "dxguid.lib")
+
+#include <hidsdi.h>
+#include <hidpi.h>
+#pragma comment(lib, "hid.lib")
 
 // runtime shader compilation hack
-#include <d3dcompiler.h>
+#include <d3dcompiler.h> // Wall time: 8.460ms
 #pragma comment(lib, "d3dcompiler.lib")
 
 #undef near

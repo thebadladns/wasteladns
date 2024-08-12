@@ -129,12 +129,19 @@ namespace Input {
 
     namespace Mouse {
         namespace Keys { enum Enum : s32 {
-              BUTTON_RIGHT = 0
-            , BUTTON_LEFT
+              BUTTON_LEFT = 0
+            , BUTTON_RIGHT
             , BUTTON_MIDDLE
             , COUNT
         }; };
     };
+
+    namespace Gamepad {
+        typedef HANDLE DeviceHandle;
+    };
+    //namespace Gamepad {
+    //    typedef LPDIRECTINPUTDEVICE8 Device;
+    //};
 };
 
 //#include "input_mappings.h"

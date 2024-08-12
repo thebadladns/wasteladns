@@ -20,7 +20,7 @@ namespace Gameplay
             Control control;
             Controller movementController;
         };
-        void process(Control& control, const ::Input::Keyboard::State& kb, const ControlButtons& buttons, const f32 dt) {
+        void process(Control& control, const ::Input::Keyboard::State& kb, const ControlButtons& buttons) {
 
             const Vec2 prevLocalInput = control.localInput;
 
@@ -69,7 +69,19 @@ namespace Gameplay
             control.localInput = localInput;
             control.mag = mag;
         }
+        void process(Control& control, const ::Input::Gamepad::State& pad) {
 
+            Vec2 localInput;
+            localInput.x = pad.sliders[::Input::Gamepad::Sliders::AXIS_X_LEFT];
+            localInput.y = pad.sliders[::Input::Gamepad::Sliders::AXIS_Y_LEFT];
+            f32 mag = Math::mag(localInput);
+            if (mag > Math::eps<f32>) {
+                localInput = Math::invScale(localInput, mag);
+                mag = Math::min(mag, 1.f);
+            }
+            control.localInput = localInput;
+            control.mag = mag;
+        }
         void process_cameraRelative(Transform& transform, Controller& controller, const Control& control, const Transform& camera, const f32 dt) {
 
             const float maxspeed = 15.f;
@@ -150,6 +162,23 @@ namespace Gameplay
             Vec3 origin;
             float scale;
         };
+
+        void process(State& controller, const ::Input::Gamepad::State& pad)
+        {
+            constexpr f32 rotationSpeed = 0.1f;
+            constexpr f32 rotationEps = 0.01f;
+            f32 speedx = pad.sliders[::Input::Gamepad::Sliders::AXIS_X_RIGHT] * rotationSpeed;
+            f32 speedy = -pad.sliders[::Input::Gamepad::Sliders::AXIS_Y_RIGHT] * rotationSpeed;
+            if (Math::abs(speedx) > rotationEps || Math::abs(speedy) > rotationEps) {
+                controller.eulers.x = Math::wrap(controller.eulers.x + speedx);
+                controller.eulers.z = Math::clamp(Math::wrap(controller.eulers.z - speedy), -Math::halfpi<f32>, 0.f); // Positive 0 is below ground
+            }
+
+            controller.scale = 1.f;
+            controller.scale -= pad.sliders[::Input::Gamepad::Sliders::TRIGGER_RIGHT];
+            controller.scale += pad.sliders[::Input::Gamepad::Sliders::TRIGGER_LEFT];
+            controller.scale = Math::clamp(controller.scale, 0.3f, 2.f);
+        }
         void process(State& controller, const ::Input::Mouse::State& mouse)
         {
             if (mouse.down(::Input::Mouse::Keys::BUTTON_LEFT))

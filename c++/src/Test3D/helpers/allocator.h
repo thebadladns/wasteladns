@@ -5,8 +5,9 @@ namespace Allocator {
     struct Arena {
         u8* curr;
         u8* end;
-        __DEBUGDEF(u8** highmark;)
+        __DEBUGDEF(u8** highmark;) // pointer to track overall allocations of scoped copies
     };
+
     Arena frameArena;
 
     void init_arena(Arena& arena, size_t capacity) {

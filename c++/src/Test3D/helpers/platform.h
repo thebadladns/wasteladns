@@ -40,14 +40,20 @@ namespace Platform
     struct Input {
         ::Input::Keyboard::State keyboard;
 		::Input::Mouse::State mouse;
-        ::Input::Gamepad::State* pads;
+        ::Input::Gamepad::State pads[4];
         u32 padCount;
     };
     
+    struct Memory {
+        Allocator::Arena scratchArenaRoot;
+        __DEBUGDEF(u8* scratchArenaHighmark;)
+    };
+
     struct State {
         Screen screen;
         Time time;
         Input input;
+        Memory memory;
     };
     
     void loadLaunchConfig(WindowConfig& config);

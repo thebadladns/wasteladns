@@ -59,6 +59,8 @@ do { \
 // Core
 #include "helpers/types.h"
 
+#include "helpers/io.h"
+
 #if __DX11
 #include "helpers/dx11/input_types.h"
 #elif __MACOS
@@ -66,7 +68,6 @@ do { \
 #elif __GLFW
 #include "helpers/platform_glfw/input_types.h"
 #endif
-
 
 #include "helpers/math.h"
 #include "helpers/easing.h"
@@ -91,7 +92,6 @@ do { \
 #include "helpers/platform_glfw/input.h"
 #endif
 
-#include "helpers/io.h"
 
 #include "helpers/renderer_types.h"
 #if __DX11
