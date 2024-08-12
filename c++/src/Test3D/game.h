@@ -450,20 +450,20 @@ namespace Game
                         {
                             namespace Pad = ::Input::Gamepad;
                             const Pad::State& pad = platform.input.pads[i];
-                            Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParamsLeft, "Pad: %d", i);// pad.name);
+                            Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParamsLeft, "Pad: %s", pad.name);
                             textParamsLeft.pos.y -= lineheight;
                             Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParamsLeft
                                 , "Pad: L:(%.3f,%.3f) R:(%.3f,%.3f) L2:%.3f R2:%.3f"
-                                , pad.sliders[Pad::Sliders::LX], pad.sliders[Pad::Sliders::LY]
-                                , pad.sliders[Pad::Sliders::RX], pad.sliders[Pad::Sliders::RY]
-                                , pad.sliders[Pad::Sliders::LT], pad.sliders[Pad::Sliders::RT]
+                                , pad.sliders[Pad::Sliders::AXIS_X_LEFT], pad.sliders[Pad::Sliders::AXIS_Y_LEFT]
+                                , pad.sliders[Pad::Sliders::AXIS_X_RIGHT], pad.sliders[Pad::Sliders::AXIS_Y_RIGHT]
+                                , pad.sliders[Pad::Sliders::TRIGGER_LEFT], pad.sliders[Pad::Sliders::TRIGGER_RIGHT]
                             );
                             char keys_str[128];
                             textParamsLeft.pos.y -= lineheight;
                             char* curr = keys_str;
                             char* last = keys_str + sizeof(keys_str);
                             curr += Platform::format(keys_str, (int)(last-curr), "Keys: ");
-                            for (u32 key = 0; key < Pad::Keys::COUNT && curr < last; key++) {
+                            for (u32 key = 0; key < Pad::KeyMask::COUNT && curr < last; key++) {
                                 if (pad.curr_keys & (1 << key)) {
                                     curr += Platform::format(curr, (int)(last - curr), "%d ", key);
                                 } else {

@@ -29,41 +29,51 @@ namespace Input {
     };
 
     namespace Gamepad {
-        namespace Keys { enum Enum {
-              BUTTON_N = 0
-            , BUTTON_S = 1
-            , BUTTON_W = 2
-            , BUTTON_E = 3
-            , DPAD_UP = 4
-            , DPAD_DOWN = 5
-            , DPAD_LEFT = 6
-            , DPAD_RIGHT = 7
-            , START = 8
-            , SELECT = 9
-            , LEFT_THUMB = 10
-            , RIGHT_THUMB = 11
-            , L1 = 12
-            , R1 = 13
-            , L2 = 14
-            , R2 = 15
-            , COUNT
+        struct KeyMask { enum Enum {
+              BUTTON_N = 1 << 0
+            , BUTTON_S = 1 << 1
+            , BUTTON_W = 1 << 2
+            , BUTTON_E = 1 << 3
+            , DPAD_UP = 1 << 4
+            , DPAD_DOWN = 1 << 5
+            , DPAD_LEFT = 1 << 6
+            , DPAD_RIGHT = 1 << 7
+            , START = 1 << 8
+            , SELECT = 1 << 9
+            , L1 = 1 << 10
+            , R1 = 1 << 11
+            , L2 = 1 << 12
+            , R2 = 1 << 13
+            , LEFT_THUMB = 1 << 14
+            , RIGHT_THUMB = 1 << 15
+            , COUNT = 16
         }; };
-        namespace Sliders {enum Enum {
+        struct Sliders { enum Enum {
               AXIS_X_LEFT = 0
-            , LX = AXIS_X_LEFT
             , AXIS_Y_LEFT = 1
-            , LY = AXIS_Y_LEFT
             , AXIS_X_RIGHT = 2
-            , RX = AXIS_X_RIGHT
             , AXIS_Y_RIGHT = 3
-            , RY = AXIS_Y_RIGHT
             , TRIGGER_LEFT = 4
-            , LT = TRIGGER_LEFT
             , TRIGGER_RIGHT = 5
-            , RT = TRIGGER_RIGHT
             , COUNT = 6
         }; };
-        namespace Type { enum Enum { GENERIC, DUALSHOCK4, COUNT }; };
+        struct Mapping {
+            const s32 keys_map[64];
+            const s32 dpad_map[8];
+            const s32 sliders_map[9];
+        };
+        struct Type { enum Enum { NES_8BITDO, MAPPINGCOUNT, DUALSHOCK4 = MAPPINGCOUNT, TOTALCOUNT }; }; // no mapping for dualshock4 (special case)
+        constexpr Mapping mappings[Type::Enum::MAPPINGCOUNT] = {
+             {    // NES_8BITDO
+                  { KeyMask::BUTTON_E, KeyMask::BUTTON_S, 0, KeyMask::BUTTON_N, KeyMask::BUTTON_W, 0, KeyMask::L2, KeyMask::R2, KeyMask::L1, KeyMask::R1, KeyMask::SELECT, KeyMask::START, 0, KeyMask::LEFT_THUMB, KeyMask::RIGHT_THUMB } // only fill these, rest will be filled with 0 
+                , { KeyMask::DPAD_UP, KeyMask::DPAD_UP|KeyMask::DPAD_RIGHT, KeyMask::DPAD_RIGHT, KeyMask::DPAD_RIGHT|KeyMask::DPAD_DOWN, KeyMask::DPAD_DOWN, KeyMask::DPAD_DOWN|KeyMask::DPAD_LEFT, KeyMask::DPAD_LEFT, KeyMask::DPAD_LEFT|KeyMask::DPAD_UP }
+                , { Sliders::AXIS_X_LEFT, Sliders::AXIS_Y_LEFT, Sliders::AXIS_X_RIGHT, -1, -1, Sliders::AXIS_Y_RIGHT, -1, -1, -1 } // from HID_USAGE_GENERIC_X to HID_USAGE_GENERIC_WHEEL
+            }
+        };
+        #if __DEBUG
+        constexpr char* names[Type::Enum::TOTALCOUNT] = { "8Bitdo", "Dualshock" };
+        #endif
+
         struct State {
             Gamepad::DeviceHandle deviceHandle;
             u16 last_keys;
@@ -73,79 +83,6 @@ namespace Input {
             __DEBUGDEF(char name[128]);
         };
     }
-//    namespace Gamepad {
-//        
-//        namespace Keys { enum Enum : s32 {
-//              B_U = 0
-//            , B_D = 1
-//            , B_L = 2
-//            , B_R = 3
-//            , D_U = 4
-//            , D_D = 5
-//            , D_L = 6
-//            , D_R = 7
-//            , START = 8
-//            , SELECT = 9
-//            , L1 = 10
-//            , R1 = 11
-//            , A_L = 12
-//            , A_R = 13
-//            , L2 = 14
-//            , R2 = 15
-//            , TOUCH = 16
-//            , COUNT
-//            , INVALID = -1
-//        }; };
-//
-//        namespace Analog { enum Enum : s8 {
-//              AxisLH = 0
-//            , AxisLV
-//            , AxisRH
-//            , AxisRV
-//            , Trigger_L
-//            , Trigger_R
-//            , COUNT
-//            , INVALID = -1
-//        }; };
-//
-////        struct Mapping {
-////            const Digital::Enum* b_mapping;
-////            const Analog::Enum* a_mapping;
-////            s32 b_mappingCount;
-////            s32 a_mappingCount;
-////            u32 name;
-////            bool set = false;
-////        };
-//
-////        bool loadPreset(Gamepad::Mapping& mapping, const char* name);
-//
-//        struct State {
-//            
-//            struct KeyState {
-//                u32 last;
-//                u32 current;
-//            };
-//            
-//            bool down(Keys::Enum key) const {
-//                return (keys.current & (1 << key)) != 0;
-//            }
-//            bool up(Keys::Enum key) const {
-//                return (keys.current & (1 << key)) == 0;
-//            }
-//            bool released(Keys::Enum key) const {
-//                const u32 mask = (1 << key);
-//                return (keys.current & mask) == 0 && (keys.last & mask) != 0;
-//            }
-//            bool pressed(Keys::Enum key) const {
-//                const u32 mask = (1 << key);
-//                return (keys.current & mask) != 0 && (keys.last & mask) == 0;
-//            }
-//            
-//            KeyState keys;
-//            f32 analogs[Analog::COUNT];
-//            bool active = false;
-//        };
-//    };
 
 	namespace Mouse {
     
