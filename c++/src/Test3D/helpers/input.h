@@ -62,16 +62,21 @@ namespace Input {
             const s32 dpad_map[8];
             const s32 sliders_map[9];
         };
-        struct Type { enum Enum { NES_8BITDO, MAPPINGCOUNT, DUALSHOCK4 = MAPPINGCOUNT, TOTALCOUNT }; }; // no mapping for dualshock4 (special case)
+        struct Type { enum Enum { NES_8BITDO, XBOX360, MAPPINGCOUNT, DUALSHOCK4 = MAPPINGCOUNT, TOTALCOUNT }; }; // no mapping for dualshock4 (special case)
         constexpr Mapping mappings[Type::Enum::MAPPINGCOUNT] = {
-             {    // NES_8BITDO
+              {    // NES_8BITDO
                   { KeyMask::BUTTON_E, KeyMask::BUTTON_S, 0, KeyMask::BUTTON_N, KeyMask::BUTTON_W, 0, KeyMask::L2, KeyMask::R2, KeyMask::L1, KeyMask::R1, KeyMask::SELECT, KeyMask::START, 0, KeyMask::LEFT_THUMB, KeyMask::RIGHT_THUMB } // only fill these, rest will be filled with 0 
                 , { KeyMask::DPAD_UP, KeyMask::DPAD_UP|KeyMask::DPAD_RIGHT, KeyMask::DPAD_RIGHT, KeyMask::DPAD_RIGHT|KeyMask::DPAD_DOWN, KeyMask::DPAD_DOWN, KeyMask::DPAD_DOWN|KeyMask::DPAD_LEFT, KeyMask::DPAD_LEFT, KeyMask::DPAD_LEFT|KeyMask::DPAD_UP }
                 , { Sliders::AXIS_X_LEFT, Sliders::AXIS_Y_LEFT, Sliders::AXIS_X_RIGHT, -1, -1, Sliders::AXIS_Y_RIGHT, -1, -1, -1 } // from HID_USAGE_GENERIC_X to HID_USAGE_GENERIC_WHEEL
-            }
+             }
+            , {    // XBOX
+                  { KeyMask::BUTTON_S, KeyMask::BUTTON_E, KeyMask::BUTTON_W, KeyMask::BUTTON_N, KeyMask::L1, KeyMask::R1, KeyMask::SELECT, KeyMask::START, KeyMask::LEFT_THUMB, KeyMask::RIGHT_THUMB, KeyMask::LEFT_THUMB } // only fill these, rest will be filled with 0 
+                , { KeyMask::DPAD_UP, KeyMask::DPAD_UP | KeyMask::DPAD_RIGHT, KeyMask::DPAD_RIGHT, KeyMask::DPAD_RIGHT | KeyMask::DPAD_DOWN, KeyMask::DPAD_DOWN, KeyMask::DPAD_DOWN | KeyMask::DPAD_LEFT, KeyMask::DPAD_LEFT, KeyMask::DPAD_LEFT | KeyMask::DPAD_UP }
+                , { Sliders::AXIS_X_LEFT, Sliders::AXIS_Y_LEFT, Sliders::AXIS_X_RIGHT, -1, -1, Sliders::AXIS_Y_RIGHT, -1, -1, -1 } // from HID_USAGE_GENERIC_X to HID_USAGE_GENERIC_WHEEL
+             }
         };
         #if __DEBUG
-        constexpr char* names[Type::Enum::TOTALCOUNT] = { "8Bitdo", "Dualshock" };
+        constexpr char* names[Type::Enum::TOTALCOUNT] = { "Xbox360", "8Bitdo", "Dualshock" };
         #endif
 
         struct State {

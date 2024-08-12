@@ -47,8 +47,14 @@ namespace Gamepad {
              const DWORD sonyVendorID = 0x054C;
              const DWORD ds4Gen1ProductID = 0x05C4;
              const DWORD ds4Gen2ProductID = 0x09CC;
-             if (deviceInfo.hid.dwVendorId == sonyVendorID && (deviceInfo.hid.dwProductId == ds4Gen1ProductID || (deviceInfo.hid.dwProductId == ds4Gen2ProductID))) {
+             const DWORD microsoftVendorID = 0x045e;
+             const DWORD xbox360wireless3rdparty1 = 0x02a9;
+             const DWORD xbox360wireless3rdparty2 = 0x0291;
+             const DWORD xbox360wireless = 0x028e;
+             if (deviceInfo.hid.dwVendorId == sonyVendorID && (deviceInfo.hid.dwProductId == ds4Gen1ProductID || deviceInfo.hid.dwProductId == ds4Gen2ProductID)) {
                  pad.type = Pad::Type::DUALSHOCK4;
+             } else if (deviceInfo.hid.dwVendorId == microsoftVendorID && (deviceInfo.hid.dwProductId == xbox360wireless3rdparty1 || deviceInfo.hid.dwProductId == xbox360wireless3rdparty2 || deviceInfo.hid.dwProductId == xbox360wireless)) {
+                 pad.type = Pad::Type::XBOX360;
              } else {
                  pad.type = Pad::Type::NES_8BITDO;
              }
@@ -179,20 +185,28 @@ namespace Gamepad {
             pad.last_keys = pad.curr_keys;
             pad.curr_keys = keys;
         }
-
         
         // If the pad is new, and we got button input from it, finish creation
-        if (pad.curr_keys && padToUpdate == padCount) {
-            padCount++; // acknowledge the current pad
-            pad.deviceHandle = input->header.hDevice;
-            __DEBUGEXP(strncpy_s(pad.name, Pad::names[pad.type], sizeof(pad.name)));
+        if (padToUpdate == padCount) {
+            bool validpad = pad.curr_keys != 0;
+            for (u32 slider = 0; validpad && slider < Pad::Sliders::COUNT; slider++) {
+                if (Math::abs(pad.sliders[slider]) > 2.f) { // TODO: properly ignore bad inputs
+                    validpad = false;
+                }
+            }
 
-            //#if __DEBUG
-            //                u32 deviceNameSize = sizeof(padToCreate.name);
-            //                GetRawInputDeviceInfo(input->header.hDevice, RIDI_DEVICENAME, padToCreate.name, &deviceNameSize);
-            //
-            //                Platform::debuglog("Registered new pad %s\n", padToCreate.name);
-            //#endif
+            if (validpad) {
+                padCount++; // acknowledge the current pad
+                pad.deviceHandle = input->header.hDevice;
+                __DEBUGEXP(strncpy_s(pad.name, Pad::names[pad.type], sizeof(pad.name)));
+
+                //#if __DEBUG
+                //                u32 deviceNameSize = sizeof(padToCreate.name);
+                //                GetRawInputDeviceInfo(input->header.hDevice, RIDI_DEVICENAME, padToCreate.name, &deviceNameSize);
+                //
+                //                Platform::debuglog("Registered new pad %s\n", padToCreate.name);
+                //#endif
+            }
         }
     }
 }
