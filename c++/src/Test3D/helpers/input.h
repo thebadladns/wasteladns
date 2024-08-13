@@ -76,7 +76,7 @@ namespace Input {
              }
         };
         #if __DEBUG
-        constexpr char* names[Type::Enum::TOTALCOUNT] = { "Xbox360", "8Bitdo", "Dualshock" };
+        const char* names[Type::Enum::TOTALCOUNT] = { "Xbox360", "8Bitdo", "Dualshock" };
         #endif
 
         struct State {

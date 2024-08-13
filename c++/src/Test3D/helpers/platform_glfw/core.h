@@ -11,7 +11,7 @@
 #include "../../lib/glad/glad.c"
 #include "GLFW/glfw3.h"
 
-#define consoleLog printf
+#define consoleLog(a) printf("%s", a)
 
 #undef near
 #undef far
