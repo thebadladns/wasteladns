@@ -9,114 +9,81 @@
 
 namespace Input {
 namespace Gamepad {
-    
-//    namespace Analog {
-//        const f32 novalue = 404.f;
-//        const f32 digitalThreshold = 0.5f;
-//    }
-    
-    struct KeyboardMapping {
-        s32 mapping[Keys::COUNT];
-    };
-    
-    void load(KeyboardMapping& mapping) {
-        memset(mapping.mapping, GLFW_KEY_UNKNOWN, sizeof(s32) * Keys::COUNT);
-        // Hardcoded for now
-        mapping.mapping[Keys::B_U] = GLFW_KEY_I;
-        mapping.mapping[Keys::B_D] = GLFW_KEY_K;
-        mapping.mapping[Keys::B_L] = GLFW_KEY_J;
-        mapping.mapping[Keys::B_R] = GLFW_KEY_L;
-        mapping.mapping[Keys::D_U] = GLFW_KEY_W;
-        mapping.mapping[Keys::D_D] = GLFW_KEY_S;
-        mapping.mapping[Keys::D_L] = GLFW_KEY_A;
-        mapping.mapping[Keys::D_R] = GLFW_KEY_D;
-    }
-    
-    void pollState(State& pad, GLFWwindow* window, const KeyboardMapping& mapping) {
-        pad.active = true;
-        pad.keys.last = pad.keys.current;
-        pad.keys.current = 0;
-        for (int i = 0; i < Keys::COUNT; i++) {
-            s32 glfw_id = mapping.mapping[i];
-            if (glfw_id != GLFW_KEY_UNKNOWN) {
-                s32 keyState = glfwGetKey(window, glfw_id);
-                s32 keyOn = keyState != GLFW_RELEASE;
-                pad.keys.current = pad.keys.current | (keyOn << i);
+
+    void pollState(::Input::Gamepad::State* pads, u32& padCount, const u32 maxPadCount) {
+        namespace Pad = ::Input::Gamepad;
+
+        for (u32 joyId = GLFW_JOYSTICK_1; joyId < GLFW_JOYSTICK_LAST; joyId++) {
+            if (!glfwJoystickPresent(joyId)) continue;
+            if (!glfwJoystickIsGamepad(joyId)) continue;
+
+            const char* guid = glfwGetJoystickGUID(joyId);
+            u32 padToUpdate = padCount;
+            for (u32 padidx = 0; padidx < padCount; padidx++) {
+                if (pads[padidx].deviceHandle == guid) { // hopefully checking the pointers is enough
+                    padToUpdate = padidx;
+                    break;
+                }
+            }
+            if (padToUpdate >= maxPadCount) return;
+            Pad::State& pad = pads[padToUpdate];
+
+            // this will be a new pad
+            if (padToUpdate == padCount) {
+                pad = {};
+            }
+
+            u16 keys = 0;
+            GLFWgamepadstate state;
+            if (glfwGetGamepadState(joyId, &state))
+            {
+                u32 keyMask[GLFW_GAMEPAD_BUTTON_LAST + 1] =
+                { Pad::KeyMask::BUTTON_S, Pad::KeyMask::BUTTON_E, Pad::KeyMask::BUTTON_W, Pad::KeyMask::BUTTON_N,
+                  Pad::KeyMask::L1, Pad::KeyMask::R1, Pad::KeyMask::SELECT, Pad::KeyMask::START, 0,
+                  Pad::KeyMask::LEFT_THUMB, Pad::KeyMask::RIGHT_THUMB,
+                  Pad::KeyMask::DPAD_UP, Pad::KeyMask::DPAD_RIGHT, Pad::KeyMask::DPAD_DOWN, Pad::KeyMask::DPAD_LEFT
+                };
+                for (u32 i = 0; i <= GLFW_GAMEPAD_BUTTON_LAST; i++) {
+                    if (state.buttons[i] & GLFW_PRESS) { keys |= keyMask[i]; }
+                }
+                u32 sliderMask[GLFW_GAMEPAD_AXIS_LAST + 1] =
+                { Pad::Sliders::AXIS_X_LEFT, Pad::Sliders::AXIS_Y_LEFT,
+                  Pad::Sliders::AXIS_X_RIGHT, Pad::Sliders::AXIS_Y_RIGHT,
+                  Pad::Sliders::TRIGGER_LEFT, Pad::Sliders::TRIGGER_RIGHT
+                };
+                for (u32 i = 0; i <= GLFW_GAMEPAD_AXIS_LAST; i++) {
+                    f32 slider = state.axes[i];
+                    u32 sliderIdx = sliderMask[i];
+                    if (sliderIdx == Pad::Sliders::AXIS_Y_LEFT || sliderIdx == Pad::Sliders::AXIS_Y_RIGHT) slider = -slider;
+                    if (Math::abs(slider) < 0.02f) slider = 0.f;
+                    pad.sliders[sliderIdx] = slider;
+                }
+                if (state.axes[GLFW_GAMEPAD_AXIS_LEFT_TRIGGER] > 0.9) { keys |= Pad::KeyMask::L2; }
+                if (state.axes[GLFW_GAMEPAD_AXIS_RIGHT_TRIGGER] > 0.9) { keys |= Pad::KeyMask::R2; }
+
+                pad.last_keys = pad.curr_keys;
+                pad.curr_keys = keys;
+            }
+
+            // If the pad is new, and we got button input from it, finish creation
+            if (padToUpdate == padCount) {
+                bool validpad = pad.curr_keys != 0;
+                for (u32 slider = 0; validpad && slider < Pad::Sliders::COUNT; slider++) {
+                    if (Math::abs(pad.sliders[slider]) > 2.f) { // TODO: properly ignore bad inputs
+                        validpad = false;
+                    }
+                }
+                if (validpad) {
+                    pad.deviceHandle = guid;
+                    #if __DEBUG
+                    const char* name = glfwGetGamepadName(joyId);
+                    strncpy_s(pad.name, name, sizeof(pad.name));
+                    #endif
+                    padCount++;
+                }
             }
         }
-        
-        // TODO: handle analog only if requested?
     }
-    
-//    void pollState(Joypad& joypad, s32 joyId, GLFWwindow* window) {
-//        joypad.active = glfwJoystickPresent(joyId) != 0;
-//        if (joypad.active) {
-//
-//            if (!pad.mapping.set) {
-//                loadPreset(pad.mapping, glfwGetJoystickName(joyId));
-//                pad.mapping.set = true;
-//            }
-//
-//            // Analogs (axis and triggers)
-//            for (s32 i = 0; i < Gamepad::Analog::COUNT; i++) {
-//                pad.analogs.values[i] = Gamepad::Analog::novalue;
-//            }
-//            s32 axesCount;
-//            const f32* axes = glfwGetJoystickAxes(joyId, &axesCount);
-//            for (s32 i = 0; i < axesCount; i++) {
-//                if (i < pad.mapping.a_mappingCount) {
-//                    const Gamepad::Analog::Enum axisIndex = pad.mapping.a_mapping[i];
-//                    if (axisIndex != Gamepad::Analog::INVALID) {
-//                        f32 v = axes[i];
-//                        const f32 deadzone = 0.25f;
-//                        if (Math::abs(v) < deadzone) {
-//                            v = 0.f;
-//                        }
-//                        pad.analogs.values[axisIndex] = v;
-//                    }
-//                }
-//            }
-//
-//            bool digitalTrigger_L = false;
-//            bool digitalTrigger_R = false;
-//
-//            pad.buttons.last = pad.buttons.current;
-//            pad.buttons.current = (Gamepad::Digital::Enum) 0;
-//            s32 buttonCount;
-//            const u8* buttons = glfwGetJoystickButtons(GLFW_JOYSTICK_1, &buttonCount);
-//            for (s32 i = 0; i < buttonCount; i++) {
-//                if (i < pad.mapping.b_mappingCount) {
-//                    const Gamepad::Digital::Enum buttonIndex = pad.mapping.b_mapping[i];
-//                    if (buttonIndex != Gamepad::Digital::INVALID) {
-//                        pad.buttons.current = pad.buttons.current | ((buttons[i] != 0) << buttonIndex);
-//                    }
-//                    if (buttonIndex == Gamepad::Digital::L2) {
-//                        digitalTrigger_L = true;
-//                    } else if (buttonIndex == Gamepad::Digital::R2) {
-//                        digitalTrigger_R = true;
-//                    }
-//                }
-//            }
-//
-//            // Manually set digital trigger values, if needed
-//            if (!digitalTrigger_L) {
-//                const f32 trigger_l = pad.analogs.values[Gamepad::Analog::Trigger_L];
-//                if (trigger_l != Gamepad::Analog::novalue) {
-//                    bool triggerPressed = trigger_l > Gamepad::Analog::digitalThreshold;
-//                    pad.buttons.current = (Gamepad::Digital::Enum) (pad.buttons.current | (triggerPressed << Gamepad::Digital::L2));
-//                    digitalTrigger_L = true;
-//                }
-//            }
-//            if (!digitalTrigger_R) {
-//                const f32 trigger_r = pad.analogs.values[Gamepad::Analog::Trigger_R];
-//                if (trigger_r != Gamepad::Analog::novalue) {
-//                    bool triggerPressed = trigger_r > Gamepad::Analog::digitalThreshold;
-//                    pad.buttons.current = (Gamepad::Digital::Enum) (pad.buttons.current | (triggerPressed << Gamepad::Digital::R2));
-//                    digitalTrigger_R = true;
-//                }
-//            }
-//        }
-//    }
 };
     
 namespace Keyboard

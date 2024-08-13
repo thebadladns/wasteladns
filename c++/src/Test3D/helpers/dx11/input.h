@@ -28,36 +28,37 @@ namespace Gamepad {
         bool gotInput = GetRawInputData(lParam, RID_INPUT, input, &bufferSize, sizeof(RAWINPUTHEADER)) > 0;
         if (!gotInput) return;
 
-        s32 padToUpdate = padCount;
-        for (s32 padidx = 0; padidx < (s32)padCount; padidx++) {
+        u32 padToUpdate = padCount;
+        for (u32 padidx = 0; padidx < padCount; padidx++) {
             if (pads[padidx].deviceHandle == input->header.hDevice) {
                 padToUpdate = padidx;
                 break;
             }
         }
-        if (padToUpdate >= (s32)maxPadCount) return;
+        if (padToUpdate >= maxPadCount) return;
         Pad::State& pad = pads[padToUpdate];
 
         // this will be a new pad, check the type
         if (padToUpdate == padCount) {
-             RID_DEVICE_INFO deviceInfo;
-             UINT deviceInfoSize = sizeof(deviceInfo);
-             bool gotInfo = GetRawInputDeviceInfo(input->header.hDevice, RIDI_DEVICEINFO, &deviceInfo, &deviceInfoSize) > 0;
-             if (!gotInfo) return;
-             const DWORD sonyVendorID = 0x054C;
-             const DWORD ds4Gen1ProductID = 0x05C4;
-             const DWORD ds4Gen2ProductID = 0x09CC;
-             const DWORD microsoftVendorID = 0x045e;
-             const DWORD xbox360wireless3rdparty1 = 0x02a9;
-             const DWORD xbox360wireless3rdparty2 = 0x0291;
-             const DWORD xbox360wireless = 0x028e;
-             if (deviceInfo.hid.dwVendorId == sonyVendorID && (deviceInfo.hid.dwProductId == ds4Gen1ProductID || deviceInfo.hid.dwProductId == ds4Gen2ProductID)) {
-                 pad.type = Pad::Type::DUALSHOCK4;
-             } else if (deviceInfo.hid.dwVendorId == microsoftVendorID && (deviceInfo.hid.dwProductId == xbox360wireless3rdparty1 || deviceInfo.hid.dwProductId == xbox360wireless3rdparty2 || deviceInfo.hid.dwProductId == xbox360wireless)) {
-                 pad.type = Pad::Type::XBOX360;
-             } else {
-                 pad.type = Pad::Type::NES_8BITDO;
-             }
+            pad = {};
+            RID_DEVICE_INFO deviceInfo;
+            UINT deviceInfoSize = sizeof(deviceInfo);
+            bool gotInfo = GetRawInputDeviceInfo(input->header.hDevice, RIDI_DEVICEINFO, &deviceInfo, &deviceInfoSize) > 0;
+            if (!gotInfo) return;
+            const DWORD sonyVendorID = 0x054C;
+            const DWORD ds4Gen1ProductID = 0x05C4;
+            const DWORD ds4Gen2ProductID = 0x09CC;
+            const DWORD microsoftVendorID = 0x045e;
+            const DWORD xbox360wireless3rdparty1 = 0x02a9;
+            const DWORD xbox360wireless3rdparty2 = 0x0291;
+            const DWORD xbox360wireless = 0x028e;
+            if (deviceInfo.hid.dwVendorId == sonyVendorID && (deviceInfo.hid.dwProductId == ds4Gen1ProductID || deviceInfo.hid.dwProductId == ds4Gen2ProductID)) {
+                pad.type = Pad::Type::DUALSHOCK4;
+            } else if (deviceInfo.hid.dwVendorId == microsoftVendorID && (deviceInfo.hid.dwProductId == xbox360wireless3rdparty1 || deviceInfo.hid.dwProductId == xbox360wireless3rdparty2 || deviceInfo.hid.dwProductId == xbox360wireless)) {
+                pad.type = Pad::Type::XBOX360;
+            } else {
+                pad.type = Pad::Type::NES_8BITDO;
+            }
         }
         
         // handle Dualshock4 separately, since it doesn't specify HID gamepad usages in the report

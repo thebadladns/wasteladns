@@ -125,11 +125,7 @@ int main(int argc, char** argv) {
 	glfwSetInputMode(windowHandle, GLFW_STICKY_KEYS, 1);
 	glfwSetInputMode(windowHandle, GLFW_STICKY_MOUSE_BUTTONS, 1);
         
-    ::Input::Gamepad::State pads[1];
-    ::Input::Gamepad::KeyboardMapping keyboardPadMappings[1];
-    platform.input.padCount = 1;
-    platform.input.pads = pads;
-    ::Input::Gamepad::load(keyboardPadMappings[0]);
+    memset(platform.input.pads, 0, sizeof(platform.input.pads));
         
     platform.time.running = 0.0;
     platform.time.now = platform.time.start = glfwGetTime();
@@ -155,9 +151,7 @@ int main(int argc, char** argv) {
                 glfwPollEvents();
                 ::Input::Keyboard::pollState(platform.input.keyboard, windowHandle);
                 ::Input::Mouse::pollState(platform.input.mouse, windowHandle);
-                for (u32 i = 0; i < platform.input.padCount; i++) {
-                    ::Input::Gamepad::pollState(platform.input.pads[i], windowHandle, keyboardPadMappings[i]);
-                }
+                ::Input::Gamepad::pollState(platform.input.pads, platform.input.padCount, COUNT_OF(platform.input.pads));
             }
 
             Game::update(game, config, platform);
@@ -165,7 +159,7 @@ int main(int argc, char** argv) {
             glfwSwapBuffers(windowHandle);
                 
             if (config.quit) {
-                    glfwSetWindowShouldClose(windowHandle, 1);
+                glfwSetWindowShouldClose(windowHandle, 1);
             }
         }
         platform.time.now = glfwGetTime();
