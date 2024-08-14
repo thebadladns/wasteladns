@@ -98,12 +98,17 @@ int main(int argc, char** argv) {
         }
         s32 effectiveWidth, effectiveHeight;
         glfwGetWindowSize(windowHandle, &effectiveWidth, &effectiveHeight);
-        platform.screen.window_width = effectiveWidth;
-        platform.screen.window_height = effectiveHeight;
+        
+        int w, h;
+        glfwGetFramebufferSize(windowHandle, &w, &h);
+        
+        platform.screen.window_width = w;
+        platform.screen.window_height = h;
         platform.screen.width = config.game_width;
         platform.screen.height = config.game_height;
         platform.screen.desiredRatio = platform.screen.width / (f32)platform.screen.height;
         platform.screen.fullscreen = config.fullscreen;
+        __DEBUGEXP(platform.screen.text_scale = w / effectiveWidth);
     }
 
     glfwMakeContextCurrent(windowHandle);

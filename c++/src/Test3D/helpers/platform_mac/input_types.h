@@ -118,7 +118,6 @@ namespace Input {
             , INVALID = -1
         }; };
     };
-
     namespace Mouse {
         namespace Keys { enum Enum : s32 {
               BUTTON_RIGHT = 0
@@ -126,6 +125,9 @@ namespace Input {
             , BUTTON_MIDDLE
             , COUNT
         }; };
+    };
+    namespace Gamepad {
+        typedef void* DeviceHandle;
     };
 };
 

@@ -124,6 +124,7 @@ int main(int , char** ) {
         memset(platform.input.keyboard.last, 0, sizeof(u8) * ::Input::Keyboard::Keys::COUNT);
         memset(platform.input.keyboard.current, 0, sizeof(u8) * ::Input::Keyboard::Keys::COUNT);
         ::Input::Mouse::PollData mousePollData = {};
+        platform.input.padCount = 0;
         
         mach_timebase_info_data_t ticks_to_nanos;
         mach_timebase_info(&ticks_to_nanos);

@@ -16,16 +16,7 @@ namespace Keyboard {
     };
 };
 namespace Gamepad {
-    
-//    namespace Analog {
-//        const f32 novalue = 404.f;
-//        const f32 digitalThreshold = 0.5f;
-//    }
-    
-    struct KeyboardMapping {
-        s32 mapping[Keys::COUNT];
-    };
-    
+
 //    void load(KeyboardMapping& mapping) {
 //        memset(mapping.mapping, GLFW_KEY_UNKNOWN, sizeof(s32) * Keys::COUNT);
 //        // Hardcoded for now
