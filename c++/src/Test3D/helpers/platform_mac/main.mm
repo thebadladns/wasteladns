@@ -48,7 +48,7 @@ int main(int , char** ) {
         NSDictionary* defaults = @{@"ApplePressAndHoldEnabled":@NO};
         [[NSUserDefaults standardUserDefaults] registerDefaults:defaults];
         
-        Platform::State platform;
+        Platform::State platform = {};
         id window;
         NSOpenGLContext* openGLContext;
         {
@@ -119,11 +119,15 @@ int main(int , char** ) {
             __DEBUGEXP(platform.screen.text_scale = scale);
         }
 
-        ::Input::Keyboard::PollData keyboardPollData;
-        keyboardPollData.queue = {};
-        memset(platform.input.keyboard.last, 0, sizeof(u8) * ::Input::Keyboard::Keys::COUNT);
-        memset(platform.input.keyboard.current, 0, sizeof(u8) * ::Input::Keyboard::Keys::COUNT);
-        ::Input::Mouse::PollData mousePollData = {};
+        struct MouseQueue {
+            u8 buttons[::Input::Mouse::Keys::COUNT];
+            f32 x, y;
+            f32 scrollx, scrolly;
+        };
+        u8 keyboard_queue[::Input::Keyboard::Keys::COUNT]{};
+        MouseQueue mouse_queue = {};
+        const int hotkeyMask = NSEventModifierFlagCommand | NSEventModifierFlagOption | NSEventModifierFlagControl | NSEventModifierFlagCapsLock;
+        
         platform.input.padCount = 0;
         
         mach_timebase_info_data_t ticks_to_nanos;
@@ -137,9 +141,6 @@ int main(int , char** ) {
         Platform::GameConfig config;
         Game::start(game, config, platform);
         
-        memset(platform.input.mouse.last, 0, sizeof(u8) * ::Input::Mouse::Keys::COUNT);
-        memset(platform.input.mouse.current, 0, sizeof(u8) * ::Input::Mouse::Keys::COUNT);
-        
         do
         {
             @autoreleasepool {
@@ -147,8 +148,9 @@ int main(int , char** ) {
                 if (platform.time.now >= config.nextFrame) {
                     // Input
                     {
-                        // todo: figure out mouse
-                        ::Input::Mouse::resetState(mousePollData);
+                        namespace KB = ::Input::Keyboard;
+                        namespace MS = ::Input::Mouse;
+                        
                         NSEvent *event = nil;
                         do {
                             event = [NSApp nextEventMatchingMask:NSEventMaskAny
@@ -156,18 +158,17 @@ int main(int , char** ) {
                                                           inMode:NSDefaultRunLoopMode
                                                          dequeue:YES];
                             NSEventType eventType = [event type];
+                            
                             switch (eventType) {
-                                case NSEventTypeKeyUp:
+                                case NSEventTypeKeyUp: {
+                                    // Handle events like cmd+q etc
+                                    if ([event modifierFlags] & hotkeyMask) { [NSApp sendEvent:event]; break; }
+                                    ::Input::queueKeyUp(keyboard_queue, platform.input.keyboard.current, (KB::Keys::Enum)[event keyCode]);
+                                } break;
                                 case NSEventTypeKeyDown: {
-                                    int hotkeyMask = NSEventModifierFlagCommand | NSEventModifierFlagOption | NSEventModifierFlagControl | NSEventModifierFlagCapsLock;
-                                    if ([event modifierFlags] & hotkeyMask) {
-                                        // Handle events like cmd+q etc
-                                        [NSApp sendEvent:event];
-                                        break;
-                                    }
-                                    namespace KB = ::Input::Keyboard;
-                                    bool state = eventType == NSEventTypeKeyDown;
-                                    keyboardPollData.queue.keyStates[(KB::Keys::Enum)[event keyCode]] = state;
+                                    // Handle events like cmd+q etc
+                                    if ([event modifierFlags] & hotkeyMask) { [NSApp sendEvent:event]; break; }
+                                    ::Input::queueKeyDown(keyboard_queue, platform.input.keyboard.current, (KB::Keys::Enum)[event keyCode]);
                                 } break;
                                 case NSEventTypeMouseMoved:
                                 case NSEventTypeLeftMouseDragged:
@@ -176,24 +177,25 @@ int main(int , char** ) {
                                     // todo: won't work when hiding cursor
                                     // todo: doesn't work while pressing mouse buttons
                                     NSPoint pos = [event locationInWindow];
-                                    mousePollData.x = pos.x;
-                                    mousePollData.y = platform.screen.height-pos.y;
+                                    mouse_queue.x = pos.x;
+                                    mouse_queue.y = platform.screen.height-pos.y;
                                 } break;
                                 case NSEventTypeLeftMouseDown:
+                                case NSEventTypeRightMouseDown: {
+                                    MS::Keys::Enum keycode = (MS::Keys::Enum)((eventType >> 1) & 0x1);
+                                    ::Input::queueKeyDown(mouse_queue.buttons, platform.input.mouse.current, keycode);
+                                } break;
                                 case NSEventTypeLeftMouseUp:
-                                case NSEventTypeRightMouseDown:
                                 case NSEventTypeRightMouseUp: {
-                                    namespace MS = ::Input::Mouse;
-                                    MS::Keys::Enum key = (eventType == NSEventTypeLeftMouseDown || eventType == NSEventTypeLeftMouseUp) ? MS::Keys::BUTTON_LEFT : MS::Keys::BUTTON_RIGHT;
-                                    bool state = eventType == NSEventTypeLeftMouseDown || eventType == NSEventTypeRightMouseDown;
-                                    mousePollData.keyStates[key] = state;
+                                    MS::Keys::Enum keycode = (MS::Keys::Enum)((eventType >> 2) & 0x1);
+                                    ::Input::queueKeyUp(mouse_queue.buttons, platform.input.mouse.current, keycode);
                                 } break;
                                     
                                 case NSEventTypeScrollWheel: {
                                     float scrollx = [event deltaX];
                                     float scrolly = [event deltaY];
-                                    mousePollData.scrollx = scrollx;
-                                    mousePollData.scrolly = scrolly;
+                                    mouse_queue.scrollx = scrollx;
+                                    mouse_queue.scrolly = scrolly;
                                 } break;
                                 default: {
                                     [NSApp sendEvent:event];
@@ -204,10 +206,23 @@ int main(int , char** ) {
                         [NSApp updateWindows];
                         
                         // Input
-                        ::Input::Keyboard::pollState(platform.input.keyboard, keyboardPollData.queue);
-                        ::Input::Mouse::pollState(platform.input.mouse, mousePollData);
-                        //                            for (u32 i = 0; i < platform.input.padCount; i++) {
-                        //                                ::Input::Gamepad::pollState(platform.input.pads[i], keyboardPollData.queue, keyboardPadMappings[i]);
+                        memcpy(platform.input.keyboard.last, platform.input.keyboard.current, sizeof(u8) * KB::Keys::COUNT);
+                        for (int i = 0; i < KB::Keys::COUNT; i++) {
+                            ::Input::unqueueKey(platform.input.keyboard.current, keyboard_queue, i);
+                        }
+                        memcpy(platform.input.mouse.last, platform.input.mouse.current, sizeof(u8) * MS::Keys::COUNT);
+                        for (int i = 0; i < MS::Keys::COUNT; i++) {
+                            ::Input::unqueueKey(platform.input.mouse.current, mouse_queue.buttons, i);
+                        }
+                        platform.input.mouse.dx = mouse_queue.x - platform.input.mouse.x;
+                        platform.input.mouse.dy = mouse_queue.y - platform.input.mouse.y;
+                        platform.input.mouse.x = mouse_queue.x;
+                        platform.input.mouse.y = mouse_queue.y;
+                        platform.input.mouse.scrolldx = mouse_queue.scrollx;
+                        platform.input.mouse.scrolldy = mouse_queue.scrolly;
+                        mouse_queue.scrollx = 0.f;
+                        mouse_queue.scrolly = 0.f;
+//                      todo: gamepad
                     }
                     
                     [openGLContext makeCurrentContext];
