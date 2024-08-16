@@ -1,7 +1,3 @@
-
-#import <Cocoa/Cocoa.h>
-#import <mach/mach_time.h> // for mach_absolute_time
-
 #ifndef GL_SILENCE_DEPRECATION
 #define GL_SILENCE_DEPRECATION
 #endif
@@ -10,6 +6,36 @@
 //#include "core.h"
 //#include "input.h"
 //#endif
+
+@interface AppDelegate : NSObject<NSApplicationDelegate> { bool terminated; }
+- (id)init;
+- (NSApplicationTerminateReply)applicationShouldTerminate:(NSApplication *)sender;
+- (bool)applicationHasTerminated;
+@end
+@implementation AppDelegate
+- (id)init {
+    if (!(self = [super init])) { return nil; }
+    self->terminated = false;
+    return self;
+}
+- (NSApplicationTerminateReply)applicationShouldTerminate:(NSApplication *)sender {
+    self->terminated = true;
+    return NSTerminateCancel;
+}
+- (bool)applicationHasTerminated { return self->terminated; }
+@end
+
+
+@interface MainWindowDelegate: NSObject<NSWindowDelegate>
+@end
+
+@implementation MainWindowDelegate
+
+- (void)windowWillClose:(id)sender {
+    [NSApp terminate:nil];
+}
+
+@end
 
 static CFBundleRef glFramework;
 void loadGLFramework()
@@ -37,6 +63,8 @@ int main(int , char** ) {
         loadGLFramework();
         
         [NSApplication sharedApplication];
+        AppDelegate* appDelegate = [[AppDelegate alloc] init];
+        [NSApp setDelegate:appDelegate];
         
         // Need for menu bar and window focus
         [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
@@ -78,6 +106,9 @@ int main(int , char** ) {
             [window setTitle:nstitle];
             [window cascadeTopLeftFromPoint:NSMakePoint(20,20)];
             
+            MainWindowDelegate* windowDelegate = [[MainWindowDelegate alloc] init];
+            [window setDelegate:windowDelegate];
+            
             NSView* contentView = [window contentView];
             
             NSOpenGLPixelFormatAttribute glAttributes[] = {
@@ -99,7 +130,7 @@ int main(int , char** ) {
             [openGLContext setValues:&swap forParameter:NSOpenGLContextParameterSwapInterval];
             [openGLContext setView:contentView];
             [openGLContext makeCurrentContext];
-        
+            
             gladLoadGLLoader(getGLProcAddress);
             
             [(NSWindow*)window center];
@@ -118,7 +149,7 @@ int main(int , char** ) {
             platform.screen.fullscreen = config.fullscreen;
             __DEBUGEXP(platform.screen.text_scale = scale);
         }
-
+        
         struct MouseQueue {
             u8 buttons[::Input::Mouse::Keys::COUNT];
             f32 x, y;
@@ -142,21 +173,18 @@ int main(int , char** ) {
         do
         {
             @autoreleasepool {
-                
                 if (platform.time.now >= config.nextFrame) {
                     // Input
                     {
                         namespace KB = ::Input::Keyboard;
                         namespace MS = ::Input::Mouse;
-                        
                         NSEvent *event = nil;
                         do {
                             event = [NSApp nextEventMatchingMask:NSEventMaskAny
-                                                       untilDate:nil
+                                                       untilDate:[NSDate distantPast]
                                                           inMode:NSDefaultRunLoopMode
                                                          dequeue:YES];
                             NSEventType eventType = [event type];
-                            
                             switch (eventType) {
                                 case NSEventTypeKeyUp: {
                                     // Handle events like cmd+q etc
@@ -195,13 +223,13 @@ int main(int , char** ) {
                                     mouse_queue.scrollx = scrollx;
                                     mouse_queue.scrolly = scrolly;
                                 } break;
-                                default: {
-                                    [NSApp sendEvent:event];
-                                } break;
+                                default: break;
                             }
+                            // passthrough to handle things like title bar buttons
+                            [NSApp sendEvent:event];
                         } while (event);
-                        
                         [NSApp updateWindows];
+                        config.quit = [appDelegate applicationHasTerminated];
                         
                         // Input
                         memcpy(platform.input.keyboard.last, platform.input.keyboard.current, sizeof(u8) * KB::Keys::COUNT);
@@ -220,23 +248,20 @@ int main(int , char** ) {
                         platform.input.mouse.scrolldy = mouse_queue.scrolly;
                         mouse_queue.scrollx = 0.f;
                         mouse_queue.scrolly = 0.f;
-//                      todo: gamepad
+                        // todo: gamepad
                     }
                     
                     [openGLContext makeCurrentContext];
                     Game::update(game, config, platform);
                     [openGLContext flushBuffer];
-                    
                 }
                 
                 u64 now = mach_absolute_time();
                 platform.time.now = now / frequency;
                 platform.time.running = platform.time.now - platform.time.start;
             }
-
         } while (!config.quit);
-
+        
     }
-
     return 1;
 }

@@ -10,11 +10,10 @@
 #define GLEXT_64_TYPES_DEFINED
 #include "../../lib/glad/glad.c"
 
-#define consoleLog printf
+#import <Cocoa/Cocoa.h>
+#import <mach/mach_time.h> // for mach_absolute_time
 
-#undef near
-#undef far
-#undef DELETE
+#define consoleLog printf
 
 namespace Platform {
 const char* name = "MACOS";
