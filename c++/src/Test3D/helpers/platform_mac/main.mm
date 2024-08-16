@@ -128,8 +128,6 @@ int main(int , char** ) {
         MouseQueue mouse_queue = {};
         const int hotkeyMask = NSEventModifierFlagCommand | NSEventModifierFlagOption | NSEventModifierFlagControl | NSEventModifierFlagCapsLock;
         
-        platform.input.padCount = 0;
-        
         mach_timebase_info_data_t ticks_to_nanos;
         mach_timebase_info(&ticks_to_nanos);
         f64 frequency = (1e9 * ticks_to_nanos.denom) / (f64)ticks_to_nanos.numer;

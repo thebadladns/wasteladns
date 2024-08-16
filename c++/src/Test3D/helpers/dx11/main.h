@@ -388,12 +388,6 @@ int WINAPI WinMain(
         Renderer::Driver::swapchain = swapchain;
         Renderer::Driver::perf = pPerf;
 
-        //::Input::Gamepad::State pads[1];
-        //::Input::Gamepad::KeyboardMapping keyboardPadMappings[1];
-        //platform.input.padCount = 1;
-        //platform.input.pads = pads;
-        //::Input::Gamepad::load(keyboardPadMappings[0]);
-
         struct MouseQueue {
             u8 buttons[::Input::Mouse::Keys::COUNT];
             f32 x, y;
@@ -402,8 +396,7 @@ int WINAPI WinMain(
         u8 keyboard_queue[::Input::Keyboard::Keys::COUNT]{};
         MouseQueue mouse_queue = {};
 
-        // gamepad
-        memset(platform.input.pads, 0, sizeof(platform.input.pads));
+        // dinput gamepad
         //platform.input.padCount = init_dinput_pads(hWnd, platform.input.pads, COUNT_OF(platform.input.pads));
 
         RAWINPUTDEVICE rid;
@@ -412,7 +405,6 @@ int WINAPI WinMain(
         rid.dwFlags = 0;
         rid.hwndTarget = hWnd;
         RegisterRawInputDevices(&rid, 1, sizeof(RAWINPUTDEVICE));
-
 
         u64 start;
         QueryPerformanceCounter((LARGE_INTEGER*)&start);
@@ -446,7 +438,7 @@ int WINAPI WinMain(
                             case WM_SYSKEYUP: {
                                 WPARAM wParam = msg.wParam;
                                 if (wParam != VK_CONTROL && wParam != VK_PROCESSKEY) {
-                                    auto keycode = (KB::Keys::Enum)(HIWORD(msg.lParam) & 0x1FF);
+                                    KB::Keys::Enum keycode = (KB::Keys::Enum)(HIWORD(msg.lParam) & 0x1FF);
                                     ::Input::queueKeyUp(keyboard_queue, platform.input.keyboard.current, keycode);
                                 }
                             }
@@ -455,7 +447,7 @@ int WINAPI WinMain(
                             case WM_SYSKEYDOWN: {
                                 WPARAM wParam = msg.wParam;
                                 if (wParam != VK_CONTROL && wParam != VK_PROCESSKEY) {
-                                    auto keycode = (KB::Keys::Enum)(HIWORD(msg.lParam) & 0x1FF);
+                                    KB::Keys::Enum keycode = (KB::Keys::Enum)(HIWORD(msg.lParam) & 0x1FF);
                                     ::Input::queueKeyDown(keyboard_queue, platform.input.keyboard.current, keycode);
                                 }
                             }
@@ -464,7 +456,6 @@ int WINAPI WinMain(
                             case WM_RBUTTONUP: {
                                 MS::Keys::Enum keycode = (MS::Keys::Enum) ((msg.message >> 2) & 0x1);
                                 ::Input::queueKeyUp(mouse_queue.buttons, platform.input.mouse.current, keycode);
-
                             }
                             break;
                             case WM_LBUTTONDOWN:

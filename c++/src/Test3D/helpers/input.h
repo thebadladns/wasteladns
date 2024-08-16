@@ -127,7 +127,7 @@ namespace Input {
         }
     }
     inline void queueKeyDown(u8* queue, const u8*, const u32 keycode) {
-        queue[keycode] = KeyEvent::Pressed + (KeyEvent::None << KeyEvent::FrameShift);
+        queue[keycode] = KeyEvent::Pressed; // also clears next frame with (KeyEvent::None << KeyEvent::FrameShift);
     }
     inline void unqueueKey(u8* current, u8* queue, const u32 keycode) {
         u8 queuedValueThisFrame = (queue[keycode] & KeyEvent::FrameMask);
