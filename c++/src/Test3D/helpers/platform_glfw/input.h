@@ -55,7 +55,7 @@ namespace Gamepad {
                     f32 slider = state.axes[i];
                     u32 sliderIdx = sliderMask[i];
                     if (sliderIdx == Pad::Sliders::AXIS_Y_LEFT || sliderIdx == Pad::Sliders::AXIS_Y_RIGHT) slider = -slider;
-                    if (Math::abs(slider) < 0.02f) slider = 0.f;
+                    if (Math::abs(slider) < 0.05f) slider = 0.f;
                     pad.sliders[sliderIdx] = slider;
                 }
                 if (state.axes[GLFW_GAMEPAD_AXIS_LEFT_TRIGGER] > 0.9) { keys |= Pad::KeyMask::L2; }

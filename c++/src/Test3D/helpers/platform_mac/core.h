@@ -12,6 +12,7 @@
 
 #import <Cocoa/Cocoa.h>
 #import <mach/mach_time.h> // for mach_absolute_time
+#import <IOKit/hid/IOHIDLib.h>
 
 #define consoleLog printf
 

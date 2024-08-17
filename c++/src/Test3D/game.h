@@ -430,13 +430,16 @@ namespace Game
 
                     if (game.debugVis.overlaymode == DebugVis::OverlayMode::All || game.debugVis.overlaymode == DebugVis::OverlayMode::HelpOnly) {
                         textParamsLeft.color = platform.input.mouse.down(::Input::Mouse::Keys::BUTTON_LEFT) ? activeCol : defaultCol;
-                        Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParamsLeft, "left mouse click and drag to orbit");
+                        Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParamsLeft, "Mouse (%.3f,%.3f)", platform.input.mouse.x, platform.input.mouse.y);
+                        textParamsLeft.pos.y -= lineheight;
+                        textParamsLeft.color = platform.input.mouse.down(::Input::Mouse::Keys::BUTTON_LEFT) ? activeCol : defaultCol;
+                        Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParamsLeft, "   left click and drag to orbit");
                         textParamsLeft.pos.y -= lineheight;
                         textParamsLeft.color = platform.input.mouse.down(::Input::Mouse::Keys::BUTTON_RIGHT) ? activeCol : defaultCol;
-                        Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParamsLeft, "right mouse click and drag to pan");
+                        Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParamsLeft, "   right click and drag to pan");
                         textParamsLeft.pos.y -= lineheight;
                         textParamsLeft.color = platform.input.mouse.scrolldy != 0 ? activeCol : defaultCol;
-                        Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParamsLeft, "mouse wheel to scale");
+                        Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParamsLeft, "   mouse wheel to scale");
                         textParamsLeft.pos.y -= lineheight;
                         textParamsLeft.color = defaultCol;
                         {

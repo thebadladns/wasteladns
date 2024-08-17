@@ -127,7 +127,7 @@ namespace Input {
         }; };
     };
     namespace Gamepad {
-        typedef void* DeviceHandle;
+        typedef IOHIDDeviceRef DeviceHandle;
     };
 };
 
