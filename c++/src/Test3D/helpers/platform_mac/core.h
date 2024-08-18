@@ -14,7 +14,7 @@
 #import <mach/mach_time.h> // for mach_absolute_time
 #import <IOKit/hid/IOHIDLib.h>
 
-#define consoleLog printf
+#define consoleLog(a) printf("%s", a)
 
 namespace Platform {
 const char* name = "MACOS";

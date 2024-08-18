@@ -127,6 +127,35 @@ namespace Input {
         }; };
     };
     namespace Gamepad {
+    
+        struct KeyInfo {
+            IOHIDElementRef native;
+            u32 usage;
+            u64 min;
+            u64 max;
+        };
+        struct SliderInfo {
+            IOHIDElementRef native;
+            u32 usage;
+            u64 min;
+            u64 max;
+        };
+        struct HatInfo {
+            IOHIDElementRef native;
+            u32 usage;
+            u64 min;
+            u64 max;
+        };
+    
+        struct DeviceInfo {
+            KeyInfo keys_info[64];
+            SliderInfo sliders_info[9];
+            HatInfo hat_info;
+            u32 keys_count;
+            u32 sliders_count;
+            bool loaded;
+        };
+
         typedef IOHIDDeviceRef DeviceHandle;
     };
 };

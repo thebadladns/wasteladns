@@ -33,147 +33,6 @@
 }
 @end
 
-static void valueChangedGamepadCallback(void *context, IOReturn result, void *sender, IOHIDReportType type, uint32_t reportID, uint8_t *report, CFIndex reportLength) {
-  
-    namespace Pad = ::Input::Gamepad;
-    
-    ::Platform::Input& ctx = *(::Platform::Input*)context;
-    IOHIDDeviceRef device = (IOHIDDeviceRef)sender;
-    
-    u32 padToUpdate = ctx.padCount;
-    for (u32 padidx = 0; padidx < ctx.padCount; padidx++) {
-        if (ctx.pads[padidx].deviceHandle == device) {
-            padToUpdate = padidx;
-            break;
-        }
-    }
-    
-    if (padToUpdate >= COUNT_OF(ctx.pads)) return;
-    Pad::State& pad = ctx.pads[padToUpdate];
-    
-    // this will be a new pad, check the type
-    if (padToUpdate == ctx.padCount) {
-        pad = {};
-
-        u64 vendorID = [(__bridge NSNumber *)IOHIDDeviceGetProperty(device, CFSTR(kIOHIDVendorIDKey)) unsignedIntegerValue];
-        u64 productID = [(__bridge NSNumber *)IOHIDDeviceGetProperty(device, CFSTR(kIOHIDProductIDKey)) unsignedIntegerValue];
-        
-        const u64 sonyVendorID = 0x054C;
-        const u64 ds4Gen1ProductID = 0x05C4;
-        const u64 ds4Gen2ProductID = 0x09CC;
-        const u64 microsoftVendorID = 0x045e;
-        const u64 xbox360wireless3rdparty1 = 0x02a9;
-        const u64 xbox360wireless3rdparty2 = 0x0291;
-        const u64 xbox360wireless = 0x028e;
-        if (vendorID == sonyVendorID && (productID == ds4Gen1ProductID || productID == ds4Gen2ProductID)) {
-            pad.type = Pad::Type::DUALSHOCK4;
-        } else if (vendorID == microsoftVendorID && (productID == xbox360wireless3rdparty1 || productID == xbox360wireless3rdparty2 || productID == xbox360wireless)) {
-            pad.type = Pad::Type::XBOX360;
-        } else {
-            pad.type = Pad::Type::NES_8BITDO;
-        }
-    }
-    
-    // handle Dualshock4 separately, since it doesn't specify HID gamepad usages in the report
-    if (pad.type == ::Input::Gamepad::Type::DUALSHOCK4) {
-
-        struct ControllerData {
-            u8 axis_left_x;
-            u8 axis_left_y;
-            u8 axis_right_x;
-            u8 axis_right_y;
-            u8 axis_dpad : 4;
-            bool button_square : 1;
-            bool button_cross : 1;
-            bool button_circle : 1;
-            bool button_triangle : 1;
-            bool button_left_1 : 1;
-            bool button_right_1 : 1;
-            bool button_left_2 : 1;
-            bool button_right_2 : 1;
-            bool button_share : 1;
-            bool button_options : 1;
-            bool button_left_3 : 1;
-            bool button_right_3 : 1;
-            bool button_ps : 1;
-            bool button_touch : 1;
-            u8 sequence_number : 6;
-            u8 axis_left_2;
-            u8 axis_right_2;
-            // for remaining buttons check https://github.com/chromium/chromium/blob/main/device/gamepad/dualshock4_controller.cc#L44
-        };
-        
-        u8* rawdata = report;
-        rawdata = &(rawdata[1]);
-        if (reportID == 0x11) { // Bluetooth on Windows, adds two bytes
-            rawdata = &(rawdata[2]);
-        }
-        
-        ControllerData& controller = *(ControllerData*)rawdata;
-        u16 keys = 0;
-        if (controller.button_square) keys |= Pad::KeyMask::BUTTON_W;
-        if (controller.button_cross) keys |= Pad::KeyMask::BUTTON_S;
-        if (controller.button_circle) keys |= Pad::KeyMask::BUTTON_E;
-        if (controller.button_triangle) keys |= Pad::KeyMask::BUTTON_N;
-        if (controller.button_options) keys |= Pad::KeyMask::START;
-        if (controller.button_share) keys |= Pad::KeyMask::SELECT;
-        if (controller.button_left_3) keys |= Pad::KeyMask::LEFT_THUMB;
-        if (controller.button_right_3) keys |= Pad::KeyMask::RIGHT_THUMB;
-        if (controller.button_left_1) keys |= Pad::KeyMask::L1;
-        if (controller.button_right_1) keys |= Pad::KeyMask::R1;
-        if (controller.button_left_2) keys |= Pad::KeyMask::L2;
-        if (controller.button_right_2) keys |= Pad::KeyMask::R2;
-        switch (controller.axis_dpad) { // todo: simplify?
-        case 0: keys |= (Pad::KeyMask::DPAD_UP); break;
-        case 1: keys |= (Pad::KeyMask::DPAD_UP) | (Pad::KeyMask::DPAD_RIGHT); break;
-        case 2: keys |= (Pad::KeyMask::DPAD_RIGHT); break;
-        case 3: keys |= (Pad::KeyMask::DPAD_RIGHT) | (Pad::KeyMask::DPAD_DOWN); break;
-        case 4: keys |= (Pad::KeyMask::DPAD_DOWN); break;
-        case 5: keys |= (Pad::KeyMask::DPAD_DOWN) | (Pad::KeyMask::DPAD_LEFT); break;
-        case 6: keys |= (Pad::KeyMask::DPAD_LEFT); break;
-        case 7: keys |= (Pad::KeyMask::DPAD_LEFT) | (Pad::KeyMask::DPAD_UP); break;
-        }
-        pad.last_keys = pad.curr_keys;
-        pad.curr_keys = keys;
-
-        auto normalizeAxis = [](u8 v) {
-            f32 rawAxis = (2.0f * v / 255.f) - 1.0f;
-            if (Math::abs(rawAxis) < 0.05f) rawAxis = 0.f;
-            return rawAxis;
-            };
-        pad.sliders[Pad::Sliders::AXIS_X_LEFT] = normalizeAxis(controller.axis_left_x);
-        pad.sliders[Pad::Sliders::AXIS_Y_LEFT] = -normalizeAxis(controller.axis_left_y);
-        pad.sliders[Pad::Sliders::AXIS_X_RIGHT] = normalizeAxis(controller.axis_right_x);
-        pad.sliders[Pad::Sliders::AXIS_Y_RIGHT] = -normalizeAxis(controller.axis_right_y);
-        pad.sliders[Pad::Sliders::TRIGGER_LEFT] = controller.axis_left_2 / 255.f;
-        pad.sliders[Pad::Sliders::TRIGGER_RIGHT] = controller.axis_right_2 / 255.f;
-    }
-    else {
-    }
-    
-    // If the pad is new, and we got button input from it, finish creation
-    if (padToUpdate == ctx.padCount) {
-        bool validpad = pad.curr_keys != 0;
-        for (u32 slider = 0; validpad && slider < Pad::Sliders::COUNT; slider++) {
-            if (Math::abs(pad.sliders[slider]) > 2.f) { // TODO: properly ignore bad inputs
-                validpad = false;
-            }
-        }
-
-        if (validpad) {
-            ctx.padCount++; // acknowledge the current pad
-            pad.deviceHandle = device;
-            __DEBUGEXP(strncpy(pad.name, Pad::names[pad.type], sizeof(pad.name)));
-
-#if __DEBUG
-            u64 vendorID = [(__bridge NSNumber *)IOHIDDeviceGetProperty(device, CFSTR(kIOHIDVendorIDKey)) unsignedIntegerValue];
-            u64 productID = [(__bridge NSNumber *)IOHIDDeviceGetProperty(device, CFSTR(kIOHIDProductIDKey)) unsignedIntegerValue];
-            Platform::debuglog("Registered new pad 0x%lx 0x%lx\n", vendorID, productID);
-#endif
-        }
-    }
-}
-
 static CFBundleRef glFramework;
 void loadGLFramework()
 {
@@ -196,6 +55,10 @@ static void* getGLProcAddress(const char* procname)
 int main(int , char** ) {
     @autoreleasepool {
         
+        Platform::State platform = {};
+        Allocator::init_arena(platform.memory.scratchArenaRoot, 1 << 20); // 1MB
+        __DEBUGEXP(platform.memory.scratchArenaHighmark = platform.memory.scratchArenaRoot.curr; platform.memory.scratchArenaRoot.highmark = &platform.memory.scratchArenaHighmark);
+        
         // load framework to access opengl functions through glad
         loadGLFramework();
         
@@ -213,7 +76,6 @@ int main(int , char** ) {
         NSDictionary* defaults = @{@"ApplePressAndHoldEnabled":@NO};
         [[NSUserDefaults standardUserDefaults] registerDefaults:defaults];
         
-        Platform::State platform = {};
         id window;
         NSOpenGLContext* openGLContext;
         {
@@ -296,18 +158,15 @@ int main(int , char** ) {
         const f32 actualWindowHeight = [[window contentView] frame].size.height;
         
         // gamepad // todo: custom allocators?
-        {
+        @autoreleasepool {
             IOHIDManagerRef HIDManager = IOHIDManagerCreate(kCFAllocatorDefault, kIOHIDOptionsTypeNone);
-            
-            IOHIDManagerRegisterInputReportCallback(HIDManager, &valueChangedGamepadCallback, &platform.input);
-            // todo: handle return != kIOReturnSuccess
+            IOHIDManagerRegisterInputReportCallback(HIDManager, &::Input::Gamepad::processPads, &platform);
             IOHIDManagerOpen(HIDManager, kIOHIDOptionsTypeNone);
-            IOHIDManagerSetDeviceMatchingMultiple(HIDManager, (__bridge CFArrayRef)@[
+            IOHIDManagerSetDeviceMatchingMultiple(HIDManager, (__bridge_transfer CFArrayRef)@[
                 @{@(kIOHIDDeviceUsagePageKey): @(kHIDPage_GenericDesktop), @(kIOHIDDeviceUsageKey): @(kHIDUsage_GD_GamePad)},
                 @{@(kIOHIDDeviceUsagePageKey): @(kHIDPage_GenericDesktop), @(kIOHIDDeviceUsageKey): @(kHIDUsage_GD_Joystick)},
                 @{@(kIOHIDDeviceUsagePageKey): @(kHIDPage_GenericDesktop), @(kIOHIDDeviceUsageKey): @(kHIDUsage_GD_MultiAxisController)},
             ]);
-          
             IOHIDManagerScheduleWithRunLoop(HIDManager,
                                             CFRunLoopGetMain(),
                                             kCFRunLoopDefaultMode);

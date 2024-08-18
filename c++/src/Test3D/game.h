@@ -466,9 +466,17 @@ namespace Game
                             char* curr = keys_str;
                             char* last = keys_str + sizeof(keys_str);
                             curr += Platform::format(keys_str, (int)(last-curr), "Keys: ");
+                            const char* key_names[] = {
+                                "BUTTON_N", "BUTTON_S", "BUTTON_W", "BUTTON_E"
+                              , "DPAD_UP", "DPAD_DOWN", "DPAD_LEFT", "DPAD_RIGHT"
+                              , "START", "SELECT"
+                              , "L1", "R1", "L2", "R2"
+                              , "LEFT_THUMB", "RIGHT_THUMB"
+                            };
                             for (u32 key = 0; key < Pad::KeyMask::COUNT && curr < last; key++) {
                                 if (pad.curr_keys & (1 << key)) {
-                                    curr += Platform::format(curr, (int)(last - curr), "%d ", key);
+                                    
+                                    curr += Platform::format(curr, (int)(last - curr), "%s ", key_names[key]);
                                 } else {
                                     curr += Platform::format(curr, (int)(last - curr), "");
                                 }
