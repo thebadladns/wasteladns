@@ -133,7 +133,6 @@ namespace Input {
         }; };
     };
     namespace Gamepad {
-        typedef void* DeviceCapabilities;
         typedef const char* DeviceHandle;
     };
 };

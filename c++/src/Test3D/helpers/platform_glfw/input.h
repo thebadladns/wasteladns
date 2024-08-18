@@ -37,6 +37,8 @@ namespace Gamepad {
             GLFWgamepadstate state;
             if (glfwGetGamepadState(joyId, &state))
             {
+                memset(pad.sliders, 0, sizeof(pad.sliders));
+
                 u32 keyMask[GLFW_GAMEPAD_BUTTON_LAST + 1] =
                 { Pad::KeyMask::BUTTON_S, Pad::KeyMask::BUTTON_E, Pad::KeyMask::BUTTON_W, Pad::KeyMask::BUTTON_N,
                   Pad::KeyMask::L1, Pad::KeyMask::R1, Pad::KeyMask::SELECT, Pad::KeyMask::START, 0,
@@ -46,20 +48,21 @@ namespace Gamepad {
                 for (u32 i = 0; i <= GLFW_GAMEPAD_BUTTON_LAST; i++) {
                     if (state.buttons[i] & GLFW_PRESS) { keys |= keyMask[i]; }
                 }
-                u32 sliderMask[GLFW_GAMEPAD_AXIS_LAST + 1] =
+                u32 sliderMap[GLFW_GAMEPAD_AXIS_LAST + 1] =
                 { Pad::Sliders::AXIS_X_LEFT, Pad::Sliders::AXIS_Y_LEFT,
                   Pad::Sliders::AXIS_X_RIGHT, Pad::Sliders::AXIS_Y_RIGHT,
                   Pad::Sliders::TRIGGER_LEFT, Pad::Sliders::TRIGGER_RIGHT
                 };
                 for (u32 i = 0; i <= GLFW_GAMEPAD_AXIS_LAST; i++) {
                     f32 slider = state.axes[i];
-                    u32 sliderIdx = sliderMask[i];
+                    u32 sliderIdx = sliderMap[i];
                     if (sliderIdx == Pad::Sliders::AXIS_Y_LEFT || sliderIdx == Pad::Sliders::AXIS_Y_RIGHT) slider = -slider;
+                    if (sliderIdx == Pad::Sliders::TRIGGER_LEFT || sliderIdx == Pad::Sliders::TRIGGER_RIGHT) slider = (slider + 1.f) * 0.5f;
                     if (Math::abs(slider) < 0.05f) slider = 0.f;
                     pad.sliders[sliderIdx] = slider;
                 }
-                if (state.axes[GLFW_GAMEPAD_AXIS_LEFT_TRIGGER] > 0.9) { keys |= Pad::KeyMask::L2; }
-                if (state.axes[GLFW_GAMEPAD_AXIS_RIGHT_TRIGGER] > 0.9) { keys |= Pad::KeyMask::R2; }
+                if (pad.sliders[Pad::Sliders::TRIGGER_LEFT] > 0.9) { keys |= Pad::KeyMask::L2; }
+                if (pad.sliders[Pad::Sliders::TRIGGER_RIGHT] > 0.9) { keys |= Pad::KeyMask::R2; }
 
                 pad.last_keys = pad.curr_keys;
                 pad.curr_keys = keys;
@@ -67,17 +70,12 @@ namespace Gamepad {
 
             // If the pad is new, and we got button input from it, finish creation
             if (padToUpdate == padCount) {
-                bool validpad = pad.curr_keys != 0;
-                for (u32 slider = 0; validpad && slider < Pad::Sliders::COUNT; slider++) {
-                    if (Math::abs(pad.sliders[slider]) > 2.f) { // TODO: properly ignore bad inputs
-                        validpad = false;
-                    }
-                }
+                bool validpad = hasValidInput(pad);
                 if (validpad) {
                     pad.deviceHandle = guid;
                     #if __DEBUG
                     const char* name = glfwGetGamepadName(joyId);
-                    strncpy(pad.name, name, sizeof(pad.name));
+                    strncpy(pad.name, name, sizeof(pad.name)); // todo: fix
                     #endif
                     padCount++;
                 }

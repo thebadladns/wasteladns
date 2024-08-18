@@ -57,37 +57,40 @@ namespace Input {
             , TRIGGER_RIGHT = 5
             , COUNT = 6
         }; };
-        struct Mapping {
-            DeviceInfo deviceInfo;
-            const s32 keys_map[64];
-            const s32 dpad_map[8];
-            const s32 sliders_map[9];
-        };
-        struct Type { enum Enum { NES_8BITDO, XBOX360, MAPPINGCOUNT, DUALSHOCK4 = MAPPINGCOUNT, TOTALCOUNT }; }; // no mapping for dualshock4 (special case)
-        Mapping mappings[Type::Enum::MAPPINGCOUNT] = {
-            {     {} // NES_8BITDO
-                , { KeyMask::BUTTON_E, KeyMask::BUTTON_S, 0, KeyMask::BUTTON_N, KeyMask::BUTTON_W, 0, KeyMask::L2, KeyMask::R2, KeyMask::L1, KeyMask::R1, KeyMask::SELECT, KeyMask::START, 0, KeyMask::LEFT_THUMB, KeyMask::RIGHT_THUMB } // only fill these, rest will be filled with 0
-                , { KeyMask::DPAD_UP, KeyMask::DPAD_UP|KeyMask::DPAD_RIGHT, KeyMask::DPAD_RIGHT, KeyMask::DPAD_RIGHT|KeyMask::DPAD_DOWN, KeyMask::DPAD_DOWN, KeyMask::DPAD_DOWN|KeyMask::DPAD_LEFT, KeyMask::DPAD_LEFT, KeyMask::DPAD_LEFT|KeyMask::DPAD_UP }
-                , { Sliders::AXIS_X_LEFT, Sliders::AXIS_Y_LEFT, Sliders::AXIS_X_RIGHT, -1, -1, Sliders::AXIS_Y_RIGHT, -1, -1, -1 } // from HID_USAGE_GENERIC_X to HID_USAGE_GENERIC_WHEEL
-             }
-            , {   {} // XBOX
-                , { KeyMask::BUTTON_S, KeyMask::BUTTON_E, KeyMask::BUTTON_W, KeyMask::BUTTON_N, KeyMask::L1, KeyMask::R1, KeyMask::SELECT, KeyMask::START, KeyMask::LEFT_THUMB, KeyMask::RIGHT_THUMB, KeyMask::LEFT_THUMB } // only fill these, rest will be filled with 0
-                , { KeyMask::DPAD_UP, KeyMask::DPAD_UP | KeyMask::DPAD_RIGHT, KeyMask::DPAD_RIGHT, KeyMask::DPAD_RIGHT | KeyMask::DPAD_DOWN, KeyMask::DPAD_DOWN, KeyMask::DPAD_DOWN | KeyMask::DPAD_LEFT, KeyMask::DPAD_LEFT, KeyMask::DPAD_LEFT | KeyMask::DPAD_UP }
-                , { Sliders::AXIS_X_LEFT, Sliders::AXIS_Y_LEFT, Sliders::AXIS_X_RIGHT, -1, -1, Sliders::AXIS_Y_RIGHT, -1, -1, -1 } // from HID_USAGE_GENERIC_X to HID_USAGE_GENERIC_WHEEL
-             }
-        };
-        #if __DEBUG
-        const char* names[Type::Enum::TOTALCOUNT] = { "8Bitdo", "Xbox360", "Dualshock4" };
-        #endif
 
         struct State {
-            Gamepad::DeviceHandle deviceHandle;
+            bool down(KeyMask::Enum keyMask) const {
+                return (curr_keys & keyMask) != 0;
+            }
+            bool up(KeyMask::Enum keyMask) const {
+                return (curr_keys & keyMask) == 0;
+            }
+            bool released(KeyMask::Enum keyMask) const {
+                return (curr_keys & keyMask) == 0 && (last_keys & keyMask) != 0;
+            }
+            bool pressed(KeyMask::Enum keyMask) const {
+                return (curr_keys & keyMask) != 0 && (last_keys & keyMask) == 0;
+            }
+            DeviceHandle deviceHandle;
             u16 last_keys;
             u16 curr_keys;
             f32 sliders[Sliders::COUNT];
-            Type::Enum type;
+            u32 type;
             __DEBUGDEF(char name[128]);
         };
+
+        bool hasValidInput(State& pad) {
+            bool validpad = pad.curr_keys != 0;
+            for (u32 slider = 0; slider < Sliders::COUNT; slider++) {
+                if (Math::abs(pad.sliders[slider]) > 2.f) { // TODO: properly ignore bad inputs
+                    validpad = false;
+                }
+                else if (Math::abs(pad.sliders[slider]) > 0.9f) {
+                    validpad = validpad || true;
+                }
+            }
+            return validpad;
+        }
     }
 
 	namespace Mouse {
@@ -138,7 +141,5 @@ namespace Input {
         queue[keycode] >>= KeyEvent::FrameShift;
     }
 };
-
-//#include "input_mappings.h"
 
 #endif // __WASTELADNS_INPUT_H__

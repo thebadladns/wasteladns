@@ -137,13 +137,33 @@ namespace Input {
     };
 
     namespace Gamepad {
+
+        struct KeyInfo {
+            USAGE usageMin;
+        };
+        struct SliderInfo {
+            USAGE usage;
+            USAGE usagePage;
+            u32 min;
+            u32 max;
+        };
+
+        struct DeviceInfo {
+            KeyInfo keys_info[64];
+            SliderInfo sliders_info[10];
+            _HIDP_PREPARSED_DATA* preparsedData;
+            USAGE keys_usage_page;
+            USAGE keys_usage_min;
+            u32 keys_count;
+            u32 sliders_count;
+            bool loaded;
+        };
+
         typedef HANDLE DeviceHandle;
     };
     //namespace Gamepad {
     //    typedef LPDIRECTINPUTDEVICE8 Device;
     //};
 };
-
-//#include "input_mappings.h"
 
 #endif // __WASTELADNS_INPUT_TYPES_DX11_H__

@@ -160,6 +160,4 @@ namespace Input {
     };
 };
 
-//#include "input_mappings.h"
-
 #endif // __WASTELADNS_INPUT_TYPES_MACOS_H__

@@ -474,8 +474,7 @@ namespace Game
                               , "LEFT_THUMB", "RIGHT_THUMB"
                             };
                             for (u32 key = 0; key < Pad::KeyMask::COUNT && curr < last; key++) {
-                                if (pad.curr_keys & (1 << key)) {
-                                    
+                                if (pad.down((Pad::KeyMask::Enum)(1<<key))) {
                                     curr += Platform::format(curr, (int)(last - curr), "%s ", key_names[key]);
                                 } else {
                                     curr += Platform::format(curr, (int)(last - curr), "");
