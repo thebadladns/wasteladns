@@ -77,16 +77,10 @@ namespace Gamepad {
                 mapping.deviceInfo.keys_count = mapped_key_count;
                 mapping.deviceInfo.keys_usage_min = buttonCaps->Range.UsageMin;
                 mapping.deviceInfo.keys_usage_page = buttonCaps->UsagePage;
-                const USHORT mappedCapCount = (USHORT)COUNT_OF(mapping.sliders_map);
                 const USHORT sliderInfoMaxCount = COUNT_OF(mapping.deviceInfo.sliders_info);
                 for (ULONG i = 0; i < caps.NumberInputValueCaps; i++) {
                     USAGE usage = valueCaps[i].Range.UsageMin;
-                    if (usage != HID_USAGE_GENERIC_HATSWITCH) {
-                        u32 mapIdx = usage - HID_USAGE_GENERIC_X;
-                        if (mapIdx >= mappedCapCount) continue;
-                        s32 sliderIdx = mapping.sliders_map[mapIdx];
-                        if (sliderIdx < 0) continue;
-                    }
+                    if (usage < HID_USAGE_GENERIC_X || usage > HID_USAGE_GENERIC_HATSWITCH) continue;
                     if (mapping.deviceInfo.sliders_count >= sliderInfoMaxCount) break;
                     Pad::SliderInfo& sliderInfo = mapping.deviceInfo.sliders_info[mapping.deviceInfo.sliders_count++];
                     sliderInfo.usage = valueCaps[i].Range.UsageMin;
@@ -112,6 +106,7 @@ namespace Gamepad {
                 keys |= keyMask;
             }
 
+            const USHORT mappedCapCount = (USHORT)COUNT_OF(mapping.sliders_map);
             const USHORT valueCount = mapping.deviceInfo.sliders_count;
             for (USHORT i = 0; i < valueCount; i++) {
                 Pad::SliderInfo& sliderInfo = mapping.deviceInfo.sliders_info[i];
@@ -124,7 +119,9 @@ namespace Gamepad {
                     keys |= mapping.dpad_map[value];
                 } else {
                     u32 mapIdx = usage - HID_USAGE_GENERIC_X;
+                    if (mapIdx >= mappedCapCount) continue;
                     s32 sliderIdx = mapping.sliders_map[mapIdx];
+                    if (sliderIdx < 0) continue;
                     ULONG value;
                     HidP_GetUsageValue(HidP_Input, usagePage, 0, usage, &value, mapping.deviceInfo.preparsedData, (PCHAR)input->data.hid.bRawData, input->data.hid.dwSizeHid);
                     pad.sliders[sliderIdx] = TranslateRawSliderValue(sliderInfo, value, (Sliders::Enum)sliderIdx);
