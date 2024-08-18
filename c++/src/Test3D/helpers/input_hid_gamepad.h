@@ -29,13 +29,13 @@ namespace Gamepad {
 #endif
 
     Type::Enum ComputeControllerType(unsigned long vendorID, unsigned long productID) {
-        const DWORD sonyVendorID = 0x054C;
-        const DWORD ds4Gen1ProductID = 0x05C4;
-        const DWORD ds4Gen2ProductID = 0x09CC;
-        const DWORD microsoftVendorID = 0x045e;
-        const DWORD xbox360wireless3rdparty1 = 0x02a9;
-        const DWORD xbox360wireless3rdparty2 = 0x0291;
-        const DWORD xbox360wireless = 0x028e;
+        const unsigned long sonyVendorID = 0x054C;
+        const unsigned long ds4Gen1ProductID = 0x05C4;
+        const unsigned long ds4Gen2ProductID = 0x09CC;
+        const unsigned long microsoftVendorID = 0x045e;
+        const unsigned long xbox360wireless3rdparty1 = 0x02a9;
+        const unsigned long xbox360wireless3rdparty2 = 0x0291;
+        const unsigned long xbox360wireless = 0x028e;
         if (vendorID == sonyVendorID && (productID == ds4Gen1ProductID || productID == ds4Gen2ProductID)) {
             return Type::DUALSHOCK4;
         }

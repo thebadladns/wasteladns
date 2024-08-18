@@ -148,8 +148,8 @@ namespace Input {
         };
     
         struct DeviceInfo {
-            KeyInfo keys_info[64];
-            SliderInfo sliders_info[9];
+            KeyInfo keys_info[64]; // a bunch of them, same as Mapping::keys_map // todo: improve
+            SliderInfo sliders_info[9]; // from kHIDUsage_GD_X to kHIDUsage_GD_Wheel
             HatInfo hat_info;
             u32 keys_count;
             u32 sliders_count;

@@ -162,7 +162,7 @@ int main(int , char** ) {
             IOHIDManagerRef HIDManager = IOHIDManagerCreate(kCFAllocatorDefault, kIOHIDOptionsTypeNone);
             IOHIDManagerRegisterInputReportCallback(HIDManager, &::Input::Gamepad::processPads, &platform);
             IOHIDManagerOpen(HIDManager, kIOHIDOptionsTypeNone);
-            IOHIDManagerSetDeviceMatchingMultiple(HIDManager, (__bridge_transfer CFArrayRef)@[
+            IOHIDManagerSetDeviceMatchingMultiple(HIDManager, (__bridge CFArrayRef)@[
                 @{@(kIOHIDDeviceUsagePageKey): @(kHIDPage_GenericDesktop), @(kIOHIDDeviceUsageKey): @(kHIDUsage_GD_GamePad)},
                 @{@(kIOHIDDeviceUsagePageKey): @(kHIDPage_GenericDesktop), @(kIOHIDDeviceUsageKey): @(kHIDUsage_GD_Joystick)},
                 @{@(kIOHIDDeviceUsagePageKey): @(kHIDPage_GenericDesktop), @(kIOHIDDeviceUsageKey): @(kHIDUsage_GD_MultiAxisController)},

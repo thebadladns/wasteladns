@@ -138,9 +138,6 @@ namespace Input {
 
     namespace Gamepad {
 
-        struct KeyInfo {
-            USAGE usageMin;
-        };
         struct SliderInfo {
             USAGE usage;
             USAGE usagePage;
@@ -149,8 +146,7 @@ namespace Input {
         };
 
         struct DeviceInfo {
-            KeyInfo keys_info[64];
-            SliderInfo sliders_info[10];
+            SliderInfo sliders_info[10]; // from HID_USAGE_GENERIC_X to HID_USAGE_GENERIC_HATSWITCH
             _HIDP_PREPARSED_DATA* preparsedData;
             USAGE keys_usage_page;
             USAGE keys_usage_min;
