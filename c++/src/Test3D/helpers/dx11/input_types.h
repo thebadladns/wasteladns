@@ -136,27 +136,6 @@ namespace Input {
         }; };
     };
 
-    namespace Gamepad {
-
-        struct SliderInfo {
-            USAGE usage;
-            USAGE usagePage;
-            u32 min;
-            u32 max;
-        };
-
-        struct DeviceInfo {
-            SliderInfo sliders_info[10]; // from HID_USAGE_GENERIC_X to HID_USAGE_GENERIC_HATSWITCH
-            _HIDP_PREPARSED_DATA* preparsedData;
-            USAGE keys_usage_page;
-            USAGE keys_usage_min;
-            u32 keys_count;
-            u32 sliders_count;
-            bool loaded;
-        };
-
-        typedef HANDLE DeviceHandle;
-    };
     //namespace Gamepad {
     //    typedef LPDIRECTINPUTDEVICE8 Device;
     //};

@@ -132,9 +132,6 @@ namespace Input {
             , COUNT
         }; };
     };
-    namespace Gamepad {
-        typedef const char* DeviceHandle;
-    };
 };
 
 #endif // __WASTELADNS_INPUT_TYPES_GLFW_H__

@@ -33,10 +33,6 @@
 //#pragma comment(lib, "dinput8.lib")
 //#pragma comment (lib, "dxguid.lib")
 
-#include <hidsdi.h>
-#include <hidpi.h>
-#pragma comment(lib, "hid.lib")
-
 // runtime shader compilation hack
 #include <d3dcompiler.h> // Wall time: 8.460ms
 #pragma comment(lib, "d3dcompiler.lib")

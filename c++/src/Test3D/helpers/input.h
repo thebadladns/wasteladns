@@ -71,7 +71,7 @@ namespace Input {
             bool pressed(KeyMask::Enum keyMask) const {
                 return (curr_keys & keyMask) != 0 && (last_keys & keyMask) == 0;
             }
-            DeviceHandle deviceHandle;
+            u64 deviceHandle;
             u16 last_keys;
             u16 curr_keys;
             f32 sliders[Sliders::COUNT];

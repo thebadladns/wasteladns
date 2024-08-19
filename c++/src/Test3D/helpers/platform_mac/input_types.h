@@ -126,38 +126,6 @@ namespace Input {
             , COUNT
         }; };
     };
-    namespace Gamepad {
-    
-        struct KeyInfo {
-            IOHIDElementRef native;
-            u32 usage;
-            u64 min;
-            u64 max;
-        };
-        struct SliderInfo {
-            IOHIDElementRef native;
-            u32 usage;
-            u64 min;
-            u64 max;
-        };
-        struct HatInfo {
-            IOHIDElementRef native;
-            u32 usage;
-            u64 min;
-            u64 max;
-        };
-    
-        struct DeviceInfo {
-            KeyInfo keys_info[64]; // a bunch of them, same as Mapping::keys_map // todo: improve
-            SliderInfo sliders_info[9]; // from kHIDUsage_GD_X to kHIDUsage_GD_Wheel
-            HatInfo hat_info;
-            u32 keys_count;
-            u32 sliders_count;
-            bool loaded;
-        };
-
-        typedef IOHIDDeviceRef DeviceHandle;
-    };
 };
 
 #endif // __WASTELADNS_INPUT_TYPES_MACOS_H__

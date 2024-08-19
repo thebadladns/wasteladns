@@ -158,19 +158,7 @@ int main(int , char** ) {
         const f32 actualWindowHeight = [[window contentView] frame].size.height;
         
         // gamepad // todo: custom allocators?
-        @autoreleasepool {
-            IOHIDManagerRef HIDManager = IOHIDManagerCreate(kCFAllocatorDefault, kIOHIDOptionsTypeNone);
-            IOHIDManagerRegisterInputReportCallback(HIDManager, &::Input::Gamepad::processPads, &platform);
-            IOHIDManagerOpen(HIDManager, kIOHIDOptionsTypeNone);
-            IOHIDManagerSetDeviceMatchingMultiple(HIDManager, (__bridge CFArrayRef)@[
-                @{@(kIOHIDDeviceUsagePageKey): @(kHIDPage_GenericDesktop), @(kIOHIDDeviceUsageKey): @(kHIDUsage_GD_GamePad)},
-                @{@(kIOHIDDeviceUsagePageKey): @(kHIDPage_GenericDesktop), @(kIOHIDDeviceUsageKey): @(kHIDUsage_GD_Joystick)},
-                @{@(kIOHIDDeviceUsagePageKey): @(kHIDPage_GenericDesktop), @(kIOHIDDeviceUsageKey): @(kHIDUsage_GD_MultiAxisController)},
-            ]);
-            IOHIDManagerScheduleWithRunLoop(HIDManager,
-                                            CFRunLoopGetMain(),
-                                            kCFRunLoopDefaultMode);
-        }
+        ::Input::Gamepad::init_hid_pads_mac(platform);
         
         mach_timebase_info_data_t ticks_to_nanos;
         mach_timebase_info(&ticks_to_nanos);
@@ -263,7 +251,7 @@ int main(int , char** ) {
                         platform.input.mouse.scrolldy = mouse_queue.scrolly;
                         mouse_queue.scrollx = 0.f;
                         mouse_queue.scrolly = 0.f;
-                        // todo: gamepad
+                        // gamepads are handle by HIDmanager's callbacks
                     }
                     
                     [openGLContext makeCurrentContext];

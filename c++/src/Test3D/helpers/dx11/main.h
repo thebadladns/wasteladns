@@ -398,13 +398,7 @@ int WINAPI WinMain(
 
         // dinput gamepad
         //platform.input.padCount = init_dinput_pads(hWnd, platform.input.pads, COUNT_OF(platform.input.pads));
-
-        RAWINPUTDEVICE rid;
-        rid.usUsagePage = HID_USAGE_PAGE_GENERIC;
-        rid.usUsage = HID_USAGE_GENERIC_GAMEPAD;
-        rid.dwFlags = 0;
-        rid.hwndTarget = hWnd;
-        RegisterRawInputDevices(&rid, 1, sizeof(RAWINPUTDEVICE));
+        ::Input::Gamepad::init_hid_pads_win(hWnd);
 
         u64 start;
         QueryPerformanceCounter((LARGE_INTEGER*)&start);
@@ -482,7 +476,7 @@ int WINAPI WinMain(
                             break;
                             case WM_INPUT: {
                                 // arena copy, not by value (there will be an implicit free when the function ends)
-                                ::Input::Gamepad::processPads(platform.memory.scratchArenaRoot, platform.input.pads, platform.input.padCount, COUNT_OF(platform.input.pads), (HRAWINPUT)msg.lParam);
+                                ::Input::Gamepad::process_hid_pads_win(platform.memory.scratchArenaRoot, platform.input.pads, platform.input.padCount, COUNT_OF(platform.input.pads), (HRAWINPUT)msg.lParam);
                             }
                             break;
                             default: {

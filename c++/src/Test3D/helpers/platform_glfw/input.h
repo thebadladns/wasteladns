@@ -10,6 +10,8 @@
 namespace Input {
 namespace Gamepad {
 
+    typedef const char* DeviceHandle;
+
     void pollState(::Input::Gamepad::State* pads, u32& padCount, const u32 maxPadCount) {
         namespace Pad = ::Input::Gamepad;
 
@@ -20,7 +22,7 @@ namespace Gamepad {
             const char* guid = glfwGetJoystickGUID(joyId);
             u32 padToUpdate = padCount;
             for (u32 padidx = 0; padidx < padCount; padidx++) {
-                if (pads[padidx].deviceHandle == guid) { // hopefully checking the pointers is enough
+                if ((DeviceHandle)(pads[padidx].deviceHandle) == guid) { // hopefully checking the pointers is enough
                     padToUpdate = padidx;
                     break;
                 }
@@ -72,7 +74,7 @@ namespace Gamepad {
             if (padToUpdate == padCount) {
                 bool validpad = hasValidInput(pad);
                 if (validpad) {
-                    pad.deviceHandle = guid;
+                    pad.deviceHandle = (u64)guid;
                     #if __DEBUG
                     const char* name = glfwGetGamepadName(joyId);
                     strncpy(pad.name, name, sizeof(pad.name)); // todo: fix
