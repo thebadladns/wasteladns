@@ -59,36 +59,37 @@ namespace Gamepad {
     }
 
 	namespace Dualshock4 {
-        struct ControllerData {
-            u8 axis_left_x;
-            u8 axis_left_y;
-            u8 axis_right_x;
-            u8 axis_right_y;
-            u8 axis_dpad : 4;
-            bool button_square : 1;
-            bool button_cross : 1;
-            bool button_circle : 1;
-            bool button_triangle : 1;
-            bool button_left_1 : 1;
-            bool button_right_1 : 1;
-            bool button_left_2 : 1;
-            bool button_right_2 : 1;
-            bool button_share : 1;
-            bool button_options : 1;
-            bool button_left_3 : 1;
-            bool button_right_3 : 1;
-            bool button_ps : 1;
-            bool button_touch : 1;
-            u8 sequence_number : 6;
-            u8 axis_left_2;
-            u8 axis_right_2;
-            // for remaining buttons check https://github.com/chromium/chromium/blob/main/device/gamepad/dualshock4_controller.cc#L44
-        };
         void parseDualshock4(State& pad, const u8 reportID, const u8* data) {
             const u8* rawdata = data;
-            if (reportID == 0x11) { // Bluetooth, USB is 0x01
+            if (reportID == 0x11) { // full-feature input reports add 2 extra bytes to the header
                 rawdata = &(data[2]);
             }
+
+            struct ControllerData {
+                u8 axis_left_x;
+                u8 axis_left_y;
+                u8 axis_right_x;
+                u8 axis_right_y;
+                u8 axis_dpad : 4;
+                bool button_square : 1;
+                bool button_cross : 1;
+                bool button_circle : 1;
+                bool button_triangle : 1;
+                bool button_left_1 : 1;
+                bool button_right_1 : 1;
+                bool button_left_2 : 1;
+                bool button_right_2 : 1;
+                bool button_share : 1;
+                bool button_options : 1;
+                bool button_left_3 : 1;
+                bool button_right_3 : 1;
+                bool button_ps : 1;
+                bool button_touch : 1;
+                u8 sequence_number : 6;
+                u8 axis_left_2;
+                u8 axis_right_2;
+                // for remaining buttons check https://github.com/chromium/chromium/blob/main/device/gamepad/dualshock4_controller.cc#L44
+            };
 
             ControllerData& controller = *(ControllerData*)rawdata;
             u16 keys = 0;

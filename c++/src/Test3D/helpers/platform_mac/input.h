@@ -116,7 +116,7 @@ namespace Gamepad {
                             }
                             break;
                         }
-                    } else if (page == kHIDPage_Button || page == kHIDPage_Consumer) {
+                    } else if (page == kHIDPage_Button || page == kHIDPage_Consumer) { // see https://github.com/libsdl-org/SDL/issues/1973
                         if (mapping.deviceInfo.keys_count >= COUNT_OF(mapping.deviceInfo.keys_info)) break;
                         Pad::KeyInfo& keyInfo = mapping.deviceInfo.keys_info[mapping.deviceInfo.keys_count++];
                         keyInfo.native = native;

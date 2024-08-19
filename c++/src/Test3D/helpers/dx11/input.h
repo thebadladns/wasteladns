@@ -52,7 +52,8 @@ namespace Gamepad {
             pad.type = ComputeControllerType(vendorID, productID);
         }
         
-        // handle Dualshock4 separately, since it doesn't specify HID gamepad usages in the report
+        // handle Dualshock4 separately, since it doesn't always specify HID gamepad usages in the report
+        // see https://chromium-review.googlesource.com/c/chromium/src/+/1478406
         if (pad.type == ::Input::Gamepad::Type::DUALSHOCK4) {
             BYTE reportID = input->data.hid.bRawData[0];
             BYTE* rawdata = &input->data.hid.bRawData[1];
