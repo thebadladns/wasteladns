@@ -157,7 +157,7 @@ int main(int , char** ) {
         const int hotkeyMask = NSEventModifierFlagCommand | NSEventModifierFlagOption | NSEventModifierFlagControl | NSEventModifierFlagCapsLock;
         const f32 actualWindowHeight = [[window contentView] frame].size.height;
         
-        // gamepad // todo: custom allocators?
+        // gamepad
         ::Input::Gamepad::init_hid_pads_mac(platform);
         
         mach_timebase_info_data_t ticks_to_nanos;

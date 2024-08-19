@@ -390,51 +390,51 @@ void process_hid_pads_mac(void* context, IOReturn result, void* sender, IOHIDRep
                 const uint32_t page = IOHIDElementGetUsagePage(native);
                 if (page == kHIDPage_GenericDesktop) {
                     switch (usage) {
-                    case kHIDUsage_GD_X:
-                    case kHIDUsage_GD_Y:
-                    case kHIDUsage_GD_Z:
-                    case kHIDUsage_GD_Rx:
-                    case kHIDUsage_GD_Ry:
-                    case kHIDUsage_GD_Rz:
-                    case kHIDUsage_GD_Slider:
-                    case kHIDUsage_GD_Dial:
-                    case kHIDUsage_GD_Wheel: {
-                        if (mapping.deviceInfo.sliders_count >= COUNT_OF(mapping.deviceInfo.sliders_info)) break;
-                        SliderInfo& sliderInfo = mapping.deviceInfo.sliders_info[mapping.deviceInfo.sliders_count++];
-                        sliderInfo.native = native;
-                        sliderInfo.usage = usage;
+                        case kHIDUsage_GD_X:
+                        case kHIDUsage_GD_Y:
+                        case kHIDUsage_GD_Z:
+                        case kHIDUsage_GD_Rx:
+                        case kHIDUsage_GD_Ry:
+                        case kHIDUsage_GD_Rz:
+                        case kHIDUsage_GD_Slider:
+                        case kHIDUsage_GD_Dial:
+                        case kHIDUsage_GD_Wheel: {
+                            if (mapping.deviceInfo.sliders_count >= COUNT_OF(mapping.deviceInfo.sliders_info)) break;
+                            SliderInfo& sliderInfo = mapping.deviceInfo.sliders_info[mapping.deviceInfo.sliders_count++];
+                            sliderInfo.native = native;
+                            sliderInfo.usage = usage;
 
-                        sliderInfo.min = IOHIDElementGetLogicalMin(native);
-                        sliderInfo.max = IOHIDElementGetLogicalMax(native);
-                    }
-                                           break;
-                    case kHIDUsage_GD_Hatswitch: {
-                        HatInfo& hatInfo = mapping.deviceInfo.hat_info;
-                        hatInfo.native = native;
-                        hatInfo.usage = usage;
-                        hatInfo.min = IOHIDElementGetLogicalMin(native);
-                        hatInfo.max = IOHIDElementGetLogicalMax(native);
-                    }
-                                               break;
-                    case kHIDUsage_GD_DPadUp:
-                    case kHIDUsage_GD_DPadRight:
-                    case kHIDUsage_GD_DPadDown:
-                    case kHIDUsage_GD_DPadLeft:
-                    case kHIDUsage_GD_SystemMainMenu:
-                    case kHIDUsage_GD_Select:
-                    case kHIDUsage_GD_Start: {
-                        if (mapping.deviceInfo.keys_count >= COUNT_OF(mapping.deviceInfo.keys_info)) break;
-                        KeyInfo& keyInfo = mapping.deviceInfo.keys_info[mapping.deviceInfo.keys_count++];
-                        keyInfo.native = native;
-                        keyInfo.usage = usage;
-                        keyInfo.min = IOHIDElementGetLogicalMin(native);
-                        keyInfo.max = IOHIDElementGetLogicalMax(native);
-                    }
-                                           break;
+                            sliderInfo.min = IOHIDElementGetLogicalMin(native);
+                            sliderInfo.max = IOHIDElementGetLogicalMax(native);
+                        }
+                        break;
+                        case kHIDUsage_GD_Hatswitch: {
+                            HatInfo& hatInfo = mapping.deviceInfo.hat_info;
+                            hatInfo.native = native;
+                            hatInfo.usage = usage;
+                            hatInfo.min = IOHIDElementGetLogicalMin(native);
+                            hatInfo.max = IOHIDElementGetLogicalMax(native);
+                        }
+                        break;
+                        case kHIDUsage_GD_DPadUp:
+                        case kHIDUsage_GD_DPadRight:
+                        case kHIDUsage_GD_DPadDown:
+                        case kHIDUsage_GD_DPadLeft:
+                        case kHIDUsage_GD_SystemMainMenu:
+                        case kHIDUsage_GD_Select:
+                        case kHIDUsage_GD_Start: {
+                            if (mapping.deviceInfo.keys_count >= COUNT_OF(mapping.deviceInfo.keys_info)) break;
+                            KeyInfo& keyInfo = mapping.deviceInfo.keys_info[mapping.deviceInfo.keys_count++];
+                            keyInfo.native = native;
+                            keyInfo.usage = usage;
+                            keyInfo.min = IOHIDElementGetLogicalMin(native);
+                            keyInfo.max = IOHIDElementGetLogicalMax(native);
+                        }
+                        break;
                     }
                 }
                 else if (page == kHIDPage_Button || page == kHIDPage_Consumer) { // see https://github.com/libsdl-org/SDL/issues/1973
-                    if (mapping.deviceInfo.keys_count >= COUNT_OF(mapping.deviceInfo.keys_info)) break;
+                    if (mapping.deviceInfo.keys_count >= COUNT_OF(mapping.deviceInfo.keys_info)) continue;
                     KeyInfo& keyInfo = mapping.deviceInfo.keys_info[mapping.deviceInfo.keys_count++];
                     keyInfo.native = native;
                     keyInfo.usage = usage;
@@ -504,8 +504,9 @@ void process_hid_pads_mac(void* context, IOReturn result, void* sender, IOHIDRep
         }
     }
 }
-void init_hid_pads_mac(Platform& platform) {
+void init_hid_pads_mac(Platform::State& platform) {
     @autoreleasepool{
+        // todo: custom allocators?
         IOHIDManagerRef HIDManager = IOHIDManagerCreate(kCFAllocatorDefault, kIOHIDOptionsTypeNone);
         IOHIDManagerRegisterInputReportCallback(HIDManager, &process_hid_pads_mac, &platform);
         IOHIDManagerOpen(HIDManager, kIOHIDOptionsTypeNone);
