@@ -120,7 +120,7 @@ namespace Input {
             , RIGHT_ALT = GLFW_KEY_RIGHT_ALT
             , RIGHT_SUPER = GLFW_KEY_RIGHT_SUPER
             , MENU = GLFW_KEY_MENU
-            , COUNT
+            , COUNT = GLFW_KEY_LAST + 1
             , INVALID = -1
         }; };
     };

@@ -122,7 +122,7 @@ namespace Input {
             , RIGHT_SUPER = 0x15C
             , MENU = 0x15D
             , PAUSE = 0x045
-            , COUNT
+            , COUNT = 0x15E
             , INVALID = -1
         }; };
     };

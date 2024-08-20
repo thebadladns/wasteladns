@@ -114,7 +114,7 @@ namespace Input {
             , RIGHT_ALT = 0x3D
             , RIGHT_SUPER = 0x36
             , MENU = 0x6E
-            , COUNT
+            , COUNT = 0x7F
             , INVALID = -1
         }; };
     };
