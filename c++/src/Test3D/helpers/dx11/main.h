@@ -420,6 +420,10 @@ int WINAPI WinMain(
                     namespace KB = ::Input::Keyboard;
                     namespace MS = ::Input::Mouse;
 
+                    for (u32 i = 0; i < platform.input.padCount; i++) { // todo: improve release state
+                        platform.input.pads[i].last_keys = platform.input.pads[i].curr_keys;
+                    }
+
                     while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
                         // Process some messages locally instead of through a callback
                         // Keystrokes only need TranslateMessage when handling text

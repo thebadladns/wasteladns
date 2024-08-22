@@ -178,7 +178,6 @@ namespace Dualshock4 {
         case 6: keys |= (KeyMask::DPAD_LEFT); break;
         case 7: keys |= (KeyMask::DPAD_LEFT) | (KeyMask::DPAD_UP); break;
         }
-        pad.last_keys = pad.curr_keys;
         pad.curr_keys = keys;
 
         auto normalizeAxis = [](u8 v) {
@@ -304,7 +303,6 @@ void process_hid_pads_win(Allocator::Arena scratchArena, State* pads, u32& padCo
                 pad.sliders[sliderIdx] = TranslateRawSliderValue(sliderInfo, value, (Sliders::Enum)sliderIdx);
             }
         }
-        pad.last_keys = pad.curr_keys;
         pad.curr_keys = keys;
     }
 

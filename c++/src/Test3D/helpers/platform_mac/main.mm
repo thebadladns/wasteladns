@@ -179,6 +179,9 @@ int main(int , char** ) {
                     {
                         namespace KB = ::Input::Keyboard;
                         namespace MS = ::Input::Mouse;
+                        for (u32 i = 0; i < platform.input.padCount; i++) { // todo: improve release state
+                            platform.input.pads[i].last_keys = platform.input.pads[i].curr_keys;
+                        }
                         NSEvent *event = nil;
                         do {
                             event = [NSApp nextEventMatchingMask:NSEventMaskAny
