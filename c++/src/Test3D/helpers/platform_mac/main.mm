@@ -254,7 +254,7 @@ int main(int , char** ) {
                         platform.input.mouse.scrolldy = mouse_queue.scrolly;
                         mouse_queue.scrollx = 0.f;
                         mouse_queue.scrolly = 0.f;
-                        // gamepads are handle by HIDmanager's callbacks
+                        // gamepads are handled by HIDmanager's callbacks
                     }
                     
                     [openGLContext makeCurrentContext];

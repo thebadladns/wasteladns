@@ -168,7 +168,7 @@ namespace Dualshock4 {
         if (controller.button_right_1) keys |= KeyMask::R1;
         if (controller.button_left_2) keys |= KeyMask::L2;
         if (controller.button_right_2) keys |= KeyMask::R2;
-        switch (controller.axis_dpad) { // todo: simplify?
+        switch (controller.axis_dpad) {
         case 0: keys |= (KeyMask::DPAD_UP); break;
         case 1: keys |= (KeyMask::DPAD_UP) | (KeyMask::DPAD_RIGHT); break;
         case 2: keys |= (KeyMask::DPAD_RIGHT); break;
@@ -365,7 +365,8 @@ void process_hid_pads_mac(void* context, IOReturn result, void* sender, IOHIDRep
         pad.type = ComputeControllerType(vendorID, productID);
     }
 
-    // handle Dualshock4 separately, since it doesn't specify HID gamepad usages in the report
+    // handle Dualshock4 separately, since it doesn't always specify HID gamepad usages in the report
+    // see https://chromium-review.googlesource.com/c/chromium/src/+/1478406
     if (pad.type == Type::DUALSHOCK4) {
         Dualshock4::parseDualshock4(pad, report[0], &(report[1]));
     }
