@@ -338,9 +338,6 @@ void process_hid_pads_mac(void* context, IOReturn result, void* sender, IOHIDRep
 
     ::Platform::State& ctx = *(::Platform::State*)context;
     ::Platform::Input& input = ctx.input;
-    // explicit copy, scratch header will be cleared on function exit
-//        Allocator::Arena scratchArena = ctx.memory.scratchArenaRoot;
-//        ptrdiff_t align = 16;
 
     IOHIDDeviceRef device = (IOHIDDeviceRef)sender;
 
@@ -415,7 +412,8 @@ void process_hid_pads_mac(void* context, IOReturn result, void* sender, IOHIDRep
                             hatInfo.max = IOHIDElementGetLogicalMax(native);
                         }
                         break;
-                        case kHIDUsage_GD_DPadUp:
+                        // todo: figure out mappings with pads that use kHIDUsage_GD_DPadUp to kHIDUsage_GD_Start
+                        /*case kHIDUsage_GD_DPadUp:
                         case kHIDUsage_GD_DPadRight:
                         case kHIDUsage_GD_DPadDown:
                         case kHIDUsage_GD_DPadLeft:
@@ -430,9 +428,10 @@ void process_hid_pads_mac(void* context, IOReturn result, void* sender, IOHIDRep
                             keyInfo.max = IOHIDElementGetLogicalMax(native);
                         }
                         break;
+                         */
                     }
                 }
-                else if (page == kHIDPage_Button || page == kHIDPage_Consumer) { // see https://github.com/libsdl-org/SDL/issues/1973
+                else if (page == kHIDPage_Button /* || page == kHIDPage_Consumer */) { // todo: see https://github.com/libsdl-org/SDL/issues/1973
                     if (mapping.deviceInfo.keys_count >= COUNT_OF(mapping.deviceInfo.keys_info)) continue;
                     KeyInfo& keyInfo = mapping.deviceInfo.keys_info[mapping.deviceInfo.keys_count++];
                     keyInfo.native = native;
@@ -453,10 +452,9 @@ void process_hid_pads_mac(void* context, IOReturn result, void* sender, IOHIDRep
             KeyInfo& keysInfo = mapping.deviceInfo.keys_info[i];
             IOHIDValueRef valueRef;
             if (IOHIDDeviceGetValue(device, keysInfo.native, &valueRef) == kIOReturnSuccess) {
-                // todo: figure out mappins with pads that use kHIDUsage_GD_DPadUp to kHIDUsage_GD_Start, and kHIDPage_Consumer
-                u8 buttonIdx = i;//IOHIDValueGetIntegerValue(valueRef) - keysInfo.min; // maybe store usage min?
-                if (buttonIdx >= mappedKeysCount) continue;
                 if (IOHIDValueGetIntegerValue(valueRef) == 0) continue;
+                u8 buttonIdx = keysInfo.usage - kHIDUsage_Button_1;
+                if (buttonIdx >= mappedKeysCount) continue;
                 s32 keyMask = mapping.keys_map[buttonIdx];
                 if (keyMask == KeyMask::L2) pad.sliders[Sliders::TRIGGER_LEFT] = 1.f;
                 else if (keyMask == KeyMask::R2) pad.sliders[Sliders::TRIGGER_RIGHT] = 1.f;
@@ -483,7 +481,6 @@ void process_hid_pads_mac(void* context, IOReturn result, void* sender, IOHIDRep
                 pad.sliders[sliderIdx] = TranslateRawSliderValue(sliderInfo, value, (Sliders::Enum)sliderIdx);
             }
         }
-        pad.last_keys = pad.curr_keys;
         pad.curr_keys = keys;
     }
 
