@@ -467,6 +467,19 @@ namespace Driver {
         glEnableVertexAttribArray(1);
     }
     template <>
+    void bind_vertex_layout<Layout_TexturedSkinnedVec3>() {
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Layout_TexturedSkinnedVec3), &(((Layout_TexturedSkinnedVec3*)0)->pos));
+        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(Layout_TexturedSkinnedVec3), &(((Layout_TexturedSkinnedVec3*)0)->uv));
+        glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(Layout_TexturedSkinnedVec3), &(((Layout_TexturedSkinnedVec3*)0)->normal));
+        glVertexAttribPointer(3, 4, GL_BYTE, GL_FALSE, sizeof(Layout_TexturedSkinnedVec3), &(((Layout_TexturedSkinnedVec3*)0)->joint_indices));
+        glVertexAttribPointer(4, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(Layout_TexturedSkinnedVec3), &(((Layout_TexturedSkinnedVec3*)0)->joint_weights));
+        glEnableVertexAttribArray(0);
+        glEnableVertexAttribArray(1);
+        glEnableVertexAttribArray(2);
+        glEnableVertexAttribArray(3);
+        glEnableVertexAttribArray(4);
+    }
+    template <>
     void bind_vertex_layout<Layout_Vec3TexturedMapped>() {
         glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Layout_Vec3TexturedMapped), &(((Layout_Vec3TexturedMapped*)0)->pos));
         glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(Layout_Vec3TexturedMapped), &(((Layout_Vec3TexturedMapped*)0)->uv));
@@ -492,6 +505,19 @@ namespace Driver {
         glVertexAttribPointer(1, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(Layout_Vec3Color4B), &(((Layout_Vec3Color4B*)0)->color));
         glEnableVertexAttribArray(0);
         glEnableVertexAttribArray(1);
+    }
+    template <>
+    void bind_vertex_layout<Layout_Vec3Color4BSkinned>() {
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Layout_Vec3Color4BSkinned), &(((Layout_Vec3Color4BSkinned*)0)->pos));
+        glVertexAttribPointer(1, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(Layout_Vec3Color4BSkinned), &(((Layout_Vec3Color4BSkinned*)0)->color));
+        glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(Layout_Vec3Color4BSkinned), &(((Layout_Vec3Color4BSkinned*)0)->normal));
+        glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, sizeof(Layout_Vec3Color4BSkinned), &(((Layout_Vec3Color4BSkinned*)0)->joint_indices));
+        glVertexAttribPointer(4, 3, GL_FLOAT, GL_FALSE, sizeof(Layout_Vec3Color4BSkinned), &(((Layout_Vec3Color4BSkinned*)0)->joint_weights));
+        glEnableVertexAttribArray(0);
+        glEnableVertexAttribArray(1);
+        glEnableVertexAttribArray(2);
+        glEnableVertexAttribArray(3);
+        glEnableVertexAttribArray(4);
     }
     template <typename _vertexLayout, Shaders::PSCBufferUsage::Enum _cbufferUsage, Shaders::VSDrawType::Enum _drawType>
     void bind_cbuffers_to_shader(RscShaderSet<_vertexLayout, Layout_CNone, _cbufferUsage, _drawType>& ss, const RscCBuffer* cbuffers) {}

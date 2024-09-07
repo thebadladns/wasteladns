@@ -135,6 +135,14 @@ struct VS_src_selector<
     VSDrawType::Standard> {
     static const VS_src& value() { return vs_forward_base_Vec3Color4B_CBuffer_3DScene_Standard; }
 };
+template <>
+struct VS_src_selector<
+    VSTechnique::forward_base,
+    Layout_Vec3Color4BSkinned,
+    Layout_CBuffer_3DScene,
+    VSDrawType::Standard> {
+    static const VS_src& value() { return vs_forward_base_Vec3Color4B_CBuffer_3DScene_Standard; }
+};
 
 constexpr VS_src vs_forward_base_Vec3_CBuffer_3DScene_Instanced = {
 "forward_base_Vec3_CBuffer_3DScene_Instanced"
@@ -227,6 +235,52 @@ struct VS_src_selector<
     Layout_CBuffer_3DScene,
     VSDrawType::Standard> {
     static const VS_src& value() { return vs_forward_base_TexturedVec3_CBuffer_3DScene_Standard; }
+};
+
+// TODO: REWRITE
+constexpr VS_src vs_forward_base_TexturedSkinnedVec3_CBuffer_3DScene_Standard = {
+"forward_base_TexturedSkinnedVec3_CBuffer_3DScene_Standard",
+R"(
+cbuffer PerScene : register(b0) {
+    matrix projectionMatrix;
+    matrix viewMatrix;
+    float3 viewPosWS;
+    float padding1;
+    float3 lightPosWS;
+    float padding2;
+}
+cbuffer PerGroup : register(b1) {
+    matrix modelMatrix;
+    float4 groupColor;
+}
+cbuffer PerInstance : register(b2) {
+	matrix instanceMatrices[256];
+};
+struct AppData {
+    float3 posMS : POSITION;
+    float2 uv : TEXCOORD;
+};
+struct VertexOutput {
+    float2 uv : TEXCOORD;
+    float4 positionCS : SV_POSITION;
+};
+VertexOutput VS(AppData IN) {
+    VertexOutput OUT;
+    matrix vp = mul(projectionMatrix, viewMatrix);
+    float4 posWS = mul(modelMatrix, float4(IN.posMS, 1.f));
+    OUT.positionCS = mul(vp, posWS);
+    OUT.uv = IN.uv;
+    return OUT;
+}
+)"
+};
+template <>
+struct VS_src_selector<
+    VSTechnique::forward_base,
+    Layout_TexturedSkinnedVec3,
+    Layout_CBuffer_3DScene,
+    VSDrawType::Standard> {
+    static const VS_src& value() { return vs_forward_base_TexturedSkinnedVec3_CBuffer_3DScene_Standard; }
 };
 
 constexpr VS_src vs_forward_base_Layout_Vec3TexturedMapped_CBuffer_3DScene_Standard = {
@@ -359,6 +413,14 @@ struct PS_src_selector<
     static const PSMaterialUsage::Enum materialUsage = PSMaterialUsage::None;
     static const PS_src& value() { return ps_forward_untextured_unlit; }
 };
+template <>
+struct PS_src_selector<
+    PSTechnique::forward_untextured_unlit,
+    Layout_Vec3Color4BSkinned,
+    Layout_CNone> {
+    static const PSMaterialUsage::Enum materialUsage = PSMaterialUsage::None;
+    static const PS_src& value() { return ps_forward_untextured_unlit; }
+};
 
 const char* textured_unlit_samplers[] = { "diffuse" };
 constexpr PS_src ps_forward_textured_unlit_TexturedVec3_CBuffer_3DScene = {
@@ -402,6 +464,14 @@ template <>
 struct PS_src_selector<
     PSTechnique::forward_textured_unlit,
     Layout_TexturedVec3,
+    Layout_CNone> {
+    static const PSMaterialUsage::Enum materialUsage = PSMaterialUsage::Uses;
+    static const PS_src& value() { return ps_forward_textured_unlit_TexturedVec3_CBuffer_3DScene; }
+};
+template <>
+struct PS_src_selector<
+    PSTechnique::forward_textured_unlit,
+    Layout_TexturedSkinnedVec3,
     Layout_CNone> {
     static const PSMaterialUsage::Enum materialUsage = PSMaterialUsage::Uses;
     static const PS_src& value() { return ps_forward_textured_unlit_TexturedVec3_CBuffer_3DScene; }
@@ -450,6 +520,14 @@ template <>
 struct PS_src_selector<
     PSTechnique::forward_textured_unlitalphaclip,
     Layout_TexturedVec3,
+    Layout_CNone> {
+    static const PSMaterialUsage::Enum materialUsage = PSMaterialUsage::Uses;
+    static const PS_src& value() { return ps_forward_textured_unlitalphaclip_TexturedVec3_CBuffer_3DScene; }
+};
+template <>
+struct PS_src_selector<
+    PSTechnique::forward_textured_unlitalphaclip,
+    Layout_TexturedSkinnedVec3,
     Layout_CNone> {
     static const PSMaterialUsage::Enum materialUsage = PSMaterialUsage::Uses;
     static const PS_src& value() { return ps_forward_textured_unlitalphaclip_TexturedVec3_CBuffer_3DScene; }

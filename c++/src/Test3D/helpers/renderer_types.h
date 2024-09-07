@@ -73,6 +73,13 @@ namespace Renderer {
         Vec3 pos;
         Vec2 uv;
     };
+    struct Layout_TexturedSkinnedVec3 {
+        Vec3 pos;
+        Vec2 uv;
+        Vec3 normal;
+        u8 joint_weights[4];
+        u8 joint_indices[4];
+    };
     struct Layout_Vec3TexturedMapped {
         Vec3 pos;
         Vec2 uv;
@@ -87,6 +94,13 @@ namespace Renderer {
     struct Layout_Vec3Color4B {
         Vec3 pos;
         u32 color;
+    };
+    struct Layout_Vec3Color4BSkinned {
+        Vec3 pos;
+        u32 color;
+        Vec3 normal;
+        u8 joint_weights[4];
+        u8 joint_indices[4];
     };
     struct Layout_CNone {
         struct Buffers { enum Enum { Count }; };

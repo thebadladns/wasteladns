@@ -620,6 +620,7 @@ struct Drawlist_PerVertexBuffer<_vertexLayout, _cbufferLayout, Shaders::VSDrawTy
     GroupData groupData;
     static Type& null() { static Type data = {}; return data; }
 };
+
 template <typename _vertexLayout, typename _cbufferLayout>
 struct Drawlist_PerVertexBuffer<_vertexLayout, _cbufferLayout, Shaders::VSDrawType::Instanced> {
     typedef typename _cbufferLayout::GroupData GroupData;
@@ -631,6 +632,23 @@ struct Drawlist_PerVertexBuffer<_vertexLayout, _cbufferLayout, Shaders::VSDrawTy
     GroupData groupData;
     static Type& null() { static Type data = {}; return data; }
 };
+
+template <typename _vertexLayout, typename _cbufferLayout>
+struct Drawlist_PerVertexBufferSkinned {
+    typedef typename _cbufferLayout::GroupData GroupData;
+    typedef typename _cbufferLayout::Instance Instance; // posed world_to_joint matrices
+    typedef Drawlist_PerVertexBuffer<_vertexLayout, _cbufferLayout, Shaders::VSDrawType::Standard> Type;
+    Driver::RscIndexedBuffer<_vertexLayout> buffer;
+    tinystl::vector<Instance> instancedData;
+    GroupData groupData;
+    static Type& null() { static Type data = {}; return data; }
+};
+
+template <typename _cbufferLayout>
+struct Drawlist_PerVertexBuffer<Layout_Vec3Color4BSkinned, _cbufferLayout, Shaders::VSDrawType::Standard> : Drawlist_PerVertexBufferSkinned< Layout_Vec3Color4BSkinned, _cbufferLayout> {};
+template <typename _cbufferLayout>
+struct Drawlist_PerVertexBuffer<Layout_TexturedSkinnedVec3, _cbufferLayout, Shaders::VSDrawType::Standard> : Drawlist_PerVertexBufferSkinned< Layout_TexturedSkinnedVec3, _cbufferLayout> {};
+
 template<typename _vertexLayout, typename _cbufferLayout, Shaders::PSCBufferUsage::Enum _cbufferUsage>
 void dl_bind_and_draw_buffer(const Drawlist_PerVertexBuffer<_vertexLayout, _cbufferLayout, Shaders::VSDrawType::Standard>& buffer, Driver::RscCBuffer* cbuffers) {
     Driver::update_cbuffer(cbuffers[_cbufferLayout::Buffers::GroupData], buffer.groupData);
@@ -647,8 +665,8 @@ void dl_bind_and_draw_buffer(const Drawlist_PerVertexBuffer<_vertexLayout, _cbuf
         instancedBuffer.instanceMatrices[k] = buffer.instancedData[k];
     }
     Driver::update_cbuffer(cbuffers[_cbufferLayout::Buffers::InstanceData], instancedBuffer);
-    Renderer::Driver::bind_cbuffers(cbuffers, _cbufferLayout::Buffers::Count, { true, (bool)_cbufferUsage });
-    Renderer::Driver::bind_indexed_vertex_buffer(buffer.buffer);
+    Driver::bind_cbuffers(cbuffers, _cbufferLayout::Buffers::Count, { true, (bool)_cbufferUsage });
+    Driver::bind_indexed_vertex_buffer(buffer.buffer);
     draw_instances_indexed_vertex_buffer(buffer.buffer, size);
 }
 

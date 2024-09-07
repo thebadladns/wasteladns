@@ -611,6 +611,20 @@ namespace Driver {
         vs.inputLayout = inputLayout;
     }
     template <typename _bufferLayout, Shaders::VSDrawType::Enum _drawType>
+    void create_vertex_layout(RscVertexShader<Layout_TexturedSkinnedVec3, _bufferLayout, _drawType>& vs, void* shaderBufferPointer, u32 shaderBufferSize) {
+        ID3D11InputLayout* inputLayout;
+        D3D11_INPUT_ELEMENT_DESC vertexLayoutDesc[] = {
+              { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, offsetof(Layout_TexturedSkinnedVec3, pos), D3D11_INPUT_PER_VERTEX_DATA, 0 }
+            , { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, offsetof(Layout_TexturedSkinnedVec3, uv), D3D11_INPUT_PER_VERTEX_DATA, 0 }
+            , { "NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, offsetof(Layout_TexturedSkinnedVec3, normal), D3D11_INPUT_PER_VERTEX_DATA, 0 }
+            , { "BONEINDICES", 0, DXGI_FORMAT_R8G8B8A8_SINT, 0, offsetof(Layout_TexturedSkinnedVec3, joint_indices), D3D11_INPUT_PER_VERTEX_DATA, 0 }
+            , { "BONEWEIGHTS", 0, DXGI_FORMAT_R8G8B8A8_UNORM, 0, offsetof(Layout_TexturedSkinnedVec3, joint_weights), D3D11_INPUT_PER_VERTEX_DATA, 0 }
+        };
+        d3ddev->CreateInputLayout(vertexLayoutDesc, ARRAYSIZE(vertexLayoutDesc), shaderBufferPointer, shaderBufferSize, &inputLayout);
+
+        vs.inputLayout = inputLayout;
+    }
+    template <typename _bufferLayout, Shaders::VSDrawType::Enum _drawType>
     void create_vertex_layout(RscVertexShader<Layout_Vec3TexturedMapped, _bufferLayout, _drawType>& vs, void* shaderBufferPointer, u32 shaderBufferSize) {
         ID3D11InputLayout* inputLayout;
         D3D11_INPUT_ELEMENT_DESC vertexLayoutDesc[] = {
@@ -641,6 +655,20 @@ namespace Driver {
         D3D11_INPUT_ELEMENT_DESC vertexLayoutDesc[] = {
               { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, offsetof(Layout_Vec3Color4B, pos), D3D11_INPUT_PER_VERTEX_DATA, 0 }
             , { "COLOR", 0, DXGI_FORMAT_R8G8B8A8_UNORM, 0, offsetof(Layout_Vec3Color4B, color), D3D11_INPUT_PER_VERTEX_DATA, 0 }
+        };
+        d3ddev->CreateInputLayout(vertexLayoutDesc, ARRAYSIZE(vertexLayoutDesc), shaderBufferPointer, shaderBufferSize, &inputLayout);
+
+        vs.inputLayout = inputLayout;
+    }
+    template <typename _bufferLayout, Shaders::VSDrawType::Enum _drawType>
+    void create_vertex_layout(RscVertexShader<Layout_Vec3Color4BSkinned, _bufferLayout, _drawType>& vs, void* shaderBufferPointer, u32 shaderBufferSize) {
+        ID3D11InputLayout* inputLayout;
+        D3D11_INPUT_ELEMENT_DESC vertexLayoutDesc[] = {
+              { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, offsetof(Layout_Vec3Color4BSkinned, pos), D3D11_INPUT_PER_VERTEX_DATA, 0 }
+            , { "COLOR", 0, DXGI_FORMAT_R8G8B8A8_UNORM, 0, offsetof(Layout_Vec3Color4BSkinned, color), D3D11_INPUT_PER_VERTEX_DATA, 0 }
+            , { "NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, offsetof(Layout_Vec3Color4BSkinned, normal), D3D11_INPUT_PER_VERTEX_DATA, 0 }
+            , { "BONEINDICES", 0, DXGI_FORMAT_R8G8B8A8_SINT, 0, offsetof(Layout_Vec3Color4BSkinned, joint_indices), D3D11_INPUT_PER_VERTEX_DATA, 0 }
+            , { "BONEWEIGHTS", 0, DXGI_FORMAT_R8G8B8A8_UNORM, 0, offsetof(Layout_Vec3Color4BSkinned, joint_weights), D3D11_INPUT_PER_VERTEX_DATA, 0 }
         };
         d3ddev->CreateInputLayout(vertexLayoutDesc, ARRAYSIZE(vertexLayoutDesc), shaderBufferPointer, shaderBufferSize, &inputLayout);
 
