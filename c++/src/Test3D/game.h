@@ -16,6 +16,7 @@ const Scene_ModelLoadData assets[] = {
     , { "assets/meshes/bird.fbx", {1.f, 3.f, 2.23879f}, 1.f, true }
     , { "assets/meshes/bird.fbx", {0.f, 5.f, 2.23879f}, 1.f, false }
 };
+const u32 numCubes = 4;
 
 namespace Game
 {
@@ -64,7 +65,8 @@ namespace Game
         __DEBUGDEF(Renderer::Immediate::Buffer immediateBuffer;)
         Renderer::WindowProjection windowProjection;
         Renderer::PerspProjection perspProjection;
-        Renderer::Drawlist::Drawlist_node player_DLnode, particles_DLnode;
+        Renderer::Drawlist::Drawlist_node player_DLnode;
+        Renderer::Drawlist::Drawlist_game::Handle particles_DLhandle;
     };
 
     #if __DEBUG
@@ -180,14 +182,14 @@ namespace Game
                 Transform t; Math::identity4x4(t);
                 buffer.groupData.worldMatrix = t.matrix;
                 buffer.groupData.groupColor = Col(0.9f, 0.7f, 0.8f, 0.6f).RGBAv4();
-                buffer.instancedData.resize(4);
+                buffer.instancedData.resize(numCubes);
                 Renderer::create_indexed_vertex_buffer_from_untextured_cube(buffer.buffer, { 1.f, 1.f, 1.f });
 
                 Renderer::Drawlist::Drawlist_node nodeToAdd = {};
                 nodeToAdd.handle.DL_id::id = (u32)store.drawlist.DL::dl_perVertexBuffer.size();
                 nodeToAdd.worldTransform = t;
                 Math::identity4x4(nodeToAdd.localTransform);
-                game.renderMgr.particles_DLnode = nodeToAdd;
+                game.renderMgr.particles_DLhandle = nodeToAdd.handle;
                 store.drawlist.DL::dl_perVertexBuffer.push_back(buffer);
                 store.drawlist_nodes.push_back(nodeToAdd);
             }
@@ -300,22 +302,38 @@ namespace Game
                 // update drawlist
                 game.renderMgr.player_DLnode.worldTransform.matrix = Math::mult(game.player.transform.matrix, game.renderMgr.player_DLnode.localTransform.matrix);
                 Renderer::Drawlist::update_dl_node_matrix(game.renderMgr.renderScene.store.drawlist, game.renderMgr.player_DLnode);
-
-                using DL_instanced = Renderer::Drawlist::DL_unlit_instanced_t;
-                auto& instancedBuffer = game.renderMgr.renderScene.store.drawlist.DL_instanced::get_leaf(game.renderMgr.particles_DLnode.handle).instancedData;
-                u32 instanceSize = (u32)instancedBuffer.size();
-                for (u32 i = 0; i < instanceSize; i++) {
-                    float scaley = -1.f * Math::clamp(game.player.movementController.speed, 0.f, 1.5f);
-                    float scalez = 0.5f * Math::clamp(game.player.movementController.speed, 0.f, 1.f);
-                    Transform t;
-                    Math::identity4x4(t);
-                    t.pos = Math::add(game.player.transform.pos, Math::scale(game.player.transform.front, scaley * (i + 2)));
-                    t.pos.z = t.pos.z + scalez * (Math::cos((f32)platform.time.now * 10.f + i*2.f) - 1.5f);
-                    t.matrix.col0.x = 0.2f;
-                    t.matrix.col1.y = 0.2f;
-                    t.matrix.col2.z = 0.2f;
-                    instancedBuffer[i] = t.matrix;
+                
+                {
+                    using DL_instanced = Renderer::Drawlist::DL_unlit_instanced_t;
+                    Mat4 instance_matrices[numCubes];
+                    for (u32 i = 0; i < numCubes; i++) {
+                        float scaley = -1.f * Math::clamp(game.player.movementController.speed, 0.f, 1.5f);
+                        float scalez = 0.5f * Math::clamp(game.player.movementController.speed, 0.f, 1.f);
+                        Transform t;
+                        Math::identity4x4(t);
+                        t.pos = Math::add(game.player.transform.pos, Math::scale(game.player.transform.front, scaley * (i + 2)));
+                        t.pos.z = t.pos.z + scalez * (Math::cos((f32)platform.time.now * 10.f + i * 2.f) - 1.5f);
+                        t.matrix.col0.x = 0.2f;
+                        t.matrix.col1.y = 0.2f;
+                        t.matrix.col2.z = 0.2f;
+                        instance_matrices[i] = t.matrix;
+                    }
+                    Renderer::Drawlist::update_dl_node_instance_data(game.renderMgr.renderScene.store.drawlist, game.renderMgr.particles_DLhandle, instance_matrices);
                 }
+            }
+            
+            // animation
+            {
+                const f32 time = 0.f; // tmp hack
+                for (u32 i = 0; i < game.renderMgr.renderScene.store.animated_nodes.size(); i++) {
+                    Allocator::Arena scratchArena = game.memory.scratchArenaRoot;
+                    const Renderer::Animation::AnimatedNode& node = game.renderMgr.renderScene.store.animated_nodes[i];
+                    Mat4* world_to_joint = (Mat4*)Allocator::alloc_arena(scratchArena, node.skeleton.jointCount, 16);
+                    Renderer::Animation::updateAnimation(world_to_joint, node, time);
+                    
+                    Renderer::Drawlist::update_dl_node_instance_data(game.renderMgr.renderScene.store.drawlist, game.renderMgr.player_DLnode.handle, world_to_joint);
+                }
+                
             }
 
             // camera update

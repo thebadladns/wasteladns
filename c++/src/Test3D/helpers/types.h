@@ -19,4 +19,11 @@ typedef double f64;
 
 #define COUNT_OF(x) (sizeof(x)/sizeof(0[x]))
 
+template <bool, typename _A, typename _B>
+struct Conditional_t { typedef _A type; };
+template <typename _A, typename _B>
+struct Conditional_t<false, _A, _B> { typedef _B type; };
+template<bool _b>
+struct Bool_t { static const bool value = _b; };
+
 #endif // __WASTELADNS_TYPES_H__

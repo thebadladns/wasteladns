@@ -610,54 +610,60 @@ namespace FBX {
     }
 }
 
-template <typename _vertexLayout, typename _cbufferLayout, typename Shaders::VSDrawType::Enum _drawType>
+template <typename _vertexLayout, typename _cbufferLayout, typename Shaders::VSDrawType::Enum _drawType, typename Shaders::VSSkinType::Enum _skinType>
 struct Drawlist_PerVertexBuffer;
 template <typename _vertexLayout, typename _cbufferLayout>
-struct Drawlist_PerVertexBuffer<_vertexLayout, _cbufferLayout, Shaders::VSDrawType::Standard>{
+struct Drawlist_PerVertexBuffer<_vertexLayout, _cbufferLayout, Shaders::VSDrawType::Standard, Shaders::VSSkinType::Unskinned>{
     typedef typename _cbufferLayout::GroupData GroupData;
-    typedef Drawlist_PerVertexBuffer<_vertexLayout, _cbufferLayout, Shaders::VSDrawType::Standard> Type;
+    typedef Drawlist_PerVertexBuffer<_vertexLayout, _cbufferLayout, Shaders::VSDrawType::Standard, Shaders::VSSkinType::Unskinned> Type;
     Driver::RscIndexedBuffer<_vertexLayout> buffer;
     GroupData groupData;
     static Type& null() { static Type data = {}; return data; }
 };
-
 template <typename _vertexLayout, typename _cbufferLayout>
-struct Drawlist_PerVertexBuffer<_vertexLayout, _cbufferLayout, Shaders::VSDrawType::Instanced> {
-    typedef typename _cbufferLayout::GroupData GroupData;
-    typedef typename _cbufferLayout::Instance Instance;
-    typedef Drawlist_PerVertexBuffer<_vertexLayout, _cbufferLayout, Shaders::VSDrawType::Instanced> Type;
-
-    Driver::RscIndexedBuffer<_vertexLayout> buffer;
-    tinystl::vector<Instance> instancedData;
-    GroupData groupData;
-    static Type& null() { static Type data = {}; return data; }
-};
-
-template <typename _vertexLayout, typename _cbufferLayout>
-struct Drawlist_PerVertexBufferSkinned {
+struct Drawlist_PerVertexBuffer<_vertexLayout, _cbufferLayout, Shaders::VSDrawType::Standard, Shaders::VSSkinType::Skinned> {
     typedef typename _cbufferLayout::GroupData GroupData;
     typedef typename _cbufferLayout::Instance Instance; // posed world_to_joint matrices
-    typedef Drawlist_PerVertexBuffer<_vertexLayout, _cbufferLayout, Shaders::VSDrawType::Standard> Type;
+    typedef Drawlist_PerVertexBuffer<_vertexLayout, _cbufferLayout, Shaders::VSDrawType::Standard, Shaders::VSSkinType::Skinned> Type;
+    Driver::RscIndexedBuffer<_vertexLayout> buffer;
+    tinystl::vector<Instance> instancedData;
+    GroupData groupData;
+    static Type& null() { static Type data = {}; return data; }
+};
+template <typename _vertexLayout, typename _cbufferLayout>
+struct Drawlist_PerVertexBuffer<_vertexLayout, _cbufferLayout, Shaders::VSDrawType::Instanced, Shaders::VSSkinType::Unskinned> {
+    typedef typename _cbufferLayout::GroupData GroupData;
+    typedef typename _cbufferLayout::Instance Instance;
+    typedef Drawlist_PerVertexBuffer<_vertexLayout, _cbufferLayout, Shaders::VSDrawType::Instanced, Shaders::VSSkinType::Unskinned> Type;
+
     Driver::RscIndexedBuffer<_vertexLayout> buffer;
     tinystl::vector<Instance> instancedData;
     GroupData groupData;
     static Type& null() { static Type data = {}; return data; }
 };
 
-template <typename _cbufferLayout>
-struct Drawlist_PerVertexBuffer<Layout_Vec3Color4BSkinned, _cbufferLayout, Shaders::VSDrawType::Standard> : Drawlist_PerVertexBufferSkinned< Layout_Vec3Color4BSkinned, _cbufferLayout> {};
-template <typename _cbufferLayout>
-struct Drawlist_PerVertexBuffer<Layout_TexturedSkinnedVec3, _cbufferLayout, Shaders::VSDrawType::Standard> : Drawlist_PerVertexBufferSkinned< Layout_TexturedSkinnedVec3, _cbufferLayout> {};
-
 template<typename _vertexLayout, typename _cbufferLayout, Shaders::PSCBufferUsage::Enum _cbufferUsage>
-void dl_bind_and_draw_buffer(const Drawlist_PerVertexBuffer<_vertexLayout, _cbufferLayout, Shaders::VSDrawType::Standard>& buffer, Driver::RscCBuffer* cbuffers) {
+void dl_bind_and_draw_buffer(const Drawlist_PerVertexBuffer<_vertexLayout, _cbufferLayout, Shaders::VSDrawType::Standard, Shaders::VSSkinType::Unskinned>& buffer, Driver::RscCBuffer* cbuffers) {
     Driver::update_cbuffer(cbuffers[_cbufferLayout::Buffers::GroupData], buffer.groupData);
     Driver::bind_cbuffers(cbuffers, _cbufferLayout::Buffers::Count, { true, _cbufferUsage });
     Driver::bind_indexed_vertex_buffer(buffer.buffer);
     Driver::draw_indexed_vertex_buffer(buffer.buffer);
 }
 template<typename _vertexLayout, typename _cbufferLayout, Shaders::PSCBufferUsage::Enum _cbufferUsage>
-void dl_bind_and_draw_buffer(const Drawlist_PerVertexBuffer<_vertexLayout, _cbufferLayout, Shaders::VSDrawType::Instanced>& buffer, Driver::RscCBuffer* cbuffers) {
+void dl_bind_and_draw_buffer(const Drawlist_PerVertexBuffer<_vertexLayout, _cbufferLayout, Shaders::VSDrawType::Standard, Shaders::VSSkinType::Skinned>& buffer, Driver::RscCBuffer* cbuffers) {
+    Driver::update_cbuffer(cbuffers[_cbufferLayout::Buffers::GroupData], buffer.groupData);
+    typename _cbufferLayout::InstanceData instancedBuffer;
+    u32 size = (u32)buffer.instancedData.size();
+    for (u32 k = 0; k < size; k++) {
+        instancedBuffer.instanceMatrices[k] = buffer.instancedData[k];
+    }
+    Driver::update_cbuffer(cbuffers[_cbufferLayout::Buffers::InstanceData], instancedBuffer);
+    Driver::bind_cbuffers(cbuffers, _cbufferLayout::Buffers::Count, { true, (bool)_cbufferUsage });
+    Driver::bind_indexed_vertex_buffer(buffer.buffer);
+    draw_instances_indexed_vertex_buffer(buffer.buffer, size);
+}
+template<typename _vertexLayout, typename _cbufferLayout, Shaders::PSCBufferUsage::Enum _cbufferUsage>
+void dl_bind_and_draw_buffer(const Drawlist_PerVertexBuffer<_vertexLayout, _cbufferLayout, Shaders::VSDrawType::Instanced, Shaders::VSSkinType::Unskinned>& buffer, Driver::RscCBuffer* cbuffers) {
     Driver::update_cbuffer(cbuffers[_cbufferLayout::Buffers::GroupData], buffer.groupData);
     typename _cbufferLayout::InstanceData instancedBuffer;
     u32 size = (u32)buffer.instancedData.size();
@@ -674,21 +680,21 @@ template <typename _vertexLayout, typename _cbufferLayout, Shaders::PSTechnique:
 struct Drawlist_PerMaterial;
 template <typename _vertexLayout, typename _cbufferLayout, Shaders::VSDrawType::Enum _drawType>
 struct Drawlist_PerMaterial<_vertexLayout, _cbufferLayout, Shaders::PSTechnique::forward_textured_lit_normalmapped, _drawType> {
-    using DL_VertexBuffer = Drawlist_PerVertexBuffer<_vertexLayout, _cbufferLayout, _drawType>;
+    using DL_VertexBuffer = Drawlist_PerVertexBuffer<_vertexLayout, _cbufferLayout, _drawType, Shaders::SkinnedType<_vertexLayout>::type >;
     struct TextureTypes { enum Enum { Albedo, NormalMap, DepthMap, Count }; };
     Driver::RscTexture textures[TextureTypes::Count];
     tinystl::vector<DL_VertexBuffer> dl_perVertexBuffer;
 };
 template <typename _vertexLayout, typename _cbufferLayout, Shaders::VSDrawType::Enum _drawType>
 struct Drawlist_PerMaterial<_vertexLayout, _cbufferLayout, Shaders::PSTechnique::forward_textured_unlit, _drawType> {
-    using DL_VertexBuffer = Drawlist_PerVertexBuffer<_vertexLayout, _cbufferLayout, _drawType>;
+    using DL_VertexBuffer = Drawlist_PerVertexBuffer<_vertexLayout, _cbufferLayout, _drawType, Shaders::SkinnedType<_vertexLayout>::type>;
     struct TextureTypes { enum Enum { Diffuse, Count }; };
     Driver::RscTexture textures[TextureTypes::Count];
     tinystl::vector<DL_VertexBuffer> dl_perVertexBuffer;
 };
 template <typename _vertexLayout, typename _cbufferLayout, Shaders::VSDrawType::Enum _drawType>
 struct Drawlist_PerMaterial<_vertexLayout, _cbufferLayout, Shaders::PSTechnique::forward_textured_unlitalphaclip, _drawType> {
-    using DL_VertexBuffer = Drawlist_PerVertexBuffer<_vertexLayout, _cbufferLayout, _drawType>;
+    using DL_VertexBuffer = Drawlist_PerVertexBuffer<_vertexLayout, _cbufferLayout, _drawType, Shaders::SkinnedType<_vertexLayout>::type>;
     struct TextureTypes { enum Enum { Diffuse, Count }; };
     Driver::RscTexture textures[TextureTypes::Count];
     tinystl::vector<DL_VertexBuffer> dl_perVertexBuffer;
@@ -725,7 +731,7 @@ template <
       Shaders::VSTechnique::Enum _vsTechnique, Shaders::PSTechnique::Enum _psTechnique
     , typename _vertexLayout, typename _cbufferLayout, Shaders::PSCBufferUsage::Enum _cbufferUsage, Shaders::VSDrawType::Enum _drawType>
 struct Drawlist_PerShader<_vsTechnique, _psTechnique, Shaders::PSMaterialUsage::None, _vertexLayout, _cbufferLayout, _cbufferUsage, _drawType> {
-    using DL_VertexBuffer = Drawlist_PerVertexBuffer<_vertexLayout, _cbufferLayout, _drawType>;
+    using DL_VertexBuffer = Drawlist_PerVertexBuffer<_vertexLayout, _cbufferLayout, _drawType, Shaders::SkinnedType<_vertexLayout>::type>;
     enum : u32 { DL_id_null = 0xffffffff };
     struct Handle {
         u32 id = DL_id_null;
@@ -736,6 +742,9 @@ struct Drawlist_PerShader<_vsTechnique, _psTechnique, Shaders::PSMaterialUsage::
     Renderer::Driver::RscDepthStencilState* depthStencilState;
     tinystl::vector<DL_VertexBuffer> dl_perVertexBuffer;
     Renderer::Driver::Marker_t markerName;
+
+    constexpr static Shaders::VSSkinType::Enum skinType = Shaders::SkinnedType<_vertexLayout>::type;
+    constexpr static Shaders::VSDrawType::Enum drawType = _drawType;
 
     DL_VertexBuffer& get_leaf(Handle& handle) {
         if (handle.id != DL_id_null) {
@@ -748,7 +757,7 @@ template <
       Shaders::VSTechnique::Enum _vsTechnique, Shaders::PSTechnique::Enum _psTechnique
     , typename _vertexLayout, typename _cbufferLayout, Shaders::PSCBufferUsage::Enum _cbufferUsage, Shaders::VSDrawType::Enum _drawType>
 struct Drawlist_PerShader<_vsTechnique, _psTechnique, Shaders::PSMaterialUsage::Uses, _vertexLayout, _cbufferLayout, _cbufferUsage, _drawType> {
-    using DL_VertexBuffer = Drawlist_PerVertexBuffer<_vertexLayout, _cbufferLayout, _drawType>;
+    using DL_VertexBuffer = Drawlist_PerVertexBuffer<_vertexLayout, _cbufferLayout, _drawType, Shaders::SkinnedType<_vertexLayout>::type>;
     using DL_Material = Drawlist_PerMaterial<_vertexLayout, _cbufferLayout, _psTechnique, _drawType>;
     enum : u32 { DL_id_null = 0xffffffff };
     struct Handle {
@@ -766,6 +775,9 @@ struct Drawlist_PerShader<_vsTechnique, _psTechnique, Shaders::PSMaterialUsage::
     Renderer::Driver::RscDepthStencilState* depthStencilState;
     tinystl::vector<DL_Material> dl_perMaterial;
     Renderer::Driver::Marker_t markerName;
+
+    constexpr static Shaders::VSSkinType::Enum skinType = Shaders::SkinnedType<_vertexLayout>::type;
+    constexpr static Shaders::VSDrawType::Enum drawType = _drawType;
 
     DL_VertexBuffer& get_leaf(Handle& handle) {
         if (handle.id != DL_id_null) {

@@ -73,13 +73,38 @@ namespace Renderer {
         template<typename... _T>
         struct Drawlist_set : _T... {
             using Handle = Drawlist_handle<_T...>;
+
             template<typename _Op, typename... _Args>
-            void for_each(_Args&&... args) const {
-                int dummy[] = { 0, (_Op::template execute<_T>(args...), void(), 0)... };
+            static void for_each(_Args&&... args) {
+                int dummy[] = { 0, (_Op::template execute<_T>(args...), 0)... };
                 (void)dummy;
                 //(_Op::execute<_T>(args...), ...); // c++17 only
             }
         };
+
+        template<typename _drawlistSet, typename _drawlist>
+        struct ConcatDrawlist;
+        template<typename... _drawlists, typename _drawlist>
+        struct ConcatDrawlist<_drawlist, Drawlist_set<_drawlists...>> { using type = Drawlist_set<_drawlist, _drawlists...>; };
+        template <typename _filter, typename... _drawlists> struct DrawlistSubsetImpl;
+        template <typename _filter, typename _drawlist, typename... _drawlists>
+        struct DrawlistSubsetImpl<_filter, _drawlist, _drawlists...> {
+            using next = typename DrawlistSubsetImpl<_filter, _drawlists...>::type;
+            using type = typename Conditional_t<_filter::template cond<_drawlist>::value,
+                typename ConcatDrawlist<_drawlist, next>::type,
+                next
+            >::type;
+        };
+        template <typename _filter>
+        struct DrawlistSubsetImpl<_filter> {
+            using type = Drawlist_set<>;
+        };
+        template <typename _filter, typename _drawlistSet>
+        struct DrawlistSubset;
+        template <typename _filter, typename... _drawlists>
+		struct DrawlistSubset<_filter, Drawlist_set<_drawlists...>> {
+			using type = typename DrawlistSubsetImpl<_filter, _drawlists...>::type;
+		};
 
         typedef Drawlist_set <
             DL_color_t,
@@ -95,6 +120,12 @@ namespace Renderer {
             Drawlist_game::Handle handle;
         };
 
+        struct HasInstanceData_filter {
+            template<typename _drawlist>
+            using cond = Bool_t<_drawlist::skinType == Shaders::VSSkinType::Skinned || _drawlist::drawType == Shaders::VSDrawType::Instanced>;
+        };
+        typedef typename DrawlistSubset<HasInstanceData_filter, Drawlist_game>::type Drawlist_instanceData;
+
         struct update_worldmatrix_t {
             template <typename _T>
             static void execute(Drawlist_game& drawlist, const Drawlist_node& node) {
@@ -103,7 +134,20 @@ namespace Renderer {
             }
         };
         void update_dl_node_matrix(Drawlist_game& drawlist, const Drawlist_node& node) {
-            drawlist.for_each<update_worldmatrix_t>(drawlist, node);
+            Drawlist_game::for_each<update_worldmatrix_t>(drawlist, node);
+        }
+        
+        struct update_instance_data_t {
+            template<typename _T>
+            static void execute(Drawlist_game& drawlist, const Drawlist_game::Handle& handle, const Mat4* matrices) {
+                typename _T::DL_VertexBuffer& leafData = drawlist._T::get_leaf((typename _T::Handle&)(handle));
+                for (u32 i = 0; i < leafData.instancedData.size(); i++) {
+                    leafData.instancedData[i] = matrices[i];
+                }
+            }
+        };
+        void update_dl_node_instance_data(Drawlist_game& drawlist, const Drawlist_game::Handle& handle, const Mat4* matrices) {
+            Drawlist_instanceData::for_each<update_instance_data_t>(drawlist, handle, matrices);
         }
         struct draw_drawlist_t {
             template <typename _T>
@@ -112,7 +156,7 @@ namespace Renderer {
             }
         };
         void draw_drawlists(const Drawlist_game& drawlist, Driver::RscCBuffer* cbuffers) {
-            drawlist.for_each<draw_drawlist_t>(drawlist, cbuffers);
+            Drawlist_game::for_each<draw_drawlist_t>(drawlist, cbuffers);
         }
         struct draw_drawlist_nodes_t {
             template <typename _T>
@@ -122,30 +166,42 @@ namespace Renderer {
         };
         void draw_drawlist_nodes(const Drawlist_node* nodes, const u32 node_count, const Drawlist_game& drawlist, Driver::RscCBuffer* cbuffers) {
             for (u32 i = 0; i < node_count; i++) {
-                drawlist.for_each<draw_drawlist_nodes_t>(nodes[i], drawlist, cbuffers);
+                Drawlist_game::for_each<draw_drawlist_nodes_t>(nodes[i], drawlist, cbuffers);
             }
         }
     }
 
     namespace Animation {
         struct Skeleton {
-            Mat4* joint_to_parent; // the local space of the joint in relation to their parents (posed)
+            Mat4* joint_to_parent; // the local space of the joint in relation to their parents (posed, defaults to t-pose)
             Mat4* model_to_joint; // where each vertex is in relation to the joint
             s8* parentIndices; // the parent of each joint (-1 for root)
             u32 jointCount; // number of joints
         };
-        struct AnimationFrame {
+        struct Frame {
             Mat4* joint_to_parent; // must be initaliazed to Skeleton::jointCount
         };
-        struct AnimationClip {
-            AnimationFrame* frames;
+        struct Clip {
+            Frame* frames;
             u32 frameCount;
         };
         struct AnimatedNode {
             Skeleton skeleton; // constant mesh_to_joint matrices, as well as posed joint_to_parent matrices
-            AnimationClip clip; // harcoded: one clip per mesh
-            Renderer::Drawlist::Drawlist_node mesh_DLnode;
+            Clip* clips;
+            u32 clipCount;
+            Renderer::Drawlist::Drawlist_game::Handle mesh_DLhandle;
         };
+    
+        void updateAnimation(Mat4* world_to_joint, const AnimatedNode& node, const f32 time) {
+            // unused time for now
+            (void)time;
+            
+            memcpy(world_to_joint, node.skeleton.joint_to_parent, sizeof(Mat4) * node.skeleton.jointCount);
+            for (u32 jointIndex = 1; jointIndex < node.skeleton.jointCount; jointIndex++) {
+                s8 parentIndex = node.skeleton.parentIndices[jointIndex];
+                world_to_joint[jointIndex] = Math::mult(node.skeleton.model_to_joint[parentIndex], node.skeleton.joint_to_parent[jointIndex]);
+            }
+        }
     }
 
     typedef Shader_Params<
@@ -378,8 +434,7 @@ namespace Renderer {
                     if (index_in_dst_array[src_index] != 0xffffffff) {
                         // Vertex has been updated in the new buffer, copy the index over
                         stream_dst.indices.push_back(index_in_dst_array[src_index]);
-                    }
-                    else {
+                    } else {
                         // Vertex needs to be added to the new buffer, and index updated
                         u32 dst_index = (u32)stream_dst.vertices.size();
                         _vertexLayout vertex = {};
@@ -395,7 +450,7 @@ namespace Renderer {
                 }
             }
         }
-        void extract_anim_data(Animation::Skeleton& skeleton, Animation::AnimationClip& clip /*todo*/, const ufbx_mesh& mesh, const ufbx_scene& scene) {
+        void extract_anim_data(Animation::Skeleton& skeleton, Animation::Clip*& clips, u32& clipCount, const ufbx_mesh& mesh, const ufbx_scene& scene) {
 
             auto from_ufbx_mat = [](Mat4& dst, const ufbx_matrix& src) {
                 dst.col0.x = src.cols[0].x; dst.col0.y = src.cols[0].y; dst.col0.z = src.cols[0].z; dst.col0.w = 0.f;
@@ -435,6 +490,32 @@ namespace Renderer {
                     from_ufbx_mat(skeleton.joint_to_parent[joint_index], node.node_to_world);
                 }
             }
+            
+            // anim clip
+            clipCount = (u32)scene.anim_stacks.count;
+            clips = (Animation::Clip*)malloc(sizeof(Animation::Clip) * scene.anim_stacks.count);
+            for (size_t i = 0; i < clipCount; i++) {
+                const ufbx_anim_stack& stack = *(scene.anim_stacks.data[i]);
+                const f64 targetFramerate = 30.f;
+                const u32 maxFrames = 4096;
+                const f64 duration = (f32)stack.time_end - (f32)stack.time_begin;
+                const u32 numFrames = Math::clamp((u32)(duration * targetFramerate), 2u, maxFrames);
+                const f64 framerate = (numFrames-1) / duration;
+
+                Animation::Clip& clip = clips[i];
+                clip.frameCount = numFrames;
+                clip.frames = (Animation::Frame*)malloc(sizeof(Animation::Frame) * numFrames);
+                for (u32 f = 0; f < numFrames; f++) {
+                    Animation::Frame& frame = clip.frames[f];
+                    frame.joint_to_parent = (Mat4*)malloc(sizeof(Mat4) * jointCount);
+                    for (u32 joint_index = 0; joint_index < jointCount; joint_index++) {
+                        f64 time = stack.time_begin + (double)i / framerate;
+                        ufbx_node* node = scene.nodes.data[node_indices[joint_index]];
+                        ufbx_transform transform = ufbx_evaluate_transform(&stack.anim, node, time);
+                        from_ufbx_mat(frame.joint_to_parent[i], ufbx_transform_to_matrix(&transform));
+                    }
+                }
+            }
         }
         void load_with_material(Drawlist::Drawlist_node& nodeToAdd, Store& renderStore, const char* path, Allocator::Arena scratchArena) {
             ufbx_load_opts opts = {};
@@ -459,7 +540,7 @@ namespace Renderer {
                 // hack: only consider skinning from first mesh
                 Animation::AnimatedNode animatedNode = {};
                 if (scene->meshes.count && scene->meshes[0]->skin_deformers.count) {
-                    extract_anim_data(animatedNode.skeleton, animatedNode.clip, *(scene->meshes[0]), *scene);
+                    extract_anim_data(animatedNode.skeleton, animatedNode.clips, animatedNode.clipCount, *(scene->meshes[0]), *scene);
                 }
 
                 // 2x best case, less likely to resize
@@ -558,6 +639,7 @@ namespace Renderer {
                         DL_colorskinned_vb dlBuffer = {};
                         dlBuffer.buffer = rscBuffer;
                         dlBuffer.groupData = groupData;
+                        dlBuffer.instancedData.resize(animatedNode.skeleton.jointCount);
 
                         renderStore.drawlist.DL_colorskinned_t::dl_perVertexBuffer.push_back(dlBuffer);
                     }
@@ -578,6 +660,7 @@ namespace Renderer {
                                 DL_textured_vb dlBuffer = {};
                                 dlBuffer.buffer = rscBuffer;
                                 dlBuffer.groupData = groupData;
+                                dlBuffer.instancedData.resize(animatedNode.skeleton.jointCount);
                                 material.dl_perVertexBuffer.push_back(dlBuffer);
                             }
                             nodeToAdd.handle.DL_textured_id::material = (s16)renderStore.drawlist.DL_textured_t::dl_perMaterial.size();
@@ -601,6 +684,7 @@ namespace Renderer {
                                 DL_texturedalphaclip_vb dlBuffer = {};
                                 dlBuffer.buffer = rscBuffer;
                                 dlBuffer.groupData = groupData;
+                                dlBuffer.instancedData.resize(animatedNode.skeleton.jointCount);
                                 material.dl_perVertexBuffer.push_back(dlBuffer);
                             }
                             nodeToAdd.handle.DL_texturedalphaclip_id::material = (s16)renderStore.drawlist.DL_texturedalphaclip_t::dl_perMaterial.size();
@@ -608,7 +692,7 @@ namespace Renderer {
                         }
                     }
                     if (animatedNode.skeleton.jointCount) {
-                        animatedNode.mesh_DLnode = nodeToAdd;
+                        animatedNode.mesh_DLhandle = nodeToAdd.handle;
                         renderStore.animated_nodes.push_back(animatedNode);
                     }
                     renderStore.drawlist_nodes.push_back(nodeToAdd);
