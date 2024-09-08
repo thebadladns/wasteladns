@@ -141,23 +141,13 @@ namespace Renderer {
     namespace Shaders {
         template<typename _vsCBufferLayout, typename _psCBufferLayout>
         struct PSCBufferOpts;
-        template<>
-        struct PSCBufferOpts<Layout_CNone, Layout_CNone> {
-            constexpr static PSCBufferUsage::Enum cbufferUsage = PSCBufferUsage::None;
-        };
-        template<typename _vsCBufferLayout>
-        struct PSCBufferOpts<_vsCBufferLayout, _vsCBufferLayout> {
-            constexpr static PSCBufferUsage::Enum cbufferUsage = PSCBufferUsage::Uses;
-        };
-        template<typename _vsCBufferLayout>
-        struct PSCBufferOpts<_vsCBufferLayout, Layout_CNone> {
-            constexpr static PSCBufferUsage::Enum cbufferUsage = PSCBufferUsage::None;
-        };
+        template<> struct PSCBufferOpts<Layout_CNone, Layout_CNone> { enum { cbufferUsage = PSCBufferUsage::None }; };
+        template<typename _vsCBufferLayout> struct PSCBufferOpts<_vsCBufferLayout, _vsCBufferLayout> { enum { cbufferUsage = PSCBufferUsage::Uses }; };
+        template<typename _vsCBufferLayout> struct PSCBufferOpts<_vsCBufferLayout, Layout_CNone> { enum { cbufferUsage = PSCBufferUsage::None }; };
 
-        template <typename _vertexLayout>
-        struct SkinnedType { constexpr static VSSkinType::Enum type = VSSkinType::Unskinned; };
-        template<> struct SkinnedType<Layout_TexturedSkinnedVec3> { constexpr static VSSkinType::Enum type = VSSkinType::Skinned; };
-        template<> struct SkinnedType<Layout_Vec3Color4BSkinned> { constexpr static VSSkinType::Enum type = VSSkinType::Skinned; };
+        template <typename _vertexLayout> struct SkinnedType { enum Enum { type = VSSkinType::Unskinned }; };
+        template<> struct SkinnedType<Layout_TexturedSkinnedVec3> { enum Enum { type = VSSkinType::Skinned }; };
+        template<> struct SkinnedType<Layout_Vec3Color4BSkinned> { enum Enum { type = VSSkinType::Skinned }; };
     }
 
     // Convenience shapes

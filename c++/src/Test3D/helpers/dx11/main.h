@@ -63,7 +63,7 @@
 //
 //    ::Input::Gamepad::State& pad = ctx.pads[padindex];
 //    HRESULT hr = ctx.di->CreateDevice(pdidInstance->guidInstance, &pad.device, nullptr);
-//    strncpy_s(pad.name, pdidInstance->tszProductName, sizeof(pad.name));
+//    Platform::strncpy(pad.name, pdidInstance->tszProductName, sizeof(pad.name));
 //
 //    ctx.padcount++;
 //

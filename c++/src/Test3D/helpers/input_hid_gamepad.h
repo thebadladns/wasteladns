@@ -312,7 +312,7 @@ void process_hid_pads_win(Allocator::Arena scratchArena, State* pads, u32& padCo
         if (validpad) {
             padCount++; // acknowledge the current pad
             pad.deviceHandle = (u64)input->header.hDevice;
-            __DEBUGEXP(strncpy_s(pad.name, names[pad.type], sizeof(pad.name)));
+            __DEBUGEXP(Platform::strncpy(pad.name, names[pad.type], sizeof(pad.name)));
 
             #if __DEBUG
             char name[256];
@@ -490,7 +490,7 @@ void process_hid_pads_mac(void* context, IOReturn result, void* sender, IOHIDRep
         if (validpad) {
             input.padCount++; // acknowledge the current pad
             pad.deviceHandle = (u64)device;
-            __DEBUGEXP(strncpy(pad.name, names[pad.type], sizeof(pad.name)));
+            __DEBUGEXP(Platform::strncpy(pad.name, names[pad.type], sizeof(pad.name)));
 
             #if __DEBUG
             u64 vendorID = [(__bridge NSNumber*)IOHIDDeviceGetProperty(device, CFSTR(kIOHIDVendorIDKey)) unsignedIntegerValue];

@@ -90,7 +90,7 @@ namespace Renderer {
         template <typename _filter, typename _drawlist, typename... _drawlists>
         struct DrawlistSubsetImpl<_filter, _drawlist, _drawlists...> {
             using next = typename DrawlistSubsetImpl<_filter, _drawlists...>::type;
-            using type = typename Conditional_t<_filter::template cond<_drawlist>::value,
+            using type = typename Conditional_t<_filter::template eval<_drawlist>::eval::v,
                 typename ConcatDrawlist<_drawlist, next>::type,
                 next
             >::type;
@@ -122,7 +122,9 @@ namespace Renderer {
 
         struct HasInstanceData_filter {
             template<typename _drawlist>
-            using cond = Bool_t<_drawlist::skinType == Shaders::VSSkinType::Skinned || _drawlist::drawType == Shaders::VSDrawType::Instanced>;
+            struct eval { enum { v = (Shaders::VSSkinType::Enum)_drawlist::DL_SkinnedType::type == Shaders::VSSkinType::Skinned
+                                  || (Shaders::VSDrawType::Enum)_drawlist::DL_DrawType::type == Shaders::VSDrawType::Instanced
+            }; };
         };
         typedef typename DrawlistSubset<HasInstanceData_filter, Drawlist_game>::type Drawlist_instanceData;
 

@@ -77,7 +77,7 @@ namespace Gamepad {
                     pad.deviceHandle = (u64)guid;
                     #if __DEBUG
                     const char* name = glfwGetGamepadName(joyId);
-                    strncpy(pad.name, name, sizeof(pad.name)); // todo: fix
+                    Platform::strncpy(pad.name, name, sizeof(pad.name));
                     #endif
                     padCount++;
                 }

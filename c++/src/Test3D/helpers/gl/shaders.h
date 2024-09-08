@@ -418,7 +418,7 @@ struct PS_src_selector<
     PSTechnique::forward_untextured_unlit,
     Layout_Vec3,
     Layout_CNone> {
-    static const PSMaterialUsage::Enum materialUsage = PSMaterialUsage::None;
+    enum { materialUsage = PSMaterialUsage::None };
     static const PS_src& value() { return ps_forward_untextured_unlit; }
 };
 
@@ -427,7 +427,7 @@ struct PS_src_selector<
     PSTechnique::forward_untextured_unlit,
     Layout_Vec2Color4B,
     Layout_CNone> {
-    static const PSMaterialUsage::Enum materialUsage = PSMaterialUsage::None;
+    enum { materialUsage = PSMaterialUsage::None };
     static const PS_src& value() { return ps_forward_untextured_unlit; }
 };
 template <>
@@ -435,7 +435,7 @@ struct PS_src_selector<
     PSTechnique::forward_untextured_unlit,
     Layout_Vec3Color4B,
     Layout_CNone> {
-    static const PSMaterialUsage::Enum materialUsage = PSMaterialUsage::None;
+    enum { materialUsage = PSMaterialUsage::None };
     static const PS_src& value() { return ps_forward_untextured_unlit; }
 };
 template <>
@@ -443,7 +443,7 @@ struct PS_src_selector<
     PSTechnique::forward_untextured_unlit,
     Layout_Vec3Color4BSkinned,
     Layout_CNone> {
-    static const PSMaterialUsage::Enum materialUsage = PSMaterialUsage::None;
+    enum { materialUsage = PSMaterialUsage::None };
     static const PS_src& value() { return ps_forward_untextured_unlit; }
 };
 
@@ -486,7 +486,7 @@ struct PS_src_selector<
     PSTechnique::forward_textured_unlit,
     Layout_TexturedVec3,
     Layout_CNone> {
-    static const PSMaterialUsage::Enum materialUsage = PSMaterialUsage::Uses;
+    enum { materialUsage = PSMaterialUsage::Uses };
     static const PS_src& value() { return ps_forward_textured_unlit_TexturedVec3_CBuffer_3DScene; }
 };
 template <>
@@ -494,7 +494,7 @@ struct PS_src_selector<
     PSTechnique::forward_textured_unlit,
     Layout_TexturedSkinnedVec3,
     Layout_CNone> {
-    static const PSMaterialUsage::Enum materialUsage = PSMaterialUsage::Uses;
+    enum { materialUsage = PSMaterialUsage::Uses };
     static const PS_src& value() { return ps_forward_textured_unlit_TexturedVec3_CBuffer_3DScene; }
 };
 
@@ -538,7 +538,7 @@ struct PS_src_selector<
     PSTechnique::forward_textured_unlitalphaclip,
     Layout_TexturedVec3,
     Layout_CNone> {
-    static const PSMaterialUsage::Enum materialUsage = PSMaterialUsage::Uses;
+    enum { materialUsage = PSMaterialUsage::Uses };
     static const PS_src& value() { return ps_forward_textured_unlitalphaclip_TexturedVec3_CBuffer_3DScene; }
 };
 template <>
@@ -546,7 +546,7 @@ struct PS_src_selector<
     PSTechnique::forward_textured_unlitalphaclip,
     Layout_TexturedSkinnedVec3,
     Layout_CNone> {
-    static const PSMaterialUsage::Enum materialUsage = PSMaterialUsage::Uses;
+    enum { materialUsage = PSMaterialUsage::Uses };
     static const PS_src& value() { return ps_forward_textured_unlitalphaclip_TexturedVec3_CBuffer_3DScene; }
 };
 
@@ -609,7 +609,7 @@ struct PS_src_selector<
     PSTechnique::forward_textured_lit_normalmapped,
     Layout_Vec3TexturedMapped,
     Layout_CBuffer_3DScene> {
-    static const PSMaterialUsage::Enum materialUsage = PSMaterialUsage::Uses;
+    enum { materialUsage = PSMaterialUsage::Uses };
     static const PS_src& value() { return ps_forward_textured_lit_normalmapped_Vec3TexturedMapped_CBuffer_3DScene; }
 };
 
@@ -640,7 +640,7 @@ struct PS_src_selector<
     PSTechnique::fullscreen_blit_textured,
     Layout_TexturedVec3,
     Layout_CNone> {
-    static const PSMaterialUsage::Enum materialUsage = PSMaterialUsage::Uses;
+    enum { materialUsage = PSMaterialUsage::Uses };
     static const PS_src& value() { return ps_fullscreen_blit_textured; }
 };
 

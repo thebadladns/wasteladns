@@ -680,21 +680,21 @@ template <typename _vertexLayout, typename _cbufferLayout, Shaders::PSTechnique:
 struct Drawlist_PerMaterial;
 template <typename _vertexLayout, typename _cbufferLayout, Shaders::VSDrawType::Enum _drawType>
 struct Drawlist_PerMaterial<_vertexLayout, _cbufferLayout, Shaders::PSTechnique::forward_textured_lit_normalmapped, _drawType> {
-    using DL_VertexBuffer = Drawlist_PerVertexBuffer<_vertexLayout, _cbufferLayout, _drawType, Shaders::SkinnedType<_vertexLayout>::type >;
+    using DL_VertexBuffer = Drawlist_PerVertexBuffer<_vertexLayout, _cbufferLayout, _drawType, (Shaders::VSSkinType::Enum) Shaders::SkinnedType<_vertexLayout>::type>;
     struct TextureTypes { enum Enum { Albedo, NormalMap, DepthMap, Count }; };
     Driver::RscTexture textures[TextureTypes::Count];
     tinystl::vector<DL_VertexBuffer> dl_perVertexBuffer;
 };
 template <typename _vertexLayout, typename _cbufferLayout, Shaders::VSDrawType::Enum _drawType>
 struct Drawlist_PerMaterial<_vertexLayout, _cbufferLayout, Shaders::PSTechnique::forward_textured_unlit, _drawType> {
-    using DL_VertexBuffer = Drawlist_PerVertexBuffer<_vertexLayout, _cbufferLayout, _drawType, Shaders::SkinnedType<_vertexLayout>::type>;
+    using DL_VertexBuffer = Drawlist_PerVertexBuffer<_vertexLayout, _cbufferLayout, _drawType, (Shaders::VSSkinType::Enum) Shaders::SkinnedType<_vertexLayout>::type>;
     struct TextureTypes { enum Enum { Diffuse, Count }; };
     Driver::RscTexture textures[TextureTypes::Count];
     tinystl::vector<DL_VertexBuffer> dl_perVertexBuffer;
 };
 template <typename _vertexLayout, typename _cbufferLayout, Shaders::VSDrawType::Enum _drawType>
 struct Drawlist_PerMaterial<_vertexLayout, _cbufferLayout, Shaders::PSTechnique::forward_textured_unlitalphaclip, _drawType> {
-    using DL_VertexBuffer = Drawlist_PerVertexBuffer<_vertexLayout, _cbufferLayout, _drawType, Shaders::SkinnedType<_vertexLayout>::type>;
+    using DL_VertexBuffer = Drawlist_PerVertexBuffer<_vertexLayout, _cbufferLayout, _drawType, (Shaders::VSSkinType::Enum) Shaders::SkinnedType<_vertexLayout>::type>;
     struct TextureTypes { enum Enum { Diffuse, Count }; };
     Driver::RscTexture textures[TextureTypes::Count];
     tinystl::vector<DL_VertexBuffer> dl_perVertexBuffer;
@@ -731,7 +731,9 @@ template <
       Shaders::VSTechnique::Enum _vsTechnique, Shaders::PSTechnique::Enum _psTechnique
     , typename _vertexLayout, typename _cbufferLayout, Shaders::PSCBufferUsage::Enum _cbufferUsage, Shaders::VSDrawType::Enum _drawType>
 struct Drawlist_PerShader<_vsTechnique, _psTechnique, Shaders::PSMaterialUsage::None, _vertexLayout, _cbufferLayout, _cbufferUsage, _drawType> {
-    using DL_VertexBuffer = Drawlist_PerVertexBuffer<_vertexLayout, _cbufferLayout, _drawType, Shaders::SkinnedType<_vertexLayout>::type>;
+    using DL_VertexBuffer = Drawlist_PerVertexBuffer<_vertexLayout, _cbufferLayout, _drawType, (Shaders::VSSkinType::Enum) Shaders::SkinnedType<_vertexLayout>::type>;
+    using DL_SkinnedType = Shaders::SkinnedType<_vertexLayout>;
+    using DL_DrawType = enum { type = _drawType };
     enum : u32 { DL_id_null = 0xffffffff };
     struct Handle {
         u32 id = DL_id_null;
@@ -742,9 +744,6 @@ struct Drawlist_PerShader<_vsTechnique, _psTechnique, Shaders::PSMaterialUsage::
     Renderer::Driver::RscDepthStencilState* depthStencilState;
     tinystl::vector<DL_VertexBuffer> dl_perVertexBuffer;
     Renderer::Driver::Marker_t markerName;
-
-    constexpr static Shaders::VSSkinType::Enum skinType = Shaders::SkinnedType<_vertexLayout>::type;
-    constexpr static Shaders::VSDrawType::Enum drawType = _drawType;
 
     DL_VertexBuffer& get_leaf(Handle& handle) {
         if (handle.id != DL_id_null) {
@@ -757,8 +756,10 @@ template <
       Shaders::VSTechnique::Enum _vsTechnique, Shaders::PSTechnique::Enum _psTechnique
     , typename _vertexLayout, typename _cbufferLayout, Shaders::PSCBufferUsage::Enum _cbufferUsage, Shaders::VSDrawType::Enum _drawType>
 struct Drawlist_PerShader<_vsTechnique, _psTechnique, Shaders::PSMaterialUsage::Uses, _vertexLayout, _cbufferLayout, _cbufferUsage, _drawType> {
-    using DL_VertexBuffer = Drawlist_PerVertexBuffer<_vertexLayout, _cbufferLayout, _drawType, Shaders::SkinnedType<_vertexLayout>::type>;
+    using DL_VertexBuffer = Drawlist_PerVertexBuffer<_vertexLayout, _cbufferLayout, _drawType, (Shaders::VSSkinType::Enum) Shaders::SkinnedType<_vertexLayout>::type>;
     using DL_Material = Drawlist_PerMaterial<_vertexLayout, _cbufferLayout, _psTechnique, _drawType>;
+    using DL_SkinnedType = Shaders::SkinnedType<_vertexLayout>;
+    using DL_DrawType = enum { type = _drawType };
     enum : u32 { DL_id_null = 0xffffffff };
     struct Handle {
         union {
@@ -776,9 +777,6 @@ struct Drawlist_PerShader<_vsTechnique, _psTechnique, Shaders::PSMaterialUsage::
     tinystl::vector<DL_Material> dl_perMaterial;
     Renderer::Driver::Marker_t markerName;
 
-    constexpr static Shaders::VSSkinType::Enum skinType = Shaders::SkinnedType<_vertexLayout>::type;
-    constexpr static Shaders::VSDrawType::Enum drawType = _drawType;
-
     DL_VertexBuffer& get_leaf(Handle& handle) {
         if (handle.id != DL_id_null) {
             return dl_perMaterial[handle.material].dl_perVertexBuffer[handle.buffer];
@@ -794,7 +792,7 @@ struct Shader_Params {
     typedef Shaders::VS_src_selector<_vsTechnique, _vertexLayout, _vsCBufferLayout, _drawType> vs_selector;
     typedef Shaders::PS_src_selector<_psTechnique, _vertexLayout, _psCBufferLayout> ps_selector;
     typedef Shaders::PSCBufferOpts<_vsCBufferLayout, _psCBufferLayout> cbufferOpts;
-    typedef Renderer::Driver::RscShaderSet<_vertexLayout, _vsCBufferLayout, cbufferOpts::cbufferUsage, _drawType> ShaderSet;
+    typedef Renderer::Driver::RscShaderSet<_vertexLayout, _vsCBufferLayout, (Shaders::PSCBufferUsage::Enum) cbufferOpts::cbufferUsage, _drawType> ShaderSet;
 
     static void create_shader_from_techniques(ShaderSet& shaderSet, Driver::RscCBuffer* cbuffers) {
 
@@ -802,7 +800,7 @@ struct Shader_Params {
         const Shaders::PS_src& psSrc = ps_selector::value();
 
         Renderer::Driver::RscVertexShader<_vertexLayout, _vsCBufferLayout, _drawType> rscVS;
-        Renderer::Driver::RscPixelShader<cbufferOpts::cbufferUsage> rscPS;
+        Renderer::Driver::RscPixelShader<(Shaders::PSCBufferUsage::Enum)cbufferOpts::cbufferUsage> rscPS;
         Renderer::Driver::ShaderResult pixelResult;
         Renderer::Driver::ShaderResult vertexResult;
         pixelResult = Renderer::Driver::create_shader_ps(rscPS, { psSrc.src, (u32)strlen(psSrc.src) });
@@ -832,7 +830,7 @@ template <
     , typename _vertexLayout, typename _vsCBufferLayout, typename _psCBufferLayout, Shaders::VSDrawType::Enum _drawType>
 struct Drawlist_TypeContext {
     using shader_params = Shader_Params<_vsTechnique, _psTechnique, _vertexLayout, _vsCBufferLayout, _psCBufferLayout, _drawType>;
-    using type = Drawlist_PerShader < _vsTechnique, _psTechnique, shader_params::ps_selector::materialUsage, _vertexLayout, _vsCBufferLayout, shader_params::cbufferOpts::cbufferUsage, _drawType>;
+    using type = Drawlist_PerShader < _vsTechnique, _psTechnique, (Shaders::PSMaterialUsage::Enum) shader_params::ps_selector::materialUsage, _vertexLayout, _vsCBufferLayout, (Shaders::PSCBufferUsage::Enum) shader_params::cbufferOpts::cbufferUsage, _drawType>;
 
     static void load_dl_technique(type& dl_shader, Renderer::Driver::RscCBuffer* cbuffers) {
         shader_params::create_shader_from_techniques(dl_shader.shader, cbuffers);

@@ -304,7 +304,6 @@ namespace Game
                 Renderer::Drawlist::update_dl_node_matrix(game.renderMgr.renderScene.store.drawlist, game.renderMgr.player_DLnode);
                 
                 {
-                    using DL_instanced = Renderer::Drawlist::DL_unlit_instanced_t;
                     Mat4 instance_matrices[numCubes];
                     for (u32 i = 0; i < numCubes; i++) {
                         float scaley = -1.f * Math::clamp(game.player.movementController.speed, 0.f, 1.5f);
