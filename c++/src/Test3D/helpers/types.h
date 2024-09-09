@@ -19,9 +19,11 @@ typedef double f64;
 
 #define COUNT_OF(x) (sizeof(x)/sizeof(0[x]))
 
-template <bool, typename _A, typename _B>
-struct Conditional_t { typedef _A type; };
-template <typename _A, typename _B>
-struct Conditional_t<false, _A, _B> { typedef _B type; };
+template <bool>
+struct ConditionalImpl { template<typename _true, typename _false> using type = _true; };
+template<>
+struct ConditionalImpl<false> { template<typename _true, typename _false> using type = _false; };
+template<bool _b, class _true, class _false>
+using Conditional_t = typename ConditionalImpl<_b>::template type<_true, _false>;
 
 #endif // __WASTELADNS_TYPES_H__

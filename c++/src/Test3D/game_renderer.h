@@ -90,10 +90,10 @@ namespace Renderer {
         template <typename _filter, typename _drawlist, typename... _drawlists>
         struct DrawlistSubsetImpl<_filter, _drawlist, _drawlists...> {
             using next = typename DrawlistSubsetImpl<_filter, _drawlists...>::type;
-            using type = typename Conditional_t<_filter::template eval<_drawlist>::eval::v,
+            using type = Conditional_t<_filter::template eval<_drawlist>::eval::v,
                 typename ConcatDrawlist<_drawlist, next>::type,
                 next
-            >::type;
+            >;
         };
         template <typename _filter>
         struct DrawlistSubsetImpl<_filter> {
