@@ -307,8 +307,41 @@ namespace Renderer {
     }
 
     namespace FBX {
+        struct Vertex_src {
+            Vec3 coords;
+        };
+        typedef tinystl::vector<Vertex_src, Allocator::ArenaSTL<Vertex_src>> Vertices_src_stream;
+        template<typename _vertexLayout>
+        struct Streams {
+            void init(Allocator::Arena* arena, const u32 maxVertices) {
+                vertices.set_alloc(arena);
+                indices.set_alloc(arena);
+                vertices.reserve(maxVertices);
+                indices.reserve(maxVertices * 3 * 2);
+            }
+            tinystl::vector<_vertexLayout, Allocator::ArenaSTL<_vertexLayout>> vertices;
+            tinystl::vector<u32, Allocator::ArenaSTL<u32>> indices;
+        };
+        template<typename _vertexLayout, Shaders::PSMaterialUsage::Enum _materialUsage>
+        struct DrawlistSrc;
+        template<typename _vertexLayout>
+        struct DrawlistSrc<_vertexLayout, Shaders::PSMaterialUsage::None> {
+            void init(Allocator::Arena* arena, const u32 maxVertices) {
+                streams.init(arena, maxVertices);
+            }
+            Streams<_vertexLayout> streams;
+        };
+        template<typename _vertexLayout>
+        struct DrawlistSrc<_vertexLayout, Shaders::PSMaterialUsage::Uses> {
+            void init(Allocator::Arena* arena, const u32 maxVertices) {
+                streams.init(arena, maxVertices);
+                user = 0;
+            }
+            Streams<_vertexLayout> streams;
+            void* user; // for textures
+        };
         template <typename _vertexLayout>
-        void create_buffer(Driver::RscIndexedBuffer<_vertexLayout>& rscBuffer, _vertexLayout* vertices, const u32 vertices_count, u32* indices, const u32 indices_count) {
+        void create_vertex_buffer(Driver::RscIndexedBuffer<_vertexLayout>& rscBuffer, _vertexLayout* vertices, const u32 vertices_count, u32* indices, const u32 indices_count) {
             Renderer::Driver::IndexedBufferParams bufferParams;
             bufferParams.vertexData = vertices;
             bufferParams.vertexSize = (u32)vertices_count * sizeof(_vertexLayout);
@@ -321,24 +354,99 @@ namespace Renderer {
             bufferParams.type = Renderer::Driver::BufferTopologyType::Triangles;
             Renderer::Driver::create_indexed_vertex_buffer(rscBuffer, bufferParams);
         }
-
-        struct Vertex_src {
-            Vec3 coords;
-        };
-        typedef tinystl::vector<Vertex_src, Allocator::ArenaSTL<Vertex_src>> Vertices_src_stream;
-        template<typename _vertexLayout>
-        struct Vertices_dst_stream {
-            Vertices_dst_stream(Allocator::Arena* arena, const u32 maxVertices) {
-                vertices.set_alloc(arena);
-                indices.set_alloc(arena);
-                vertices.reserve(maxVertices);
-                indices.reserve(maxVertices * 3 * 2);
-                user = 0;
+        template<typename _vertexLayout, Shaders::VSSkinType::Enum _skinType, typename _drawlist>
+        struct InitVertexBuffer;
+        template<typename _vertexLayout, typename _drawlist>
+        struct InitVertexBuffer<_vertexLayout, Shaders::VSSkinType::Unskinned, _drawlist> {
+            static void op(typename _drawlist::DL_VertexBuffer& dlBuffer, const typename _drawlist::DL_VertexBuffer::GroupData& groupData, const Driver::RscIndexedBuffer<_vertexLayout>& rscBuffer, const Animation::AnimatedNode& animatedNode) {
+                dlBuffer.buffer = rscBuffer;
+                dlBuffer.groupData = groupData;
             }
-            tinystl::vector<_vertexLayout, Allocator::ArenaSTL<_vertexLayout>> vertices;
-            tinystl::vector<u32, Allocator::ArenaSTL<u32>> indices;
-            void* user; // for textures
         };
+        template<typename _vertexLayout, typename _drawlist>
+        struct InitVertexBuffer<_vertexLayout, Shaders::VSSkinType::Skinned, _drawlist> {
+            static void op(typename _drawlist::DL_VertexBuffer& dlBuffer, const typename _drawlist::DL_VertexBuffer::GroupData& groupData, const Driver::RscIndexedBuffer<_vertexLayout>& rscBuffer, const Animation::AnimatedNode& animatedNode) {
+                dlBuffer.buffer = rscBuffer;
+                dlBuffer.groupData = groupData;
+                dlBuffer.instancedData.resize(animatedNode.skeleton.jointCount);
+            }
+        };
+        template<typename _vertexLayout, Shaders::VSSkinType::Enum _skinType, typename _drawlist>
+        static void create_dl_perVertexBuffer(typename _drawlist::DL_VertexBuffer& dlBuffer, Drawlist::Drawlist_node& nodeToAdd, Store& renderStore, Streams<_vertexLayout>& streams, const Animation::AnimatedNode& animatedNode) {
+            auto& dst_vertices = streams.vertices;
+            auto& dst_indices = streams.indices;
+            typename _drawlist::DL_VertexBuffer::GroupData groupData = {};
+            groupData.groupColor = Col(0.0f, 0.0f, 0.0f, 0.f).RGBAv4();
+            groupData.worldMatrix = Math::mult(nodeToAdd.worldTransform.matrix, nodeToAdd.localTransform.matrix);
+            Driver::RscIndexedBuffer<_vertexLayout> rscBuffer = {};
+            create_vertex_buffer(rscBuffer, &dst_vertices[0], (u32)dst_vertices.size(), &dst_indices[0], (u32)dst_indices.size());
+            InitVertexBuffer<_vertexLayout, _skinType, _drawlist>::op(dlBuffer, groupData, rscBuffer, animatedNode);
+        }
+        template<typename _vertexLayout, Shaders::VSSkinType::Enum _skinType, Shaders::PSMaterialUsage::Enum _materialUsage, typename _drawlist, typename _handle>
+        struct Generate_DL;
+        template<typename _vertexLayout, Shaders::VSSkinType::Enum _skinType, typename _drawlist, typename _handle>
+        struct Generate_DL<_vertexLayout, _skinType, Shaders::PSMaterialUsage::None, _drawlist, _handle> {
+            static void op(Drawlist::Drawlist_node& nodeToAdd, Store& renderStore, DrawlistSrc<_vertexLayout, Shaders::PSMaterialUsage::None>& src, const Animation::AnimatedNode& animatedNode) {
+                if (src.streams.vertices.size() == 0) { return; }
+                typename _drawlist::DL_VertexBuffer dlBuffer = {};
+                create_dl_perVertexBuffer<_vertexLayout, _skinType, _drawlist>(dlBuffer, nodeToAdd, renderStore, src.streams, animatedNode);
+                nodeToAdd.handle._handle::id = (s32)renderStore.drawlist._drawlist::dl_perVertexBuffer.size();
+                renderStore.drawlist._drawlist::dl_perVertexBuffer.push_back(dlBuffer);
+            }
+        };
+        template<typename _vertexLayout, Shaders::VSSkinType::Enum _skinType, typename _drawlist, typename _handle>
+        struct Generate_DL<_vertexLayout, _skinType, Shaders::PSMaterialUsage::Uses, _drawlist, _handle> {
+            static void op(Drawlist::Drawlist_node& nodeToAdd, Store& renderStore, DrawlistSrc<_vertexLayout, Shaders::PSMaterialUsage::Uses>& src, const Animation::AnimatedNode& animatedNode) {
+                if (src.streams.vertices.size() == 0) { return; }
+                typename _drawlist::DL_Material material = {};
+                Driver::create_texture_from_file(material.textures[0], { ((ufbx_texture*)src.user)->filename.data });
+                {
+                    typename _drawlist::DL_VertexBuffer dlBuffer = {};
+                    create_dl_perVertexBuffer<_vertexLayout, _skinType, _drawlist>(dlBuffer, nodeToAdd, renderStore, src.streams, animatedNode);
+                    nodeToAdd.handle._handle::buffer = (s16)material.dl_perVertexBuffer.size();
+                    material.dl_perVertexBuffer.push_back(dlBuffer);
+                }
+                nodeToAdd.handle._handle::material = (s16)renderStore.drawlist._drawlist::dl_perMaterial.size();
+                renderStore.drawlist._drawlist::dl_perMaterial.push_back(material);
+            }
+        };
+        template<typename _vertexLayout, typename _drawlist>
+        struct DrawlistSrcSelector {
+            using SkinnedType = typename Shaders::SkinnedType<_vertexLayout>;
+            using MaterialUsageType = typename Shaders::MaterialUsage<_vertexLayout>;
+            using Handle = typename _drawlist::Handle;
+            using Src = DrawlistSrc<_vertexLayout, (Shaders::PSMaterialUsage::Enum) MaterialUsageType::type>;
+            using Generate_DL = Generate_DL<_vertexLayout, (Shaders::VSSkinType::Enum) SkinnedType::type, (Shaders::PSMaterialUsage::Enum) MaterialUsageType::type, _drawlist, Handle>;
+
+            Src src;
+        };
+        template<typename... _T>
+        struct DrawlistSrcSet : _T... {
+            template<typename _Op, typename... _Args>
+            static void for_each(_Args&&... args) {
+                int dummy[] = { 0, (_Op::template execute<_T>(args...), 0)... };
+                (void)dummy;
+            }
+        };
+        typedef DrawlistSrcSelector<Layout_Vec3Color4B, Drawlist::DL_color_t> DL_color_t;
+        typedef DrawlistSrcSelector<Layout_Vec3Color4BSkinned, Drawlist::DL_colorskinned_t> DL_colorskinned_t;
+        typedef DrawlistSrcSelector<Layout_TexturedSkinnedVec3, Drawlist::DL_textured_t> DL_textured_t;
+        typedef DrawlistSrcSelector<Layout_TexturedSkinnedVec3, Drawlist::DL_texturedalphaclip_t> DL_texturedalphaclip_t;
+        typedef DrawlistSrcSet<DL_color_t, DL_colorskinned_t, DL_textured_t, DL_texturedalphaclip_t> FBXSupportedDrawlists;
+
+        struct init_drawlists_t {
+            template <typename _T>
+            static void execute(FBXSupportedDrawlists& drawlist, Allocator::Arena* arena, const u32 maxVertices) {
+                drawlist._T::src.init(arena, maxVertices);
+            }
+        };
+        struct process_streams_t {
+            template <typename _T>
+            static void execute(FBXSupportedDrawlists& drawlist, Drawlist::Drawlist_node& nodeToAdd, Store& renderStore, const Animation::AnimatedNode& animatedNode) {
+                _T::Generate_DL::op(nodeToAdd, renderStore, drawlist._T::src, animatedNode);
+            }
+        };
+
         template<typename _vertexLayout>
         void extract_skinning_attribs(_vertexLayout& vertex, const ufbx_mesh& mesh, const u32 vertex_id) {
             ufbx_skin_deformer& skin = *(mesh.skin_deformers.data[0]);
@@ -418,7 +526,7 @@ namespace Renderer {
         }
 
         template<typename _vertexLayout, DstDataType::Enum _dataType>
-        void process_material(const Vertex_src* vertices_src, const u32 vertices_src_count, Vertices_dst_stream<_vertexLayout>& stream_dst, ufbx_mesh& mesh, ufbx_mesh_material& mesh_mat, Allocator::Arena scratchArena) {
+        void process_material(const Vertex_src* vertices_src, const u32 vertices_src_count, Streams<_vertexLayout>& stream_dst, ufbx_mesh& mesh, ufbx_mesh_material& mesh_mat, Allocator::Arena scratchArena) {
             u32* index_in_dst_array = (u32*)Allocator::alloc_arena(scratchArena, sizeof(u32) * vertices_src_count, alignof(u32));
             memset(index_in_dst_array, 0xffffffff, sizeof(u32) * vertices_src_count);
 
@@ -534,10 +642,8 @@ namespace Renderer {
                 Vertices_src_stream vertices;
                 vertices.set_alloc(&scratchArena);
                 vertices.reserve(maxVertices);
-                Vertices_dst_stream<Layout_Vec3Color4B> materialStream_coloropaque_unskinned(&scratchArena, maxVertices);
-                Vertices_dst_stream<Layout_Vec3Color4BSkinned> materialStream_coloropaque_skinned(&scratchArena, maxVertices);
-                Vertices_dst_stream<Layout_TexturedSkinnedVec3> materialStream_textureopaque_skinned(&scratchArena, maxVertices);
-                Vertices_dst_stream<Layout_TexturedSkinnedVec3> materialStream_texturealphaclip_skinned(&scratchArena, maxVertices);
+                FBXSupportedDrawlists supportedDrawlists;
+                FBXSupportedDrawlists::for_each<init_drawlists_t>(supportedDrawlists, &scratchArena, maxVertices);
 
                 // hack: only consider skinning from first mesh
                 Animation::AnimatedNode animatedNode = {};
@@ -545,7 +651,6 @@ namespace Renderer {
                     extract_anim_data(animatedNode.skeleton, animatedNode.clips, animatedNode.clipCount, *(scene->meshes[0]), *scene);
                 }
 
-                // 2x best case, less likely to resize
                 u32 vertexOffset = 0;
                 for (size_t i = 0; i < scene->meshes.count; i++) {
                     ufbx_mesh& mesh = *scene->meshes.data[i];
@@ -566,44 +671,49 @@ namespace Renderer {
                         }
                     }
 
-                    // Extract all indices, separated by supported material
+                    // Extract all indices, separated by supported drawlist
                     // They will all point the same vertex buffer array, which is not ideal, but I don't want to deal with
                     // re-building a vertex buffer for each index buffer
+
+                    auto& streamColor = supportedDrawlists.DL_color_t::src;
+                    auto& streamColorSkinned = supportedDrawlists.DL_colorskinned_t::src;
+                    auto& streamTexturedSkinned = supportedDrawlists.DL_textured_t::src;
+                    auto& streamTexturedSkinnedAlphaClip = supportedDrawlists.DL_texturedalphaclip_t::src;
+
                     const u32 mesh_vertices_count = (u32)mesh.num_vertices;
                     const Vertex_src* mesh_vertices = &vertices[vertexOffset];
                     for (size_t m = 0; m < mesh.materials.count; m++) {
                         ufbx_mesh_material& mesh_mat = mesh.materials.data[m];
-                        
                         if (animatedNode.skeleton.jointCount) { // hack: handle textured shaders only for skinned meshes
                             if (mesh_mat.material && mesh_mat.material->pbr.base_color.has_value) {
                                 if (mesh_mat.material->pbr.base_color.texture_enabled) {
                                     // Assume that opacity tied to a texture means that we should use the alpha clip shader
                                     if (mesh_mat.material->pbr.opacity.texture_enabled) {
-                                        assert(!materialStream_texturealphaclip_skinned.user); // we only support one textured-material of each pass
-                                        process_material<Layout_TexturedSkinnedVec3, DstDataType::Vertex>(mesh_vertices, mesh_vertices_count, materialStream_texturealphaclip_skinned, mesh, mesh_mat, scratchArena);
-                                        materialStream_texturealphaclip_skinned.user = mesh_mat.material->pbr.base_color.texture;
+                                        assert(!streamTexturedSkinnedAlphaClip.user); // we only support one textured-material of each pass
+                                        process_material<Layout_TexturedSkinnedVec3, DstDataType::Vertex>(mesh_vertices, mesh_vertices_count, streamTexturedSkinnedAlphaClip.streams, mesh, mesh_mat, scratchArena);
+                                        streamTexturedSkinnedAlphaClip.user = mesh_mat.material->pbr.base_color.texture;
                                     } else {
-                                        assert(!materialStream_textureopaque_skinned.user); // we only support one textured-material of each pass
-                                        process_material<Layout_TexturedSkinnedVec3, DstDataType::Vertex>(mesh_vertices, mesh_vertices_count, materialStream_textureopaque_skinned, mesh, mesh_mat, scratchArena);
-                                        materialStream_textureopaque_skinned.user = mesh_mat.material->pbr.base_color.texture;
+                                        assert(!streamTexturedSkinned.user); // we only support one textured-material of each pass
+                                        process_material<Layout_TexturedSkinnedVec3, DstDataType::Vertex>(mesh_vertices, mesh_vertices_count, streamTexturedSkinned.streams, mesh, mesh_mat, scratchArena);
+                                        streamTexturedSkinned.user = mesh_mat.material->pbr.base_color.texture;
                                     }
                                 } else {
-                                    process_material<Layout_Vec3Color4BSkinned, DstDataType::Material>(mesh_vertices, mesh_vertices_count, materialStream_coloropaque_skinned, mesh, mesh_mat, scratchArena);
+                                    process_material<Layout_Vec3Color4BSkinned, DstDataType::Material>(mesh_vertices, mesh_vertices_count, streamColorSkinned.streams, mesh, mesh_mat, scratchArena);
                                 }
                             } else {
                                 if (mesh.vertex_color.exists) {
-                                    process_material<Layout_Vec3Color4BSkinned, DstDataType::Vertex>(mesh_vertices, mesh_vertices_count, materialStream_coloropaque_skinned, mesh, mesh_mat, scratchArena);
+                                    process_material<Layout_Vec3Color4BSkinned, DstDataType::Vertex>(mesh_vertices, mesh_vertices_count, streamColorSkinned.streams, mesh, mesh_mat, scratchArena);
                                 } else {
-                                    process_material<Layout_Vec3Color4BSkinned, DstDataType::Dummy>(mesh_vertices, mesh_vertices_count, materialStream_coloropaque_skinned, mesh, mesh_mat, scratchArena);
+                                    process_material<Layout_Vec3Color4BSkinned, DstDataType::Dummy>(mesh_vertices, mesh_vertices_count, streamColorSkinned.streams, mesh, mesh_mat, scratchArena);
                                 }
                             }
                         } else {
                             if (mesh_mat.material && mesh_mat.material->pbr.base_color.has_value) {
-                                process_material<Layout_Vec3Color4B, DstDataType::Material>(mesh_vertices, mesh_vertices_count, materialStream_coloropaque_unskinned, mesh, mesh_mat, scratchArena);
+                                process_material<Layout_Vec3Color4B, DstDataType::Material>(mesh_vertices, mesh_vertices_count, streamColor.streams, mesh, mesh_mat, scratchArena);
                             } else if (mesh.vertex_color.exists) {
-                                process_material<Layout_Vec3Color4B, DstDataType::Vertex>(mesh_vertices, mesh_vertices_count, materialStream_coloropaque_unskinned, mesh, mesh_mat, scratchArena);
+                                process_material<Layout_Vec3Color4B, DstDataType::Vertex>(mesh_vertices, mesh_vertices_count, streamColor.streams, mesh, mesh_mat, scratchArena);
                             } else {
-                                process_material<Layout_Vec3Color4B, DstDataType::Dummy>(mesh_vertices, mesh_vertices_count, materialStream_coloropaque_unskinned, mesh, mesh_mat, scratchArena);
+                                process_material<Layout_Vec3Color4B, DstDataType::Dummy>(mesh_vertices, mesh_vertices_count, streamColor.streams, mesh, mesh_mat, scratchArena);
                             }
                         }
                     }
@@ -611,84 +721,7 @@ namespace Renderer {
                 }
 
                 {
-                    using namespace Drawlist;
-
-                    if (materialStream_coloropaque_unskinned.vertices.size() > 0) {
-                        auto& dst_vertices = materialStream_coloropaque_unskinned.vertices;
-                        auto& dst_indices = materialStream_coloropaque_unskinned.indices;
-                        DL_color_vb::GroupData groupData = {};
-                        groupData.groupColor = Col(0.0f, 0.0f, 0.0f, 0.f).RGBAv4();
-                        groupData.worldMatrix = Math::mult(nodeToAdd.worldTransform.matrix, nodeToAdd.localTransform.matrix);
-                        Driver::RscIndexedBuffer<Layout_Vec3Color4B> rscBuffer = {};
-                        create_buffer(rscBuffer, &dst_vertices[0], (u32)dst_vertices.size(), &dst_indices[0], (u32)dst_indices.size());
-
-                        nodeToAdd.handle.DL_color_id::id = (s32)renderStore.drawlist.DL_color_t::dl_perVertexBuffer.size();
-                        DL_color_vb dlBuffer = {};
-                        dlBuffer.buffer = rscBuffer;
-                        dlBuffer.groupData = groupData;
-                        renderStore.drawlist.DL_color_t::dl_perVertexBuffer.push_back(dlBuffer);
-                    }
-                    if (materialStream_coloropaque_skinned.vertices.size() > 0) {
-                        auto& dst_vertices = materialStream_coloropaque_skinned.vertices;
-                        auto& dst_indices = materialStream_coloropaque_skinned.indices;
-                        DL_color_vb::GroupData groupData = {};
-                        groupData.groupColor = Col(0.0f, 0.0f, 0.0f, 0.f).RGBAv4();
-                        groupData.worldMatrix = Math::mult(nodeToAdd.worldTransform.matrix, nodeToAdd.localTransform.matrix);
-                        Driver::RscIndexedBuffer<Layout_Vec3Color4BSkinned> rscBuffer = {};
-                        create_buffer(rscBuffer, &dst_vertices[0], (u32)dst_vertices.size(), &dst_indices[0], (u32)dst_indices.size());
-
-                        nodeToAdd.handle.DL_colorskinned_id::id = (s32)renderStore.drawlist.DL_colorskinned_t::dl_perVertexBuffer.size();
-                        DL_colorskinned_vb dlBuffer = {};
-                        dlBuffer.buffer = rscBuffer;
-                        dlBuffer.groupData = groupData;
-                        dlBuffer.instancedData.resize(animatedNode.skeleton.jointCount);
-
-                        renderStore.drawlist.DL_colorskinned_t::dl_perVertexBuffer.push_back(dlBuffer);
-                    }
-                    if (materialStream_textureopaque_skinned.vertices.size() > 0) {
-                        DL_textured_mat material = {};
-                        Driver::create_texture_from_file(material.textures[0], { ((ufbx_texture*)materialStream_textureopaque_skinned.user)->filename.data });
-                        {
-                            auto& dst_vertices = materialStream_textureopaque_skinned.vertices;
-                            auto& dst_indices = materialStream_textureopaque_skinned.indices;
-                            material.dl_perVertexBuffer = {};
-                            DL_textured_vb::GroupData groupData = {};
-                            groupData.groupColor = Col(0.0f, 0.0f, 0.0f, 0.f).RGBAv4();
-                            groupData.worldMatrix = Math::mult(nodeToAdd.worldTransform.matrix, nodeToAdd.localTransform.matrix);
-                            Driver::RscIndexedBuffer<Layout_TexturedSkinnedVec3> rscBuffer = {};
-                            create_buffer(rscBuffer, &dst_vertices[0], (u32)dst_vertices.size(), &dst_indices[0], (u32)dst_indices.size());
-                            nodeToAdd.handle.DL_textured_id::buffer = (s16)material.dl_perVertexBuffer.size();
-                            DL_textured_vb dlBuffer = {};
-                            dlBuffer.buffer = rscBuffer;
-                            dlBuffer.groupData = groupData;
-                            dlBuffer.instancedData.resize(animatedNode.skeleton.jointCount);
-                            material.dl_perVertexBuffer.push_back(dlBuffer);
-                        }
-                        nodeToAdd.handle.DL_textured_id::material = (s16)renderStore.drawlist.DL_textured_t::dl_perMaterial.size();
-                        renderStore.drawlist.DL_textured_t::dl_perMaterial.push_back(material);
-                    }
-                    if (materialStream_texturealphaclip_skinned.vertices.size() > 0) {
-                        DL_texturedalphaclip_mat material = {};
-                        Driver::create_texture_from_file(material.textures[0], { ((ufbx_texture*)materialStream_texturealphaclip_skinned.user)->filename.data });
-                        {
-                            auto& dst_vertices = materialStream_texturealphaclip_skinned.vertices;
-                            auto& dst_indices = materialStream_texturealphaclip_skinned.indices;
-                            material.dl_perVertexBuffer = {};
-                            DL_texturedalphaclip_t::DL_VertexBuffer::GroupData groupData = {};
-                            groupData.groupColor = Col(0.0f, 0.0f, 0.0f, 0.f).RGBAv4();
-                            groupData.worldMatrix = Math::mult(nodeToAdd.worldTransform.matrix, nodeToAdd.localTransform.matrix);
-                            Driver::RscIndexedBuffer<Layout_TexturedSkinnedVec3> rscBuffer = {};
-                            create_buffer(rscBuffer, &dst_vertices[0], (u32)dst_vertices.size(), &dst_indices[0], (u32)dst_indices.size());
-                            nodeToAdd.handle.DL_texturedalphaclip_id::buffer = (s16)material.dl_perVertexBuffer.size();
-                            DL_texturedalphaclip_vb dlBuffer = {};
-                            dlBuffer.buffer = rscBuffer;
-                            dlBuffer.groupData = groupData;
-                            dlBuffer.instancedData.resize(animatedNode.skeleton.jointCount);
-                            material.dl_perVertexBuffer.push_back(dlBuffer);
-                        }
-                        nodeToAdd.handle.DL_texturedalphaclip_id::material = (s16)renderStore.drawlist.DL_texturedalphaclip_t::dl_perMaterial.size();
-                        renderStore.drawlist.DL_texturedalphaclip_t::dl_perMaterial.push_back(material);
-                    }
+                    FBXSupportedDrawlists::for_each<process_streams_t>(supportedDrawlists, nodeToAdd, renderStore, animatedNode);
                     if (animatedNode.skeleton.jointCount) {
                         animatedNode.mesh_DLhandle = nodeToAdd.handle;
                         renderStore.animated_nodes.push_back(animatedNode);

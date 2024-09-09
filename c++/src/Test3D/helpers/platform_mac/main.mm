@@ -77,6 +77,7 @@ int main(int , char** ) {
         [[NSUserDefaults standardUserDefaults] registerDefaults:defaults];
         
         id window;
+        f32 windowScale = 1.f;
         NSOpenGLContext* openGLContext;
         {
             Platform::WindowConfig config;
@@ -137,14 +138,14 @@ int main(int , char** ) {
             
             NSSize windowSize = [contentView frame].size;
             
-            f32 scale = [contentView convertSizeToBacking:CGSizeMake(1,1)].width;
-            platform.screen.window_width = windowSize.width * scale;
-            platform.screen.window_height = windowSize.height * scale;
+            windowScale = [contentView convertSizeToBacking:CGSizeMake(1,1)].width;
+            platform.screen.window_width = windowSize.width * windowScale;
+            platform.screen.window_height = windowSize.height * windowScale;
             platform.screen.width = config.game_width;
             platform.screen.height = config.game_height;
             platform.screen.desiredRatio = platform.screen.width / (f32)platform.screen.height;
             platform.screen.fullscreen = config.fullscreen;
-            __DEBUGEXP(platform.screen.text_scale = scale);
+            __DEBUGEXP(platform.screen.text_scale = windowScale);
         }
         
         struct MouseQueue {
@@ -156,7 +157,11 @@ int main(int , char** ) {
         MouseQueue mouse_queue = {};
         const int hotkeyMask = NSEventModifierFlagCommand | NSEventModifierFlagOption | NSEventModifierFlagControl | NSEventModifierFlagCapsLock;
         const f32 actualWindowHeight = [[window contentView] frame].size.height;
-        
+        {   // init mouse pos so we don't get a big delta movement on the first click
+            NSPoint pos = [window  mouseLocationOutsideOfEventStream];
+            mouse_queue.x = platform.input.mouse.x = pos.x;
+            mouse_queue.y = platform.input.mouse.y = [[window contentView] frame].size.height-pos.y;
+        }
         // gamepad
         ::Input::Gamepad::init_hid_pads_mac(platform);
         
@@ -206,7 +211,6 @@ int main(int , char** ) {
                                 case NSEventTypeRightMouseDragged:
                                 case NSEventTypeOtherMouseDragged: {
                                     // todo: won't work when hiding cursor
-                                    // todo: doesn't work while pressing mouse buttons
                                     NSPoint pos = [event locationInWindow];
                                     mouse_queue.x = pos.x;
                                     mouse_queue.y = actualWindowHeight-pos.y;

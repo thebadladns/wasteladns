@@ -148,6 +148,12 @@ namespace Renderer {
         template <typename _vertexLayout> struct SkinnedType { enum Enum { type = VSSkinType::Unskinned }; };
         template<> struct SkinnedType<Layout_TexturedSkinnedVec3> { enum Enum { type = VSSkinType::Skinned }; };
         template<> struct SkinnedType<Layout_Vec3Color4BSkinned> { enum Enum { type = VSSkinType::Skinned }; };
+
+        template <typename _vertexLayout> struct MaterialUsage { enum Enum { type = PSMaterialUsage::None }; };
+        template<> struct MaterialUsage<Layout_TexturedVec2> { enum Enum { type = PSMaterialUsage::Uses }; };
+        template<> struct MaterialUsage<Layout_TexturedVec3> { enum Enum { type = PSMaterialUsage::Uses }; };
+        template<> struct MaterialUsage<Layout_TexturedSkinnedVec3> { enum Enum { type = PSMaterialUsage::Uses }; };
+        template<> struct MaterialUsage<Layout_Vec3TexturedMapped> { enum Enum { type = PSMaterialUsage::Uses }; };
     }
 
     // Convenience shapes
