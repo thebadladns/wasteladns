@@ -646,52 +646,48 @@ namespace Renderer {
                         renderStore.drawlist.DL_colorskinned_t::dl_perVertexBuffer.push_back(dlBuffer);
                     }
                     if (materialStream_textureopaque_skinned.vertices.size() > 0) {
+                        DL_textured_mat material = {};
+                        Driver::create_texture_from_file(material.textures[0], { ((ufbx_texture*)materialStream_textureopaque_skinned.user)->filename.data });
                         {
-                            DL_textured_mat material = {};
-                            Driver::create_texture_from_file(material.textures[0], { ((ufbx_texture*)materialStream_textureopaque_skinned.user)->filename.data });
-                            {
-                                auto& dst_vertices = materialStream_textureopaque_skinned.vertices;
-                                auto& dst_indices = materialStream_textureopaque_skinned.indices;
-                                material.dl_perVertexBuffer = {};
-                                DL_textured_vb::GroupData groupData = {};
-                                groupData.groupColor = Col(0.0f, 0.0f, 0.0f, 0.f).RGBAv4();
-                                groupData.worldMatrix = Math::mult(nodeToAdd.worldTransform.matrix, nodeToAdd.localTransform.matrix);
-                                Driver::RscIndexedBuffer<Layout_TexturedSkinnedVec3> rscBuffer = {};
-                                create_buffer(rscBuffer, &dst_vertices[0], (u32)dst_vertices.size(), &dst_indices[0], (u32)dst_indices.size());
-                                nodeToAdd.handle.DL_textured_id::buffer = (s16)material.dl_perVertexBuffer.size();
-                                DL_textured_vb dlBuffer = {};
-                                dlBuffer.buffer = rscBuffer;
-                                dlBuffer.groupData = groupData;
-                                dlBuffer.instancedData.resize(animatedNode.skeleton.jointCount);
-                                material.dl_perVertexBuffer.push_back(dlBuffer);
-                            }
-                            nodeToAdd.handle.DL_textured_id::material = (s16)renderStore.drawlist.DL_textured_t::dl_perMaterial.size();
-                            renderStore.drawlist.DL_textured_t::dl_perMaterial.push_back(material);
+                            auto& dst_vertices = materialStream_textureopaque_skinned.vertices;
+                            auto& dst_indices = materialStream_textureopaque_skinned.indices;
+                            material.dl_perVertexBuffer = {};
+                            DL_textured_vb::GroupData groupData = {};
+                            groupData.groupColor = Col(0.0f, 0.0f, 0.0f, 0.f).RGBAv4();
+                            groupData.worldMatrix = Math::mult(nodeToAdd.worldTransform.matrix, nodeToAdd.localTransform.matrix);
+                            Driver::RscIndexedBuffer<Layout_TexturedSkinnedVec3> rscBuffer = {};
+                            create_buffer(rscBuffer, &dst_vertices[0], (u32)dst_vertices.size(), &dst_indices[0], (u32)dst_indices.size());
+                            nodeToAdd.handle.DL_textured_id::buffer = (s16)material.dl_perVertexBuffer.size();
+                            DL_textured_vb dlBuffer = {};
+                            dlBuffer.buffer = rscBuffer;
+                            dlBuffer.groupData = groupData;
+                            dlBuffer.instancedData.resize(animatedNode.skeleton.jointCount);
+                            material.dl_perVertexBuffer.push_back(dlBuffer);
                         }
+                        nodeToAdd.handle.DL_textured_id::material = (s16)renderStore.drawlist.DL_textured_t::dl_perMaterial.size();
+                        renderStore.drawlist.DL_textured_t::dl_perMaterial.push_back(material);
                     }
                     if (materialStream_texturealphaclip_skinned.vertices.size() > 0) {
+                        DL_texturedalphaclip_mat material = {};
+                        Driver::create_texture_from_file(material.textures[0], { ((ufbx_texture*)materialStream_texturealphaclip_skinned.user)->filename.data });
                         {
-                            DL_texturedalphaclip_mat material = {};
-                            Driver::create_texture_from_file(material.textures[0], { ((ufbx_texture*)materialStream_texturealphaclip_skinned.user)->filename.data });
-                            {
-                                auto& dst_vertices = materialStream_texturealphaclip_skinned.vertices;
-                                auto& dst_indices = materialStream_texturealphaclip_skinned.indices;
-                                material.dl_perVertexBuffer = {};
-                                DL_texturedalphaclip_t::DL_VertexBuffer::GroupData groupData = {};
-                                groupData.groupColor = Col(0.0f, 0.0f, 0.0f, 0.f).RGBAv4();
-                                groupData.worldMatrix = Math::mult(nodeToAdd.worldTransform.matrix, nodeToAdd.localTransform.matrix);
-                                Driver::RscIndexedBuffer<Layout_TexturedSkinnedVec3> rscBuffer = {};
-                                create_buffer(rscBuffer, &dst_vertices[0], (u32)dst_vertices.size(), &dst_indices[0], (u32)dst_indices.size());
-                                nodeToAdd.handle.DL_texturedalphaclip_id::buffer = (s16)material.dl_perVertexBuffer.size();
-                                DL_texturedalphaclip_vb dlBuffer = {};
-                                dlBuffer.buffer = rscBuffer;
-                                dlBuffer.groupData = groupData;
-                                dlBuffer.instancedData.resize(animatedNode.skeleton.jointCount);
-                                material.dl_perVertexBuffer.push_back(dlBuffer);
-                            }
-                            nodeToAdd.handle.DL_texturedalphaclip_id::material = (s16)renderStore.drawlist.DL_texturedalphaclip_t::dl_perMaterial.size();
-                            renderStore.drawlist.DL_texturedalphaclip_t::dl_perMaterial.push_back(material);
+                            auto& dst_vertices = materialStream_texturealphaclip_skinned.vertices;
+                            auto& dst_indices = materialStream_texturealphaclip_skinned.indices;
+                            material.dl_perVertexBuffer = {};
+                            DL_texturedalphaclip_t::DL_VertexBuffer::GroupData groupData = {};
+                            groupData.groupColor = Col(0.0f, 0.0f, 0.0f, 0.f).RGBAv4();
+                            groupData.worldMatrix = Math::mult(nodeToAdd.worldTransform.matrix, nodeToAdd.localTransform.matrix);
+                            Driver::RscIndexedBuffer<Layout_TexturedSkinnedVec3> rscBuffer = {};
+                            create_buffer(rscBuffer, &dst_vertices[0], (u32)dst_vertices.size(), &dst_indices[0], (u32)dst_indices.size());
+                            nodeToAdd.handle.DL_texturedalphaclip_id::buffer = (s16)material.dl_perVertexBuffer.size();
+                            DL_texturedalphaclip_vb dlBuffer = {};
+                            dlBuffer.buffer = rscBuffer;
+                            dlBuffer.groupData = groupData;
+                            dlBuffer.instancedData.resize(animatedNode.skeleton.jointCount);
+                            material.dl_perVertexBuffer.push_back(dlBuffer);
                         }
+                        nodeToAdd.handle.DL_texturedalphaclip_id::material = (s16)renderStore.drawlist.DL_texturedalphaclip_t::dl_perMaterial.size();
+                        renderStore.drawlist.DL_texturedalphaclip_t::dl_perMaterial.push_back(material);
                     }
                     if (animatedNode.skeleton.jointCount) {
                         animatedNode.mesh_DLhandle = nodeToAdd.handle;
