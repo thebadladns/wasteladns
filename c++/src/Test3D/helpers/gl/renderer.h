@@ -476,7 +476,6 @@ namespace Driver {
         glEnableVertexAttribArray(1);
         glEnableVertexAttribArray(2);
         glEnableVertexAttribArray(3);
-        glEnableVertexAttribArray(4);
     }
     template <>
     void bind_vertex_layout<Layout_Vec3TexturedMapped>() {
@@ -515,7 +514,6 @@ namespace Driver {
         glEnableVertexAttribArray(1);
         glEnableVertexAttribArray(2);
         glEnableVertexAttribArray(3);
-        glEnableVertexAttribArray(4);
     }
     template <typename _vertexLayout, Shaders::PSCBufferUsage::Enum _cbufferUsage, Shaders::VSDrawType::Enum _drawType>
     void bind_cbuffers_to_shader(RscShaderSet<_vertexLayout, Layout_CNone, _cbufferUsage, _drawType>& ss, const RscCBuffer* cbuffers) {}
