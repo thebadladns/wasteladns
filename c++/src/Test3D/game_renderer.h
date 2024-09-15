@@ -175,33 +175,68 @@ namespace Renderer {
 
     namespace Animation {
         struct Skeleton {
-            Mat4* joint_to_parent; // the local space of the joint in relation to their parents (posed, defaults to t-pose)
-            Mat4* model_to_joint; // where each vertex is in relation to the joint
+            Mat4 geometryFromRoot;
+            Mat4* parentFromPosedJoint;
+            Mat4* geometryFromPosedJoint;
+            Mat4* jointFromGeometry;
             s8* parentIndices; // the parent of each joint (-1 for root)
             u32 jointCount; // number of joints
         };
-        struct Frame {
-            Mat4* joint_to_parent; // must be initaliazed to Skeleton::jointCount
+		struct Joint_TRS {
+            Vec3 translation;
+            Vec4 rotation;
+			Vec3 scale;
+		};
+        struct JointKeyframes {
+            Joint_TRS* joint_to_parent_trs; // must be initaliazed to Clip::frameCount
         };
         struct Clip {
-            Frame* frames;
+            JointKeyframes* joints;
             u32 frameCount;
+            f32 timeEnd;
+        };
+        struct State {
+            u32 animIndex;
+            f32 time;
+            f32 scale;
         };
         struct AnimatedNode {
             Skeleton skeleton; // constant mesh_to_joint matrices, as well as posed joint_to_parent matrices
             Clip* clips;
+            State state;
             u32 clipCount;
             Renderer::Drawlist::Drawlist_game::Handle mesh_DLhandle;
         };
-    
-        void updateAnimation(Mat4* world_to_joint, const AnimatedNode& node, const f32 time) {
-            // unused time for now
-            (void)time;
-            
-            memcpy(world_to_joint, node.skeleton.joint_to_parent, sizeof(Mat4) * node.skeleton.jointCount);
-            for (u32 jointIndex = 1; jointIndex < node.skeleton.jointCount; jointIndex++) {
-                s8 parentIndex = node.skeleton.parentIndices[jointIndex];
-                world_to_joint[jointIndex] = Math::mult(node.skeleton.model_to_joint[parentIndex], node.skeleton.joint_to_parent[jointIndex]);
+
+        void updateAnimation(Mat4* skinning, State& state, const Clip& clip, const Skeleton& skeleton, const f32 dt) {
+            {
+                state.time = state.time + dt * state.scale;
+                if (state.time >= clip.timeEnd) {
+                    state.time -= clip.timeEnd;
+                }
+                f32 t = state.time / clip.timeEnd;
+                u32 f0 = (u32)(t * (clip.frameCount - 1));
+                u32 f1 = f0 + 1;
+
+				for (u32 jointIndex = 0; jointIndex < skeleton.jointCount; jointIndex++) {
+		
+                    const Animation::Joint_TRS& joint_to_parent0 = clip.joints[jointIndex].joint_to_parent_trs[f0];
+                    const Animation::Joint_TRS& joint_to_parent1 = clip.joints[jointIndex].joint_to_parent_trs[f1];
+                    // note: this will likely always default to lerp, since the angle delta will likely be small
+                    Vec4 q = Math::quaternionSlerp(t, joint_to_parent0.rotation, joint_to_parent1.rotation);
+                    Vec3 translation = Math::lerp(t, joint_to_parent0.translation, joint_to_parent1.translation);
+                    Vec3 scale = Math::lerp(t, joint_to_parent0.scale, joint_to_parent1.scale);
+                    skeleton.parentFromPosedJoint[jointIndex] = Math::trsToMatrix(translation, q, scale);
+				}
+            }
+
+            skeleton.geometryFromPosedJoint[0] = Math::mult(skeleton.geometryFromRoot, skeleton.parentFromPosedJoint[0]);
+            for (u32 jointIndex = 1; jointIndex < skeleton.jointCount; jointIndex++) {
+                s8 parentIndex = skeleton.parentIndices[jointIndex];
+                skeleton.geometryFromPosedJoint[jointIndex] = Math::mult(skeleton.geometryFromPosedJoint[parentIndex], skeleton.parentFromPosedJoint[jointIndex]);
+            }
+            for (u32 jointIndex = 0; jointIndex < skeleton.jointCount; jointIndex++) {
+                skinning[jointIndex] = Math::mult(skeleton.geometryFromPosedJoint[jointIndex], skeleton.jointFromGeometry[jointIndex]);
             }
         }
     }
@@ -369,6 +404,9 @@ namespace Renderer {
                 dlBuffer.buffer = rscBuffer;
                 dlBuffer.groupData = groupData;
                 dlBuffer.instancedData.resize(animatedNode.skeleton.jointCount);
+				for (u32 jointIndex = 0; jointIndex < animatedNode.skeleton.jointCount; jointIndex++) {
+                    dlBuffer.instancedData[jointIndex] = Math::mult(animatedNode.skeleton.geometryFromPosedJoint[jointIndex], animatedNode.skeleton.jointFromGeometry[jointIndex]);
+				}
             }
         };
         template<typename _vertexLayout, Shaders::VSSkinType::Enum _skinType, typename _drawlist>
@@ -487,10 +525,8 @@ namespace Renderer {
         template<>
         void extract_vertex_attrib<Layout_TexturedSkinnedVec3, DstDataType::Vertex>(Layout_TexturedSkinnedVec3& vertex, const ufbx_mesh& mesh, const ufbx_mesh_material&, const u32 index_id, const u32 vertex_id) {
             ufbx_vec2& uv = mesh.vertex_uv[index_id];
-            ufbx_vec3& normal = mesh.vertex_normal[index_id];
             vertex.uv.x = uv.x;
             vertex.uv.y = uv.y;
-            vertex.normal = Vec3(normal.x, normal.y, normal.z);
             extract_skinning_attribs(vertex, mesh, vertex_id);
         }
         template<>
@@ -569,44 +605,60 @@ namespace Renderer {
                 dst.col3.x = src.cols[3].x; dst.col3.y = src.cols[3].y; dst.col3.z = src.cols[3].z; dst.col3.w = 1.f;
             };
 
-            ufbx_matrix model_to_joint[128];
-            u32 node_indices[COUNT_OF(model_to_joint)];
+            const u32 maxjoints = 128;
+            ufbx_matrix jointFromGeometry[maxjoints];
+            u32 node_indices_raw[maxjoints];
             u8 jointCount = 0;
 
-            // Extract all matrices model_to_joint
+            // Extract all constant matrices from geometry to joints
             ufbx_skin_deformer& skin = *(mesh.skin_deformers.data[0]);
             for (size_t ci = 0; ci < skin.clusters.count; ci++) {
                 ufbx_skin_cluster* cluster = skin.clusters.data[ci];
-                if (jointCount == COUNT_OF(model_to_joint)) { continue; }
-                model_to_joint[jointCount] = cluster->geometry_to_bone;
-                node_indices[jointCount] = (s8)cluster->bone_node->typed_id;
+                if (jointCount == maxjoints) { continue; }
+                jointFromGeometry[jointCount] = cluster->geometry_to_bone;
+                node_indices_raw[jointCount] = (s8)cluster->bone_node->typed_id;
                 jointCount++;
             }
 
-            skeleton.model_to_joint = (Mat4*)malloc(sizeof(Mat4) * jointCount);
-            skeleton.joint_to_parent = (Mat4*)malloc(sizeof(Mat4) * jointCount);
+            u32* node_indices_skeleton = (u32*)malloc(sizeof(u32) * jointCount);
+            s8* nodeIdtoJointId = (s8*)malloc(sizeof(s8) * scene.nodes.count);
+            skeleton.jointFromGeometry = (Mat4*)malloc(sizeof(Mat4) * jointCount);
+            skeleton.parentFromPosedJoint = (Mat4*)malloc(sizeof(Mat4) * jointCount);
+            skeleton.geometryFromPosedJoint = (Mat4*)malloc(sizeof(Mat4) * jointCount);
             skeleton.parentIndices = (s8*)malloc(sizeof(s8) * jointCount);
             skeleton.jointCount = jointCount;
-            // todo: are joints already sorted from root to children? otherwise we'll have to sort them
+
+            // joints are listed in hierarchical order, first one is the root
             for (u32 joint_index = 0; joint_index < jointCount; joint_index++) {
-                from_ufbx_mat(skeleton.model_to_joint[joint_index], model_to_joint[joint_index]);
-                ufbx_node& node = *(scene.nodes.data[node_indices[joint_index]]);
-                if (node.parent) {
-                    skeleton.parentIndices[joint_index] = node.parent->typed_id;
-                    from_ufbx_mat(skeleton.joint_to_parent[joint_index], node.node_to_parent);
-                }
-                else {
+                u32 node_index = node_indices_raw[joint_index];
+                ufbx_node& node = *(scene.nodes.data[node_index]);
+                from_ufbx_mat(skeleton.jointFromGeometry[joint_index], jointFromGeometry[joint_index]);
+                if (joint_index == 0) {
                     skeleton.parentIndices[joint_index] = -1;
-                    from_ufbx_mat(skeleton.joint_to_parent[joint_index], node.node_to_world);
+                    from_ufbx_mat(skeleton.geometryFromRoot, node.parent->node_to_world);
+                } else { // if (node.parent) { // todo: multiple roots??
+                    skeleton.parentIndices[joint_index] = nodeIdtoJointId[node.parent->typed_id];
                 }
+                from_ufbx_mat(skeleton.geometryFromPosedJoint[joint_index], node.node_to_world); // default
+                nodeIdtoJointId[node_index] = joint_index;
+                node_indices_skeleton[joint_index] = node_index;
             }
-            
+
+            // todo: default
+            for (u32 joint_index = 0; joint_index < skeleton.jointCount; joint_index++) {
+                Mat4& m = skeleton.parentFromPosedJoint[joint_index];
+                m.col0 = { 1.f, 0.f, 0.f, 0.f };
+                m.col1 = { 0.f, 1.f, 0.f, 0.f };
+                m.col2 = { 0.f, 0.f, 1.f, 0.f };
+                m.col3 = { 0.f, 0.f, 0.f, 1.f };
+            }
+
             // anim clip
             clipCount = (u32)scene.anim_stacks.count;
             clips = (Animation::Clip*)malloc(sizeof(Animation::Clip) * scene.anim_stacks.count);
             for (size_t i = 0; i < clipCount; i++) {
                 const ufbx_anim_stack& stack = *(scene.anim_stacks.data[i]);
-                const f64 targetFramerate = 30.f;
+                const f64 targetFramerate = 12.f;
                 const u32 maxFrames = 4096;
                 const f64 duration = (f32)stack.time_end - (f32)stack.time_begin;
                 const u32 numFrames = Math::clamp((u32)(duration * targetFramerate), 2u, maxFrames);
@@ -614,15 +666,19 @@ namespace Renderer {
 
                 Animation::Clip& clip = clips[i];
                 clip.frameCount = numFrames;
-                clip.frames = (Animation::Frame*)malloc(sizeof(Animation::Frame) * numFrames);
-                for (u32 f = 0; f < numFrames; f++) {
-                    Animation::Frame& frame = clip.frames[f];
-                    frame.joint_to_parent = (Mat4*)malloc(sizeof(Mat4) * jointCount);
-                    for (u32 joint_index = 0; joint_index < jointCount; joint_index++) {
-                        f64 time = stack.time_begin + (double)i / framerate;
-                        ufbx_node* node = scene.nodes.data[node_indices[joint_index]];
+                clip.joints = (Animation::JointKeyframes*)malloc(sizeof(Animation::JointKeyframes) * jointCount);
+                clip.timeEnd = (f32)stack.time_end;
+                for (u32 joint_index = 0; joint_index < jointCount; joint_index++) {
+                    ufbx_node* node = scene.nodes.data[node_indices_skeleton[joint_index]];
+					Animation::JointKeyframes& joint = clip.joints[joint_index];
+                    joint.joint_to_parent_trs = (Animation::Joint_TRS*)malloc(sizeof(Animation::Joint_TRS) * numFrames);
+                    for (u32 f = 0; f < numFrames; f++) {
+                        Animation::Joint_TRS& keyframeJoint = joint.joint_to_parent_trs[f];
+                        f64 time = stack.time_begin + (double)f / framerate;
                         ufbx_transform transform = ufbx_evaluate_transform(&stack.anim, node, time);
-                        from_ufbx_mat(frame.joint_to_parent[i], ufbx_transform_to_matrix(&transform));
+                        keyframeJoint.rotation.x = transform.rotation.x; keyframeJoint.rotation.y = transform.rotation.y; keyframeJoint.rotation.z = transform.rotation.z; keyframeJoint.rotation.w = transform.rotation.w;
+                        keyframeJoint.translation.x = transform.translation.x; keyframeJoint.translation.y = transform.translation.y; keyframeJoint.translation.z = transform.translation.z;
+                        keyframeJoint.scale.x = transform.scale.x; keyframeJoint.scale.y = transform.scale.y; keyframeJoint.scale.z = transform.scale.z;
                     }
                 }
             }
@@ -630,7 +686,6 @@ namespace Renderer {
         void load_with_material(Drawlist::Drawlist_node& nodeToAdd, Store& renderStore, const char* path, Allocator::Arena scratchArena) {
             ufbx_load_opts opts = {};
             opts.target_axes = { UFBX_COORDINATE_AXIS_POSITIVE_X, UFBX_COORDINATE_AXIS_POSITIVE_Z, UFBX_COORDINATE_AXIS_POSITIVE_Y };
-            //opts.evaluate_skinning = true;
             opts.allow_null_material = true;
             ufbx_error error;
             ufbx_scene* scene = ufbx_load_file(path, &opts, &error);
@@ -654,7 +709,6 @@ namespace Renderer {
                 u32 vertexOffset = 0;
                 for (size_t i = 0; i < scene->meshes.count; i++) {
                     ufbx_mesh& mesh = *scene->meshes.data[i];
-
                     // Extract vertices from this mesh and flatten any transform trees
                     // This assumes there's only one instance of this mesh, we don't support more at the moment
                     {
@@ -664,9 +718,16 @@ namespace Renderer {
                         for (size_t v = 0; v < mesh.num_vertices; v++) {
                             Vertex_src vertex;
                             const ufbx_vec3& v_fbx_ls = mesh.vertices[v];
-                            vertex.coords.x = v_fbx_ls.x * m.m00 + v_fbx_ls.y * m.m01 + v_fbx_ls.z * m.m02 + m.m03;
-                            vertex.coords.y = v_fbx_ls.x * m.m10 + v_fbx_ls.y * m.m11 + v_fbx_ls.z * m.m12 + m.m13;
-                            vertex.coords.z = v_fbx_ls.x * m.m20 + v_fbx_ls.y * m.m21 + v_fbx_ls.z * m.m22 + m.m23;
+                            // If using skinning, we'll store the node hierarchy in the joints
+                            if (mesh.skin_deformers.count) {
+                                vertex.coords.x = v_fbx_ls.x;
+                                vertex.coords.y = v_fbx_ls.y;
+                                vertex.coords.z = v_fbx_ls.z;
+                            } else {
+                                vertex.coords.x = v_fbx_ls.x * m.m00 + v_fbx_ls.y * m.m01 + v_fbx_ls.z * m.m02 + m.m03;
+                                vertex.coords.y = v_fbx_ls.x * m.m10 + v_fbx_ls.y * m.m11 + v_fbx_ls.z * m.m12 + m.m13;
+                                vertex.coords.z = v_fbx_ls.x * m.m20 + v_fbx_ls.y * m.m21 + v_fbx_ls.z * m.m22 + m.m23;
+                            }
                             vertices.push_back(vertex);
                         }
                     }

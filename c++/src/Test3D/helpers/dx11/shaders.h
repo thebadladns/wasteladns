@@ -135,13 +135,59 @@ struct VS_src_selector<
     VSDrawType::Standard> {
     static const VS_src& value() { return vs_forward_base_Vec3Color4B_CBuffer_3DScene_Standard; }
 };
+
+
+constexpr VS_src vs_forward_base_Vec3Color4BSkinned_CBuffer_3DScene_Standard = {
+"forward_base_Vec3Color4BSkinned_CBuffer_3DScene_Standard",
+R"(
+cbuffer PerScene : register(b0) {
+    matrix projectionMatrix;
+    matrix viewMatrix;
+    float3 viewPosWS;
+    float padding1;
+    float3 lightPosWS;
+    float padding2;
+}
+cbuffer PerGroup : register(b1) {
+    matrix modelMatrix;
+    float4 groupColor;
+}
+cbuffer PerInstance : register(b2) {
+	matrix skinningMatrices[256];
+};
+struct AppData {
+    float3 posMS : POSITION;
+    float4 color : COLOR;
+    int4 joint_indices : JOINTINDICES;
+    float4 joint_weights : JOINTWEIGHTS;
+};
+struct VertexOutput {
+    float4 color : COLOR;
+    float4 positionCS : SV_POSITION;
+};
+VertexOutput VS(AppData IN) {
+    float4x4 joint0 = skinningMatrices[IN.joint_indices.x] * IN.joint_weights.x;
+    float4x4 joint1 = skinningMatrices[IN.joint_indices.y] * IN.joint_weights.y;
+    float4x4 joint2 = skinningMatrices[IN.joint_indices.z] * IN.joint_weights.z;
+    float4x4 joint3 = skinningMatrices[IN.joint_indices.w] * IN.joint_weights.w;
+    float4x4 skinning = joint0 + joint1 + joint2 + joint3;
+    VertexOutput OUT;
+    matrix vp = mul(projectionMatrix, viewMatrix);
+    float4 posWS = mul(mul(modelMatrix,skinning), float4(IN.posMS, 1.f));
+    OUT.positionCS = mul(vp, posWS);
+    OUT.color = IN.color.rgba;
+    return OUT;
+}
+)"
+};
+
 template <>
 struct VS_src_selector<
     VSTechnique::forward_base,
     Layout_Vec3Color4BSkinned,
     Layout_CBuffer_3DScene,
     VSDrawType::Standard> {
-    static const VS_src& value() { return vs_forward_base_Vec3Color4B_CBuffer_3DScene_Standard; }
+    static const VS_src& value() { return vs_forward_base_Vec3Color4BSkinned_CBuffer_3DScene_Standard; }
 };
 
 constexpr VS_src vs_forward_base_Vec3_CBuffer_3DScene_Instanced = {
@@ -254,20 +300,27 @@ cbuffer PerGroup : register(b1) {
     float4 groupColor;
 }
 cbuffer PerInstance : register(b2) {
-	matrix instanceMatrices[256];
+	matrix skinningMatrices[256];
 };
 struct AppData {
     float3 posMS : POSITION;
     float2 uv : TEXCOORD;
+    int4 joint_indices : JOINTINDICES;
+    float4 joint_weights : JOINTWEIGHTS;
 };
 struct VertexOutput {
     float2 uv : TEXCOORD;
     float4 positionCS : SV_POSITION;
 };
 VertexOutput VS(AppData IN) {
+    float4x4 joint0 = skinningMatrices[IN.joint_indices.x] * IN.joint_weights.x;
+    float4x4 joint1 = skinningMatrices[IN.joint_indices.y] * IN.joint_weights.y;
+    float4x4 joint2 = skinningMatrices[IN.joint_indices.z] * IN.joint_weights.z;
+    float4x4 joint3 = skinningMatrices[IN.joint_indices.w] * IN.joint_weights.w;
+    float4x4 skinning = joint0 + joint1 + joint2 + joint3;
     VertexOutput OUT;
     matrix vp = mul(projectionMatrix, viewMatrix);
-    float4 posWS = mul(modelMatrix, float4(IN.posMS, 1.f));
+    float4 posWS = mul(modelMatrix, mul(skinning, float4(IN.posMS, 1.f)));
     OUT.positionCS = mul(vp, posWS);
     OUT.uv = IN.uv;
     return OUT;

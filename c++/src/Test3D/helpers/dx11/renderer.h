@@ -305,9 +305,24 @@ namespace Driver {
     template <typename _vertexLayout, typename _cbufferLayout, Shaders::PSCBufferUsage::Enum _cbufferUsage, typename Shaders::VSDrawType::Enum _drawType>
     void bind_shader_samplers(RscShaderSet<_vertexLayout, _cbufferLayout, _cbufferUsage, _drawType>& ss, const char** params, const u32 count) {}
 
+    struct ShaderBytecode {
+        u8* data;
+        u64 size;
+    };
+    struct ShaderCache {
+        ShaderBytecode* shaderBytecode;
+        u64 shaderBytecodeCount;
+    };
+#if WRITE_SHADERCACHE
+    static ShaderCache shaderCache{ (ShaderBytecode*)malloc(sizeof(ShaderBytecode) * 64), 0 };
+#endif
+#if READ_SHADERCACHE
+    static ShaderCache shaderCache{ nullptr, 0 };
+#endif
     template <typename _vertexLayout, typename _cbufferLayout, Shaders::VSDrawType::Enum _drawType>
     ShaderResult create_shader_vs(RscVertexShader<_vertexLayout, _cbufferLayout, _drawType>& vs, const VertexShaderRuntimeCompileParams& params) {
         ID3D11VertexShader* vertexShader = nullptr;
+#if WRITE_SHADERCACHE
         ID3DBlob* pShaderBlob = nullptr;
         ID3DBlob* pErrorBlob = nullptr;
         HRESULT hr = D3DCompile(
@@ -319,26 +334,44 @@ namespace Driver {
             , D3DCOMPILE_ENABLE_STRICTNESS | D3DCOMPILE_DEBUG, 0
             , &pShaderBlob, &pErrorBlob
         );
+        ShaderBytecode& byteCode = shaderCache.shaderBytecode[shaderCache.shaderBytecodeCount++];
+        byteCode.data = (u8*)malloc(pShaderBlob->GetBufferSize());
+        byteCode.size = pShaderBlob->GetBufferSize();
+        memcpy(byteCode.data, pShaderBlob->GetBufferPointer(), pShaderBlob->GetBufferSize());
+        void* shaderBufferPointer = byteCode.data;
+        size_t shaderBufferSize = byteCode.size;
+        void* error = pErrorBlob?pErrorBlob->GetBufferPointer():nullptr;
+#endif
+#if READ_SHADERCACHE
+        Renderer::Driver::ShaderBytecode& byteCode = Renderer::Driver::shaderCache.shaderBytecode[Renderer::Driver::shaderCache.shaderBytecodeCount++];
+        void* shaderBufferPointer = byteCode.data;
+        size_t shaderBufferSize = byteCode.size;
+        void* error = nullptr;
+        HRESULT hr = S_OK;
+#endif
 
         ShaderResult result;
         result.compiled = !FAILED(hr);
         if (result.compiled) {
-            d3ddev->CreateVertexShader(pShaderBlob->GetBufferPointer(), pShaderBlob->GetBufferSize(), nullptr, &vertexShader);
-            create_vertex_layout(vs, (void*)pShaderBlob->GetBufferPointer(), (u32)pShaderBlob->GetBufferSize());
+            d3ddev->CreateVertexShader(shaderBufferPointer, shaderBufferSize, nullptr, &vertexShader);
+            create_vertex_layout(vs, shaderBufferPointer, (u32)shaderBufferSize);
         } else {
-            Platform::format(result.error, 128, "%.128s", pErrorBlob ? (char*)pErrorBlob->GetBufferPointer() : "Unknown shader error");
+            Platform::format(result.error, 128, "%.128s", error ? (char*)error : "Unknown shader error");
         }
 
         vs.shaderObject = vertexShader;
 
+#if WRITE_SHADERCHACHE
         if (pShaderBlob) pShaderBlob->Release();
         if (pErrorBlob) pErrorBlob->Release();
+#endif
 
         return result;
     }
     template <Shaders::PSCBufferUsage::Enum _cbufferUsage>
     ShaderResult create_shader_ps(RscPixelShader<_cbufferUsage>& ps, const PixelShaderRuntimeCompileParams& params) {
         ID3D11PixelShader* pixelShader = nullptr;
+#if WRITE_SHADERCACHE
         ID3DBlob* pShaderBlob = nullptr;
         ID3DBlob* pErrorBlob = nullptr;
         HRESULT hr = D3DCompile(
@@ -350,19 +383,35 @@ namespace Driver {
             , D3DCOMPILE_ENABLE_STRICTNESS | D3DCOMPILE_DEBUG, 0
             , &pShaderBlob, &pErrorBlob
         );
-
+        ShaderBytecode& byteCode = shaderCache.shaderBytecode[shaderCache.shaderBytecodeCount++];
+        byteCode.data = (u8*)malloc(pShaderBlob->GetBufferSize());
+        byteCode.size = pShaderBlob->GetBufferSize();
+        memcpy(byteCode.data, pShaderBlob->GetBufferPointer(), pShaderBlob->GetBufferSize());
+        void* shaderBufferPointer = byteCode.data;
+        size_t shaderBufferSize = byteCode.size;
+        void* error = pErrorBlob? pErrorBlob->GetBufferPointer() : nullptr;
+#endif
+#if READ_SHADERCACHE
+        Renderer::Driver::ShaderBytecode& byteCode = Renderer::Driver::shaderCache.shaderBytecode[Renderer::Driver::shaderCache.shaderBytecodeCount++];
+        void* shaderBufferPointer = byteCode.data;
+        size_t shaderBufferSize = byteCode.size;
+        void* error = nullptr;
+        HRESULT hr = S_OK;
+#endif
         ShaderResult result;
         result.compiled = !FAILED(hr);
         if (result.compiled) {
-            d3ddev->CreatePixelShader(pShaderBlob->GetBufferPointer(), pShaderBlob->GetBufferSize(), nullptr, &pixelShader);
+            d3ddev->CreatePixelShader(shaderBufferPointer, shaderBufferSize, nullptr, &pixelShader);
         } else {
-            Platform::format(result.error, 128, "%.128s", pErrorBlob ? (char*)pErrorBlob->GetBufferPointer() : "Unknown shader error");
+            Platform::format(result.error, 128, "%.128s", error ? (char*)error : "Unknown shader error");
         }
 
         ps.shaderObject = pixelShader;
 
+#if WRITE_SHADERCHACHE
         if (pShaderBlob) pShaderBlob->Release();
         if (pErrorBlob) pErrorBlob->Release();
+#endif
 
         return result;
     }
@@ -616,9 +665,8 @@ namespace Driver {
         D3D11_INPUT_ELEMENT_DESC vertexLayoutDesc[] = {
               { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, offsetof(Layout_TexturedSkinnedVec3, pos), D3D11_INPUT_PER_VERTEX_DATA, 0 }
             , { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, offsetof(Layout_TexturedSkinnedVec3, uv), D3D11_INPUT_PER_VERTEX_DATA, 0 }
-            , { "NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, offsetof(Layout_TexturedSkinnedVec3, normal), D3D11_INPUT_PER_VERTEX_DATA, 0 }
-            , { "BONEINDICES", 0, DXGI_FORMAT_R8G8B8A8_SINT, 0, offsetof(Layout_TexturedSkinnedVec3, joint_indices), D3D11_INPUT_PER_VERTEX_DATA, 0 }
-            , { "BONEWEIGHTS", 0, DXGI_FORMAT_R8G8B8A8_UNORM, 0, offsetof(Layout_TexturedSkinnedVec3, joint_weights), D3D11_INPUT_PER_VERTEX_DATA, 0 }
+            , { "JOINTINDICES", 0, DXGI_FORMAT_R8G8B8A8_SINT, 0, offsetof(Layout_TexturedSkinnedVec3, joint_indices), D3D11_INPUT_PER_VERTEX_DATA, 0 }
+            , { "JOINTWEIGHTS", 0, DXGI_FORMAT_R8G8B8A8_UNORM, 0, offsetof(Layout_TexturedSkinnedVec3, joint_weights), D3D11_INPUT_PER_VERTEX_DATA, 0 }
         };
         d3ddev->CreateInputLayout(vertexLayoutDesc, ARRAYSIZE(vertexLayoutDesc), shaderBufferPointer, shaderBufferSize, &inputLayout);
 
@@ -666,9 +714,8 @@ namespace Driver {
         D3D11_INPUT_ELEMENT_DESC vertexLayoutDesc[] = {
               { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, offsetof(Layout_Vec3Color4BSkinned, pos), D3D11_INPUT_PER_VERTEX_DATA, 0 }
             , { "COLOR", 0, DXGI_FORMAT_R8G8B8A8_UNORM, 0, offsetof(Layout_Vec3Color4BSkinned, color), D3D11_INPUT_PER_VERTEX_DATA, 0 }
-            , { "NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, offsetof(Layout_Vec3Color4BSkinned, normal), D3D11_INPUT_PER_VERTEX_DATA, 0 }
-            , { "BONEINDICES", 0, DXGI_FORMAT_R8G8B8A8_SINT, 0, offsetof(Layout_Vec3Color4BSkinned, joint_indices), D3D11_INPUT_PER_VERTEX_DATA, 0 }
-            , { "BONEWEIGHTS", 0, DXGI_FORMAT_R8G8B8A8_UNORM, 0, offsetof(Layout_Vec3Color4BSkinned, joint_weights), D3D11_INPUT_PER_VERTEX_DATA, 0 }
+            , { "JOINTINDICES", 0, DXGI_FORMAT_R8G8B8A8_SINT, 0, offsetof(Layout_Vec3Color4BSkinned, joint_indices), D3D11_INPUT_PER_VERTEX_DATA, 0 }
+            , { "JOINTWEIGHTS", 0, DXGI_FORMAT_R8G8B8A8_UNORM, 0, offsetof(Layout_Vec3Color4BSkinned, joint_weights), D3D11_INPUT_PER_VERTEX_DATA, 0 }
         };
         d3ddev->CreateInputLayout(vertexLayoutDesc, ARRAYSIZE(vertexLayoutDesc), shaderBufferPointer, shaderBufferSize, &inputLayout);
 

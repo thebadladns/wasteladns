@@ -623,7 +623,7 @@ struct Drawlist_PerVertexBuffer<_vertexLayout, _cbufferLayout, Shaders::VSDrawTy
 template <typename _vertexLayout, typename _cbufferLayout>
 struct Drawlist_PerVertexBuffer<_vertexLayout, _cbufferLayout, Shaders::VSDrawType::Standard, Shaders::VSSkinType::Skinned> {
     typedef typename _cbufferLayout::GroupData GroupData;
-    typedef typename _cbufferLayout::Instance Instance; // posed world_to_joint matrices
+    typedef typename _cbufferLayout::Instance Instance; // skinning matrices
     typedef Drawlist_PerVertexBuffer<_vertexLayout, _cbufferLayout, Shaders::VSDrawType::Standard, Shaders::VSSkinType::Skinned> Type;
     Driver::RscIndexedBuffer<_vertexLayout> buffer;
     tinystl::vector<Instance> instancedData;
@@ -658,9 +658,9 @@ void dl_bind_and_draw_buffer(const Drawlist_PerVertexBuffer<_vertexLayout, _cbuf
         instancedBuffer.instanceMatrices[k] = buffer.instancedData[k];
     }
     Driver::update_cbuffer(cbuffers[_cbufferLayout::Buffers::InstanceData], instancedBuffer);
-    Driver::bind_cbuffers(cbuffers, _cbufferLayout::Buffers::Count, { true, (bool)_cbufferUsage });
+    Driver::bind_cbuffers(cbuffers, _cbufferLayout::Buffers::Count, { true, _cbufferUsage });
     Driver::bind_indexed_vertex_buffer(buffer.buffer);
-    draw_instances_indexed_vertex_buffer(buffer.buffer, size);
+    Driver::draw_indexed_vertex_buffer(buffer.buffer);
 }
 template<typename _vertexLayout, typename _cbufferLayout, Shaders::PSCBufferUsage::Enum _cbufferUsage>
 void dl_bind_and_draw_buffer(const Drawlist_PerVertexBuffer<_vertexLayout, _cbufferLayout, Shaders::VSDrawType::Instanced, Shaders::VSSkinType::Unskinned>& buffer, Driver::RscCBuffer* cbuffers) {
@@ -673,7 +673,7 @@ void dl_bind_and_draw_buffer(const Drawlist_PerVertexBuffer<_vertexLayout, _cbuf
     Driver::update_cbuffer(cbuffers[_cbufferLayout::Buffers::InstanceData], instancedBuffer);
     Driver::bind_cbuffers(cbuffers, _cbufferLayout::Buffers::Count, { true, (bool)_cbufferUsage });
     Driver::bind_indexed_vertex_buffer(buffer.buffer);
-    draw_instances_indexed_vertex_buffer(buffer.buffer, size);
+    Driver::draw_instances_indexed_vertex_buffer(buffer.buffer, size);
 }
 
 template <typename _vertexLayout, typename _cbufferLayout, Shaders::PSTechnique::Enum _psTechnique, Shaders::VSDrawType::Enum _drawType>

@@ -149,7 +149,7 @@ constexpr Vector4<_T>::Vector4(const Vector2<_T>& _xy, const Vector2<_T>& _zw)
 : x(_xy.x), y(_xy.y), z(_zw.x), w(_zw.y) {}
 
 namespace Math {
-    
+
 template <typename _T>
 Vector2<_T> negate(const Vector2<_T>& v) {
     return Vector2<_T>(-v.x, -v.y);
@@ -372,7 +372,19 @@ bool isCloseAll(const Vector4<_T>& a, const Vector4<_T>& b, const _T d) {
         && Math::abs(a.z - b.z) < d
         && Math::abs(a.w - b.w) < d;
 }
-    
+template <typename _T>
+Vector2<_T> lerp(const f32 t, const Vector2<_T>& a, const Vector2<_T>& b) {
+    return Math::add(a, Math::scale(Math::subtract(b, a), t));
+}
+template <typename _T>
+Vector3<_T> lerp(const f32 t, const Vector3<_T>& a, const Vector3<_T>& b) {
+    return Math::add(a, Math::scale(Math::subtract(b, a), t));
+}
+template <typename _T>
+Vector4<_T> lerp(const f32 t, const Vector4<_T>& a, const Vector4<_T>& b) {
+    return Math::add(a, Math::scale(Math::subtract(b, a), t));
+}
+
 template <typename _T>
 Matrix33<_T> mult(const Matrix33<_T>& a, const Matrix33<_T>& b) {
     Vector3<_T> a_r0 ( a.dataCM[0], a.dataCM[3], a.dataCM[6] );

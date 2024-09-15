@@ -17,7 +17,7 @@ out gl_PerVertex
 
 layout(std140) uniform type_PerGroup
 {
-    layout(row_major) mat4 MVP;
+    mat4 MVP;
 } PerGroup;
 
 layout(location = 0) in vec3 in_var_POSITION;
@@ -27,7 +27,7 @@ layout(location = 0) out vec4 varying_COLOR;
 void main()
 {
     varying_COLOR = in_var_COLOR;
-    gl_Position = vec4(in_var_POSITION, 1.0) * PerGroup.MVP;
+    gl_Position = PerGroup.MVP * vec4(in_var_POSITION, 1.0);
 }
 )"
 };
@@ -63,8 +63,8 @@ out gl_PerVertex
 
 layout(std140) uniform type_PerScene
 {
-    layout(row_major) mat4 projectionMatrix;
-    layout(row_major) mat4 viewMatrix;
+    mat4 projectionMatrix;
+    mat4 viewMatrix;
     vec3 viewPosWS;
     float padding1;
     vec3 lightPosWS;
@@ -73,7 +73,7 @@ layout(std140) uniform type_PerScene
 
 layout(std140) uniform type_PerGroup
 {
-    layout(row_major) mat4 modelMatrix;
+    mat4 modelMatrix;
     vec4 groupColor;
 } PerGroup;
 
@@ -83,7 +83,7 @@ layout(location = 0) out vec4 varying_COLOR;
 void main()
 {
     varying_COLOR = PerGroup.groupColor;
-    gl_Position = (vec4(in_var_POSITION, 1.0) * PerGroup.modelMatrix) * (PerScene.viewMatrix * PerScene.projectionMatrix);
+    gl_Position = (PerScene.projectionMatrix * PerScene.viewMatrix) * (PerGroup.modelMatrix * vec4(in_var_POSITION, 1.0));
 }
 )"
 };
@@ -110,8 +110,8 @@ out gl_PerVertex
 
 layout(std140) uniform type_PerScene
 {
-    layout(row_major) mat4 projectionMatrix;
-    layout(row_major) mat4 viewMatrix;
+    mat4 projectionMatrix;
+    mat4 viewMatrix;
     vec3 viewPosWS;
     float padding1;
     vec3 lightPosWS;
@@ -120,7 +120,7 @@ layout(std140) uniform type_PerScene
 
 layout(std140) uniform type_PerGroup
 {
-    layout(row_major) mat4 modelMatrix;
+    mat4 modelMatrix;
     vec4 groupColor;
 } PerGroup;
 
@@ -131,7 +131,7 @@ layout(location = 0) out vec4 varying_COLOR;
 void main()
 {
     varying_COLOR = in_var_COLOR;
-    gl_Position = (vec4(in_var_POSITION, 1.0) * PerGroup.modelMatrix) * (PerScene.viewMatrix * PerScene.projectionMatrix);
+    gl_Position = (PerScene.projectionMatrix * PerScene.viewMatrix) * (PerGroup.modelMatrix * vec4(in_var_POSITION, 1.0));
 }
 )"
 };
@@ -144,13 +144,63 @@ struct VS_src_selector<
     VSDrawType::Standard> {
     static const VS_src& value() { return vs_forward_base_Vec3Color4B_CBuffer_3DScene_Standard; }
 };
+constexpr VS_src vs_forward_base_Vec3Color4BSkinned_CBuffer_3DScene_Standard = {
+"forward_base_Vec3Color4BSkinned_CBuffer_3DScene_Standard",
+R"(
+#version 330
+#extension GL_ARB_separate_shader_objects : require
+
+out gl_PerVertex
+{
+    vec4 gl_Position;
+};
+
+layout(std140) uniform type_PerScene
+{
+    mat4 projectionMatrix;
+    mat4 viewMatrix;
+    vec3 viewPosWS;
+    float padding1;
+    vec3 lightPosWS;
+    float padding2;
+} PerScene;
+
+layout(std140) uniform type_PerGroup
+{
+    mat4 modelMatrix;
+    vec4 groupColor;
+} PerGroup;
+layout(std140) uniform type_PerInstance
+{
+    mat4 skinningMatrices[256];
+} PerInstance;
+
+layout(location = 0) in vec3 in_var_POSITION;
+layout(location = 1) in vec4 in_var_COLOR;
+layout(location = 2) in vec4 in_var_JOINTINDICES;
+layout(location = 3) in vec4 in_var_JOINTWEIGHTS;
+layout(location = 0) out vec4 varying_COLOR;
+
+void main()
+{
+    varying_COLOR = in_var_COLOR;
+    mat4 joint0 = PerInstance.skinningMatrices[int(in_var_JOINTINDICES.x)] * in_var_JOINTWEIGHTS.x;
+    mat4 joint1 = PerInstance.skinningMatrices[int(in_var_JOINTINDICES.y)] * in_var_JOINTWEIGHTS.y;
+    mat4 joint2 = PerInstance.skinningMatrices[int(in_var_JOINTINDICES.z)] * in_var_JOINTWEIGHTS.z;
+    mat4 joint3 = PerInstance.skinningMatrices[int(in_var_JOINTINDICES.w)] * in_var_JOINTWEIGHTS.w;
+    mat4 skinning = joint0 + joint1 + joint2 + joint3;
+    gl_Position = (PerScene.projectionMatrix * PerScene.viewMatrix) * ((PerGroup.modelMatrix * skinning) * vec4(in_var_POSITION, 1.0));
+}
+)"
+};
+
 template <>
 struct VS_src_selector<
     VSTechnique::forward_base,
     Layout_Vec3Color4BSkinned,
     Layout_CBuffer_3DScene,
     VSDrawType::Standard> {
-    static const VS_src& value() { return vs_forward_base_Vec3Color4B_CBuffer_3DScene_Standard; }
+    static const VS_src& value() { return vs_forward_base_Vec3Color4BSkinned_CBuffer_3DScene_Standard; }
 };
 
 constexpr VS_src vs_forward_base_Vec3_CBuffer_3DScene_Instanced = {
@@ -221,8 +271,8 @@ out gl_PerVertex
 
 layout(std140) uniform type_PerScene
 {
-    layout(row_major) mat4 projectionMatrix;
-    layout(row_major) mat4 viewMatrix;
+    mat4 projectionMatrix;
+    mat4 viewMatrix;
     vec3 viewPosWS;
     float padding1;
     vec3 lightPosWS;
@@ -231,7 +281,7 @@ layout(std140) uniform type_PerScene
 
 layout(std140) uniform type_PerGroup
 {
-    layout(row_major) mat4 modelMatrix;
+    mat4 modelMatrix;
     vec4 groupColor;
 } PerGroup;
 
@@ -242,7 +292,7 @@ layout(location = 0) out vec2 varying_TEXCOORD;
 void main()
 {
     varying_TEXCOORD = in_var_TEXCOORD;
-    gl_Position = (vec4(in_var_POSITION, 1.0) * PerGroup.modelMatrix) * (PerScene.viewMatrix * PerScene.projectionMatrix);
+    gl_Position = (PerScene.projectionMatrix * PerScene.viewMatrix) * (PerGroup.modelMatrix * vec4(in_var_POSITION, 1.0));
 }
 )"
 };
@@ -258,7 +308,7 @@ struct VS_src_selector<
 
 // TODO: REWRITE
 constexpr VS_src vs_forward_base_TexturedSkinnedVec3_CBuffer_3DScene_Standard = {
-"forward_base_TexturedVec3_CBuffer_3DScene_Standard",
+"forward_base_TexturedSkinnedVec3_CBuffer_3DScene_Standard",
 R"(
 #version 330
 #extension GL_ARB_separate_shader_objects : require
@@ -267,31 +317,40 @@ out gl_PerVertex
 {
     vec4 gl_Position;
 };
-
 layout(std140) uniform type_PerScene
 {
-    layout(row_major) mat4 projectionMatrix;
-    layout(row_major) mat4 viewMatrix;
+    mat4 projectionMatrix;
+    mat4 viewMatrix;
     vec3 viewPosWS;
     float padding1;
     vec3 lightPosWS;
     float padding2;
 } PerScene;
-
 layout(std140) uniform type_PerGroup
 {
-    layout(row_major) mat4 modelMatrix;
+    mat4 modelMatrix;
     vec4 groupColor;
 } PerGroup;
+layout(std140) uniform type_PerInstance
+{
+    mat4 skinningMatrices[256];
+} PerInstance;
 
 layout(location = 0) in vec3 in_var_POSITION;
 layout(location = 1) in vec2 in_var_TEXCOORD;
+layout(location = 2) in vec4 in_var_JOINTINDICES;
+layout(location = 3) in vec4 in_var_JOINTWEIGHTS;
 layout(location = 0) out vec2 varying_TEXCOORD;
 
 void main()
 {
     varying_TEXCOORD = in_var_TEXCOORD;
-    gl_Position = (vec4(in_var_POSITION, 1.0) * PerGroup.modelMatrix) * (PerScene.viewMatrix * PerScene.projectionMatrix);
+    mat4 joint0 = PerInstance.skinningMatrices[int(in_var_JOINTINDICES.x)] * in_var_JOINTWEIGHTS.x;
+    mat4 joint1 = PerInstance.skinningMatrices[int(in_var_JOINTINDICES.y)] * in_var_JOINTWEIGHTS.y;
+    mat4 joint2 = PerInstance.skinningMatrices[int(in_var_JOINTINDICES.z)] * in_var_JOINTWEIGHTS.z;
+    mat4 joint3 = PerInstance.skinningMatrices[int(in_var_JOINTINDICES.w)] * in_var_JOINTWEIGHTS.w;
+    mat4 skinning = joint0 + joint1 + joint2 + joint3;
+    gl_Position = (PerScene.projectionMatrix * PerScene.viewMatrix) * ((PerGroup.modelMatrix * skinning) * vec4(in_var_POSITION, 1.0));
 }
 )"
 };
@@ -458,8 +517,8 @@ R"(
 
 layout(std140) uniform type_PerScene
 {
-    layout(row_major) mat4 projectionMatrix;
-    layout(row_major) mat4 viewMatrix;
+    mat4 projectionMatrix;
+    mat4 viewMatrix;
     vec3 viewPosWS;
     float padding1;
     vec3 lightPosWS;
@@ -508,8 +567,8 @@ R"(
 
 layout(std140) uniform type_PerScene
 {
-    layout(row_major) mat4 projectionMatrix;
-    layout(row_major) mat4 viewMatrix;
+    mat4 projectionMatrix;
+    mat4 viewMatrix;
     vec3 viewPosWS;
     float padding1;
     vec3 lightPosWS;

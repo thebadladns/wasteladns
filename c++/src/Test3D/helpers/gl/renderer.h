@@ -470,9 +470,8 @@ namespace Driver {
     void bind_vertex_layout<Layout_TexturedSkinnedVec3>() {
         glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Layout_TexturedSkinnedVec3), &(((Layout_TexturedSkinnedVec3*)0)->pos));
         glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(Layout_TexturedSkinnedVec3), &(((Layout_TexturedSkinnedVec3*)0)->uv));
-        glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(Layout_TexturedSkinnedVec3), &(((Layout_TexturedSkinnedVec3*)0)->normal));
-        glVertexAttribPointer(3, 4, GL_BYTE, GL_FALSE, sizeof(Layout_TexturedSkinnedVec3), &(((Layout_TexturedSkinnedVec3*)0)->joint_indices));
-        glVertexAttribPointer(4, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(Layout_TexturedSkinnedVec3), &(((Layout_TexturedSkinnedVec3*)0)->joint_weights));
+        glVertexAttribPointer(2, 4, GL_BYTE, GL_FALSE, sizeof(Layout_TexturedSkinnedVec3), &(((Layout_TexturedSkinnedVec3*)0)->joint_indices));
+        glVertexAttribPointer(3, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(Layout_TexturedSkinnedVec3), &(((Layout_TexturedSkinnedVec3*)0)->joint_weights));
         glEnableVertexAttribArray(0);
         glEnableVertexAttribArray(1);
         glEnableVertexAttribArray(2);
@@ -510,9 +509,8 @@ namespace Driver {
     void bind_vertex_layout<Layout_Vec3Color4BSkinned>() {
         glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Layout_Vec3Color4BSkinned), &(((Layout_Vec3Color4BSkinned*)0)->pos));
         glVertexAttribPointer(1, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(Layout_Vec3Color4BSkinned), &(((Layout_Vec3Color4BSkinned*)0)->color));
-        glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(Layout_Vec3Color4BSkinned), &(((Layout_Vec3Color4BSkinned*)0)->normal));
-        glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, sizeof(Layout_Vec3Color4BSkinned), &(((Layout_Vec3Color4BSkinned*)0)->joint_indices));
-        glVertexAttribPointer(4, 3, GL_FLOAT, GL_FALSE, sizeof(Layout_Vec3Color4BSkinned), &(((Layout_Vec3Color4BSkinned*)0)->joint_weights));
+        glVertexAttribPointer(2, 4, GL_BYTE, GL_FALSE, sizeof(Layout_Vec3Color4BSkinned), &(((Layout_Vec3Color4BSkinned*)0)->joint_indices));
+        glVertexAttribPointer(3, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(Layout_Vec3Color4BSkinned), &(((Layout_Vec3Color4BSkinned*)0)->joint_weights));
         glEnableVertexAttribArray(0);
         glEnableVertexAttribArray(1);
         glEnableVertexAttribArray(2);

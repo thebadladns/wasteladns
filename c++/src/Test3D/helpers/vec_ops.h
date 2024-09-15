@@ -8,6 +8,57 @@
 
 namespace Math {
 
+template <typename _T>
+Vector4<_T> quaternionLerp(const f32 t, const Vector4<_T>& a, const Vector4<_T>& b) {
+    _T af = 1.0f - t, bf = t;
+    _T x = af * a.x + bf * b.x;
+    _T y = af * a.y + bf * b.y;
+    _T z = af * a.z + bf * b.z;
+    _T w = af * a.w + bf * b.w;
+    return Vector4<_T>(x, y, z, w);
+}
+template<typename _T>
+_T quaternionDot(const Vector4<_T>& a, const Vector4<_T>& b) {
+    return a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w;
+}
+template <typename _T>
+Vector4<_T> quaternionSlerp(const f32 t, const Vector4<_T>& a, const Vector4<_T>& b) {
+    _T x, y, z, w;
+    _T bx = b.x, by = b.y, bz = b.z, bw = b.w;
+    _T ax = a.x, ay = a.y, az = a.z, aw = a.w;
+
+    // If negative dot, negate b so the interpolation takes the shorter arc
+    _T cosOmega = Math::quaternionDot(a, b);
+    if (cosOmega < 0.0f) {
+        bx = -b.x; by = -b.y; bz = -b.z; bw = -b.w;
+        cosOmega = -cosOmega;
+    }
+
+    _T ka, kb;
+    if (cosOmega > 0.9999f) { // Very close together: use linear interpolation
+        ka = 1.0f - t;
+        kb = t;
+	} else {
+        // sin^2(omega) + cos^2(omega) = 1, so
+        _T sinOmega = Math::sqrt(1.0f - cosOmega * cosOmega);
+        _T omega = Math::atan2(sinOmega, cosOmega);
+        _T oneOverSinOmega = 1.0f / sinOmega;
+
+        ka = Math::sin((1.0f - t) * omega) * oneOverSinOmega;
+        kb = Math::sin(t * omega) * oneOverSinOmega;
+    }
+
+    x = ax * ka + bx * kb;
+    y = ay * ka + by * kb;
+    z = az * ka + bz * kb;
+    w = aw * ka + bw * kb;
+    return Vector4<_T>(x, y, z, w);
+}
+template<typename _T>
+Vector4<_T> quaternionNegate(const Vector4<_T>& q) {
+	return Vector4<_T>(-q.x, -q.y, -q.z, -q.w);
+}
+
 template<typename _T>
 Vector4<_T> eulersToQuaterion(const Vector3<_T>& eulers)
 {
@@ -90,6 +141,20 @@ Matrix33<_T> quaternionToRotationMatrix(Vector4<_T>& q) {
     //m.dataCM[8] = 2 * (q0 * q0 + q3 * q3) - 1.f;
 
     return m;
+}
+
+template <typename _T>
+Matrix44<_T> trsToMatrix(Vector3<_T> translation, Vector4<_T> q /*quaternion*/, Vector3<_T> scale) {
+	Mat4 mat = Matrix44<_T>();
+    float xx = q.x * q.x, xy = q.x * q.y, xz = q.x * q.z, xw = q.x * q.w;
+    float yy = q.y * q.y, yz = q.y * q.z, yw = q.y * q.w;
+    float zz = q.z * q.z, zw = q.z * q.w;
+    float sx = 2.0f * scale.x, sy = 2.0f * scale.y, sz = 2.0f * scale.z;
+    mat.col0.x = sx * (-yy - zz + 0.5f);    mat.col1.x = sy * (-zw + xy);           mat.col2.x = sz * (+xz + yw);           mat.col3.x = translation.x;
+    mat.col0.y = sx * (+xy + zw);           mat.col1.y = sy * (-xx - zz + 0.5f);    mat.col2.y = sz * (-xw + yz);           mat.col3.y = translation.y;
+    mat.col0.z = sx * (-yw + xz);           mat.col1.z = sy * (+xw + yz);           mat.col2.z = sz * (-xx - yy + 0.5f);    mat.col3.z = translation.z,
+    mat.col0.w = 0.f;                       mat.col1.w = 0.f;                       mat.col2.w = 0.f;                       mat.col3.w = 1.f;
+    return mat;
 }
 
 template <typename _T>

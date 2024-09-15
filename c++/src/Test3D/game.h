@@ -126,6 +126,27 @@ namespace Game
             __DEBUGEXP(Allocator::init_arena(game.memory.imDebugArena, Renderer::Immediate::arena_size));
         }
 
+
+#if READ_SHADERCACHE
+        { // shader cache
+            FILE* f;
+            if (Platform::fopen(&f, "shaderCache.bin", "rb") == 0) {
+                u64 count;
+                fread(&count, sizeof(u64), 1, f);
+                Renderer::Driver::shaderCache.shaderBytecode = (Renderer::Driver::ShaderBytecode*)malloc(sizeof(Renderer::Driver::ShaderBytecode) * count);
+                for (u64 i = 0; i < count; i++) {
+                    u64 size;
+                    fread(&size, sizeof(u64), 1, f);
+                    Renderer::Driver::ShaderBytecode& shader = Renderer::Driver::shaderCache.shaderBytecode[i];
+                    shader.data = (u8*)malloc(sizeof(u8) * size);
+                    shader.size = size;
+                    fread(shader.data, sizeof(u8), size, f);
+                }
+                Platform::fclose(f);
+            }
+        }
+#endif
+
         // camera set up
         game.renderMgr = {};
         {
@@ -237,6 +258,29 @@ namespace Game
             mgr.orbitCamera.scale = 1.f;
             mgr.orbitCamera.origin = Vec3(0.f, 0.f, 0.f);
         }
+
+#if WRITE_SHADERCACHE
+        { // shader cache
+            FILE* f;
+            if (Platform::fopen(&f, "shaderCache.bin", "wb") == 0) {
+                fwrite(&Renderer::Driver::shaderCache.shaderBytecodeCount, sizeof(u64), 1, f);
+                for (size_t i = 0; i < Renderer::Driver::shaderCache.shaderBytecodeCount; i++) {
+                    fwrite(&Renderer::Driver::shaderCache.shaderBytecode[i].size, sizeof(u64), 1, f);
+                    fwrite(Renderer::Driver::shaderCache.shaderBytecode[i].data, sizeof(u8), Renderer::Driver::shaderCache.shaderBytecode[i].size, f);
+                }
+                Platform::fclose(f);
+            }
+        }
+#endif
+#if WRITE_SHADERCACHE || READ_SHADERCACHE
+		{ // shader cache cleanup
+			for (u64 i = 0; i < Renderer::Driver::shaderCache.shaderBytecodeCount; i++) {
+				free(Renderer::Driver::shaderCache.shaderBytecode[i].data);
+			}
+			free(Renderer::Driver::shaderCache.shaderBytecode);
+        }
+#endif
+
     }
 
     void update(Instance& game, Platform::GameConfig& config, const Platform::State& platform) {
@@ -294,7 +338,8 @@ namespace Game
             {
                 if (platform.input.padCount > 0) {
                     Gameplay::Movement::process(game.player.control, platform.input.pads[0]);
-                } else {
+                }
+                else {
                     Gameplay::Movement::process(game.player.control, keyboard, { Input::UP, Input::DOWN, Input::LEFT, Input::RIGHT });
                 }
                 Gameplay::Movement::process_cameraRelative(game.player.transform, game.player.movementController, game.player.control, activeCam->transform, dt);
@@ -302,19 +347,87 @@ namespace Game
                 // update drawlist
                 game.renderMgr.player_DLnode.worldTransform.matrix = Math::mult(game.player.transform.matrix, game.renderMgr.player_DLnode.localTransform.matrix);
                 Renderer::Drawlist::update_dl_node_matrix(game.renderMgr.renderScene.store.drawlist, game.renderMgr.player_DLnode);
-                
-                {
+
+                { // animation hack
+                    enum Cycle { Idle = 0, JerkyRun = 1, Run = 2 };
+                    const f32 maxSpeed = 15.f;
+                    const f32 runSpeedStart = 0.2f;
+                    const f32 jerkyRunSpeedStart = 13.f;
+                    const f32 jerkyRunMinScale = 4.5f;
+                    const f32 jerkyRunMaxScale = 5.f;
+                    const f32 jerkyRunParticleMinScaley = -1.3f;
+                    const f32 jerkyRunParticleMaxScaley = -1.5f;
+                    const f32 jerkyRunParticleMinScalez = 0.4f;
+                    const f32 jerkyRunParticleMaxScalez = 0.5f;
+                    const f32 runParticleMinScaley = -0.4f;
+                    const f32 runParticleMaxScaley = -0.9f;
+                    const f32 runParticleMinScalez = 0.4f;
+                    const f32 runParticleMaxScalez = 0.5f;
+                    const f32 runParticleMinOffsetz = -1.2f; // 2.23879f
+                    const f32 runParticleMaxOffsetz = -0.5f;
+                    const f32 runMinScale = 5.f;
+                    const f32 runMaxScale = 15.f;
+                    const f32 idleScale = 2.f;
+                    f32 particle_scaley = 0.f, particle_scalez = 0.f, particle_offsetz = -0.5f, particle_offsety = 0.f;
+                    f32 particle_totalscale = 0.7f;
+                    if (game.player.movementController.speed > jerkyRunSpeedStart) {
+						const f32 run_t = (game.player.movementController.speed - jerkyRunSpeedStart) / (maxSpeed - jerkyRunSpeedStart);
+                        const f32 scale = 1.f + Math::lerp(run_t, jerkyRunMinScale, jerkyRunMaxScale);
+                        particle_scaley = Math::lerp(run_t, jerkyRunParticleMinScaley, jerkyRunParticleMaxScaley);
+                        particle_scalez = Math::lerp(run_t, jerkyRunParticleMinScalez, jerkyRunParticleMaxScalez);
+                        particle_offsety = 0.3f;
+                        game.renderMgr.renderScene.store.animated_nodes[0].state.scale = scale;
+                        if (game.renderMgr.renderScene.store.animated_nodes[0].state.animIndex != 1) {
+                            game.renderMgr.renderScene.store.animated_nodes[0].state.animIndex = 1;
+                            game.renderMgr.renderScene.store.animated_nodes[0].state.time = 0.f;
+                        }
+                    }
+                    else if (game.player.movementController.speed > 0.2f) {
+                        const f32 run_t = (game.player.movementController.speed - runSpeedStart) / (jerkyRunSpeedStart - runSpeedStart);
+                        const f32 scale = 1.f + Math::lerp(run_t, runMinScale, runMaxScale);
+                        particle_scaley = Math::lerp(run_t, runParticleMinScaley, runParticleMaxScaley);
+                        particle_scalez = Math::lerp(run_t, runParticleMinScalez, runParticleMaxScalez);
+                        particle_offsetz = Math::lerp(run_t, runParticleMinOffsetz, runParticleMaxOffsetz);
+                        particle_totalscale = 0.6f;
+                        game.renderMgr.renderScene.store.animated_nodes[0].state.scale = scale;
+                        if (game.renderMgr.renderScene.store.animated_nodes[0].state.animIndex != 2) {
+                            game.renderMgr.renderScene.store.animated_nodes[0].state.animIndex = 2;
+                            game.renderMgr.renderScene.store.animated_nodes[0].state.time = 0.f;
+                            game.renderMgr.renderScene.store.animated_nodes[0].state.scale = 9.f;
+                        }
+                    }
+                    else {
+                        particle_scaley = 0.f;
+                        particle_scalez = 0.f;
+                        game.renderMgr.renderScene.store.animated_nodes[0].state.scale = idleScale;
+                        if (game.renderMgr.renderScene.store.animated_nodes[0].state.animIndex != 0) {
+                            game.renderMgr.renderScene.store.animated_nodes[0].state.animIndex = 0;
+                            game.renderMgr.renderScene.store.animated_nodes[0].state.time = 0.f;
+                            game.renderMgr.renderScene.store.animated_nodes[0].state.scale = 1.f;
+                        }
+                    }
+
+                    // dust particles hack
                     Mat4 instance_matrices[numCubes];
                     for (u32 i = 0; i < numCubes; i++) {
-                        float scaley = -1.f * Math::clamp(game.player.movementController.speed, 0.f, 1.5f);
-                        float scalez = 0.5f * Math::clamp(game.player.movementController.speed, 0.f, 1.f);
+
+                        const f32 scaley = particle_scaley;
+                        const f32 scalez = particle_scalez;
+                        const f32 offsety = particle_offsety;
+                        const f32 offsetz = particle_offsetz;
+                        const f32 scale = particle_totalscale;
+
                         Transform t;
                         Math::identity4x4(t);
-                        t.pos = Math::add(game.player.transform.pos, Math::scale(game.player.transform.front, scaley * (i + 2)));
-                        t.pos.z = t.pos.z + scalez * (Math::cos((f32)platform.time.now * 10.f + i * 2.f) - 1.5f);
+                        t.pos = Math::add(game.player.transform.pos, Math::scale(game.player.transform.front, offsety + scaley * (i + 2)));
+                        t.pos.z = t.pos.z + offsetz + scalez * (Math::cos((f32)platform.time.now * 10.f + i * 2.f) - 1.5f);
                         t.matrix.col0.x = 0.2f;
                         t.matrix.col1.y = 0.2f;
                         t.matrix.col2.z = 0.2f;
+                        t.matrix.col0 = Math::scale(t.matrix.col0, scale);
+                        t.matrix.col1 = Math::scale(t.matrix.col1, scale);
+                        t.matrix.col2 = Math::scale(t.matrix.col2, scale);
+
                         instance_matrices[i] = t.matrix;
                     }
                     Renderer::Drawlist::update_dl_node_instance_data(game.renderMgr.renderScene.store.drawlist, game.renderMgr.particles_DLhandle, instance_matrices);
@@ -323,16 +436,14 @@ namespace Game
             
             // animation
             {
-                const f32 time = 0.f; // tmp hack
                 for (u32 i = 0; i < game.renderMgr.renderScene.store.animated_nodes.size(); i++) {
                     Allocator::Arena scratchArena = game.memory.scratchArenaRoot;
-                    const Renderer::Animation::AnimatedNode& node = game.renderMgr.renderScene.store.animated_nodes[i];
-                    Mat4* world_to_joint = (Mat4*)Allocator::alloc_arena(scratchArena, node.skeleton.jointCount, 16);
-                    Renderer::Animation::updateAnimation(world_to_joint, node, time);
+                    Renderer::Animation::AnimatedNode& node = game.renderMgr.renderScene.store.animated_nodes[i];
+                    Mat4* skinning = (Mat4*)Allocator::alloc_arena(scratchArena, node.skeleton.jointCount, 16);
+                    Renderer::Animation::updateAnimation(skinning, node.state, node.clips[node.state.animIndex], node.skeleton, dt);
                     
-                    Renderer::Drawlist::update_dl_node_instance_data(game.renderMgr.renderScene.store.drawlist, game.renderMgr.player_DLnode.handle, world_to_joint);
+                    Renderer::Drawlist::update_dl_node_instance_data(game.renderMgr.renderScene.store.drawlist, node.mesh_DLhandle, skinning);
                 }
-                
             }
 
             // camera update

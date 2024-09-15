@@ -24,12 +24,10 @@
 #define UFBX_REAL_IS_FLOAT
 #define UFBX_MINIMAL
 #define UFBXI_FEATURE_TRIANGULATION 1
-//#define UFBXI_FEATURE_SKINNING_EVALUATION 1
 #include "lib/fbx/ufbx.c"
 
 #define UNITYBUILD
 #define __GPU_DEBUG 0
-
 
 #if __MACOS || __GLFW
 #define __GL 1
@@ -47,6 +45,14 @@
 do { \
   a; \
 } while (0)
+#endif
+
+#if __DX11
+#define WRITE_SHADERCACHE __DEBUG
+#define READ_SHADERCACHE 1-WRITE_SHADERCACHE
+#else
+#define WRITE_SHADERCACHE 0
+#define READ_SHADERCACHE 0
 #endif
 
 #if __DX11
