@@ -99,7 +99,7 @@ do { \
 
 #include "game.h"
 #if __WIN64
-	#include "helpers/platform_win/main_gl.h"
+	#include "helpers/platform_win/main.h"
 #elif __MACOS
 	#include "helpers/platform_mac/main.mm"
 #endif

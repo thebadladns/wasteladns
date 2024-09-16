@@ -27,35 +27,13 @@
     [NSApp terminate:nil];
 }
 @end
-//
-//static CFBundleRef glFramework;
-//void loadGLFramework()
-//{
-//    glFramework = CFBundleGetBundleWithIdentifier(CFSTR("com.apple.opengl"));
-//}
-//static void* getGLProcAddress(const char* procname)
-//{
-//    CFStringRef symbolName = CFStringCreateWithCString(kCFAllocatorDefault,
-//                                                       procname,
-//                                                       kCFStringEncodingASCII);
-//
-//    void* symbol = CFBundleGetFunctionPointerForName(glFramework, symbolName);
-//
-//    CFRelease(symbolName);
-//
-//    return symbol;
-//}
-
 
 int main(int , char** ) {
     @autoreleasepool {
         
         Platform::State platform = {};
         Allocator::init_arena(platform.memory.scratchArenaRoot, 1 << 20); // 1MB
-        __DEBUGEXP(platform.memory.scratchArenaHighmark = platform.memory.scratchArenaRoot.curr; platform.memory.scratchArenaRoot.highmark = &platform.memory.scratchArenaHighmark);
-        
-        // load framework to access opengl functions through glad
-//        loadGLFramework();
+        __DEBUGEXP(platform.memory.scratchArenaHighmark = (uintptr_t)platform.memory.scratchArenaRoot.curr; platform.memory.scratchArenaRoot.highmark = &platform.memory.scratchArenaHighmark);
         
         [NSApplication sharedApplication];
         AppDelegate* appDelegate = [[AppDelegate alloc] init];

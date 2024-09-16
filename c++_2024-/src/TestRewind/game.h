@@ -84,8 +84,8 @@ namespace Game
         Allocator::Arena scratchArenaRoot; // to be always passed by copy, so it auto-resets
         __DEBUGDEF(Allocator::Arena imDebugArena;)
         u8* frameArenaBuffer; // used to reset Allocator::frameArena every frame
-        __DEBUGDEF(u8* frameArenaHighmark;)
-        __DEBUGDEF(u8* scratchArenaHighmark;)
+        __DEBUGDEF(uintptr_t frameArenaHighmark;)
+        __DEBUGDEF(uintptr_t scratchArenaHighmark;)
     };
 
     struct Instance {
@@ -120,9 +120,9 @@ namespace Game
         {
             Allocator::init_arena(Allocator::frameArena, 1 << 20); // 1MB
             game.memory.frameArenaBuffer = Allocator::frameArena.curr;
-            __DEBUGEXP(game.memory.frameArenaHighmark = Allocator::frameArena.curr; Allocator::frameArena.highmark = &game.memory.frameArenaHighmark);
+            __DEBUGEXP(game.memory.frameArenaHighmark = (uintptr_t)Allocator::frameArena.curr; Allocator::frameArena.highmark = &game.memory.frameArenaHighmark);
             Allocator::init_arena(game.memory.scratchArenaRoot, 1 << 20); // 1MB
-            __DEBUGEXP(game.memory.scratchArenaHighmark = game.memory.scratchArenaRoot.curr; game.memory.scratchArenaRoot.highmark = &game.memory.scratchArenaHighmark);
+            __DEBUGEXP(game.memory.scratchArenaHighmark = (uintptr_t)game.memory.scratchArenaRoot.curr; game.memory.scratchArenaRoot.highmark = &game.memory.scratchArenaHighmark);
             __DEBUGEXP(Allocator::init_arena(game.memory.imDebugArena, Renderer::Immediate::arena_size));
         }
 
@@ -597,7 +597,7 @@ namespace Game
 
                     if (game.debugVis.overlaymode == DebugVis::OverlayMode::All || game.debugVis.overlaymode == DebugVis::OverlayMode::ArenaOnly)
                     {
-                        auto renderArena = [](Renderer::Immediate::Buffer& im, Renderer::Immediate::TextParams& textCfg, u8* arenaEnd, u8* arenaStart, u8* arenaHighmark, const char* arenaName, const Col defaultCol, const Col baseCol, const Col highmarkCol, const f32 lineheight, const f32 textscale) {
+                        auto renderArena = [](Renderer::Immediate::Buffer& im, Renderer::Immediate::TextParams& textCfg, u8* arenaEnd, u8* arenaStart, uintptr_t arenaHighmark, const char* arenaName, const Col defaultCol, const Col baseCol, const Col highmarkCol, const f32 lineheight, const f32 textscale) {
                             const f32 barwidth = 150.f * textscale;
                             const f32 barheight = 10.f * textscale;
 

@@ -39,7 +39,7 @@ namespace Platform {
     #include <wingdi.h> // defines like WINGDIAPI, used by opengl
     //#include <GL/gl.h>
     #pragma comment(lib, "opengl32.lib")
-    #include "helpers/renderer_gl33/loader_gl.h"
+    #include "../renderer_gl33/loader_gl.h"
 
 namespace Platform {
     const char* name = "WIN64+GL";

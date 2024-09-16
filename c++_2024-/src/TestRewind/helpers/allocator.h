@@ -5,7 +5,7 @@ namespace Allocator {
     struct Arena {
         u8* curr;
         u8* end;
-        __DEBUGDEF(u8** highmark;) // pointer to track overall allocations of scoped copies
+        __DEBUGDEF(uintptr_t* highmark;) // pointer to track overall allocations of scoped copies
     };
 
     Arena frameArena;
@@ -21,7 +21,7 @@ namespace Allocator {
         uintptr_t curr_aligned = ((uintptr_t)arena.curr + (align - 1)) & -align;
         if (curr_aligned + size <= (uintptr_t)arena.end) {
             arena.curr = (u8*)(curr_aligned + size);
-            __DEBUGEXP(if (arena.highmark) { *arena.highmark = Math::max(*arena.highmark, arena.curr); });
+            __DEBUGEXP(if (arena.highmark) { *arena.highmark = Math::max(*arena.highmark, (uintptr_t)arena.curr); });
             return (void*)curr_aligned;
         }
         assert(0);

@@ -24,7 +24,6 @@ namespace Math {
     s32 min(s32 a, s32 b) { return (b < a) ? b : a; }
     u64 min(u64 a, u64 b) { return (b < a) ? b : a; }
     s64 min(s64 a, s64 b) { return (b < a) ? b : a; }
-	u8* min(u8* a, u8* b) { return (b < a) ? b : a; } // todo: needed?
     u8 max(u8 a, u8 b) { return (a < b) ? b : a; }
     s8 max(s8 a, s8 b) { return (a < b) ? b : a; }
     u16 max(u16 a, u16 b) { return (a < b) ? b : a; }
@@ -35,7 +34,6 @@ namespace Math {
     s32 max(s32 a, s32 b) { return (a < b) ? b : a; }
     u64 max(u64 a, u64 b) { return (a < b) ? b : a; }
     s64 max(s64 a, s64 b) { return (a < b) ? b : a; }
-    u8* max(u8* a, u8* b) { return (b < a) ? b : a; } // todo: needed?
     u8 clamp(u8 x, u8 a, u8 b) { return min(max(x, a), b); }
     s8 clamp(s8 x, s8 a, s8 b) { return min(max(x, a), b); }
     u16 clamp(u16 x, u16 a, u16 b) { return min(max(x, a), b); }
@@ -46,7 +44,6 @@ namespace Math {
     s32 clamp(s32 x, s32 a, s32 b) { return min(max(x, a), b); }
     u64 clamp(u64 x, u64 a, u64 b) { return min(max(x, a), b); }
     s64 clamp(s64 x, s64 a, s64 b) { return min(max(x, a), b); }
-    u8* clamp(u8* x, u8* a, u8* b) { return min(max(x, a), b);  } // todo: needed?
     f32 sqrt(f32 a) { return ::sqrtf(a); }
     f64 sqrt(f64 a) { return ::sqrt(a); }
     f32 square(f32 a) { return a * a; }

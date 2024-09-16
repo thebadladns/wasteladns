@@ -46,7 +46,7 @@ namespace Platform
     
     struct Memory {
         Allocator::Arena scratchArenaRoot;
-        __DEBUGDEF(u8* scratchArenaHighmark;)
+        __DEBUGDEF(uintptr_t scratchArenaHighmark;)
     };
 
     struct State {
