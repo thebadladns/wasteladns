@@ -44,11 +44,19 @@ namespace Math {
     s32 clamp(s32 x, s32 a, s32 b) { return min(max(x, a), b); }
     u64 clamp(u64 x, u64 a, u64 b) { return min(max(x, a), b); }
     s64 clamp(s64 x, s64 a, s64 b) { return min(max(x, a), b); }
+#ifndef _MSC_VER // outside of msvc, uintptr_t / ptrdiff_t types are not implicitly convertible to u64 / s64
+    uintptr_t min(uintptr_t a, uintptr_t b) { return (b < a) ? b : a; }
+    uintptr_t max(uintptr_t a, uintptr_t b) { return (a < b) ? b : a; }
+    uintptr_t clamp(uintptr_t x, uintptr_t a, uintptr_t b) { return min(max(x, a), b); }
+    ptrdiff_t min(ptrdiff_t a, ptrdiff_t b) { return (b < a) ? b : a; }
+    ptrdiff_t max(ptrdiff_t a, ptrdiff_t b) { return (a < b) ? b : a; }
+    ptrdiff_t clamp(ptrdiff_t x, ptrdiff_t a, ptrdiff_t b) { return min(max(x, a), b); }
+#endif
+
     f32 sqrt(f32 a) { return ::sqrtf(a); }
     f64 sqrt(f64 a) { return ::sqrt(a); }
     f32 square(f32 a) { return a * a; }
     f64 square(f64 a) { return a * a; }
-
     f32 abs(f32 a) { return a > 0.f ? a : -a; }
     f64 abs(f64 a) { return a > 0.0 ? a : -a; }
     s32 abs(s32 a) { return a > 0 ? a : -a; }
