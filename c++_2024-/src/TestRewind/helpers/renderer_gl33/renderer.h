@@ -31,7 +31,7 @@ namespace Driver {
             rt.mask = rt.mask | GL_DEPTH_BUFFER_BIT;
         }
     }
-    void clear_main_RT(RscMainRenderTarget& rt, Col color) {
+    void clear_main_RT(RscMainRenderTarget& rt, Color32 color) {
         glClearColor( RGBA_PARAMS(color) );
         glClear(rt.mask | GL_STENCIL_BUFFER_BIT);
     }
@@ -88,7 +88,7 @@ namespace Driver {
         glClear(rt.mask | GL_STENCIL_BUFFER_BIT);
     }
     template<u32 _attachments>
-    void clear_RT(const RscRenderTarget<_attachments>& rt, Col color) {
+    void clear_RT(const RscRenderTarget<_attachments>& rt, Color32 color) {
         glClearColor(RGBA_PARAMS(color));
         glClear(rt.mask | GL_STENCIL_BUFFER_BIT);
     }

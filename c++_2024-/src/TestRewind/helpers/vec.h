@@ -88,7 +88,7 @@ struct float3x3 {
             float3 col1;
             float3 col2;
         };
-        f32 dataCM[16];
+        f32 dataCM[9];
     };
 };
 

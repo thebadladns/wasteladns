@@ -55,7 +55,7 @@ namespace Driver {
             d3ddev->CreateDepthStencilView(stencil, nullptr, &rt.depthStencilView);
         }
     }
-    void clear_main_RT(const RscMainRenderTarget& rt, Col color) {
+    void clear_main_RT(const RscMainRenderTarget& rt, Color32 color) {
         float colorv[] = { RGBA_PARAMS(color) };
         d3dcontext->ClearRenderTargetView(rt.view, colorv);
         if (rt.depthStencilView) {
@@ -121,7 +121,7 @@ namespace Driver {
         }
     }
     template<u32 _attachments>
-    void clear_RT(const RscRenderTarget<_attachments>& rt, Col color) {
+    void clear_RT(const RscRenderTarget<_attachments>& rt, Color32 color) {
         float colorv[] = { color.getRf(), color.getGf(), color.getBf(), color.getAf() };
         for (u32 i = 0; i < _attachments; i++) {
             d3dcontext->ClearRenderTargetView(rt.views[i], colorv);

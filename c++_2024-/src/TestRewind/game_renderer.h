@@ -395,7 +395,7 @@ namespace Renderer {
             auto& dst_vertices = streams.vertices;
             auto& dst_indices = streams.indices;
             typename _drawlist::DL_VertexBuffer::GroupData groupData = {};
-            groupData.groupColor = Col(0.0f, 0.0f, 0.0f, 0.f).RGBAv4();
+            groupData.groupColor = Color32(0.0f, 0.0f, 0.0f, 0.f).RGBAv4();
             groupData.worldMatrix = Math::mult(nodeToAdd.worldTransform.matrix, nodeToAdd.localTransform.matrix);
             Driver::RscIndexedBuffer<_vertexLayout> rscBuffer = {};
             create_vertex_buffer(rscBuffer, &dst_vertices[0], (u32)dst_vertices.size(), &dst_indices[0], (u32)dst_indices.size());
@@ -513,32 +513,32 @@ namespace Renderer {
         template<>
         void extract_vertex_attrib<Layout_float3Color4B, DstDataType::Vertex>(Layout_float3Color4B& vertex, const ufbx_mesh& mesh, const ufbx_mesh_material&, const u32 index_id, const u32 vertex_id) {
             ufbx_float4& c = mesh.vertex_color[index_id];
-            vertex.color = Col32(c.x, c.y, c.z, c.w).ABGR();
+            vertex.color = Color32(c.x, c.y, c.z, c.w).ABGR();
         }
         template<>
         void extract_vertex_attrib<Layout_float3Color4B, DstDataType::Material>(Layout_float3Color4B& vertex, const ufbx_mesh& mesh, const ufbx_mesh_material& mesh_mat, const u32 index_id, const u32 vertex_id) {
             ufbx_float4& c = mesh_mat.material->pbr.base_color.value_float4;
-            vertex.color = Col32(c.x, c.y, c.z, c.w).ABGR();
+            vertex.color = Color32(c.x, c.y, c.z, c.w).ABGR();
         }
         template<>
         void extract_vertex_attrib<Layout_float3Color4B, DstDataType::Dummy>(Layout_float3Color4B& vertex, const ufbx_mesh& mesh, const ufbx_mesh_material& mesh_mat, const u32 index_id, const u32 vertex_id) {
-            vertex.color = Col32(1.f, 0.f, 1.f, 0.f).ABGR();
+            vertex.color = Color32(1.f, 0.f, 1.f, 0.f).ABGR();
         }
         template<>
         void extract_vertex_attrib<Layout_float3Color4BSkinned, DstDataType::Vertex>(Layout_float3Color4BSkinned& vertex, const ufbx_mesh& mesh, const ufbx_mesh_material&, const u32 index_id, const u32 vertex_id) {
             ufbx_float4& c = mesh.vertex_color[index_id];
-            vertex.color = Col32(c.x, c.y, c.z, c.w).ABGR();
+            vertex.color = Color32(c.x, c.y, c.z, c.w).ABGR();
             extract_skinning_attribs(vertex, mesh, vertex_id);
         }
         template<>
         void extract_vertex_attrib<Layout_float3Color4BSkinned, DstDataType::Material>(Layout_float3Color4BSkinned& vertex, const ufbx_mesh& mesh, const ufbx_mesh_material& mesh_mat, const u32 index_id, const u32 vertex_id) {
             ufbx_float4& c = mesh_mat.material->pbr.base_color.value_float4;
-            vertex.color = Col32(c.x, c.y, c.z, c.w).ABGR();
+            vertex.color = Color32(c.x, c.y, c.z, c.w).ABGR();
             extract_skinning_attribs(vertex, mesh, vertex_id);
         }
         template<>
         void extract_vertex_attrib<Layout_float3Color4BSkinned, DstDataType::Dummy>(Layout_float3Color4BSkinned& vertex, const ufbx_mesh& mesh, const ufbx_mesh_material& mesh_mat, const u32 index_id, const u32 vertex_id) {
-            vertex.color = Col32(1.f, 0.f, 1.f, 0.f).ABGR();
+            vertex.color = Color32(1.f, 0.f, 1.f, 0.f).ABGR();
             extract_skinning_attribs(vertex, mesh, vertex_id);
         }
 

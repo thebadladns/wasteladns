@@ -89,11 +89,9 @@ namespace Renderer {
         matrixCM[14] = config.far * config.near / (config.near - config.far);
     }
 
-    template <CoordinateSystem::Enum _system>
-    void generate_MV_matrix(float4x4& modelview, const TransformMatrix<_system>& t) {
+    void generate_MV_matrix(float4x4& modelview, const Transform& t) {
         
-        const TransformMatrix<CoordinateSystem::RH_Yup_Zfront> tRHwithYUp = Math::toEyeSpace(t);
-        const float4x4& mRHwithYUp = tRHwithYUp.matrix;
+        const float4x4 mRHwithYUp = Math::toEyeSpace(t);
         
         // Simplified inverse
         // https://www.gamedev.net/forums/topic/647149-d3dxmatrixlookatlh-internally/?tab=comments#comment-5089654
@@ -290,7 +288,7 @@ namespace Driver {
     template<u32 _attachments>
     void clear_RT(const RscRenderTarget<_attachments>& rt);
     template<u32 _attachments>
-    void clear_RT(const RscRenderTarget<_attachments>& rt, Col color);
+    void clear_RT(const RscRenderTarget<_attachments>& rt, Color32 color);
     struct RenderTargetCopyParams {
         // for now
         bool depth;
@@ -508,12 +506,12 @@ namespace FBX {
         if (mesh.vertex_color.exists) {
             for (size_t index = 0; index < mesh.num_indices; index++) {
                 auto& c = mesh.vertex_color[index];
-                Col32 color(c.x, c.y, c.z, c.w);
+                Color32 color(c.x, c.y, c.z, c.w);
                 vertices[mesh.vertex_indices[index]].color = color.ABGR();
             }
         } else {
             for (size_t index = 0; index < mesh.num_indices; index++) {
-                Col32 color(1.f, 1.f, 1.f, 0.5f);
+                Color32 color(1.f, 1.f, 1.f, 0.5f);
                 vertices[mesh.vertex_indices[index]].color = color.ABGR();
             }
         }

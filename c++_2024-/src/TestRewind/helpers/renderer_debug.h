@@ -63,7 +63,7 @@ namespace Immediate
         {}
         
         float3 pos;
-        Col color;
+        Color32 color;
         u8 scale;
     };
     
@@ -74,7 +74,7 @@ namespace Immediate
         buffer.vertices_2d_head = 0;
     }
 
-    void segment(Buffer& buffer, const float3& v1, const float3& v2, const Col color) {
+    void segment(Buffer& buffer, const float3& v1, const float3& v2, const Color32 color) {
 
         // Too many vertex pushed during immediate mode
         // Either bump Buffer::vertices_3d_head or re-implement
@@ -90,28 +90,28 @@ namespace Immediate
         vertexEnd.pos = v2;
         vertexEnd.color = color.ABGR();
     }
-    void openSegment(Buffer& buffer, const float3& start, const float3& dir, Col color) {
+    void openSegment(Buffer& buffer, const float3& start, const float3& dir, Color32 color) {
         const f32 segmentLength = 10000.f;
         const float3 end = Math::add(start, Math::scale(dir, segmentLength));
         segment(buffer, start, end, color);
     }
-    void ray(Buffer& buffer, const float3& start, const float3& dir, Col color) {
+    void ray(Buffer& buffer, const float3& start, const float3& dir, Color32 color) {
         openSegment(buffer, start, dir, color);
     }
-    void line(Buffer& buffer, const float3& pos, const float3& dir, Col color) {
+    void line(Buffer& buffer, const float3& pos, const float3& dir, Color32 color) {
         const f32 extents = 10000.f;
         const float3 start = Math::subtract(pos, Math::scale(dir, extents));
         const float3 end = Math::add(pos, Math::scale(dir, extents));
         segment(buffer, start, end, color);
     }
-    void poly(Buffer& buffer, const float3* vertices, const u8 count, Col color) {
+    void poly(Buffer& buffer, const float3* vertices, const u8 count, Color32 color) {
         for (u8 i = 0; i < count; i++) {
             const float3 prev = vertices[i];
             const float3 next = vertices[(i + 1) % count];
             segment(buffer, prev, next, color);
         }
     }
-    void box(Buffer& buffer, const float3 min, const float3 max, Col color) {
+    void box(Buffer& buffer, const float3 min, const float3 max, Color32 color) {
 
         float3 leftNearBottom(min.x, min.y, min.z);
         float3 leftFarBottom(min.x, max.y, min.z);
@@ -141,7 +141,7 @@ namespace Immediate
         segment(buffer, leftNearBottom, rightNearBottom, color);
         segment(buffer, leftFarBottom, rightFarBottom, color);
     }
-    void circle(Buffer& buffer, const float3& center, const float3& normal, const f32 radius, const Col color) {
+    void circle(Buffer& buffer, const float3& center, const float3& normal, const f32 radius, const Color32 color) {
         Transform33 m = Math::fromUp(normal);
         
         static constexpr u32 kVertexCount = 8;
@@ -155,10 +155,10 @@ namespace Immediate
         }
         poly(buffer, vertices, kVertexCount, color);
     }
-    void sphere(Buffer& buffer, const float3& center, const f32 radius, const Col color) {
+    void sphere(Buffer& buffer, const float3& center, const f32 radius, const Color32 color) {
         
         static constexpr u32 kSectionCount = 2;
-        const Col colorVariation(0.25f, 0.25f, 0.25f, 0.f);
+        const Color32 colorVariation(0.25f, 0.25f, 0.25f, 0.f);
         const float3 up = Math::upAxis();
         const float3 front = Math::frontAxis();
         const float3 right = Math::rightAxis();
@@ -178,7 +178,7 @@ namespace Immediate
         }
     }
     
-    void box_2d(Buffer& buffer, const float2 min, const float2 max, Col color) {
+    void box_2d(Buffer& buffer, const float2 min, const float2 max, Color32 color) {
 
         u32 vertexStart = buffer.vertices_2d_head;
         Layout_float2Color4B& bottomLeft = buffer.vertices_2d[vertexStart];

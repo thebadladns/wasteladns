@@ -202,7 +202,7 @@ namespace Game
                 Renderer::Drawlist::DL_unlit_instanced_vb buffer = {};
                 Transform t; Math::identity4x4(t);
                 buffer.groupData.worldMatrix = t.matrix;
-                buffer.groupData.groupColor = Col(0.9f, 0.7f, 0.8f, 0.6f).RGBAv4();
+                buffer.groupData.groupColor = Color32(0.9f, 0.7f, 0.8f, 0.6f).RGBAv4();
                 buffer.instancedData.resize(numCubes);
                 Renderer::create_indexed_vertex_buffer_from_untextured_cube(buffer.buffer, { 1.f, 1.f, 1.f });
 
@@ -458,7 +458,7 @@ namespace Game
                 Renderer::Driver::bind_blend_state(store.blendStateOn);
                 Renderer::Driver::bind_DS(store.depthStateOn);
                 Renderer::Driver::bind_RT(store.gameRT);
-                Renderer::Driver::clear_RT(store.gameRT, Col(0.2f, 0.344f, 0.59f, 1.f));
+                Renderer::Driver::clear_RT(store.gameRT, Color32(0.2f, 0.344f, 0.59f, 1.f));
                 {
                     Renderer::Driver::ViewportParams vpParams;
                     vpParams.topLeftX = 0;
@@ -478,9 +478,9 @@ namespace Game
             {
                 // World axis
                 {
-                    const Col axisX(0.8f, 0.15f, 0.25f, 0.7f);
-                    const Col axisY(0.25f, 0.8f, 0.15f, 0.7f);
-                    const Col axisZ(0.15f, 0.25f, 0.8f, 0.7f);
+                    const Color32 axisX(0.8f, 0.15f, 0.25f, 0.7f);
+                    const Color32 axisY(0.25f, 0.8f, 0.15f, 0.7f);
+                    const Color32 axisZ(0.15f, 0.25f, 0.8f, 0.7f);
                     const f32 axisSize = 30.f;
                     const float3 pos = float3(0.f, 0.f, 0.1f);
 
@@ -509,8 +509,8 @@ namespace Game
                 // 2d debug info
                 if (game.debugVis.overlaymode != DebugVis::OverlayMode::None)
                 {
-                    Col defaultCol(0.7f, 0.8f, 0.15f, 1.0f);
-                    Col activeCol(1.0f, 0.2f, 0.1f, 1.0f);
+                    Color32 defaultCol(0.7f, 0.8f, 0.15f, 1.0f);
+                    Color32 activeCol(1.0f, 0.2f, 0.1f, 1.0f);
                     
                     f32 textscale = platform.screen.text_scale;
                     f32 lineheight = 15.f * textscale;
@@ -597,7 +597,7 @@ namespace Game
 
                     if (game.debugVis.overlaymode == DebugVis::OverlayMode::All || game.debugVis.overlaymode == DebugVis::OverlayMode::ArenaOnly)
                     {
-                        auto renderArena = [](Renderer::Immediate::Buffer& im, Renderer::Immediate::TextParams& textCfg, u8* arenaEnd, u8* arenaStart, uintptr_t arenaHighmark, const char* arenaName, const Col defaultCol, const Col baseCol, const Col highmarkCol, const f32 lineheight, const f32 textscale) {
+                        auto renderArena = [](Renderer::Immediate::Buffer& im, Renderer::Immediate::TextParams& textCfg, u8* arenaEnd, u8* arenaStart, uintptr_t arenaHighmark, const char* arenaName, const Color32 defaultCol, const Color32 baseCol, const Color32 highmarkCol, const f32 lineheight, const f32 textscale) {
                             const f32 barwidth = 150.f * textscale;
                             const f32 barheight = 10.f * textscale;
 
@@ -624,29 +624,29 @@ namespace Game
                         const f32 barheight = 10.f * textscale;
                         textParamsCenter.pos.x -= barwidth / 2.f;
                         {
-                            const Col arenabaseCol(0.65f, 0.65f, 0.65f, 0.4f);
-                            const Col arenahighmarkCol(0.95f, 0.35f, 0.8f, 1.f);
+                            const Color32 arenabaseCol(0.65f, 0.65f, 0.65f, 0.4f);
+                            const Color32 arenahighmarkCol(0.95f, 0.35f, 0.8f, 1.f);
                             renderArena(game.renderMgr.immediateBuffer, textParamsCenter, Allocator::frameArena.end, game.memory.frameArenaBuffer, game.memory.frameArenaHighmark
                                 , "Frame arena", defaultCol, arenabaseCol, arenahighmarkCol, lineheight, textscale);
                         }
                         {
-                            const Col arenabaseCol(0.65f, 0.65f, 0.65f, 0.4f);
-                            const Col arenahighmarkCol(0.95f, 0.35f, 0.8f, 1.f);
+                            const Color32 arenabaseCol(0.65f, 0.65f, 0.65f, 0.4f);
+                            const Color32 arenahighmarkCol(0.95f, 0.35f, 0.8f, 1.f);
                             renderArena(game.renderMgr.immediateBuffer, textParamsCenter, platform.memory.scratchArenaRoot.end, platform.memory.scratchArenaRoot.curr, platform.memory.scratchArenaHighmark
                                 , "Platform scratch arena", defaultCol, arenabaseCol, arenahighmarkCol, lineheight, textscale);
                         }
                         {
-                            const Col arenabaseCol(0.65f, 0.65f, 0.65f, 0.4f);
-                            const Col arenahighmarkCol(0.95f, 0.35f, 0.8f, 1.f);
+                            const Color32 arenabaseCol(0.65f, 0.65f, 0.65f, 0.4f);
+                            const Color32 arenahighmarkCol(0.95f, 0.35f, 0.8f, 1.f);
                             renderArena(game.renderMgr.immediateBuffer, textParamsCenter, game.memory.scratchArenaRoot.end, game.memory.scratchArenaRoot.curr, game.memory.scratchArenaHighmark
                                 , "Game scratch arena", defaultCol, arenabaseCol, arenahighmarkCol, lineheight, textscale);
                         }
                         {
                             auto& im = game.renderMgr.immediateBuffer;
-                            const Col baseCol(0.65f, 0.65f, 0.65f, 0.4f);
-                            const Col used3dCol(0.95f, 0.35f, 0.8f, 1.f);
-                            const Col used2dCol(0.35f, 0.95f, 0.8f, 1.f);
-                            const Col used2didxCol(0.8f, 0.95f, 0.8f, 1.f);
+                            const Color32 baseCol(0.65f, 0.65f, 0.65f, 0.4f);
+                            const Color32 used3dCol(0.95f, 0.35f, 0.8f, 1.f);
+                            const Color32 used2dCol(0.35f, 0.95f, 0.8f, 1.f);
+                            const Color32 used2didxCol(0.8f, 0.95f, 0.8f, 1.f);
 
                             const ptrdiff_t memory_size = (ptrdiff_t)game.memory.imDebugArena.curr - (ptrdiff_t)im.vertices_3d;
                             const ptrdiff_t vertices_3d_start = (ptrdiff_t)im.vertices_3d - (ptrdiff_t)im.vertices_3d;
