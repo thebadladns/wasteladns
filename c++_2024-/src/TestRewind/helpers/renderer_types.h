@@ -104,7 +104,7 @@ namespace Renderer {
     struct Layout_CNone {
         struct Buffers { enum Enum { Count }; };
     };
-    constexpr u32 max_instances = 256; // makes InstanceData 16kb, anything higher could be risky
+    constexpr u32 max_instances = 128; // makes InstanceData 8kb
     struct Layout_CBuffer_3DScene {
         struct SceneData {
             float4x4 projectionMatrix;

@@ -538,16 +538,15 @@ namespace FBX {
         ufbx_error error;
         ufbx_scene* scene = ufbx_load_file(path, &opts, &error);
         if (scene) {
-            tinystl::vector<_vertexLayout, Allocator::ArenaSTL<_vertexLayout>> vertices;
-            tinystl::vector<u32, Allocator::ArenaSTL<u32>> indices;
-            vertices.set_alloc(&scratchArena);
-            indices.set_alloc(&scratchArena);
-
+            
+            Allocator::Buffer<_vertexLayout> vertices = {};
+            Allocator::Buffer<u32> indices = {};
+            
             u32 maxVertices = 0;
             for (size_t i = 0; i < scene->meshes.count; i++) { maxVertices += (u32)scene->meshes.data[i]->num_vertices; }
 
-            vertices.reserve(maxVertices);
-            indices.reserve(maxVertices * 3 * 2); // 2x best case, less likely to resize
+            Allocator::reserve(vertices, maxVertices, scratchArena);
+            Allocator::reserve(indices, maxVertices * 3 * 2, scratchArena); // 2x best case, less likely to resize
             u32 vertexOffset = 0;
             for (size_t i = 0; i < scene->meshes.count; i++) {
                 ufbx_mesh& mesh = *scene->meshes.data[i];
@@ -567,7 +566,7 @@ namespace FBX {
                         v_fbx_ws.z = v_fbx_ls.x * m.m20 + v_fbx_ls.y * m.m21 + v_fbx_ls.z * m.m22 + m.m23;
 
                         extract_vertex(vertex, v_fbx_ws);
-                        vertices.push_back(vertex);
+                        Allocator::push(vertices, scratchArena) = vertex;
                     }
                 }
 
@@ -580,24 +579,24 @@ namespace FBX {
                     for (u32 vi = 0; vi < numTris * 3; vi++) {
                         const uint32_t triangulatedFaceIndex = triIndices[vi];
                         const u32 vertexIndex = mesh.vertex_indices[triangulatedFaceIndex];
-                        indices.push_back(vertexIndex + vertexOffset);
+                        Allocator::push(indices, scratchArena) = vertexIndex + vertexOffset;
                     }
                 }
                 // load vertex data (uv coords, vertex colors, etc)
-                _vertexLayout* meshFirstVertex = &vertices[vertexOffset];
+                _vertexLayout* meshFirstVertex = &vertices.data[vertexOffset];
                 extract_vertex_attrib(meshFirstVertex, mesh);
 
                 vertexOffset += (u32)mesh.num_vertices;
             }
 
-            if (vertices.size() > 0 && indices.size() > 0)
+            if (vertices.len > 0 && indices.len > 0)
             {
                 Renderer::Driver::IndexedBufferParams bufferParams;
-                bufferParams.vertexData = &vertices[0];
-                bufferParams.vertexSize = (u32)vertices.size() * sizeof(vertices[0]);
-                bufferParams.indexData = &indices[0];
-                bufferParams.indexSize = (u32)indices.size() * sizeof(indices[0]);
-                bufferParams.indexCount = (u32)indices.size();
+                bufferParams.vertexData = vertices.data;
+                bufferParams.vertexSize = (u32)vertices.len * sizeof(vertices.data[0]);
+                bufferParams.indexData = indices.data;
+                bufferParams.indexSize = (u32)indices.len * sizeof(indices.data[0]);
+                bufferParams.indexCount = (u32)indices.len;
                 bufferParams.memoryUsage = Renderer::Driver::BufferMemoryUsage::GPU;
                 bufferParams.accessType = Renderer::Driver::BufferAccessType::GPU;
                 bufferParams.indexType = Renderer::Driver::BufferItemType::U32;
@@ -621,22 +620,24 @@ struct Drawlist_PerVertexBuffer<_vertexLayout, _cbufferLayout, Shaders::VSDrawTy
 template <typename _vertexLayout, typename _cbufferLayout>
 struct Drawlist_PerVertexBuffer<_vertexLayout, _cbufferLayout, Shaders::VSDrawType::Standard, Shaders::VSSkinType::Skinned> {
     typedef typename _cbufferLayout::GroupData GroupData;
-    typedef typename _cbufferLayout::Instance Instance; // skinning matrices
+    typedef typename _cbufferLayout::InstanceData InstanceData; // skinning matrices
     typedef Drawlist_PerVertexBuffer<_vertexLayout, _cbufferLayout, Shaders::VSDrawType::Standard, Shaders::VSSkinType::Skinned> Type;
     Driver::RscIndexedBuffer<_vertexLayout> buffer;
-    tinystl::vector<Instance> instancedData;
+    InstanceData instancedData;
     GroupData groupData;
+    u32 instancedDataCount;
     static Type& null() { static Type data = {}; return data; }
 };
 template <typename _vertexLayout, typename _cbufferLayout>
 struct Drawlist_PerVertexBuffer<_vertexLayout, _cbufferLayout, Shaders::VSDrawType::Instanced, Shaders::VSSkinType::Unskinned> {
     typedef typename _cbufferLayout::GroupData GroupData;
-    typedef typename _cbufferLayout::Instance Instance;
+    typedef typename _cbufferLayout::InstanceData InstanceData;
     typedef Drawlist_PerVertexBuffer<_vertexLayout, _cbufferLayout, Shaders::VSDrawType::Instanced, Shaders::VSSkinType::Unskinned> Type;
 
     Driver::RscIndexedBuffer<_vertexLayout> buffer;
-    tinystl::vector<Instance> instancedData;
+    InstanceData instancedData;
     GroupData groupData;
+    u32 instancedDataCount;
     static Type& null() { static Type data = {}; return data; }
 };
 
@@ -650,12 +651,7 @@ void dl_bind_and_draw_buffer(const Drawlist_PerVertexBuffer<_vertexLayout, _cbuf
 template<typename _vertexLayout, typename _cbufferLayout, Shaders::PSCBufferUsage::Enum _cbufferUsage>
 void dl_bind_and_draw_buffer(const Drawlist_PerVertexBuffer<_vertexLayout, _cbufferLayout, Shaders::VSDrawType::Standard, Shaders::VSSkinType::Skinned>& buffer, Driver::RscCBuffer* cbuffers) {
     Driver::update_cbuffer(cbuffers[_cbufferLayout::Buffers::GroupData], buffer.groupData);
-    typename _cbufferLayout::InstanceData instancedBuffer;
-    u32 size = (u32)buffer.instancedData.size();
-    for (u32 k = 0; k < size; k++) {
-        instancedBuffer.instanceMatrices[k] = buffer.instancedData[k];
-    }
-    Driver::update_cbuffer(cbuffers[_cbufferLayout::Buffers::InstanceData], instancedBuffer);
+    Driver::update_cbuffer(cbuffers[_cbufferLayout::Buffers::InstanceData], buffer.instancedData);
     Driver::bind_cbuffers(cbuffers, _cbufferLayout::Buffers::Count, { true, _cbufferUsage });
     Driver::bind_indexed_vertex_buffer(buffer.buffer);
     Driver::draw_indexed_vertex_buffer(buffer.buffer);
@@ -663,15 +659,10 @@ void dl_bind_and_draw_buffer(const Drawlist_PerVertexBuffer<_vertexLayout, _cbuf
 template<typename _vertexLayout, typename _cbufferLayout, Shaders::PSCBufferUsage::Enum _cbufferUsage>
 void dl_bind_and_draw_buffer(const Drawlist_PerVertexBuffer<_vertexLayout, _cbufferLayout, Shaders::VSDrawType::Instanced, Shaders::VSSkinType::Unskinned>& buffer, Driver::RscCBuffer* cbuffers) {
     Driver::update_cbuffer(cbuffers[_cbufferLayout::Buffers::GroupData], buffer.groupData);
-    typename _cbufferLayout::InstanceData instancedBuffer;
-    u32 size = (u32)buffer.instancedData.size();
-    for (u32 k = 0; k < size; k++) {
-        instancedBuffer.instanceMatrices[k] = buffer.instancedData[k];
-    }
-    Driver::update_cbuffer(cbuffers[_cbufferLayout::Buffers::InstanceData], instancedBuffer);
+    Driver::update_cbuffer(cbuffers[_cbufferLayout::Buffers::InstanceData], buffer.instancedData);
     Driver::bind_cbuffers(cbuffers, _cbufferLayout::Buffers::Count, { true, (bool)_cbufferUsage });
     Driver::bind_indexed_vertex_buffer(buffer.buffer);
-    Driver::draw_instances_indexed_vertex_buffer(buffer.buffer, size);
+    Driver::draw_instances_indexed_vertex_buffer(buffer.buffer, buffer.instancedDataCount);
 }
 
 template <typename _vertexLayout, typename _cbufferLayout, Shaders::PSTechnique::Enum _psTechnique, Shaders::VSDrawType::Enum _drawType>
@@ -681,21 +672,21 @@ struct Drawlist_PerMaterial<_vertexLayout, _cbufferLayout, Shaders::PSTechnique:
     using DL_VertexBuffer = Drawlist_PerVertexBuffer<_vertexLayout, _cbufferLayout, _drawType, (Shaders::VSSkinType::Enum) Shaders::SkinnedType<_vertexLayout>::type>;
     struct TextureTypes { enum Enum { Albedo, NormalMap, DepthMap, Count }; };
     Driver::RscTexture textures[TextureTypes::Count];
-    tinystl::vector<DL_VertexBuffer> dl_perVertexBuffer;
+    Allocator::Buffer<DL_VertexBuffer> dl_perVertexBuffer;
 };
 template <typename _vertexLayout, typename _cbufferLayout, Shaders::VSDrawType::Enum _drawType>
 struct Drawlist_PerMaterial<_vertexLayout, _cbufferLayout, Shaders::PSTechnique::forward_textured_unlit, _drawType> {
     using DL_VertexBuffer = Drawlist_PerVertexBuffer<_vertexLayout, _cbufferLayout, _drawType, (Shaders::VSSkinType::Enum) Shaders::SkinnedType<_vertexLayout>::type>;
     struct TextureTypes { enum Enum { Diffuse, Count }; };
     Driver::RscTexture textures[TextureTypes::Count];
-    tinystl::vector<DL_VertexBuffer> dl_perVertexBuffer;
+    Allocator::Buffer<DL_VertexBuffer> dl_perVertexBuffer;
 };
 template <typename _vertexLayout, typename _cbufferLayout, Shaders::VSDrawType::Enum _drawType>
 struct Drawlist_PerMaterial<_vertexLayout, _cbufferLayout, Shaders::PSTechnique::forward_textured_unlitalphaclip, _drawType> {
     using DL_VertexBuffer = Drawlist_PerVertexBuffer<_vertexLayout, _cbufferLayout, _drawType, (Shaders::VSSkinType::Enum) Shaders::SkinnedType<_vertexLayout>::type>;
     struct TextureTypes { enum Enum { Diffuse, Count }; };
     Driver::RscTexture textures[TextureTypes::Count];
-    tinystl::vector<DL_VertexBuffer> dl_perVertexBuffer;
+    Allocator::Buffer<DL_VertexBuffer> dl_perVertexBuffer;
 };
 template<Shaders::PSTechnique::Enum _psTechnique, typename _vertexLayout, typename _cbufferLayout, Shaders::VSDrawType::Enum _drawType>
 void dl_bind_material(const Drawlist_PerMaterial<_vertexLayout, _cbufferLayout, _psTechnique, _drawType>& material);
@@ -740,12 +731,12 @@ struct Drawlist_PerShader<_vsTechnique, _psTechnique, Shaders::PSMaterialUsage::
     Renderer::Driver::RscRasterizerState* rasterizerState;
     Renderer::Driver::RscBlendState* blendState;
     Renderer::Driver::RscDepthStencilState* depthStencilState;
-    tinystl::vector<DL_VertexBuffer> dl_perVertexBuffer;
+    Allocator::Buffer<DL_VertexBuffer> dl_perVertexBuffer;
     Renderer::Driver::Marker_t markerName;
 
     DL_VertexBuffer& get_leaf(Handle& handle) {
         if (handle.id != DL_id_null) {
-            return dl_perVertexBuffer[handle.id];
+            return dl_perVertexBuffer.data[handle.id];
         }
         return DL_VertexBuffer::null();
     }
@@ -772,12 +763,12 @@ struct Drawlist_PerShader<_vsTechnique, _psTechnique, Shaders::PSMaterialUsage::
     Renderer::Driver::RscRasterizerState* rasterizerState;
     Renderer::Driver::RscBlendState* blendState;
     Renderer::Driver::RscDepthStencilState* depthStencilState;
-    tinystl::vector<DL_Material> dl_perMaterial;
+    Allocator::Buffer<DL_Material> dl_perMaterial;
     Renderer::Driver::Marker_t markerName;
 
     DL_VertexBuffer& get_leaf(Handle& handle) {
         if (handle.id != DL_id_null) {
-            return dl_perMaterial[handle.material].dl_perVertexBuffer[handle.buffer];
+            return dl_perMaterial.data[handle.material].dl_perVertexBuffer.data[handle.buffer];
         }
         return DL_VertexBuffer::null();
     }
@@ -847,9 +838,9 @@ void dl_drawPerShader(
         Driver::bind_DS(*(dl_shader.depthStencilState));
         Driver::bind_RS(*(dl_shader.rasterizerState));
         Driver::bind_blend_state(*(dl_shader.blendState));
-        size_t bufferCount = dl_shader.dl_perVertexBuffer.size();
+        size_t bufferCount = dl_shader.dl_perVertexBuffer.len;
         for (size_t i = 0; i < bufferCount; i++) {
-            const auto& buffer = dl_shader.dl_perVertexBuffer[i];
+            const auto& buffer = dl_shader.dl_perVertexBuffer.data[i];
             dl_bind_and_draw_buffer<_vertexLayout, _cbufferLayout, _cbufferUsage>(buffer, cbuffers);
         }
     }
@@ -867,13 +858,13 @@ void dl_drawPerShader(
         Driver::bind_DS(*(dl_shader.depthStencilState));
         Driver::bind_RS(*(dl_shader.rasterizerState));
         Driver::bind_blend_state(*(dl_shader.blendState));
-        const size_t materialCount = dl_shader.dl_perMaterial.size();
+        const size_t materialCount = dl_shader.dl_perMaterial.len;
         for (size_t i = 0; i < materialCount; i++) {
-            const auto& dl_material = dl_shader.dl_perMaterial[i];
+            const auto& dl_material = dl_shader.dl_perMaterial.data[i];
             dl_bind_material(dl_material);
-            size_t bufferCount = dl_material.dl_perVertexBuffer.size();
+            size_t bufferCount = dl_material.dl_perVertexBuffer.len;
             for (size_t j = 0; j < bufferCount; j++) {
-                const auto& buffer = dl_material.dl_perVertexBuffer[j];
+                const auto& buffer = dl_material.dl_perVertexBuffer.data[j];
                 dl_bind_and_draw_buffer<_vertexLayout, _cbufferLayout, _cbufferUsage>(buffer, cbuffers);
             }
         }
@@ -897,7 +888,7 @@ void dl_drawPerNode(
             Driver::bind_DS(*(dl_shader.depthStencilState));
             Driver::bind_RS(*(dl_shader.rasterizerState));
             Driver::bind_blend_state(*(dl_shader.blendState));
-            auto& dl_buffer = dl_shader.dl_perVertexBuffer[handle.id];
+            auto& dl_buffer = dl_shader.dl_perVertexBuffer.data[handle.id];
             dl_bind_and_draw_buffer<_vertexLayout, _cbufferLayout, _cbufferUsage>(dl_buffer, cbuffers);
         }
     }
@@ -922,9 +913,9 @@ void dl_drawPerNode(
             SET_MARKER_NAME(Driver::Marker_t marker, "MATERIAL PART");
             Renderer::Driver::start_event(marker);
             {
-                auto& dl_material = dl_shader.dl_perMaterial[handle.material];
+                auto& dl_material = dl_shader.dl_perMaterial.data[handle.material];
                 dl_bind_material(dl_material);
-                auto& dl_buffer = dl_material.dl_perVertexBuffer[handle.buffer];
+                auto& dl_buffer = dl_material.dl_perVertexBuffer.data[handle.buffer];
                 dl_bind_and_draw_buffer<_vertexLayout, _cbufferLayout, _cbufferUsage>(dl_buffer, cbuffers);
             }
             Renderer::Driver::end_event();

@@ -81,11 +81,11 @@ namespace Game
     #endif
 
     struct Memory {
-        Allocator::Arena scratchArenaRoot; // to be always passed by copy, so it auto-resets
+        Allocator::Arena persistentArena;
         __DEBUGDEF(Allocator::Arena imDebugArena;)
         u8* frameArenaBuffer; // used to reset Allocator::frameArena every frame
+        __DEBUGDEF(u8* persistentArenaBuffer;) // used for debugging visualization
         __DEBUGDEF(uintptr_t frameArenaHighmark;)
-        __DEBUGDEF(uintptr_t scratchArenaHighmark;)
     };
 
     struct Instance {
@@ -118,11 +118,11 @@ namespace Game
         config.nextFrame = platform.time.now;
 
         {
+            Allocator::init_arena(game.memory.persistentArena, 1 << 20); // 1MB
+            __DEBUGEXP(game.memory.persistentArenaBuffer = game.memory.persistentArena.curr);
             Allocator::init_arena(Allocator::frameArena, 1 << 20); // 1MB
             game.memory.frameArenaBuffer = Allocator::frameArena.curr;
             __DEBUGEXP(game.memory.frameArenaHighmark = (uintptr_t)Allocator::frameArena.curr; Allocator::frameArena.highmark = &game.memory.frameArenaHighmark);
-            Allocator::init_arena(game.memory.scratchArenaRoot, 1 << 20); // 1MB
-            __DEBUGEXP(game.memory.scratchArenaHighmark = (uintptr_t)game.memory.scratchArenaRoot.curr; game.memory.scratchArenaRoot.highmark = &game.memory.scratchArenaHighmark);
             __DEBUGEXP(Allocator::init_arena(game.memory.imDebugArena, Renderer::Immediate::arena_size));
         }
 
@@ -176,7 +176,7 @@ namespace Game
             auto& store = game.renderMgr.renderScene.store;
 
             store = {};
-            Renderer::start_store(game.renderMgr.renderScene.store, platform, game.memory.scratchArenaRoot);
+            Renderer::start_store(game.renderMgr.renderScene.store, platform);
             __DEBUGEXP(Renderer::Immediate::load(game.renderMgr.immediateBuffer, game.memory.imDebugArena));
 
             for (const Scene_ModelLoadData& asset : assets) {
@@ -188,7 +188,7 @@ namespace Game
                 nodeToAdd.localTransform.matrix.col2.z *= asset.scale;
                 nodeToAdd.worldTransform.pos = asset.origin;
 
-                Renderer::FBX::load_with_material(nodeToAdd, store, asset.path, game.memory.scratchArenaRoot);
+                Renderer::FBX::load_with_material(nodeToAdd, store, asset.path, platform.memory.scratchArenaRoot, game.memory.persistentArena);
 
                 if (asset.player) {
                     game.renderMgr.player_DLnode = nodeToAdd;
@@ -203,16 +203,16 @@ namespace Game
                 Transform t; Math::identity4x4(t);
                 buffer.groupData.worldMatrix = t.matrix;
                 buffer.groupData.groupColor = Color32(0.9f, 0.7f, 0.8f, 0.6f).RGBAv4();
-                buffer.instancedData.resize(numCubes);
+                buffer.instancedDataCount = numCubes;
                 Renderer::create_indexed_vertex_buffer_from_untextured_cube(buffer.buffer, { 1.f, 1.f, 1.f });
 
                 Renderer::Drawlist::Drawlist_node nodeToAdd = {};
-                nodeToAdd.handle.DL_id::id = (u32)store.drawlist.DL::dl_perVertexBuffer.size();
+                nodeToAdd.handle.DL_id::id = (u32)store.drawlist.DL::dl_perVertexBuffer.len;
                 nodeToAdd.worldTransform = t;
                 Math::identity4x4(nodeToAdd.localTransform);
                 game.renderMgr.particles_DLhandle = nodeToAdd.handle;
-                store.drawlist.DL::dl_perVertexBuffer.push_back(buffer);
-                store.drawlist_nodes.push_back(nodeToAdd);
+                Allocator::push(store.drawlist.DL::dl_perVertexBuffer, game.memory.persistentArena) = buffer;
+                Allocator::push(store.drawlist_nodes, game.memory.persistentArena) = nodeToAdd;
             }
         }
 
@@ -351,10 +351,10 @@ namespace Game
                         particle_scaley = Math::lerp(run_t, jerkyRunParticleMinScaley, jerkyRunParticleMaxScaley);
                         particle_scalez = Math::lerp(run_t, jerkyRunParticleMinScalez, jerkyRunParticleMaxScalez);
                         particle_offsety = 0.3f;
-                        game.renderMgr.renderScene.store.animated_nodes[0].state.scale = scale;
-                        if (game.renderMgr.renderScene.store.animated_nodes[0].state.animIndex != 1) {
-                            game.renderMgr.renderScene.store.animated_nodes[0].state.animIndex = 1;
-                            game.renderMgr.renderScene.store.animated_nodes[0].state.time = 0.f;
+                        game.renderMgr.renderScene.store.animated_nodes.data[0].state.scale = scale;
+                        if (game.renderMgr.renderScene.store.animated_nodes.data[0].state.animIndex != 1) {
+                            game.renderMgr.renderScene.store.animated_nodes.data[0].state.animIndex = 1;
+                            game.renderMgr.renderScene.store.animated_nodes.data[0].state.time = 0.f;
                         }
                     }
                     else if (game.player.movementController.speed > 0.2f) {
@@ -364,21 +364,21 @@ namespace Game
                         particle_scalez = Math::lerp(run_t, runParticleMinScalez, runParticleMaxScalez);
                         particle_offsetz = Math::lerp(run_t, runParticleMinOffsetz, runParticleMaxOffsetz);
                         particle_totalscale = 0.6f;
-                        game.renderMgr.renderScene.store.animated_nodes[0].state.scale = scale;
-                        if (game.renderMgr.renderScene.store.animated_nodes[0].state.animIndex != 2) {
-                            game.renderMgr.renderScene.store.animated_nodes[0].state.animIndex = 2;
-                            game.renderMgr.renderScene.store.animated_nodes[0].state.time = 0.f;
-                            game.renderMgr.renderScene.store.animated_nodes[0].state.scale = 9.f;
+                        game.renderMgr.renderScene.store.animated_nodes.data[0].state.scale = scale;
+                        if (game.renderMgr.renderScene.store.animated_nodes.data[0].state.animIndex != 2) {
+                            game.renderMgr.renderScene.store.animated_nodes.data[0].state.animIndex = 2;
+                            game.renderMgr.renderScene.store.animated_nodes.data[0].state.time = 0.f;
+                            game.renderMgr.renderScene.store.animated_nodes.data[0].state.scale = 9.f;
                         }
                     }
                     else {
                         particle_scaley = 0.f;
                         particle_scalez = 0.f;
-                        game.renderMgr.renderScene.store.animated_nodes[0].state.scale = idleScale;
-                        if (game.renderMgr.renderScene.store.animated_nodes[0].state.animIndex != 0) {
-                            game.renderMgr.renderScene.store.animated_nodes[0].state.animIndex = 0;
-                            game.renderMgr.renderScene.store.animated_nodes[0].state.time = 0.f;
-                            game.renderMgr.renderScene.store.animated_nodes[0].state.scale = 1.f;
+                        game.renderMgr.renderScene.store.animated_nodes.data[0].state.scale = idleScale;
+                        if (game.renderMgr.renderScene.store.animated_nodes.data[0].state.animIndex != 0) {
+                            game.renderMgr.renderScene.store.animated_nodes.data[0].state.animIndex = 0;
+                            game.renderMgr.renderScene.store.animated_nodes.data[0].state.time = 0.f;
+                            game.renderMgr.renderScene.store.animated_nodes.data[0].state.scale = 1.f;
                         }
                     }
 
@@ -405,19 +405,19 @@ namespace Game
 
                         instance_matrices[i] = t.matrix;
                     }
-                    Renderer::Drawlist::update_dl_node_instance_data(game.renderMgr.renderScene.store.drawlist, game.renderMgr.particles_DLhandle, instance_matrices);
+                    Renderer::Drawlist::update_dl_node_instance_data(game.renderMgr.renderScene.store.drawlist, game.renderMgr.particles_DLhandle, instance_matrices, numCubes);
                 }
             }
             
             // animation
             {
-                for (u32 i = 0; i < game.renderMgr.renderScene.store.animated_nodes.size(); i++) {
-                    Allocator::Arena scratchArena = game.memory.scratchArenaRoot;
-                    Renderer::Animation::AnimatedNode& node = game.renderMgr.renderScene.store.animated_nodes[i];
+                for (ptrdiff_t i = 0; i < game.renderMgr.renderScene.store.animated_nodes.len; i++) {
+                    Allocator::Arena scratchArena = platform.memory.scratchArenaRoot; // copy
+                    Renderer::Animation::AnimatedNode& node = game.renderMgr.renderScene.store.animated_nodes.data[i];
                     float4x4* skinning = (float4x4*)Allocator::alloc_arena(scratchArena, node.skeleton.jointCount, 16);
                     Renderer::Animation::updateAnimation(skinning, node.state, node.clips[node.state.animIndex], node.skeleton, dt);
                     
-                    Renderer::Drawlist::update_dl_node_instance_data(game.renderMgr.renderScene.store.drawlist, node.mesh_DLhandle, skinning);
+                    Renderer::Drawlist::update_dl_node_instance_data(game.renderMgr.renderScene.store.drawlist, node.mesh_DLhandle, skinning, node.skeleton.jointCount);
                 }
             }
 
@@ -613,10 +613,12 @@ namespace Game
                                 , float2(textCfg.pos.x, textCfg.pos.y - barheight)
                                 , float2(textCfg.pos.x + barwidth, textCfg.pos.y)
                                 , baseCol);
-                            Renderer::Immediate::box_2d(im
-                                , float2(textCfg.pos.x, textCfg.pos.y - barheight)
-                                , float2(textCfg.pos.x + arenaHighmark_barwidth, textCfg.pos.y)
-                                , highmarkCol);
+                            if (arenaHighmarkBytes) {
+                                Renderer::Immediate::box_2d(im
+                                                          , float2(textCfg.pos.x, textCfg.pos.y - barheight)
+                                                          , float2(textCfg.pos.x + arenaHighmark_barwidth, textCfg.pos.y)
+                                                          , highmarkCol);
+                            }
                             textCfg.pos.y -= barheight + 5.f * textscale;
                         };
 
@@ -638,8 +640,8 @@ namespace Game
                         {
                             const Color32 arenabaseCol(0.65f, 0.65f, 0.65f, 0.4f);
                             const Color32 arenahighmarkCol(0.95f, 0.35f, 0.8f, 1.f);
-                            renderArena(game.renderMgr.immediateBuffer, textParamsCenter, game.memory.scratchArenaRoot.end, game.memory.scratchArenaRoot.curr, game.memory.scratchArenaHighmark
-                                , "Game scratch arena", defaultCol, arenabaseCol, arenahighmarkCol, lineheight, textscale);
+                            renderArena(game.renderMgr.immediateBuffer, textParamsCenter, game.memory.persistentArena.end, game.memory.persistentArenaBuffer, (ptrdiff_t)game.memory.persistentArena.curr
+                                , "Game persistent arena", defaultCol, arenabaseCol, arenahighmarkCol, lineheight, textscale);
                         }
                         {
                             auto& im = game.renderMgr.immediateBuffer;
@@ -666,10 +668,10 @@ namespace Game
                             Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParamsCenter, "im 3d: %lu bytes", vertices_3d_size);
                             textParamsCenter.pos.y -= lineheight;
                             textParamsCenter.color = used2dCol;
-                            Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParamsCenter, "im 3d: %lu bytes", vertices_2d_size);
+                            Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParamsCenter, "im 2d: %lu bytes", vertices_2d_size);
                             textParamsCenter.pos.y -= lineheight;
                             textParamsCenter.color = used2didxCol;
-                            Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParamsCenter, "im 3d: %lu bytes", indices_2d_size);
+                            Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParamsCenter, "im 2d indices: %lu bytes", indices_2d_size);
                             textParamsCenter.pos.y -= lineheight;
                             textParamsCenter.color = defaultCol;
 

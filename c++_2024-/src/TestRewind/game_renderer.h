@@ -129,15 +129,16 @@ namespace Renderer {
         
         struct update_instance_data_t {
             template<typename _T>
-            static void execute(Drawlist_game& drawlist, const Drawlist_game::Handle& handle, const float4x4* matrices) {
+            static void execute(Drawlist_game& drawlist, const Drawlist_game::Handle& handle, const float4x4* matrices, const u32 size) {
                 typename _T::DL_VertexBuffer& leafData = drawlist._T::get_leaf((typename _T::Handle&)(handle));
-                for (u32 i = 0; i < leafData.instancedData.size(); i++) {
-                    leafData.instancedData[i] = matrices[i];
+                for (u32 i = 0; i < size; i++) {
+                    leafData.instancedData.instanceMatrices[i] = matrices[i];
                 }
+                leafData.instancedDataCount = size;
             }
         };
-        void update_dl_node_instance_data(Drawlist_game& drawlist, const Drawlist_game::Handle& handle, const float4x4* matrices) {
-            Drawlist_instanceData::for_each<update_instance_data_t>(drawlist, handle, matrices);
+        void update_dl_node_instance_data(Drawlist_game& drawlist, const Drawlist_game::Handle& handle, const float4x4* matrices, const u32 size) {
+            Drawlist_instanceData::for_each<update_instance_data_t>(drawlist, handle, matrices, size);
         }
         struct draw_drawlist_t {
             template <typename _T>
@@ -235,8 +236,8 @@ namespace Renderer {
         , Renderer::Shaders::VSDrawType::Standard> ShaderParams_Blit;
 
     struct Store {
-        tinystl::vector<Drawlist::Drawlist_node> drawlist_nodes;
-        tinystl::vector<Animation::AnimatedNode> animated_nodes;
+        Allocator::Buffer<Drawlist::Drawlist_node> drawlist_nodes;
+        Allocator::Buffer<Animation::AnimatedNode> animated_nodes;
         Renderer::Driver::RscCBuffer cbuffers[Renderer::Layout_CBuffer_3DScene::Buffers::Count];
         Drawlist::Drawlist_game drawlist;
         ShaderParams_Blit::ShaderSet shader_blit;
@@ -248,7 +249,7 @@ namespace Renderer {
         Renderer::Driver::RscRenderTarget<1> gameRT;
     };
 
-    void start_store(Store& store, const Platform::State& platform, Allocator::Arena scratchArena) {
+    void start_store(Store& store, const Platform::State& platform) {
 
         Renderer::Driver::MainRenderTargetParams windowRTparams = {};
         windowRTparams.depth = true;
@@ -326,17 +327,17 @@ namespace Renderer {
         struct Vertex_src {
             float3 coords;
         };
-        typedef tinystl::vector<Vertex_src, Allocator::ArenaSTL<Vertex_src>> Vertices_src_stream;
+        typedef Allocator::Buffer<Vertex_src> Vertices_src_stream;
         template<typename _vertexLayout>
         struct Streams {
             void init(Allocator::Arena* arena, const u32 maxVertices) {
-                vertices.set_alloc(arena);
-                indices.set_alloc(arena);
-                vertices.reserve(maxVertices);
-                indices.reserve(maxVertices * 3 * 2);
+                vertices = {};
+                indices = {};
+                Allocator::reserve(vertices, maxVertices, *arena);
+                Allocator::reserve(indices, maxVertices * 3 * 2, *arena);
             }
-            tinystl::vector<_vertexLayout, Allocator::ArenaSTL<_vertexLayout>> vertices;
-            tinystl::vector<u32, Allocator::ArenaSTL<u32>> indices;
+            Allocator::Buffer<_vertexLayout> vertices;
+            Allocator::Buffer<u32> indices;
         };
         template<typename _vertexLayout, Shaders::PSMaterialUsage::Enum _materialUsage>
         struct DrawlistSrc;
@@ -384,10 +385,10 @@ namespace Renderer {
             static void op(typename _drawlist::DL_VertexBuffer& dlBuffer, const typename _drawlist::DL_VertexBuffer::GroupData& groupData, const Driver::RscIndexedBuffer<_vertexLayout>& rscBuffer, const Animation::AnimatedNode& animatedNode) {
                 dlBuffer.buffer = rscBuffer;
                 dlBuffer.groupData = groupData;
-                dlBuffer.instancedData.resize(animatedNode.skeleton.jointCount);
 				for (u32 jointIndex = 0; jointIndex < animatedNode.skeleton.jointCount; jointIndex++) {
-                    dlBuffer.instancedData[jointIndex] = Math::mult(animatedNode.skeleton.geometryFromPosedJoint[jointIndex], animatedNode.skeleton.jointFromGeometry[jointIndex]);
+                    dlBuffer.instancedData.instanceMatrices[jointIndex] = Math::mult(animatedNode.skeleton.geometryFromPosedJoint[jointIndex], animatedNode.skeleton.jointFromGeometry[jointIndex]);
 				}
+                dlBuffer.instancedDataCount = animatedNode.skeleton.jointCount;
             }
         };
         template<typename _vertexLayout, Shaders::VSSkinType::Enum _skinType, typename _drawlist>
@@ -398,35 +399,35 @@ namespace Renderer {
             groupData.groupColor = Color32(0.0f, 0.0f, 0.0f, 0.f).RGBAv4();
             groupData.worldMatrix = Math::mult(nodeToAdd.worldTransform.matrix, nodeToAdd.localTransform.matrix);
             Driver::RscIndexedBuffer<_vertexLayout> rscBuffer = {};
-            create_vertex_buffer(rscBuffer, &dst_vertices[0], (u32)dst_vertices.size(), &dst_indices[0], (u32)dst_indices.size());
+            create_vertex_buffer(rscBuffer, dst_vertices.data, (u32)dst_vertices.len, dst_indices.data, (u32)dst_indices.len);
             InitVertexBuffer<_vertexLayout, _skinType, _drawlist>::op(dlBuffer, groupData, rscBuffer, animatedNode);
         }
         template<typename _vertexLayout, Shaders::VSSkinType::Enum _skinType, Shaders::PSMaterialUsage::Enum _materialUsage, typename _drawlist, typename _handle>
         struct Generate_DL;
         template<typename _vertexLayout, Shaders::VSSkinType::Enum _skinType, typename _drawlist, typename _handle>
         struct Generate_DL<_vertexLayout, _skinType, Shaders::PSMaterialUsage::None, _drawlist, _handle> {
-            static void op(Drawlist::Drawlist_node& nodeToAdd, Store& renderStore, DrawlistSrc<_vertexLayout, Shaders::PSMaterialUsage::None>& src, const Animation::AnimatedNode& animatedNode) {
-                if (src.streams.vertices.size() == 0) { return; }
+            static void op(Drawlist::Drawlist_node& nodeToAdd, Store& renderStore, DrawlistSrc<_vertexLayout, Shaders::PSMaterialUsage::None>& src, const Animation::AnimatedNode& animatedNode, Allocator::Arena& persistentArena) {
+                if (src.streams.vertices.len == 0) { return; }
                 typename _drawlist::DL_VertexBuffer dlBuffer = {};
                 create_dl_perVertexBuffer<_vertexLayout, _skinType, _drawlist>(dlBuffer, nodeToAdd, renderStore, src.streams, animatedNode);
-                nodeToAdd.handle._handle::id = (s32)renderStore.drawlist._drawlist::dl_perVertexBuffer.size();
-                renderStore.drawlist._drawlist::dl_perVertexBuffer.push_back(dlBuffer);
+                nodeToAdd.handle._handle::id = (s32)renderStore.drawlist._drawlist::dl_perVertexBuffer.len;
+                Allocator::push(renderStore.drawlist._drawlist::dl_perVertexBuffer, persistentArena) = dlBuffer;
             }
         };
         template<typename _vertexLayout, Shaders::VSSkinType::Enum _skinType, typename _drawlist, typename _handle>
         struct Generate_DL<_vertexLayout, _skinType, Shaders::PSMaterialUsage::Uses, _drawlist, _handle> {
-            static void op(Drawlist::Drawlist_node& nodeToAdd, Store& renderStore, DrawlistSrc<_vertexLayout, Shaders::PSMaterialUsage::Uses>& src, const Animation::AnimatedNode& animatedNode) {
-                if (src.streams.vertices.size() == 0) { return; }
+            static void op(Drawlist::Drawlist_node& nodeToAdd, Store& renderStore, DrawlistSrc<_vertexLayout, Shaders::PSMaterialUsage::Uses>& src, const Animation::AnimatedNode& animatedNode, Allocator::Arena& persistentArena) {
+                if (src.streams.vertices.len == 0) { return; }
                 typename _drawlist::DL_Material material = {};
                 Driver::create_texture_from_file(material.textures[0], { ((ufbx_texture*)src.user)->filename.data });
                 {
                     typename _drawlist::DL_VertexBuffer dlBuffer = {};
                     create_dl_perVertexBuffer<_vertexLayout, _skinType, _drawlist>(dlBuffer, nodeToAdd, renderStore, src.streams, animatedNode);
-                    nodeToAdd.handle._handle::buffer = (s16)material.dl_perVertexBuffer.size();
-                    material.dl_perVertexBuffer.push_back(dlBuffer);
+                    nodeToAdd.handle._handle::buffer = (s16)material.dl_perVertexBuffer.len;
+                    Allocator::push(material.dl_perVertexBuffer, persistentArena) = dlBuffer;
                 }
-                nodeToAdd.handle._handle::material = (s16)renderStore.drawlist._drawlist::dl_perMaterial.size();
-                renderStore.drawlist._drawlist::dl_perMaterial.push_back(material);
+                nodeToAdd.handle._handle::material = (s16)renderStore.drawlist._drawlist::dl_perMaterial.len;
+                Allocator::push(renderStore.drawlist._drawlist::dl_perMaterial, persistentArena) = material;
             }
         };
         template<typename _vertexLayout, typename _drawlist>
@@ -461,8 +462,8 @@ namespace Renderer {
         };
         struct process_streams_t {
             template <typename _T>
-            static void execute(FBXSupportedDrawlists& drawlist, Drawlist::Drawlist_node& nodeToAdd, Store& renderStore, const Animation::AnimatedNode& animatedNode) {
-                _T::Generate_DL::op(nodeToAdd, renderStore, drawlist._T::src, animatedNode);
+            static void execute(FBXSupportedDrawlists& drawlist, Drawlist::Drawlist_node& nodeToAdd, Store& renderStore, const Animation::AnimatedNode& animatedNode, Allocator::Arena& persistentArena) {
+                _T::Generate_DL::op(nodeToAdd, renderStore, drawlist._T::src, animatedNode, persistentArena);
             }
         };
 
@@ -560,19 +561,19 @@ namespace Renderer {
                     const Vertex_src& vertex_src = vertices_src[src_index];
                     if (index_in_dst_array[src_index] != 0xffffffff) {
                         // Vertex has been updated in the new buffer, copy the index over
-                        stream_dst.indices.push_back(index_in_dst_array[src_index]);
+                        Allocator::push(stream_dst.indices, scratchArena) = index_in_dst_array[src_index];
                     } else {
                         // Vertex needs to be added to the new buffer, and index updated
-                        u32 dst_index = (u32)stream_dst.vertices.size();
+                        u32 dst_index = (u32)stream_dst.vertices.len;
                         _vertexLayout vertex = {};
                         extract_vertex_attrib<_vertexLayout, _dataType>(vertex, mesh, mesh_mat, triangulatedFaceIndex, src_index);
                         vertex.pos.x = vertex_src.coords.x;
                         vertex.pos.y = vertex_src.coords.y;
                         vertex.pos.z = vertex_src.coords.z;
-                        stream_dst.vertices.push_back(vertex);
+                        Allocator::push(stream_dst.vertices, scratchArena) = vertex;
                         // mark where this vertex is in the destination array
                         index_in_dst_array[src_index] = dst_index;
-                        stream_dst.indices.push_back(dst_index);
+                        Allocator::push(stream_dst.indices, scratchArena) = dst_index;
                     }
                 }
             }
@@ -664,7 +665,7 @@ namespace Renderer {
                 }
             }
         }
-        void load_with_material(Drawlist::Drawlist_node& nodeToAdd, Store& renderStore, const char* path, Allocator::Arena scratchArena) {
+        void load_with_material(Drawlist::Drawlist_node& nodeToAdd, Store& renderStore, const char* path, Allocator::Arena scratchArena, Allocator::Arena& persistentArena) {
             ufbx_load_opts opts = {};
             opts.target_axes = { UFBX_COORDINATE_AXIS_POSITIVE_X, UFBX_COORDINATE_AXIS_POSITIVE_Z, UFBX_COORDINATE_AXIS_POSITIVE_Y };
             opts.allow_null_material = true;
@@ -675,9 +676,8 @@ namespace Renderer {
                 u32 maxVertices = 0;
                 for (size_t i = 0; i < scene->meshes.count; i++) { maxVertices += (u32)scene->meshes.data[i]->num_vertices; }
 
-                Vertices_src_stream vertices;
-                vertices.set_alloc(&scratchArena);
-                vertices.reserve(maxVertices);
+                Vertices_src_stream vertices = {};
+                Allocator::reserve(vertices, maxVertices, scratchArena);
                 FBXSupportedDrawlists supportedDrawlists;
                 FBXSupportedDrawlists::for_each<init_drawlists_t>(supportedDrawlists, &scratchArena, maxVertices);
 
@@ -709,7 +709,7 @@ namespace Renderer {
                                 vertex.coords.y = v_fbx_ls.x * m.m10 + v_fbx_ls.y * m.m11 + v_fbx_ls.z * m.m12 + m.m13;
                                 vertex.coords.z = v_fbx_ls.x * m.m20 + v_fbx_ls.y * m.m21 + v_fbx_ls.z * m.m22 + m.m23;
                             }
-                            vertices.push_back(vertex);
+                            Allocator::push(vertices, scratchArena) = vertex;
                         }
                     }
 
@@ -723,7 +723,7 @@ namespace Renderer {
                     auto& streamTexturedSkinnedAlphaClip = supportedDrawlists.DL_texturedalphaclip_t::src;
 
                     const u32 mesh_vertices_count = (u32)mesh.num_vertices;
-                    const Vertex_src* mesh_vertices = &vertices[vertexOffset];
+                    const Vertex_src* mesh_vertices = &vertices.data[vertexOffset];
                     for (size_t m = 0; m < mesh.materials.count; m++) {
                         ufbx_mesh_material& mesh_mat = mesh.materials.data[m];
                         if (animatedNode.skeleton.jointCount) { // hack: handle textured shaders only for skinned meshes
@@ -763,12 +763,12 @@ namespace Renderer {
                 }
 
                 {
-                    FBXSupportedDrawlists::for_each<process_streams_t>(supportedDrawlists, nodeToAdd, renderStore, animatedNode);
+                    FBXSupportedDrawlists::for_each<process_streams_t>(supportedDrawlists, nodeToAdd, renderStore, animatedNode, persistentArena);
                     if (animatedNode.skeleton.jointCount) {
                         animatedNode.mesh_DLhandle = nodeToAdd.handle;
-                        renderStore.animated_nodes.push_back(animatedNode);
+                        Allocator::push(renderStore.animated_nodes, persistentArena) = animatedNode;
                     }
-                    renderStore.drawlist_nodes.push_back(nodeToAdd);
+                    Allocator::push(renderStore.drawlist_nodes, persistentArena) = nodeToAdd;
                 }
             }
         }

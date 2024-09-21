@@ -4,7 +4,6 @@
 #include "stdint.h"
 #include <assert.h>
 
-#include "lib/tinystl/vector.h"
 #include <stdio.h> // printf
 
 // Debug
