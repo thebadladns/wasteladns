@@ -318,13 +318,13 @@ namespace Driver {
         );
         void* error = pErrorBlob ? pErrorBlob->GetBufferPointer() : nullptr;
 #elif READ_SHADERCACHE // todo: fix again
+        HRESULT hr = S_OK;
         void* error = nullptr;
 #endif
 
         ShaderResult result;
         result.compiled = !FAILED(hr);
         if (result.compiled) {
-
 #if WRITE_SHADERCACHE
             ShaderBytecode& byteCode = shaderCache.shaderBytecode[shaderCache.shaderBytecodeCount++];
             byteCode.data = (u8*)malloc(pShaderBlob->GetBufferSize());
@@ -336,7 +336,6 @@ namespace Driver {
             Renderer::Driver::ShaderBytecode& byteCode = Renderer::Driver::shaderCache.shaderBytecode[Renderer::Driver::shaderCache.shaderBytecodeCount++];
             void* shaderBufferPointer = byteCode.data;
             size_t shaderBufferSize = byteCode.size;
-            HRESULT hr = S_OK;
 #endif
 
             d3ddev->CreateVertexShader(shaderBufferPointer, shaderBufferSize, nullptr, &vs.impl);
@@ -368,6 +367,7 @@ namespace Driver {
         );
         void* error = pErrorBlob ? pErrorBlob->GetBufferPointer() : nullptr;
 #elif READ_SHADERCACHE
+        HRESULT hr = S_OK;
         void* error = nullptr;
 #endif
         ShaderResult result;
@@ -384,7 +384,6 @@ namespace Driver {
             Renderer::Driver::ShaderBytecode& byteCode = Renderer::Driver::shaderCache.shaderBytecode[Renderer::Driver::shaderCache.shaderBytecodeCount++];
             void* shaderBufferPointer = byteCode.data;
             size_t shaderBufferSize = byteCode.size;
-            HRESULT hr = S_OK;
 #endif
 
             d3ddev->CreatePixelShader(shaderBufferPointer, shaderBufferSize, nullptr, &ps.impl);

@@ -114,7 +114,7 @@ namespace Game
         config.nextFrame = platform.time.now;
 
         {
-            Allocator::init_arena(Allocator::emergencyArena, 1 << 20); // 1MB
+            __DEBUGEXP(Allocator::init_arena(Allocator::emergencyArena, 1 << 20)); // 1MB
             Allocator::init_arena(game.memory.persistentArena, 1 << 20); // 1MB
             __DEBUGEXP(game.memory.persistentArenaBuffer = game.memory.persistentArena.curr);
             Allocator::init_arena(Allocator::frameArena, 1 << 20); // 1MB
