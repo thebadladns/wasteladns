@@ -1024,8 +1024,11 @@ void init_pipelines(Store& store, Allocator::Arena scratchArena, const Platform:
 
         u32 animHandle = 0;
         if (animatedNode.skeleton.jointCount > 0) {
-            Animation::AnimatedNode& animatedNodeToAdd = Allocator::alloc_pool(store.animatedNodes);
+            animatedNode.state.animIndex = 0;
+            animatedNode.state.time = 0.f;
+            animatedNode.state.scale = 1.f;
             animatedNode.drawNodeHandle = nodeHandle;
+            Animation::AnimatedNode& animatedNodeToAdd = Allocator::alloc_pool(store.animatedNodes);
             animatedNodeToAdd = animatedNode;
             animHandle = handle_from_animatedNode(store, animatedNodeToAdd);
         }
