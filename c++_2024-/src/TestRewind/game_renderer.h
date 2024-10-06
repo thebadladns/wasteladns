@@ -274,8 +274,8 @@ void addNodesToDrawlist(Drawlist& dl, float3 cameraPos, Store& store, const u32 
                 const DrawMesh& mesh = get_drawMesh(store, node.meshHandles[m]);
                 u32 curr_shift = 0;
                 key.v = 0;
-                key.v |= (n & nodeMask) << curr_shift, curr_shift += nodeBits;
                 key.v |= (mesh.type & shaderMask) << curr_shift, curr_shift += shaderBits;
+                key.v |= (n & nodeMask) << curr_shift, curr_shift += nodeBits;
                 key.v |= (distSqNormalized & depthMask) << curr_shift, curr_shift += depthBits;
                 item.shader = store.shaders[mesh.type];
                 item.vertexBuffer = mesh.vertexBuffer;
@@ -288,7 +288,7 @@ void addNodesToDrawlist(Drawlist& dl, float3 cameraPos, Store& store, const u32 
         }
     }
     {
-        // skinned nodes are sorted by node, then distance, then program
+        // skinned nodes are sorted by distance, then node, then program (important to minimize cbuffer writes)
         const u32 depthBits = 10;
         const u32 depthMask = (1 << depthBits) - 1;
         const u32 maxValue = (1 << depthBits) - 1;
@@ -335,6 +335,7 @@ void addNodesToDrawlist(Drawlist& dl, float3 cameraPos, Store& store, const u32 
         }
     }
     {
+        // instance nodes are sorted by node, then program (no distance sort)
         const u32 nodeBits = 10; // 1024 nodes
         const u32 nodeMask = (1 << nodeBits) - 1;
         const u32 shaderBits = 8; // 255 shader types
@@ -378,7 +379,6 @@ void addNodesToDrawlist(Drawlist& dl, float3 cameraPos, Store& store, const u32 
 namespace FBX {
 
     void extract_anim_data(Animation::Skeleton& skeleton, Animation::Clip*& clips, u32& clipCount, Store& store, const ufbx_mesh& mesh, const ufbx_scene& scene) {
-
         auto from_ufbx_mat = [](float4x4& dst, const ufbx_matrix& src) {
             dst.col0.x = src.cols[0].x; dst.col0.y = src.cols[0].y; dst.col0.z = src.cols[0].z; dst.col0.w = 0.f;
             dst.col1.x = src.cols[1].x; dst.col1.y = src.cols[1].y; dst.col1.z = src.cols[1].z; dst.col1.w = 0.f;
@@ -1000,9 +1000,9 @@ void init_pipelines(Store& store, Allocator::Arena scratchArena, const Platform:
     };
     // from blender: export fbx -> Apply Scalings: FBX All -> Forward: the one in Blender -> Use Space Transform: yes
     const AssetData assets[] = {
-          { "assets/meshes/boar.fbx", { 5.f, 10.f, 2.30885f }, 250, false }
+          { "assets/meshes/boar.fbx", { 5.f, 10.f, 2.30885f }, 1, false }
         , { "assets/meshes/bird.fbx", { 1.f, 3.f, 2.23879f }, 1, true }
-        , { "assets/meshes/bird.fbx", { 0.f, 5.f, 2.23879f }, 1, false }
+        , { "assets/meshes/bird.fbx", { 0.f, 5.f, 2.23879f }, 250, false }
     };
 
     FBX::PipelineAssetContext ctx = {};
