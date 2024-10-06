@@ -8,9 +8,9 @@
 // coordinate system = right handed Z up
 
 namespace Math {
-    constexpr const float3 rightAxis() { return { 1.f, 0.f, 0.f }; };
-    constexpr const float3 frontAxis() { return { 0.f, 1.f, 0.f }; };
-    constexpr const float3 upAxis() { return { 0.f, 0.f, 1.f }; };
+    const float3 rightAxis() { return { 1.f, 0.f, 0.f }; };
+    const float3 frontAxis() { return { 0.f, 1.f, 0.f }; };
+    const float3 upAxis() { return { 0.f, 0.f, 1.f }; };
 }
 
 struct Transform33 {
@@ -31,6 +31,7 @@ struct Transform33 {
 };
 
 struct Transform {
+    Transform() {}
     union {
         float4x4 matrix;
         struct {
@@ -151,33 +152,5 @@ namespace Math {
         t.pos = {};
         t.pos_w = 1.f;
     }
-    
-    float2 transform3x3(const Transform& t, const float2& v) {
-        return float2(
-              t.x.x * v.x + t.y.x * v.y
-            , t.x.y * v.x + t.y.y * v.y
-        );
-    }
-    float3 transform3x3(const Transform& t, const float3& v) {
-        return float3(
-              t.x.x * v.x + t.y.x * v.y + t.z.x * v.z
-            , t.x.y * v.x + t.y.y * v.y + t.z.y * v.z
-            , t.x.z * v.x + t.y.z * v.y + t.z.z * v.z
-        );
-    }
-    // TODO: probably will need to revise these when used
-    float2 untransform3x3(const Transform& t, const float2& v) {
-        float2 out = Math::add(
-              Math::scale(t.x.xy, Math::dot(t.x.xy, v))
-            , Math::scale(t.y.xy, Math::dot(t.y.xy, v))
-        );
-        return out;
-    }
-    float3 untransform3x3(const Transform& t, const float3& v) {
-        float3 out = Math::scale(t.x, Math::dot(t.x, v));
-        out = Math::add(out, Math::scale(t.y, Math::dot(t.y, v)));
-        out = Math::add(out, Math::scale(t.z, Math::dot(t.z, v)));
-        return out;
-    }};
-
+}
 #endif // __WASTELADNS_TRANSFORM_H__

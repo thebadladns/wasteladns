@@ -14,9 +14,9 @@
 #define float4_PARAMS(v) (v).x, (v).y, (v).z, (v).w
 
 struct float2 {
-    float2() = default;
-    constexpr float2(const f32 _x, const f32 _y) : x(_x), y(_y) {}
-    
+    float2() : x{}, y{} {}
+    float2(const f32 _x, const f32 _y) : x(_x), y(_y) {}
+
     union {
         struct {
             f32 x, y;
@@ -26,10 +26,10 @@ struct float2 {
 };
 
 struct float3 {
-    float3() = default;
-    constexpr float3(const f32 _x, const f32 _y, const f32 _z) : x(_x), y(_y), z(_z) {}
-    constexpr float3(const f32 _x, const float2& _yz) : x(_x), y(_yz.x), z(_yz.y) {}
-    constexpr float3(const float2& _xy, const f32 _z) : x(_xy.x), y(_xy.y), z(_z) {}
+    float3() : x{}, y{}, z{} {}
+    float3(const f32 _x, const f32 _y, const f32 _z) : x(_x), y(_y), z(_z) {}
+    float3(const f32 _x, const float2& _yz) : x(_x), y(_yz.x), z(_yz.y) {}
+    float3(const float2& _xy, const f32 _z) : x(_xy.x), y(_xy.y), z(_z) {}
     
     union {
         struct {
@@ -47,11 +47,11 @@ struct float3 {
 };
 
 struct float4 {
-    float4() = default;
-    constexpr float4(const f32 _x, const f32 _y, const f32 _z, const f32 _w) : x(_x), y(_y), z(_z), w(_w) {}
-    constexpr float4(const f32 _x, const float3& _yzw) : x(_x), y(_yzw.x), z(_yzw.y), w(_yzw.z) {}
-    constexpr float4(const float3& _xyz, const f32 _w) : x(_xyz.x), y(_xyz.y), z(_xyz.z), w(_w) {}
-    constexpr float4(const float2& _xy, const float2& _yz) : x(_xy.x), y(_xy.y), z(_yz.x), w(_yz.y) {}
+    float4() : x{}, y{}, z{}, w{} {}
+    float4(const f32 _x, const f32 _y, const f32 _z, const f32 _w) : x(_x), y(_y), z(_z), w(_w) {}
+    float4(const f32 _x, const float3& _yzw) : x(_x), y(_yzw.x), z(_yzw.y), w(_yzw.z) {}
+    float4(const float3& _xyz, const f32 _w) : x(_xyz.x), y(_xyz.y), z(_xyz.z), w(_w) {}
+    float4(const float2& _xy, const float2& _yz) : x(_xy.x), y(_xy.y), z(_yz.x), w(_yz.y) {}
 
     union {
         struct {
@@ -80,7 +80,7 @@ struct float4 {
 // 1  4  7
 // 2  5  8
 struct float3x3 {
-    float3x3() = default;
+    float3x3() : col0{}, col1{}, col2{} {}
 
     union {
         struct {
@@ -98,7 +98,7 @@ struct float3x3 {
 // 2  6  10 14
 // 3  7  11 15
 struct float4x4 {
-    float4x4() = default;
+    float4x4() : col0{}, col1{}, col2{}, col3{} {}
 
     union {
         struct {

@@ -2,6 +2,7 @@
 #define __WASTELADNS_GAME_H__
 
 #include "gameplay.h"
+#include "shaders.h"
 #include "game_renderer.h"
 
 struct Scene_ModelLoadData {
@@ -49,10 +50,6 @@ namespace Game
             ;
     };
 
-    struct RenderScene {
-        Renderer::Store store;
-    };
-
     struct CameraManager {
         enum { FlyCam, CamCount };
         Camera cameras[CamCount];
@@ -61,12 +58,10 @@ namespace Game
     };
 
     struct RenderManager {
-        RenderScene renderScene;
+        Renderer::Store store;
         __DEBUGDEF(Renderer::Immediate::Buffer immediateBuffer;)
         Renderer::WindowProjection windowProjection;
         Renderer::PerspProjection perspProjection;
-        Renderer::Drawlist::Drawlist_node player_DLnode;
-        Renderer::Drawlist::Drawlist_game::Handle particles_DLhandle;
     };
 
     #if __DEBUG
@@ -97,7 +92,7 @@ namespace Game
         __DEBUGDEF(DebugVis debugVis;)
     };
 
-    void loadLaunchConfig(Platform::WindowConfig& config) {
+    void loadLaunchConfig(Platform::LaunchConfig& config) {
         // hardcoded for now
         config.window_width = 320 * 3;
         config.window_height = 240 * 3;
@@ -105,6 +100,7 @@ namespace Game
         config.game_height = 240 * 1;
         config.fullscreen = false;
         config.title = "3D Test";
+		config.scratchArena_size = 1 << 20; // 1MB
     }
 
     void start(Instance& game, Platform::GameConfig& config, const Platform::State& platform) {
@@ -118,6 +114,7 @@ namespace Game
         config.nextFrame = platform.time.now;
 
         {
+            Allocator::init_arena(Allocator::emergencyArena, 1 << 20); // 1MB
             Allocator::init_arena(game.memory.persistentArena, 1 << 20); // 1MB
             __DEBUGEXP(game.memory.persistentArenaBuffer = game.memory.persistentArena.curr);
             Allocator::init_arena(Allocator::frameArena, 1 << 20); // 1MB
@@ -147,7 +144,6 @@ namespace Game
         }
 #endif
 
-        // camera set up
         game.renderMgr = {};
         {
             RenderManager& mgr = game.renderMgr;
@@ -173,53 +169,16 @@ namespace Game
 
         {
             // meshes in the scene
-            auto& store = game.renderMgr.renderScene.store;
-
-            store = {};
-            Renderer::start_store(game.renderMgr.renderScene.store, platform);
-            __DEBUGEXP(Renderer::Immediate::load(game.renderMgr.immediateBuffer, game.memory.imDebugArena));
-
-            for (const Scene_ModelLoadData& asset : assets) {
-                Renderer::Drawlist::Drawlist_node nodeToAdd = {};
-                Math::identity4x4(nodeToAdd.localTransform);
-                Math::identity4x4(nodeToAdd.worldTransform);
-                nodeToAdd.localTransform.matrix.col0.x *= asset.scale;
-                nodeToAdd.localTransform.matrix.col1.y *= asset.scale;
-                nodeToAdd.localTransform.matrix.col2.z *= asset.scale;
-                nodeToAdd.worldTransform.pos = asset.origin;
-
-                Renderer::FBX::load_with_material(nodeToAdd, store, asset.path, platform.memory.scratchArenaRoot, game.memory.persistentArena);
-
-                if (asset.player) {
-                    game.renderMgr.player_DLnode = nodeToAdd;
-                }
-            }
-            // unit cubes
-            {
-                using DL = Renderer::Drawlist::DL_unlit_instanced_t;
-                using DL_id = Renderer::Drawlist::DL_unlit_instanced_id;
-
-                Renderer::Drawlist::DL_unlit_instanced_vb buffer = {};
-                Transform t; Math::identity4x4(t);
-                buffer.groupData.worldMatrix = t.matrix;
-                buffer.groupData.groupColor = Color32(0.9f, 0.7f, 0.8f, 0.6f).RGBAv4();
-                buffer.instancedDataCount = numCubes;
-                Renderer::create_indexed_vertex_buffer_from_untextured_cube(buffer.buffer, { 1.f, 1.f, 1.f });
-
-                Renderer::Drawlist::Drawlist_node nodeToAdd = {};
-                nodeToAdd.handle.DL_id::id = (u32)store.drawlist.DL::dl_perVertexBuffer.len;
-                nodeToAdd.worldTransform = t;
-                Math::identity4x4(nodeToAdd.localTransform);
-                game.renderMgr.particles_DLhandle = nodeToAdd.handle;
-                Allocator::push(store.drawlist.DL::dl_perVertexBuffer, game.memory.persistentArena) = buffer;
-                Allocator::push(store.drawlist_nodes, game.memory.persistentArena) = nodeToAdd;
-            }
+            game.renderMgr.store = {};
+            Renderer::init_pipelines(game.renderMgr.store, platform.memory.scratchArenaRoot, platform.screen);
+            __DEBUGEXP(Renderer::Immediate::init(game.renderMgr.immediateBuffer, game.memory.imDebugArena));
         }
 
         game.player = {};
         {
             Math::identity4x4(game.player.transform);
-            game.player.transform.pos = game.renderMgr.player_DLnode.worldTransform.pos;
+            Renderer::NodeData& nodeData = Renderer::get_draw_node_data(game.renderMgr.store, game.renderMgr.store.playerDrawNodeHandle);
+            game.player.transform.pos = nodeData.worldMatrix.col3.xyz;
         }
 
         game.cameraMgr = {};
@@ -319,11 +278,13 @@ namespace Game
                 }
                 Gameplay::Movement::process_cameraRelative(game.player.transform, game.player.movementController, game.player.control, activeCam->transform, dt);
 
-                // update drawlist
-                game.renderMgr.player_DLnode.worldTransform.matrix = Math::mult(game.player.transform.matrix, game.renderMgr.player_DLnode.localTransform.matrix);
-                Renderer::Drawlist::update_dl_node_matrix(game.renderMgr.renderScene.store.drawlist, game.renderMgr.player_DLnode);
+                // update player render
+                Renderer::NodeData& nodeData = Renderer::get_draw_node_data(game.renderMgr.store, game.renderMgr.store.playerDrawNodeHandle);
+                nodeData.worldMatrix = game.player.transform.matrix;
 
                 { // animation hack
+                    Animation::AnimatedNode& animatedData = Renderer::get_animatedNode(game.renderMgr.store, game.renderMgr.store.playerAnimatedNodeHandle);
+
                     enum Cycle { Idle = 0, JerkyRun = 1, Run = 2 };
                     const f32 maxSpeed = 15.f;
                     const f32 runSpeedStart = 0.2f;
@@ -351,40 +312,40 @@ namespace Game
                         particle_scaley = Math::lerp(run_t, jerkyRunParticleMinScaley, jerkyRunParticleMaxScaley);
                         particle_scalez = Math::lerp(run_t, jerkyRunParticleMinScalez, jerkyRunParticleMaxScalez);
                         particle_offsety = 0.3f;
-                        game.renderMgr.renderScene.store.animated_nodes.data[0].state.scale = scale;
-                        if (game.renderMgr.renderScene.store.animated_nodes.data[0].state.animIndex != 1) {
-                            game.renderMgr.renderScene.store.animated_nodes.data[0].state.animIndex = 1;
-                            game.renderMgr.renderScene.store.animated_nodes.data[0].state.time = 0.f;
+                        animatedData.state.scale = scale;
+                        if (animatedData.state.animIndex != 1) {
+                            animatedData.state.animIndex = 1;
+                            animatedData.state.time = 0.f;
                         }
-                    }
-                    else if (game.player.movementController.speed > 0.2f) {
+                    } else if (game.player.movementController.speed > 0.2f) {
                         const f32 run_t = (game.player.movementController.speed - runSpeedStart) / (jerkyRunSpeedStart - runSpeedStart);
                         const f32 scale = 1.f + Math::lerp(run_t, runMinScale, runMaxScale);
                         particle_scaley = Math::lerp(run_t, runParticleMinScaley, runParticleMaxScaley);
                         particle_scalez = Math::lerp(run_t, runParticleMinScalez, runParticleMaxScalez);
                         particle_offsetz = Math::lerp(run_t, runParticleMinOffsetz, runParticleMaxOffsetz);
                         particle_totalscale = 0.6f;
-                        game.renderMgr.renderScene.store.animated_nodes.data[0].state.scale = scale;
-                        if (game.renderMgr.renderScene.store.animated_nodes.data[0].state.animIndex != 2) {
-                            game.renderMgr.renderScene.store.animated_nodes.data[0].state.animIndex = 2;
-                            game.renderMgr.renderScene.store.animated_nodes.data[0].state.time = 0.f;
-                            game.renderMgr.renderScene.store.animated_nodes.data[0].state.scale = 9.f;
+                        animatedData.state.scale = scale;
+                        if (animatedData.state.animIndex != 2) {
+                            animatedData.state.animIndex = 2;
+                            animatedData.state.time = 0.f;
+                            animatedData.state.scale = 9.f;
                         }
-                    }
-                    else {
+                    } else {
                         particle_scaley = 0.f;
                         particle_scalez = 0.f;
-                        game.renderMgr.renderScene.store.animated_nodes.data[0].state.scale = idleScale;
-                        if (game.renderMgr.renderScene.store.animated_nodes.data[0].state.animIndex != 0) {
-                            game.renderMgr.renderScene.store.animated_nodes.data[0].state.animIndex = 0;
-                            game.renderMgr.renderScene.store.animated_nodes.data[0].state.time = 0.f;
-                            game.renderMgr.renderScene.store.animated_nodes.data[0].state.scale = 1.f;
+                        animatedData.state.scale = idleScale;
+                        if (animatedData.state.animIndex != 0) {
+                            animatedData.state.animIndex = 0;
+                            animatedData.state.time = 0.f;
+                            animatedData.state.scale = 1.f;
                         }
                     }
 
                     // dust particles hack
-                    float4x4 instance_matrices[numCubes];
-                    for (u32 i = 0; i < numCubes; i++) {
+                    Renderer::Matrices64* instance_matrices;
+                    u32* instance_count;
+                    Renderer::get_draw_instanced_data(instance_matrices, instance_count, game.renderMgr.store, game.renderMgr.store.particlesDrawHandle);
+                    for (u32 i = 0; i < *instance_count; i++) {
 
                         const f32 scaley = particle_scaley;
                         const f32 scalez = particle_scalez;
@@ -403,21 +364,21 @@ namespace Game
                         t.matrix.col1 = Math::scale(t.matrix.col1, scale);
                         t.matrix.col2 = Math::scale(t.matrix.col2, scale);
 
-                        instance_matrices[i] = t.matrix;
+                        instance_matrices->data[i] = t.matrix;
                     }
-                    Renderer::Drawlist::update_dl_node_instance_data(game.renderMgr.renderScene.store.drawlist, game.renderMgr.particles_DLhandle, instance_matrices, numCubes);
                 }
-            }
-            
-            // animation
-            {
-                for (ptrdiff_t i = 0; i < game.renderMgr.renderScene.store.animated_nodes.len; i++) {
-                    Allocator::Arena scratchArena = platform.memory.scratchArenaRoot; // copy
-                    Renderer::Animation::AnimatedNode& node = game.renderMgr.renderScene.store.animated_nodes.data[i];
-                    float4x4* skinning = (float4x4*)Allocator::alloc_arena(scratchArena, node.skeleton.jointCount, 16);
-                    Renderer::Animation::updateAnimation(skinning, node.state, node.clips[node.state.animIndex], node.skeleton, dt);
-                    
-                    Renderer::Drawlist::update_dl_node_instance_data(game.renderMgr.renderScene.store.drawlist, node.mesh_DLhandle, skinning, node.skeleton.jointCount);
+
+                // anim update
+                {
+                    Renderer::Store& store = game.renderMgr.store;
+                    for (u32 n = 0, count = 0; n < store.animatedNodes.cap && count < store.animatedNodes.count; n++) {
+                        if (store.animatedNodes.data[n].alive == 0) { continue; }
+                        count++;
+
+                        Animation::AnimatedNode& animatedData = store.animatedNodes.data[n].state.live;
+                        Renderer::Matrices32& skinningData = Renderer::get_draw_skinning_data(game.renderMgr.store, animatedData.drawNodeHandle );
+                        Animation::updateAnimation(skinningData.data, animatedData.state, animatedData.clips[animatedData.state.animIndex], animatedData.skeleton, dt);
+                    }
                 }
             }
 
@@ -434,27 +395,24 @@ namespace Game
             }
         }
 
-        // Render update
+         //Render update
         {
             RenderManager& mgr = game.renderMgr;
-            RenderScene& rscene = mgr.renderScene;
+            Renderer::Store& store = mgr.store;
             using namespace Renderer;
 
             // perspective cam set up
             {
                 Camera* activeCam = game.cameraMgr.activeCam;
-                Renderer::Layout_CBuffer_3DScene::SceneData cbufferPerScene;
+                Renderer::SceneData cbufferPerScene;
                 cbufferPerScene.projectionMatrix = mgr.perspProjection.matrix;
                 cbufferPerScene.viewMatrix = activeCam->viewMatrix;
                 cbufferPerScene.viewPos = activeCam->transform.pos;
                 cbufferPerScene.lightPos = float3(3.f, 8.f, 15.f);
-                Renderer::Driver::update_cbuffer(rscene.store.cbuffers[Renderer::Layout_CBuffer_3DScene::Buffers::SceneData], cbufferPerScene);
+                Renderer::Driver::update_cbuffer(store.cbuffers[Renderer::Store::CBuffers::Scene], &cbufferPerScene);
             }
 
             {
-                auto& store = rscene.store;
-                auto& dl = store.drawlist;
-
                 Renderer::Driver::bind_blend_state(store.blendStateOn);
                 Renderer::Driver::bind_DS(store.depthStateOn);
                 Renderer::Driver::bind_RT(store.gameRT);
@@ -470,7 +428,33 @@ namespace Game
                     Renderer::Driver::set_VP(vpParams);
                 }
             
-                draw_drawlists(dl, store.cbuffers);
+                // render phase - base scene
+                {
+                // opaque pass
+                {
+                    Renderer::Drawlist dl = {};
+                    Renderer::Driver::bind_DS(store.depthStateOn);
+                    Renderer::Driver::bind_RS(store.rasterizerStateFill);
+                    Renderer::addNodesToDrawlist(dl, game.cameraMgr.activeCam->transform.pos, store, 0, Renderer::DrawlistFilter::Alpha);
+                    Renderer::Drawlist_Context ctx = {};
+                    Renderer::Drawlist_Context forcedCtx = {};
+                    ctx.blendState = &store.blendStateOn;
+                    Renderer::draw_drawlist(dl, ctx, forcedCtx);
+                }
+
+                // alpha pass
+                {
+                    Renderer::Drawlist dl = {};
+                    Renderer::Driver::bind_DS(store.depthStateReadOnly);
+                    Renderer::Driver::bind_blend_state(store.blendStateOn);
+                    Renderer::Driver::bind_RS(store.rasterizerStateFill);
+                    Renderer::addNodesToDrawlist(dl, game.cameraMgr.activeCam->transform.pos, store, Renderer::DrawlistFilter::Alpha, 0);
+                    Renderer::Drawlist_Context ctx = {};
+                    Renderer::Drawlist_Context forcedCtx = {};
+                    forcedCtx.blendState = &store.blendStateOn;
+                    Renderer::draw_drawlist(dl, ctx, forcedCtx);
+                }
+                }
             }
 
             // Immediate-mode debug. Can be moved out of the render update, it only pushes data to cpu buffers
@@ -588,9 +572,9 @@ namespace Game
                         }
 
                         textParamsRight.color = defaultCol;
+                        textParamsRight.pos.x -= 30.f * textscale;
                         Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParamsRight, "%s", Platform::name);
                         textParamsRight.pos.y -= lineheight;
-                        textParamsRight.pos.x -= 30.f * textscale;
                         Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParamsRight, "%.3lf fps", 1. / game.debugVis.frameAvg);
                         textParamsRight.pos.y -= lineheight;
                     }
@@ -652,9 +636,9 @@ namespace Game
 
                             const ptrdiff_t memory_size = (ptrdiff_t)game.memory.imDebugArena.curr - (ptrdiff_t)im.vertices_3d;
                             const ptrdiff_t vertices_3d_start = (ptrdiff_t)im.vertices_3d - (ptrdiff_t)im.vertices_3d;
-                            const ptrdiff_t vertices_3d_size = (ptrdiff_t)im.vertices_3d_head * sizeof(Layout_float3Color4B);
+                            const ptrdiff_t vertices_3d_size = (ptrdiff_t)im.vertices_3d_head * sizeof(Immediate::Vertex3D);
                             const ptrdiff_t vertices_2d_start = (ptrdiff_t)im.vertices_2d - (ptrdiff_t)im.vertices_3d;
-                            const ptrdiff_t vertices_2d_size = (ptrdiff_t)im.vertices_2d_head * sizeof(Layout_float2Color4B);
+                            const ptrdiff_t vertices_2d_size = (ptrdiff_t)im.vertices_2d_head * sizeof(Immediate::Vertex2D);
                             const ptrdiff_t indices_2d_start = (ptrdiff_t)im.indices_2d - (ptrdiff_t)im.vertices_3d;
                             const ptrdiff_t indices_2d_size = (ptrdiff_t)(im.vertices_2d_head * 3 / 2) * sizeof(u32);
                             const f32 v3d_barstart = barwidth * vertices_3d_start / (f32)memory_size;
@@ -707,7 +691,8 @@ namespace Game
 
             // copy backbuffer to window (upscale from game resolution to window resolution)
             {
-                SET_MARKER_NAME(Driver::Marker_t marker, "UPSCALE TO WINDOW");
+                Driver::Marker_t marker;
+                Driver::set_marker_name(marker, "UPSCALE TO WINDOW");
                 Renderer::Driver::start_event(marker);
                 {
                     {
@@ -721,19 +706,19 @@ namespace Game
                         Renderer::Driver::set_VP(vpParams);
                     }
 
-                    Renderer::Driver::bind_blend_state(rscene.store.blendStateOff);
-                    Renderer::Driver::bind_DS(rscene.store.depthStateOff);
-                    Renderer::Driver::bind_RS(rscene.store.rasterizerStateFill);
-                    Renderer::Driver::bind_main_RT(rscene.store.windowRT);
+                    Renderer::Driver::bind_blend_state(store.blendStateOff);
+                    Renderer::Driver::bind_DS(store.depthStateOff);
+                    Renderer::Driver::bind_RS(store.rasterizerStateFill);
+                    Renderer::Driver::bind_main_RT(store.windowRT);
 
-                    Driver::bind_shader(rscene.store.shader_blit);
-                    Driver::bind_textures(&rscene.store.gameRT.textures[0], 1);
+                    Driver::bind_shader(store.shaders[Renderer::ShaderType::FullscreenBlit]);
+                    Driver::bind_textures(&store.gameRT.textures[0], 1);
                     Driver::draw_fullscreen();
                 }
                 Renderer::Driver::end_event();
-                Renderer::Driver::bind_blend_state(rscene.store.blendStateOff);
-                Renderer::Driver::bind_DS(rscene.store.depthStateOff);
-                Renderer::Driver::bind_main_RT(rscene.store.windowRT);
+                Renderer::Driver::bind_blend_state(store.blendStateOff);
+                Renderer::Driver::bind_DS(store.depthStateOff);
+                Renderer::Driver::bind_main_RT(store.windowRT);
             }
             // Batched 2d debug (clear cpu buffers onto the screen)
             #if __DEBUG

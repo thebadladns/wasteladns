@@ -32,9 +32,7 @@ int main(int , char** ) {
     @autoreleasepool {
         
         Platform::State platform = {};
-        Allocator::init_arena(platform.memory.scratchArenaRoot, 1 << 20); // 1MB
-        __DEBUGEXP(platform.memory.scratchArenaHighmark = (uintptr_t)platform.memory.scratchArenaRoot.curr; platform.memory.scratchArenaRoot.highmark = &platform.memory.scratchArenaHighmark);
-        
+
         [NSApplication sharedApplication];
         AppDelegate* appDelegate = [[AppDelegate alloc] init];
         [NSApp setDelegate:appDelegate];
@@ -53,7 +51,7 @@ int main(int , char** ) {
         f32 windowScale = 1.f;
         NSOpenGLContext* openGLContext;
         {
-            Platform::WindowConfig config;
+            Platform::LaunchConfig config;
             Game::loadLaunchConfig(config);
             NSString* nstitle = [NSString stringWithUTF8String:config.title];
             
@@ -119,6 +117,9 @@ int main(int , char** ) {
             platform.screen.desiredRatio = platform.screen.width / (f32)platform.screen.height;
             platform.screen.fullscreen = config.fullscreen;
             __DEBUGEXP(platform.screen.text_scale = windowScale);
+
+            Allocator::init_arena(platform.memory.scratchArenaRoot, config.scratchArena_size); // 1MB
+            __DEBUGEXP(platform.memory.scratchArenaHighmark = (uintptr_t)platform.memory.scratchArenaRoot.curr; platform.memory.scratchArenaRoot.highmark = &platform.memory.scratchArenaHighmark);
         }
         
         const int hotkeyMask = NSEventModifierFlagCommand | NSEventModifierFlagOption | NSEventModifierFlagControl | NSEventModifierFlagCapsLock;
@@ -148,68 +149,68 @@ int main(int , char** ) {
                 if (platform.time.now >= config.nextFrame) {
                     // Input
                     {
-                        for (u32 i = 0; i < platform.input.padCount; i++) { platform.input.pads[i].last_keys = platform.input.pads[i].curr_keys; }
-                        memcpy(platform.input.keyboard.last, platform.input.keyboard.current, sizeof(u8)* ::Input::Keyboard::Keys::COUNT);
-                        memcpy(platform.input.mouse.last, platform.input.mouse.curr, sizeof(u8) * ::Input::Mouse::Keys::COUNT);
-                        const f32 mouse_prevx = platform.input.mouse.x, mouse_prevy = platform.input.mouse.y;
-                        platform.input.mouse.dx = platform.input.mouse.dy = platform.input.mouse.scrolldx = platform.input.mouse.scrolldy = 0.f;
+                    for (u32 i = 0; i < platform.input.padCount; i++) { platform.input.pads[i].last_keys = platform.input.pads[i].curr_keys; }
+                    memcpy(platform.input.keyboard.last, platform.input.keyboard.current, sizeof(u8)* ::Input::Keyboard::Keys::COUNT);
+                    memcpy(platform.input.mouse.last, platform.input.mouse.curr, sizeof(u8) * ::Input::Mouse::Keys::COUNT);
+                    const f32 mouse_prevx = platform.input.mouse.x, mouse_prevy = platform.input.mouse.y;
+                    platform.input.mouse.dx = platform.input.mouse.dy = platform.input.mouse.scrolldx = platform.input.mouse.scrolldy = 0.f;
                         
-                        NSEvent *event = nil;
-                        do {
-                            event = [NSApp nextEventMatchingMask:NSEventMaskAny
-                                                       untilDate:[NSDate distantPast]
-                                                          inMode:NSDefaultRunLoopMode
-                                                         dequeue:YES];
-                            NSEventType eventType = [event type];
-                            bool event_passthrough = true;
-                            switch (eventType) {
-                                case NSEventTypeKeyUp: {
-                                    if ([event modifierFlags] & hotkeyMask) { break; } // Handle events like cmd+q etc
-                                    platform.input.keyboard.current[(::Input::Keyboard::Keys::Enum)[event keyCode]] = 0;
-                                    event_passthrough = false; // disable key error sound
-                                } break;
-                                case NSEventTypeKeyDown: {
-                                    if ([event modifierFlags] & hotkeyMask) { break; } // Handle events like cmd+q etc
-                                    platform.input.keyboard.current[(::Input::Keyboard::Keys::Enum)[event keyCode]] = 1;
-                                    event_passthrough = false; // disable key error sound
-                                } break;
-                                case NSEventTypeMouseMoved:
-                                case NSEventTypeLeftMouseDragged:
-                                case NSEventTypeRightMouseDragged:
-                                case NSEventTypeOtherMouseDragged: {
-                                    // todo: won't work when hiding cursor
-                                    NSPoint pos = [event locationInWindow];
-                                    platform.input.mouse.x = pos.x;
-                                    platform.input.mouse.y = actualWindowHeight-pos.y;
-                                    platform.input.mouse.dx = platform.input.mouse.x - mouse_prevx;
-                                    platform.input.mouse.dy = platform.input.mouse.y - mouse_prevy;
-                                } break;
-                                case NSEventTypeLeftMouseDown:
-                                case NSEventTypeRightMouseDown: {
-                                    ::Input::Mouse::Keys::Enum keycode = (::Input::Mouse::Keys::Enum)((eventType >> 1) & 0x1);
-                                    platform.input.mouse.curr[keycode] = 1;
-                                } break;
-                                case NSEventTypeLeftMouseUp:
-                                case NSEventTypeRightMouseUp: {
-                                    ::Input::Mouse::Keys::Enum keycode = (::Input::Mouse::Keys::Enum)((eventType >> 2) & 0x1);
-                                    platform.input.mouse.curr[keycode] = 0;
-                                } break;
+                    NSEvent *event = nil;
+                    do {
+                        event = [NSApp nextEventMatchingMask:NSEventMaskAny
+                                                    untilDate:[NSDate distantPast]
+                                                        inMode:NSDefaultRunLoopMode
+                                                        dequeue:YES];
+                        NSEventType eventType = [event type];
+                        bool event_passthrough = true;
+                        switch (eventType) {
+                            case NSEventTypeKeyUp: {
+                                if ([event modifierFlags] & hotkeyMask) { break; } // Handle events like cmd+q etc
+                                platform.input.keyboard.current[(::Input::Keyboard::Keys::Enum)[event keyCode]] = 0;
+                                event_passthrough = false; // disable key error sound
+                            } break;
+                            case NSEventTypeKeyDown: {
+                                if ([event modifierFlags] & hotkeyMask) { break; } // Handle events like cmd+q etc
+                                platform.input.keyboard.current[(::Input::Keyboard::Keys::Enum)[event keyCode]] = 1;
+                                event_passthrough = false; // disable key error sound
+                            } break;
+                            case NSEventTypeMouseMoved:
+                            case NSEventTypeLeftMouseDragged:
+                            case NSEventTypeRightMouseDragged:
+                            case NSEventTypeOtherMouseDragged: {
+                                // todo: won't work when hiding cursor
+                                NSPoint pos = [event locationInWindow];
+                                platform.input.mouse.x = pos.x;
+                                platform.input.mouse.y = actualWindowHeight-pos.y;
+                                platform.input.mouse.dx = platform.input.mouse.x - mouse_prevx;
+                                platform.input.mouse.dy = platform.input.mouse.y - mouse_prevy;
+                            } break;
+                            case NSEventTypeLeftMouseDown:
+                            case NSEventTypeRightMouseDown: {
+                                ::Input::Mouse::Keys::Enum keycode = (::Input::Mouse::Keys::Enum)((eventType >> 1) & 0x1);
+                                platform.input.mouse.curr[keycode] = 1;
+                            } break;
+                            case NSEventTypeLeftMouseUp:
+                            case NSEventTypeRightMouseUp: {
+                                ::Input::Mouse::Keys::Enum keycode = (::Input::Mouse::Keys::Enum)((eventType >> 2) & 0x1);
+                                platform.input.mouse.curr[keycode] = 0;
+                            } break;
                                     
-                                case NSEventTypeScrollWheel: {
-                                    float scrollx = [event deltaX];
-                                    float scrolly = [event deltaY];
-                                    platform.input.mouse.scrolldx += scrollx;
-                                    platform.input.mouse.scrolldy += scrolly;
-                                } break;
-                                default: break;
-                            }
-                            if (event_passthrough) { // passthrough to handle things like title bar buttons
-                                [NSApp sendEvent:event];
-                            }
-                        } while (event);
-                        [NSApp updateWindows];
-                        config.quit = [appDelegate applicationHasTerminated];
-                    }
+                            case NSEventTypeScrollWheel: {
+                                float scrollx = [event deltaX];
+                                float scrolly = [event deltaY];
+                                platform.input.mouse.scrolldx += scrollx;
+                                platform.input.mouse.scrolldy += scrolly;
+                            } break;
+                            default: break;
+                        }
+                        if (event_passthrough) { // passthrough to handle things like title bar buttons
+                            [NSApp sendEvent:event];
+                        }
+                    } while (event);
+                    [NSApp updateWindows];
+                    config.quit = [appDelegate applicationHasTerminated];
+                    } // Input
                     
                     [openGLContext makeCurrentContext];
                     Game::update(game, config, platform);

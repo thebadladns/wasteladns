@@ -6,18 +6,6 @@
 #endif
 
 namespace Renderer {
-
-    void create_textured_quad(RenderTargetTexturedQuad& q) {
-        Renderer::Layout_Texturedfloat2* v = q.vertices;
-        u16* i = q.indices;
-        v[0] = { { -1.f, 1.f }, { 0.f, 0.f } };
-        v[1] = { { -1.f, -1.f }, { 0.f, 1.f } };
-        v[2] = { { 1.f, 1.f }, { 1.f, 0.f } };
-        v[3] = { { 1.f, -1.f }, { 1.f, 1.f } };
-        i[0] = 0; i[1] = 1; i[2] = 2;
-        i[3] = 2; i[4] = 1; i[5] = 3;
-    }
-
 namespace Driver {
 
     // Todo: clean this up
@@ -66,8 +54,7 @@ namespace Driver {
         d3dcontext->OMSetRenderTargets(1, &rt.view, rt.depthStencilView);
     }
 
-    template <u32 _attachments>
-    void create_RT(RscRenderTarget<_attachments>& rt, const RenderTargetParams& params) {
+    void create_RT(RscRenderTarget& rt, const RenderTargetParams& params) {
 
         if (params.depth) {
             // same format as texture, 0 minmap
@@ -89,7 +76,7 @@ namespace Driver {
         }
 
         {
-            for (u32 i = 0; i < _attachments; i++) {
+            for (u32 i = 0; i < params.count; i++) {
                 Renderer::Driver::TextureRenderTargetCreateParams texParams;
                 texParams.width = params.width;
                 texParams.height = params.height;
@@ -102,28 +89,26 @@ namespace Driver {
                 rtViewDesc.Format = (DXGI_FORMAT) texParams.format;
                 rtViewDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
                 rtViewDesc.Texture2D.MipSlice = 0;
-                d3ddev->CreateRenderTargetView(rt.textures[i].texture, &rtViewDesc, &rt.views[i]);
+                d3ddev->CreateRenderTargetView(rt.textures[i].impl, &rtViewDesc, &rt.views[i]);
             }
+            rt.count = params.count;
         }
     }
-    template <u32 _attachments>
-    void bind_RT(const RscRenderTarget<_attachments>& rt) {
-        d3dcontext->OMSetRenderTargets(_attachments, rt.views, rt.depthStencilView);
+    void bind_RT(const RscRenderTarget& rt) {
+        d3dcontext->OMSetRenderTargets(rt.count, rt.views, rt.depthStencilView);
     }
-    template <u32 _attachments>
-    void clear_RT(const RscRenderTarget<_attachments>& rt) {
+    void clear_RT(const RscRenderTarget& rt) {
         float colorv[] = { 0.f, 0.f, 0.f, 0.f };
-        for (u32 i = 0; i < _attachments; i++) {
+        for (u32 i = 0; i < rt.count; i++) {
             d3dcontext->ClearRenderTargetView(rt.views[i], colorv);
         }
         if (rt.depthStencilView) {
             d3dcontext->ClearDepthStencilView(rt.depthStencilView, D3D11_CLEAR_DEPTH, 1.f, 0);
         }
     }
-    template<u32 _attachments>
-    void clear_RT(const RscRenderTarget<_attachments>& rt, Color32 color) {
+    void clear_RT(const RscRenderTarget& rt, Color32 color) {
         float colorv[] = { color.getRf(), color.getGf(), color.getBf(), color.getAf() };
-        for (u32 i = 0; i < _attachments; i++) {
+        for (u32 i = 0; i < rt.count; i++) {
             d3dcontext->ClearRenderTargetView(rt.views[i], colorv);
         }
         if (rt.depthStencilView) {
@@ -131,8 +116,7 @@ namespace Driver {
         }
     }
     // ONLY WORKS WITH SAME RESOLUTION
-    template <u32 _attachments>
-    void copy_RT_to_main_RT(RscMainRenderTarget& dst, const RscRenderTarget<_attachments>& src, const RenderTargetCopyParams& params) {
+    void copy_RT_to_main_RT(RscMainRenderTarget& dst, const RscRenderTarget& src, const RenderTargetCopyParams& params) {
         {
             ID3D11Resource* srcColor;
             ID3D11Resource* dstColor;
@@ -206,14 +190,14 @@ namespace Driver {
 
             // Initialize data and generate mips
             if (mipsautogen) {
-                d3ddev->CreateTexture2D(&texDesc, nullptr, &t.texture);
+                d3ddev->CreateTexture2D(&texDesc, nullptr, &t.impl);
             }
             else {
                 D3D11_SUBRESOURCE_DATA initData;
                 initData.pSysMem = data;
                 initData.SysMemPitch = (UINT)(typeSize * w);
                 initData.SysMemSlicePitch = (UINT)(typeSize * w * h);
-                d3ddev->CreateTexture2D(&texDesc, &initData, &t.texture);
+                d3ddev->CreateTexture2D(&texDesc, &initData, &t.impl);
             }
 
             D3D11_SHADER_RESOURCE_VIEW_DESC texViewDesc = {};
@@ -221,10 +205,10 @@ namespace Driver {
             texViewDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
             texViewDesc.Texture2D.MipLevels = miplevelsGen;
             texViewDesc.Texture2D.MostDetailedMip = 0;
-            d3ddev->CreateShaderResourceView(t.texture, &texViewDesc, &t.view);
+            d3ddev->CreateShaderResourceView(t.impl, &texViewDesc, &t.view);
 
             if (mipsautogen) {
-                d3dcontext->UpdateSubresource(t.texture, 0, nullptr, data, typeSize * w, typeSize * w * h);
+                d3dcontext->UpdateSubresource(t.impl, 0, nullptr, data, typeSize * w, typeSize * w * h);
                 d3dcontext->GenerateMips(t.view);
             }
             
@@ -264,14 +248,14 @@ namespace Driver {
         texDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE|D3D11_BIND_RENDER_TARGET;
         texDesc.CPUAccessFlags = 0;
         texDesc.MiscFlags = 0;
-        d3ddev->CreateTexture2D(&texDesc, nullptr, &t.texture);
+        d3ddev->CreateTexture2D(&texDesc, nullptr, &t.impl);
 
         D3D11_SHADER_RESOURCE_VIEW_DESC texViewDesc = {};
         texViewDesc.Format = format;
         texViewDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
         texViewDesc.Texture2D.MipLevels = 1;
         texViewDesc.Texture2D.MostDetailedMip = 0;
-        d3ddev->CreateShaderResourceView(t.texture, &texViewDesc, &t.view);
+        d3ddev->CreateShaderResourceView(t.impl, &texViewDesc, &t.view);
 
         // TODO: sampler params
         D3D11_SAMPLER_DESC samplerDesc = {};
@@ -302,8 +286,7 @@ namespace Driver {
         d3dcontext->PSSetShaderResources(0, count, textureViews);
         d3dcontext->PSSetSamplers(0, count, samplers);
     }
-    template <typename _vertexLayout, typename _cbufferLayout, Shaders::PSCBufferUsage::Enum _cbufferUsage, typename Shaders::VSDrawType::Enum _drawType>
-    void bind_shader_samplers(RscShaderSet<_vertexLayout, _cbufferLayout, _cbufferUsage, _drawType>& ss, const char** params, const u32 count) {}
+    void bind_shader_samplers(RscShaderSet& ss, const char** params, const u32 count) {}
 
     struct ShaderBytecode {
         u8* data;
@@ -319,14 +302,13 @@ namespace Driver {
 #if READ_SHADERCACHE
     static ShaderCache shaderCache{ nullptr, 0 };
 #endif
-    template <typename _vertexLayout, typename _cbufferLayout, Shaders::VSDrawType::Enum _drawType>
-    ShaderResult create_shader_vs(RscVertexShader<_vertexLayout, _cbufferLayout, _drawType>& vs, const VertexShaderRuntimeCompileParams& params) {
+    ShaderResult create_shader_vs(RscVertexShader& vs, const VertexShaderRuntimeCompileParams& params) {
         ID3D11VertexShader* vertexShader = nullptr;
 #if WRITE_SHADERCACHE
         ID3DBlob* pShaderBlob = nullptr;
         ID3DBlob* pErrorBlob = nullptr;
         HRESULT hr = D3DCompile(
-              params.shaderStr, params.length, "VS"
+              params.shader_str, params.shader_length, "VS"
             , nullptr // defines
             , D3D_COMPILE_STANDARD_FILE_INCLUDE
             , "VS"
@@ -334,32 +316,34 @@ namespace Driver {
             , D3DCOMPILE_ENABLE_STRICTNESS | D3DCOMPILE_DEBUG, 0
             , &pShaderBlob, &pErrorBlob
         );
-        ShaderBytecode& byteCode = shaderCache.shaderBytecode[shaderCache.shaderBytecodeCount++];
-        byteCode.data = (u8*)malloc(pShaderBlob->GetBufferSize());
-        byteCode.size = pShaderBlob->GetBufferSize();
-        memcpy(byteCode.data, pShaderBlob->GetBufferPointer(), pShaderBlob->GetBufferSize());
-        void* shaderBufferPointer = byteCode.data;
-        size_t shaderBufferSize = byteCode.size;
-        void* error = pErrorBlob?pErrorBlob->GetBufferPointer():nullptr;
-#endif
-#if READ_SHADERCACHE
-        Renderer::Driver::ShaderBytecode& byteCode = Renderer::Driver::shaderCache.shaderBytecode[Renderer::Driver::shaderCache.shaderBytecodeCount++];
-        void* shaderBufferPointer = byteCode.data;
-        size_t shaderBufferSize = byteCode.size;
+        void* error = pErrorBlob ? pErrorBlob->GetBufferPointer() : nullptr;
+#elif READ_SHADERCACHE // todo: fix again
         void* error = nullptr;
-        HRESULT hr = S_OK;
 #endif
 
         ShaderResult result;
         result.compiled = !FAILED(hr);
         if (result.compiled) {
-            d3ddev->CreateVertexShader(shaderBufferPointer, shaderBufferSize, nullptr, &vertexShader);
-            create_vertex_layout(vs, shaderBufferPointer, (u32)shaderBufferSize);
+
+#if WRITE_SHADERCACHE
+            ShaderBytecode& byteCode = shaderCache.shaderBytecode[shaderCache.shaderBytecodeCount++];
+            byteCode.data = (u8*)malloc(pShaderBlob->GetBufferSize());
+            byteCode.size = pShaderBlob->GetBufferSize();
+            memcpy(byteCode.data, pShaderBlob->GetBufferPointer(), pShaderBlob->GetBufferSize());
+            void* shaderBufferPointer = byteCode.data;
+            size_t shaderBufferSize = byteCode.size;
+#elif READ_SHADERCACHE
+            Renderer::Driver::ShaderBytecode& byteCode = Renderer::Driver::shaderCache.shaderBytecode[Renderer::Driver::shaderCache.shaderBytecodeCount++];
+            void* shaderBufferPointer = byteCode.data;
+            size_t shaderBufferSize = byteCode.size;
+            HRESULT hr = S_OK;
+#endif
+
+            d3ddev->CreateVertexShader(shaderBufferPointer, shaderBufferSize, nullptr, &vs.impl);
+            d3ddev->CreateInputLayout(params.attribs, params.attrib_count, shaderBufferPointer, shaderBufferSize, &vs.inputLayout_impl);
         } else {
             Platform::format(result.error, 128, "%.128s", error ? (char*)error : "Unknown shader error");
         }
-
-        vs.shaderObject = vertexShader;
 
 #if WRITE_SHADERCHACHE
         if (pShaderBlob) pShaderBlob->Release();
@@ -368,14 +352,13 @@ namespace Driver {
 
         return result;
     }
-    template <Shaders::PSCBufferUsage::Enum _cbufferUsage>
-    ShaderResult create_shader_ps(RscPixelShader<_cbufferUsage>& ps, const PixelShaderRuntimeCompileParams& params) {
+    ShaderResult create_shader_ps(RscPixelShader& ps, const PixelShaderRuntimeCompileParams& params) {
         ID3D11PixelShader* pixelShader = nullptr;
 #if WRITE_SHADERCACHE
         ID3DBlob* pShaderBlob = nullptr;
         ID3DBlob* pErrorBlob = nullptr;
         HRESULT hr = D3DCompile(
-              params.shaderStr, params.length, "PS"
+              params.shader_str, params.shader_length, "PS"
             , nullptr // defines
             , D3D_COMPILE_STANDARD_FILE_INCLUDE
             , "PS"
@@ -383,30 +366,31 @@ namespace Driver {
             , D3DCOMPILE_ENABLE_STRICTNESS | D3DCOMPILE_DEBUG, 0
             , &pShaderBlob, &pErrorBlob
         );
-        ShaderBytecode& byteCode = shaderCache.shaderBytecode[shaderCache.shaderBytecodeCount++];
-        byteCode.data = (u8*)malloc(pShaderBlob->GetBufferSize());
-        byteCode.size = pShaderBlob->GetBufferSize();
-        memcpy(byteCode.data, pShaderBlob->GetBufferPointer(), pShaderBlob->GetBufferSize());
-        void* shaderBufferPointer = byteCode.data;
-        size_t shaderBufferSize = byteCode.size;
-        void* error = pErrorBlob? pErrorBlob->GetBufferPointer() : nullptr;
-#endif
-#if READ_SHADERCACHE
-        Renderer::Driver::ShaderBytecode& byteCode = Renderer::Driver::shaderCache.shaderBytecode[Renderer::Driver::shaderCache.shaderBytecodeCount++];
-        void* shaderBufferPointer = byteCode.data;
-        size_t shaderBufferSize = byteCode.size;
+        void* error = pErrorBlob ? pErrorBlob->GetBufferPointer() : nullptr;
+#elif READ_SHADERCACHE
         void* error = nullptr;
-        HRESULT hr = S_OK;
 #endif
         ShaderResult result;
         result.compiled = !FAILED(hr);
         if (result.compiled) {
-            d3ddev->CreatePixelShader(shaderBufferPointer, shaderBufferSize, nullptr, &pixelShader);
+#if WRITE_SHADERCACHE
+            ShaderBytecode& byteCode = shaderCache.shaderBytecode[shaderCache.shaderBytecodeCount++];
+            byteCode.data = (u8*)malloc(pShaderBlob->GetBufferSize());
+            byteCode.size = pShaderBlob->GetBufferSize();
+            memcpy(byteCode.data, pShaderBlob->GetBufferPointer(), pShaderBlob->GetBufferSize());
+            void* shaderBufferPointer = byteCode.data;
+            size_t shaderBufferSize = byteCode.size;
+#elif READ_SHADERCACHE
+            Renderer::Driver::ShaderBytecode& byteCode = Renderer::Driver::shaderCache.shaderBytecode[Renderer::Driver::shaderCache.shaderBytecodeCount++];
+            void* shaderBufferPointer = byteCode.data;
+            size_t shaderBufferSize = byteCode.size;
+            HRESULT hr = S_OK;
+#endif
+
+            d3ddev->CreatePixelShader(shaderBufferPointer, shaderBufferSize, nullptr, &ps.impl);
         } else {
             Platform::format(result.error, 128, "%.128s", error ? (char*)error : "Unknown shader error");
         }
-
-        ps.shaderObject = pixelShader;
 
 #if WRITE_SHADERCHACHE
         if (pShaderBlob) pShaderBlob->Release();
@@ -415,19 +399,24 @@ namespace Driver {
 
         return result;
     }
-    template <typename _vertexLayout, typename _cbufferLayout, Shaders::PSCBufferUsage::Enum _cbufferUsage, Shaders::VSDrawType::Enum _drawType>
-    ShaderResult create_shader_set(RscShaderSet<_vertexLayout, _cbufferLayout, _cbufferUsage, _drawType>& ss, const ShaderSetRuntimeCompileParams<_vertexLayout, _cbufferLayout, _cbufferUsage, _drawType>& params) {
-        ss.vs = params.rscVS;
-        ss.ps = params.rscPS;
+    ShaderResult create_shader_set(RscShaderSet& ss, const ShaderSetRuntimeCompileParams& params) {
+        ss.vs = params.vs;
+        ss.ps = params.ps;
+        for (u32 i = 0; i < params.cbuffer_count; i++) {
+            const CBufferBindingDesc& binding = params.cbufferBindings[i];
+            if (binding.stageMask & CBufferStageMask::VS) { ss.cbuffers_vs[ss.cbuffer_vs_count++] = binding.cbuffer.impl; }
+            if (binding.stageMask & CBufferStageMask::PS) { ss.cbuffers_ps[ss.cbuffer_ps_count++] = binding.cbuffer.impl; }
+        }
         ShaderResult result;
         result.compiled = true;
         return result;
     }
-    template <typename _vertexLayout, typename _cbufferLayout, Shaders::PSCBufferUsage::Enum _cbufferUsage, Shaders::VSDrawType::Enum _drawType>
-    void bind_shader(const RscShaderSet<_vertexLayout, _cbufferLayout, _cbufferUsage, _drawType>& ss) {
-        d3dcontext->VSSetShader(ss.vs.shaderObject, nullptr, 0);
-        d3dcontext->PSSetShader(ss.ps.shaderObject, nullptr, 0);
-        d3dcontext->IASetInputLayout(ss.vs.inputLayout);
+    void bind_shader(const RscShaderSet& ss) {
+        d3dcontext->VSSetShader(ss.vs.impl, nullptr, 0);
+        d3dcontext->PSSetShader(ss.ps.impl, nullptr, 0);
+        d3dcontext->IASetInputLayout(ss.vs.inputLayout_impl);
+        if (ss.cbuffer_vs_count) { d3dcontext->VSSetConstantBuffers(0, ss.cbuffer_vs_count, ss.cbuffers_vs); }
+        if (ss.cbuffer_ps_count) { d3dcontext->PSSetConstantBuffers(0, ss.cbuffer_ps_count, ss.cbuffers_ps); }
     }
     
     void create_blend_state(RscBlendState& bs, const BlendStateParams& params) {
@@ -444,10 +433,10 @@ namespace Driver {
         blendStateDesc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
         d3ddev->CreateBlendState1(&blendStateDesc, &blendState);
 
-        bs.bs = blendState;
+        bs.impl = blendState;
     }
     void bind_blend_state(const RscBlendState& bs) {
-        d3dcontext->OMSetBlendState(bs.bs, 0, 0xffffffff);
+        d3dcontext->OMSetBlendState(bs.impl, 0, 0xffffffff);
     }
     
     void create_RS(RscRasterizerState& rs, const RasterizerStateParams& params) {
@@ -464,10 +453,10 @@ namespace Driver {
         rasterizerDesc.ScissorEnable = FALSE;
         rasterizerDesc.SlopeScaledDepthBias = 0.f;
         d3ddev->CreateRasterizerState(&rasterizerDesc, &rasterizerState);
-        rs.rs = rasterizerState;
+        rs.impl = rasterizerState;
     }
     void bind_RS(const RscRasterizerState& rs) {
-        d3dcontext->RSSetState(rs.rs);
+        d3dcontext->RSSetState(rs.impl);
     }
 
     void create_DS(RscDepthStencilState& ds, const DepthStencilStateParams& params) {
@@ -478,106 +467,97 @@ namespace Driver {
         depthStencilStateDesc.DepthFunc = (D3D11_COMPARISON_FUNC) params.func;
         depthStencilStateDesc.StencilEnable = false;
         d3ddev->CreateDepthStencilState(&depthStencilStateDesc, &depthStencilState);
-        ds.ds = depthStencilState;
+        ds.impl = depthStencilState;
     }
     void bind_DS(const RscDepthStencilState& ds) {
-        d3dcontext->OMSetDepthStencilState(ds.ds, 1);
+        d3dcontext->OMSetDepthStencilState(ds.impl, 1);
     }
     
-    template <typename _layout>
-    void create_vertex_buffer(RscBuffer<_layout>& t, const BufferParams& params) {
+    void create_vertex_buffer(RscVertexBuffer& t, const VertexBufferDesc& params, const VertexAttribDesc*, const u32) {
         ID3D11Buffer* vertexBuffer;
 
         D3D11_SUBRESOURCE_DATA resourceData = { 0 };
 
-        D3D11_BUFFER_DESC vertexBufferDesc = { 0 };
-        vertexBufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
-        vertexBufferDesc.ByteWidth = params.vertexSize;
-        vertexBufferDesc.CPUAccessFlags = params.accessType;
-        vertexBufferDesc.Usage = (D3D11_USAGE) params.memoryUsage;
+        D3D11_BUFFER_DESC vertexVertexBufferDesc = { 0 };
+        vertexVertexBufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+        vertexVertexBufferDesc.ByteWidth = params.vertexSize;
+        vertexVertexBufferDesc.CPUAccessFlags = params.accessType;
+        vertexVertexBufferDesc.Usage = (D3D11_USAGE) params.memoryUsage;
         resourceData = { params.vertexData, 0, 0 };
-        HRESULT result = d3ddev->CreateBuffer(&vertexBufferDesc, params.memoryUsage == BufferMemoryUsage::CPU ? nullptr : &resourceData, &vertexBuffer);
+        HRESULT result = d3ddev->CreateBuffer(&vertexVertexBufferDesc, params.memoryUsage == BufferMemoryUsage::CPU ? nullptr : &resourceData, &vertexBuffer);
         (void)result;
 
-        t.vertexBuffer = vertexBuffer;
+        t.impl = vertexBuffer;
         t.type = (D3D11_PRIMITIVE_TOPOLOGY) params.type;
         t.vertexCount = params.vertexCount;
-        t.vertexStride = sizeof(_layout);
+        t.vertexStride = params.vertexSize / params.vertexCount; // check
     }
-    template <typename _layout>
-    void update_vertex_buffer(RscBuffer<_layout>& b, const BufferUpdateParams& params) {
+    void update_vertex_buffer(RscVertexBuffer& b, const BufferUpdateParams& params) {
         D3D11_MAPPED_SUBRESOURCE mapped;
-        d3dcontext->Map(b.vertexBuffer, 0, D3D11_MAP_WRITE_DISCARD, NULL, &mapped);
+        d3dcontext->Map(b.impl, 0, D3D11_MAP_WRITE_DISCARD, NULL, &mapped);
         memcpy(mapped.pData, params.vertexData, params.vertexSize);
-        d3dcontext->Unmap(b.vertexBuffer, 0);
+        d3dcontext->Unmap(b.impl, 0);
         b.vertexCount = params.vertexCount;
     }
-    template <typename _layout>
-    void bind_vertex_buffer(const RscBuffer<_layout>& b) {
+    void bind_vertex_buffer(const RscVertexBuffer& b) {
         u32 offset = 0;
-        d3dcontext->IASetVertexBuffers(0, 1, &b.vertexBuffer, &b.vertexStride, &offset);
+        d3dcontext->IASetVertexBuffers(0, 1, &b.impl, &b.vertexStride, &offset);
         d3dcontext->IASetPrimitiveTopology(b.type);
     }
-    template <typename _layout>
-    void draw_vertex_buffer(const RscBuffer<_layout>& b) {
+    void draw_vertex_buffer(const RscVertexBuffer& b) {
         d3dcontext->Draw(b.vertexCount, 0);
     }
     
-    template <typename _layout>
-    void create_indexed_vertex_buffer(RscIndexedBuffer<_layout>& t, const IndexedBufferParams& params) {
+    void create_indexed_vertex_buffer(RscIndexedVertexBuffer& t, const IndexedVertexBufferDesc& params, const VertexAttribDesc*, const u32) {
         ID3D11Buffer* vertexBuffer;
         ID3D11Buffer* indexBuffer;
 
         D3D11_SUBRESOURCE_DATA resourceData = { 0 };
 
-        D3D11_BUFFER_DESC vertexBufferDesc = { 0 };
-        vertexBufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
-        vertexBufferDesc.ByteWidth = params.vertexSize;
-        vertexBufferDesc.CPUAccessFlags = params.accessType;
-        vertexBufferDesc.Usage = (D3D11_USAGE) params.memoryUsage;
+        D3D11_BUFFER_DESC vertexVertexBufferDesc = { 0 };
+        vertexVertexBufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+        vertexVertexBufferDesc.ByteWidth = params.vertexSize;
+        vertexVertexBufferDesc.CPUAccessFlags = params.accessType;
+        vertexVertexBufferDesc.Usage = (D3D11_USAGE) params.memoryUsage;
         resourceData = { params.vertexData, 0, 0 };
-        d3ddev->CreateBuffer(&vertexBufferDesc, params.memoryUsage == BufferMemoryUsage::CPU ? nullptr : &resourceData, &vertexBuffer);
+        d3ddev->CreateBuffer(&vertexVertexBufferDesc, params.memoryUsage == BufferMemoryUsage::CPU ? nullptr : &resourceData, &vertexBuffer);
 
-        D3D11_BUFFER_DESC indexBufferDesc = { 0 };
-        indexBufferDesc.BindFlags = D3D11_BIND_INDEX_BUFFER;
-        indexBufferDesc.ByteWidth = params.indexSize;
-        indexBufferDesc.CPUAccessFlags = params.accessType;
-        indexBufferDesc.Usage = (D3D11_USAGE) params.memoryUsage;
+        D3D11_BUFFER_DESC indexVertexBufferDesc = { 0 };
+        indexVertexBufferDesc.BindFlags = D3D11_BIND_INDEX_BUFFER;
+        indexVertexBufferDesc.ByteWidth = params.indexSize;
+        indexVertexBufferDesc.CPUAccessFlags = params.accessType;
+        indexVertexBufferDesc.Usage = (D3D11_USAGE) params.memoryUsage;
         resourceData = { params.indexData, 0, 0 };
-        d3ddev->CreateBuffer(&indexBufferDesc, params.memoryUsage == BufferMemoryUsage::CPU ? nullptr : &resourceData, &indexBuffer);
+        d3ddev->CreateBuffer(&indexVertexBufferDesc, params.memoryUsage == BufferMemoryUsage::CPU ? nullptr : &resourceData, &indexBuffer);
 
-        t.vertexBuffer = vertexBuffer;
-        t.indexBuffer = indexBuffer;
+        t.vertexBuffer_impl = vertexBuffer;
+        t.indexBuffer_impl = indexBuffer;
         t.indexType = (DXGI_FORMAT) params.indexType;
         t.type = (D3D11_PRIMITIVE_TOPOLOGY) params.type;
         t.indexCount = params.indexCount;
-        t.vertexStride = sizeof(_layout);
+        t.vertexStride = params.vertexSize / params.vertexCount;
     }
-    template <typename _layout>
-    void update_indexed_vertex_buffer(RscIndexedBuffer<_layout>& b, const IndexedBufferUpdateParams& params) {
+    void update_indexed_vertex_buffer(RscIndexedVertexBuffer& b, const IndexedBufferUpdateParams& params) {
         D3D11_MAPPED_SUBRESOURCE mapped;
-        d3dcontext->Map(b.vertexBuffer, 0, D3D11_MAP_WRITE_DISCARD, NULL, &mapped);
+        d3dcontext->Map(b.vertexBuffer_impl, 0, D3D11_MAP_WRITE_DISCARD, NULL, &mapped);
         memcpy(mapped.pData, params.vertexData, params.vertexSize);
-        d3dcontext->Unmap(b.vertexBuffer, 0);
-        d3dcontext->Map(b.indexBuffer, 0, D3D11_MAP_WRITE_DISCARD, NULL, &mapped);
+        d3dcontext->Unmap(b.vertexBuffer_impl, 0);
+        d3dcontext->Map(b.indexBuffer_impl, 0, D3D11_MAP_WRITE_DISCARD, NULL, &mapped);
         memcpy(mapped.pData, params.indexData, params.indexSize);
-        d3dcontext->Unmap(b.indexBuffer, 0);
+        d3dcontext->Unmap(b.indexBuffer_impl, 0);
         b.indexCount = params.indexCount;
     }
-    template <typename _layout>
-    void bind_indexed_vertex_buffer(const RscIndexedBuffer<_layout>& b) {
+    void bind_indexed_vertex_buffer(const RscIndexedVertexBuffer& b) {
         u32 offset = 0;
-        d3dcontext->IASetVertexBuffers(0, 1, &b.vertexBuffer, &b.vertexStride, &offset);
-        d3dcontext->IASetIndexBuffer(b.indexBuffer, b.indexType, 0);
+        d3dcontext->IASetVertexBuffers(0, 1, &b.vertexBuffer_impl, &b.vertexStride, &offset);
+        d3dcontext->IASetIndexBuffer(b.indexBuffer_impl, b.indexType, 0);
         d3dcontext->IASetPrimitiveTopology(b.type);
     }
-    template <typename _layout>
-    void draw_indexed_vertex_buffer(const RscIndexedBuffer<_layout>& b) {
+    void draw_indexed_vertex_buffer(const RscIndexedVertexBuffer& b) {
         d3dcontext->DrawIndexed(b.indexCount, 0, 0);
 
     }
-    template <typename _layout>
-    void draw_instances_indexed_vertex_buffer(const RscIndexedBuffer<_layout>& b, const u32 instanceCount) {
+    void draw_instances_indexed_vertex_buffer(const RscIndexedVertexBuffer& b, const u32 instanceCount) {
         d3dcontext->DrawIndexedInstanced(b.indexCount, instanceCount, 0, 0, 0);
     }
 
@@ -586,30 +566,25 @@ namespace Driver {
         d3dcontext->Draw(3, 0);
     }
 
-    template <typename _layout>
     void create_cbuffer(RscCBuffer& cb, const CBufferCreateParams& params) {
         ID3D11Buffer* bufferObject;
-        D3D11_BUFFER_DESC constantBufferDesc = { 0 };
-        constantBufferDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
-        constantBufferDesc.ByteWidth = sizeof(_layout);
-        constantBufferDesc.CPUAccessFlags = 0;
-        constantBufferDesc.Usage = D3D11_USAGE_DEFAULT;
-        d3ddev->CreateBuffer(&constantBufferDesc, nullptr, &bufferObject);
+        D3D11_BUFFER_DESC constantVertexBufferDesc = { 0 };
+        constantVertexBufferDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+        constantVertexBufferDesc.ByteWidth = params.byteWidth;
+        constantVertexBufferDesc.CPUAccessFlags = 0;
+        constantVertexBufferDesc.Usage = D3D11_USAGE_DEFAULT;
+        d3ddev->CreateBuffer(&constantVertexBufferDesc, nullptr, &bufferObject);
 
-        cb.bufferObject = bufferObject;
+        cb.impl = bufferObject;
     }
-    template <typename _layout>
-    void update_cbuffer(RscCBuffer& cb, const _layout& data) {
-        d3dcontext->UpdateSubresource(cb.bufferObject, 0, nullptr, &data, 0, 0);
+    void update_cbuffer(RscCBuffer& cb, const void* data) {
+        d3dcontext->UpdateSubresource(cb.impl, 0, nullptr, data, 0, 0);
     }
     void bind_cbuffers(const RscCBuffer* cb, const u32 count, const CBufferBindParams& params) {
-        // this all works because an array of RscCBuffer maps to an array of tightly packed bufferObject
-        if (params.vertex) {
-            d3dcontext->VSSetConstantBuffers(0, count, &(cb[0].bufferObject));
-        }
-        if (params.pixel) {
-            d3dcontext->PSSetConstantBuffers(0, count, &(cb[0].bufferObject));
-        }
+
+    }
+    void set_marker_name(Marker_t& wide, const char* ansi) {
+        MultiByteToWideChar(CP_UTF8, 0, ansi, -1, wide, COUNT_OF(wide));
     }
     void set_marker(Marker_t data) {
         perf->SetMarker(data);
@@ -619,107 +594,6 @@ namespace Driver {
     }
     void end_event() {
         perf->EndEvent();
-    }
-}
-}
-
-// supported vertex layouts
-namespace Renderer {
-namespace Driver {
-    
-    template <typename _bufferLayout, Shaders::VSDrawType::Enum _drawType>
-    void create_vertex_layout(RscVertexShader<Layout_float3, _bufferLayout, _drawType>& vs, void* shaderBufferPointer, u32 shaderBufferSize) {
-        ID3D11InputLayout* inputLayout;
-        D3D11_INPUT_ELEMENT_DESC vertexLayoutDesc[] = {
-                { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 }
-        };
-        d3ddev->CreateInputLayout(vertexLayoutDesc, ARRAYSIZE(vertexLayoutDesc), shaderBufferPointer, shaderBufferSize, &inputLayout);
-
-        vs.inputLayout = inputLayout;
-    }
-    template <typename _bufferLayout, Shaders::VSDrawType::Enum _drawType>
-    void create_vertex_layout(RscVertexShader<Layout_Texturedfloat2, _bufferLayout, _drawType>& vs, void* shaderBufferPointer, u32 shaderBufferSize) {
-        ID3D11InputLayout* inputLayout;
-        D3D11_INPUT_ELEMENT_DESC vertexLayoutDesc[] = {
-              { "POSITION", 0, DXGI_FORMAT_R32G32_FLOAT, 0, offsetof(Layout_Texturedfloat2, pos), D3D11_INPUT_PER_VERTEX_DATA, 0 }
-            , { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, offsetof(Layout_Texturedfloat2, uv), D3D11_INPUT_PER_VERTEX_DATA, 0 }
-        };
-        d3ddev->CreateInputLayout(vertexLayoutDesc, ARRAYSIZE(vertexLayoutDesc), shaderBufferPointer, shaderBufferSize, &inputLayout);
-
-        vs.inputLayout = inputLayout;
-    }
-    template <typename _bufferLayout, Shaders::VSDrawType::Enum _drawType>
-    void create_vertex_layout(RscVertexShader<Layout_Texturedfloat3, _bufferLayout, _drawType>& vs, void* shaderBufferPointer, u32 shaderBufferSize) {
-        ID3D11InputLayout* inputLayout;
-        D3D11_INPUT_ELEMENT_DESC vertexLayoutDesc[] = {
-              { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, offsetof(Layout_Texturedfloat3, pos), D3D11_INPUT_PER_VERTEX_DATA, 0 }
-            , { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, offsetof(Layout_Texturedfloat3, uv), D3D11_INPUT_PER_VERTEX_DATA, 0 }
-        };
-        d3ddev->CreateInputLayout(vertexLayoutDesc, ARRAYSIZE(vertexLayoutDesc), shaderBufferPointer, shaderBufferSize, &inputLayout);
-
-        vs.inputLayout = inputLayout;
-    }
-    template <typename _bufferLayout, Shaders::VSDrawType::Enum _drawType>
-    void create_vertex_layout(RscVertexShader<Layout_TexturedSkinnedfloat3, _bufferLayout, _drawType>& vs, void* shaderBufferPointer, u32 shaderBufferSize) {
-        ID3D11InputLayout* inputLayout;
-        D3D11_INPUT_ELEMENT_DESC vertexLayoutDesc[] = {
-              { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, offsetof(Layout_TexturedSkinnedfloat3, pos), D3D11_INPUT_PER_VERTEX_DATA, 0 }
-            , { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, offsetof(Layout_TexturedSkinnedfloat3, uv), D3D11_INPUT_PER_VERTEX_DATA, 0 }
-            , { "JOINTINDICES", 0, DXGI_FORMAT_R8G8B8A8_SINT, 0, offsetof(Layout_TexturedSkinnedfloat3, joint_indices), D3D11_INPUT_PER_VERTEX_DATA, 0 }
-            , { "JOINTWEIGHTS", 0, DXGI_FORMAT_R8G8B8A8_UNORM, 0, offsetof(Layout_TexturedSkinnedfloat3, joint_weights), D3D11_INPUT_PER_VERTEX_DATA, 0 }
-        };
-        d3ddev->CreateInputLayout(vertexLayoutDesc, ARRAYSIZE(vertexLayoutDesc), shaderBufferPointer, shaderBufferSize, &inputLayout);
-
-        vs.inputLayout = inputLayout;
-    }
-    template <typename _bufferLayout, Shaders::VSDrawType::Enum _drawType>
-    void create_vertex_layout(RscVertexShader<Layout_float3TexturedMapped, _bufferLayout, _drawType>& vs, void* shaderBufferPointer, u32 shaderBufferSize) {
-        ID3D11InputLayout* inputLayout;
-        D3D11_INPUT_ELEMENT_DESC vertexLayoutDesc[] = {
-              { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, offsetof(Layout_float3TexturedMapped, pos), D3D11_INPUT_PER_VERTEX_DATA, 0 }
-            , { "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, offsetof(Layout_float3TexturedMapped, uv), D3D11_INPUT_PER_VERTEX_DATA, 0 }
-            , { "NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, offsetof(Layout_float3TexturedMapped, normal), D3D11_INPUT_PER_VERTEX_DATA, 0 }
-            , { "TANGENT", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, offsetof(Layout_float3TexturedMapped, tangent), D3D11_INPUT_PER_VERTEX_DATA, 0 }
-            , { "BITANGENT", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, offsetof(Layout_float3TexturedMapped, bitangent), D3D11_INPUT_PER_VERTEX_DATA, 0 }
-        };
-        d3ddev->CreateInputLayout(vertexLayoutDesc, ARRAYSIZE(vertexLayoutDesc), shaderBufferPointer, shaderBufferSize, &inputLayout);
-
-        vs.inputLayout = inputLayout;
-    }
-    template <typename _bufferLayout, Shaders::VSDrawType::Enum _drawType>
-    void create_vertex_layout(RscVertexShader<Layout_float2Color4B, _bufferLayout, _drawType>& vs, void* shaderBufferPointer, u32 shaderBufferSize) {
-        ID3D11InputLayout* inputLayout;
-        D3D11_INPUT_ELEMENT_DESC vertexLayoutDesc[] = {
-              { "POSITION", 0, DXGI_FORMAT_R32G32_FLOAT, 0, offsetof(Layout_float2Color4B, pos), D3D11_INPUT_PER_VERTEX_DATA, 0 }
-            , { "COLOR", 0, DXGI_FORMAT_R8G8B8A8_UNORM, 0, offsetof(Layout_float2Color4B, color), D3D11_INPUT_PER_VERTEX_DATA, 0 }
-        };
-        d3ddev->CreateInputLayout(vertexLayoutDesc, ARRAYSIZE(vertexLayoutDesc), shaderBufferPointer, shaderBufferSize, &inputLayout);
-
-        vs.inputLayout = inputLayout;
-    }
-    template <typename _bufferLayout, Shaders::VSDrawType::Enum _drawType>
-    void create_vertex_layout(RscVertexShader<Layout_float3Color4B, _bufferLayout, _drawType>& vs, void* shaderBufferPointer, u32 shaderBufferSize) {
-        ID3D11InputLayout* inputLayout;
-        D3D11_INPUT_ELEMENT_DESC vertexLayoutDesc[] = {
-              { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, offsetof(Layout_float3Color4B, pos), D3D11_INPUT_PER_VERTEX_DATA, 0 }
-            , { "COLOR", 0, DXGI_FORMAT_R8G8B8A8_UNORM, 0, offsetof(Layout_float3Color4B, color), D3D11_INPUT_PER_VERTEX_DATA, 0 }
-        };
-        d3ddev->CreateInputLayout(vertexLayoutDesc, ARRAYSIZE(vertexLayoutDesc), shaderBufferPointer, shaderBufferSize, &inputLayout);
-
-        vs.inputLayout = inputLayout;
-    }
-    template <typename _bufferLayout, Shaders::VSDrawType::Enum _drawType>
-    void create_vertex_layout(RscVertexShader<Layout_float3Color4BSkinned, _bufferLayout, _drawType>& vs, void* shaderBufferPointer, u32 shaderBufferSize) {
-        ID3D11InputLayout* inputLayout;
-        D3D11_INPUT_ELEMENT_DESC vertexLayoutDesc[] = {
-              { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, offsetof(Layout_float3Color4BSkinned, pos), D3D11_INPUT_PER_VERTEX_DATA, 0 }
-            , { "COLOR", 0, DXGI_FORMAT_R8G8B8A8_UNORM, 0, offsetof(Layout_float3Color4BSkinned, color), D3D11_INPUT_PER_VERTEX_DATA, 0 }
-            , { "JOINTINDICES", 0, DXGI_FORMAT_R8G8B8A8_SINT, 0, offsetof(Layout_float3Color4BSkinned, joint_indices), D3D11_INPUT_PER_VERTEX_DATA, 0 }
-            , { "JOINTWEIGHTS", 0, DXGI_FORMAT_R8G8B8A8_UNORM, 0, offsetof(Layout_float3Color4BSkinned, joint_weights), D3D11_INPUT_PER_VERTEX_DATA, 0 }
-        };
-        d3ddev->CreateInputLayout(vertexLayoutDesc, ARRAYSIZE(vertexLayoutDesc), shaderBufferPointer, shaderBufferSize, &inputLayout);
-
-        vs.inputLayout = inputLayout;
     }
 }
 }

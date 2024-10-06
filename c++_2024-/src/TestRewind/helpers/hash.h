@@ -21,15 +21,13 @@ namespace Hash {
 }
 
 struct str32 {
-    str32()
-    : hash(0)
+    str32() : hash(0)
 #ifdef __WASTELADNS_HASH_DEBUG__
     , debug_name(0)
 #endif
     {}
     
-    str32(const char* name)
-    : hash(Hash::fnv(name))
+    str32(const char* name) : hash(Hash::fnv(name))
 #ifdef __WASTELADNS_HASH_DEBUG__
     , debug_name(name)
 #endif

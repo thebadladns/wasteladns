@@ -95,6 +95,7 @@ do { \
 #if __DEBUG
 	#include "helpers/renderer_debug.h"
 #endif
+#include "helpers/animation.h"
 
 #include "game.h"
 #if __WIN64

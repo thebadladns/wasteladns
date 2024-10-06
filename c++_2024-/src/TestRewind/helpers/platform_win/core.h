@@ -32,12 +32,13 @@
     #include <d3dcompiler.h> // Wall time: 8.460ms
     #pragma comment(lib, "d3dcompiler.lib")
 
+    #include <Stringapiset.h> // wide char support
+
 namespace Platform {
     const char* name = "WIN64+DX11";
 }
 #elif __GL33
     #include <wingdi.h> // defines like WINGDIAPI, used by opengl
-    //#include <GL/gl.h>
     #pragma comment(lib, "opengl32.lib")
     #include "../renderer_gl33/loader_gl.h"
 

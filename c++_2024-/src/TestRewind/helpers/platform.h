@@ -7,8 +7,9 @@
 
 namespace Platform
 {
-    struct WindowConfig {
+    struct LaunchConfig {
         const char* title;
+        u64 scratchArena_size;
         u32 window_width;
         u32 window_height;
         u32 game_width;
@@ -56,13 +57,9 @@ namespace Platform
         Memory memory;
     };
     
-    void loadLaunchConfig(WindowConfig& config);
-    
-    template <typename _GameData>
-    void start(_GameData& game, Platform::GameConfig& config, const State& platform);
-    
-    template <typename _GameData>
-    void update(_GameData& game, GameConfig& config, const State& platform);
+    void loadLaunchConfig(LaunchConfig& config);
+    //void start(_GameData& game, Platform::GameConfig& config, const State& platform);
+    //void update(_GameData& game, GameConfig& config, const State& platform);
 }
 namespace OS = Platform;
 

@@ -2,7 +2,6 @@
 #define __WASTELADNS_LOADER_GL33_H__
 
 #if __WIN64
-//#define APIENTRY
 #define APIENTRYP APIENTRY *
 namespace Renderer {
 namespace Driver {
@@ -72,6 +71,27 @@ typedef int64_t GLint64EXT;
 typedef uint64_t GLuint64EXT;
 typedef struct __GLsync* GLsync;
 
+#define GL_DEBUG_OUTPUT 0x92E0
+#define GL_DEBUG_SEVERITY_HIGH 0x9146
+#define GL_DEBUG_SEVERITY_MEDIUM 0x9147
+#define GL_DEBUG_SEVERITY_LOW 0x9148
+#define GL_DEBUG_SEVERITY_NOTIFICATION 0x826B
+#define GL_DEBUG_SOURCE_API 0x8246
+#define GL_DEBUG_SOURCE_WINDOW_SYSTEM 0x8247
+#define GL_DEBUG_SOURCE_SHADER_COMPILER 0x8248
+#define GL_DEBUG_SOURCE_THIRD_PARTY 0x8249
+#define GL_DEBUG_SOURCE_APPLICATION 0x824A
+#define GL_DEBUG_SOURCE_OTHER 0x824B
+#define GL_DEBUG_TYPE_ERROR 0x824C
+#define GL_DEBUG_TYPE_DEPRECATED_BEHAVIOR 0x824D
+#define GL_DEBUG_TYPE_UNDEFINED_BEHAVIOR 0x824E
+#define GL_DEBUG_TYPE_PORTABILITY 0x824F
+#define GL_DEBUG_TYPE_PERFORMANCE 0x8250
+#define GL_DEBUG_TYPE_OTHER 0x8251
+#define GL_DEBUG_TYPE_MARKER 0x8268
+#define GL_DEBUG_TYPE_PUSH_GROUP 0x8269
+#define GL_DEBUG_TYPE_POP_GROUP 0x826A
+
 #define GL_RGBA32F 0x8814
 #define GL_RGB32F 0x8815
 #define GL_RGBA16F 0x881A
@@ -105,9 +125,6 @@ typedef struct __GLsync* GLsync;
 #define GL_INFO_LOG_LENGTH 0x8B84
 #define GL_DEPTH_ATTACHMENT 0x8D00
 #define GL_INVALID_INDEX 0xFFFFFFFF
-
-
-
 
 #define GL_TEXTURE_1D 0x0DE0
 #define GL_TEXTURE_2D 0x0DE1
@@ -185,6 +202,8 @@ typedef struct __GLsync* GLsync;
 #define GL_CCW 0x0901
 #define GL_DEPTH_TEST 0x0B71
 
+int GL_KHR_debug = 0; //todo
+typedef void (APIENTRY* GLDEBUGPROC)(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const GLchar* message, const void* userParam);
 
 typedef void (APIENTRYP PFNGLCLEARCOLORPROC)(GLfloat red, GLfloat green, GLfloat blue, GLfloat alpha);
 PFNGLCLEARCOLORPROC glClearColor;
@@ -225,8 +244,6 @@ PFNGLPOLYGONMODEPROC glPolygonMode;
 typedef void (APIENTRYP PFNGLFRONTFACEPROC)(GLenum mode);
 PFNGLFRONTFACEPROC glFrontFace;
 
-
-
 typedef GLuint(APIENTRYP PFNGLCREATEPROGRAMPROC)(void);
 PFNGLCREATEPROGRAMPROC glCreateProgram = nullptr;
 typedef GLuint(APIENTRYP PFNGLCREATESHADERPROC)(GLenum type);
@@ -266,6 +283,8 @@ typedef void (APIENTRYP PFNGLBINDFRAMEBUFFERPROC) (GLenum target, GLuint framebu
 PFNGLBINDFRAMEBUFFERPROC glBindFramebuffer = nullptr;
 typedef void (APIENTRYP PFNGLGENERATEMIPMAPPROC) (GLenum target);
 PFNGLGENERATEMIPMAPPROC glGenerateMipmap = nullptr;
+typedef void (APIENTRYP PFNGLBLITFRAMEBUFFERPROC)(GLint srcX0, GLint srcY0, GLint srcX1, GLint srcY1, GLint dstX0, GLint dstY0, GLint dstX1, GLint dstY1, GLbitfield mask, GLenum filter);
+PFNGLBLITFRAMEBUFFERPROC glBlitFramebuffer = nullptr;
 typedef void (APIENTRYP PFNGLACTIVETEXTUREPROC) (GLenum texture);
 PFNGLACTIVETEXTUREPROC glActiveTexture = nullptr;
 typedef void (APIENTRYP PFNGLPUSHDEBUGGROUPPROC) (GLenum source, GLuint id, GLsizei length, const GLchar* message);
@@ -311,11 +330,16 @@ PFNGLGETUNIFORMBLOCKINDEXPROC glGetUniformBlockIndex;
 typedef void (APIENTRYP PFNGLDRAWELEMENTSINSTANCEDPROC)(GLenum mode, GLsizei count, GLenum type, const void* indices, GLsizei instancecount);
 PFNGLDRAWELEMENTSINSTANCEDPROC glDrawElementsInstanced;
 
+typedef void (APIENTRYP PFNGLDEBUGMESSAGECALLBACKPROC)(GLDEBUGPROC callback, const void* userParam);
+PFNGLDEBUGMESSAGECALLBACKPROC glDebugMessageCallback;
+
 namespace Renderer {
 namespace Driver {
 void loadGLExtensions() {
     
     loadGLFramework();
+
+    //GL_KHR_debug
     
     glClearColor = (PFNGLCLEARCOLORPROC)getGLProcAddress("glClearColor");
     glClear = (PFNGLCLEARPROC)getGLProcAddress("glClear");
@@ -356,6 +380,7 @@ void loadGLExtensions() {
     glVertexAttribPointer = (PFNGLVERTEXATTRIBPOINTERPROC)getGLProcAddress("glVertexAttribPointer");
     glBindFramebuffer = (PFNGLBINDFRAMEBUFFERPROC)getGLProcAddress("glBindFramebuffer");
     glGenerateMipmap = (PFNGLGENERATEMIPMAPPROC)getGLProcAddress("glGenerateMipmap");
+    glBlitFramebuffer = (PFNGLBLITFRAMEBUFFERPROC)getGLProcAddress("glBlitFramebuffer");
     glActiveTexture = (PFNGLACTIVETEXTUREPROC)getGLProcAddress("glActiveTexture");
     glPushDebugGroup = (PFNGLPUSHDEBUGGROUPPROC)getGLProcAddress("glPushDebugGroup");
     glPopDebugGroup = (PFNGLPOPDEBUGGROUPPROC)getGLProcAddress("glPopDebugGroup");
@@ -378,6 +403,9 @@ void loadGLExtensions() {
     glUniformBlockBinding = (PFNGLUNIFORMBLOCKBINDINGPROC)getGLProcAddress("glUniformBlockBinding");
     glGetUniformBlockIndex = (PFNGLGETUNIFORMBLOCKINDEXPROC)getGLProcAddress("glGetUniformBlockIndex");
     glDrawElementsInstanced = (PFNGLDRAWELEMENTSINSTANCEDPROC)getGLProcAddress("glDrawElementsInstanced");
+
+
+    glDebugMessageCallback = (PFNGLDEBUGMESSAGECALLBACKPROC)getGLProcAddress("glDebugMessageCallback");
 }
 }
 }

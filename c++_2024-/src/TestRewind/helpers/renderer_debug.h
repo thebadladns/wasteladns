@@ -16,35 +16,35 @@ namespace Renderer
 {
 namespace Immediate
 {
-    constexpr u32 max_3d_vertices = 1 << 12;
-    constexpr u32 max_2d_vertices = 1 << 14;
+    struct Vertex2D {
+        float2 pos;
+        u32 color;
+    };
+    struct Vertex3D {
+        float3 pos;
+        u32 color;
+    };
+
+    const u32 max_3d_vertices = 1 << 12;
+    const u32 max_2d_vertices = 1 << 14;
     // 2d vertices are stored in quads: per 4 vertex quad, we store 6 indexes (2 tris) = 6 / 4 = 3 / 2
-    constexpr u32 vertexSizeToIndexCount(const u32 count) { return 3 * count / 2; }
-    constexpr size_t arena_size =
-          max_3d_vertices * sizeof(Layout_float3Color4B)
-        + max_2d_vertices * sizeof(Layout_float2Color4B)
+    inline u32 vertexSizeToIndexCount(const u32 count) { return 3 * count / 2; }
+    const size_t arena_size =
+          max_3d_vertices * sizeof(Vertex3D)
+        + max_2d_vertices * sizeof(Vertex2D)
         + vertexSizeToIndexCount(max_2d_vertices) * sizeof(u32);
     
     struct Buffer {
 
-        typedef Shader_Params<
-              Renderer::Shaders::VSTechnique::forward_base, Renderer::Shaders::PSTechnique::forward_untextured_unlit
-            , Renderer::Layout_float3Color4B, Layout_CBuffer_DebugScene, Layout_CNone
-            , Renderer::Shaders::VSDrawType::Standard> ShaderParams_3D;
-        typedef Shader_Params<
-              Renderer::Shaders::VSTechnique::forward_base, Renderer::Shaders::PSTechnique::forward_untextured_unlit
-            , Renderer::Layout_float2Color4B, Layout_CBuffer_DebugScene, Layout_CNone
-            , Renderer::Shaders::VSDrawType::Standard> ShaderParams_2D;
-
-        Layout_float3Color4B* vertices_3d;
-        Layout_float2Color4B* vertices_2d;
+        Vertex3D* vertices_3d;
+        Vertex2D* vertices_2d;
         u32* indices_2d;
         
-        Driver::RscBuffer<Layout_float3Color4B> buffer_3d;
-        Driver::RscIndexedBuffer<Layout_float2Color4B> buffer_2d;
-        ShaderParams_3D::ShaderSet shader_3d;
-        ShaderParams_2D::ShaderSet shader_2d;
-        Driver::RscCBuffer cbuffers[Layout_CBuffer_DebugScene::Buffers::Count];
+        Driver::RscVertexBuffer buffer_3d;
+        Driver::RscIndexedVertexBuffer buffer_2d;
+        Driver::RscShaderSet shader_3d;
+        Driver::RscShaderSet shader_2d;
+        Driver::RscCBuffer cbuffer;
         Driver::RscRasterizerState rasterizerState;
         Driver::RscDepthStencilState orthoDepthState, perspDepthState;
 
@@ -81,8 +81,8 @@ namespace Immediate
         // complex primitives to avoid vertex usage
         assert(buffer.vertices_3d_head + 2 < max_3d_vertices);
         
-        Layout_float3Color4B& vertexStart = buffer.vertices_3d[buffer.vertices_3d_head];
-        Layout_float3Color4B& vertexEnd = buffer.vertices_3d[buffer.vertices_3d_head + 1];
+        Vertex3D& vertexStart = buffer.vertices_3d[buffer.vertices_3d_head];
+        Vertex3D& vertexEnd = buffer.vertices_3d[buffer.vertices_3d_head + 1];
         buffer.vertices_3d_head = buffer.vertices_3d_head + 2;
 
         vertexStart.pos = v1;
@@ -181,13 +181,13 @@ namespace Immediate
     void box_2d(Buffer& buffer, const float2 min, const float2 max, Color32 color) {
 
         u32 vertexStart = buffer.vertices_2d_head;
-        Layout_float2Color4B& bottomLeft = buffer.vertices_2d[vertexStart];
+        Vertex2D& bottomLeft = buffer.vertices_2d[vertexStart];
         bottomLeft.pos = { min.x, max.y };
-        Layout_float2Color4B& topLeft = buffer.vertices_2d[vertexStart + 1];
+        Vertex2D& topLeft = buffer.vertices_2d[vertexStart + 1];
         topLeft.pos = { min.x, min.y };
-        Layout_float2Color4B& topRight = buffer.vertices_2d[vertexStart + 2];
+        Vertex2D& topRight = buffer.vertices_2d[vertexStart + 2];
         topRight.pos = { max.x, min.y };
-        Layout_float2Color4B& bottomRigth = buffer.vertices_2d[vertexStart + 3];
+        Vertex2D& bottomRigth = buffer.vertices_2d[vertexStart + 3];
         bottomRigth.pos = { max.x, max.y };
         
         u32 indexStart = vertexSizeToIndexCount(vertexStart);
@@ -220,7 +220,7 @@ namespace Immediate
         color[2] = params.color.getBu();
         color[3] = params.color.getAu();
         u8* vertexBuffer = (u8*) &buffer.vertices_2d[buffer.vertices_2d_head];
-        s32 vertexBufferSize = (max_2d_vertices - buffer.vertices_2d_head) * sizeof(Layout_float2Color4B);
+        s32 vertexBufferSize = (max_2d_vertices - buffer.vertices_2d_head) * sizeof(Vertex2D);
         // negate y, since our (0,0) is the center of the screen, stb's is bottom left
         u32 quadCount = stb_easy_font_print(params.pos.x, -params.pos.y, params.scale, text, color, vertexBuffer, vertexBufferSize);
         buffer.vertices_2d_head += quadCount * 4;
@@ -260,51 +260,83 @@ namespace Immediate
     }
 #endif // __WASTELADNS_DEBUG_TEXT__
     
-    void load(Buffer& buffer, Allocator::Arena& arena) {
+    void init(Buffer& buffer, Allocator::Arena& arena) {
 
         buffer = {};
 
-        Driver::create_cbuffer<Layout_CBuffer_DebugScene::GroupData>(buffer.cbuffers[Layout_CBuffer_DebugScene::Buffers::GroupData], {});
-
         {
             // reserve memory for buffers
-            u32 vertices_3d_size = max_3d_vertices * sizeof(Layout_float3Color4B);
-            u32 vertices_2d_size = max_2d_vertices * sizeof(Layout_float2Color4B);
+            u32 vertices_3d_size = max_3d_vertices * sizeof(Vertex3D);
+            u32 vertices_2d_size = max_2d_vertices * sizeof(Vertex2D);
             u32 indices_2d_size = vertexSizeToIndexCount(max_2d_vertices) * sizeof(u32);
-            buffer.vertices_3d = (Layout_float3Color4B*)Allocator::alloc_arena(arena, vertices_3d_size, alignof(Layout_float3Color4B));
-            buffer.vertices_2d = (Layout_float2Color4B*)Allocator::alloc_arena(arena, vertices_2d_size, alignof(Layout_float2Color4B));
+            buffer.vertices_3d = (Vertex3D*)Allocator::alloc_arena(arena, vertices_3d_size, alignof(Vertex3D));
+            buffer.vertices_2d = (Vertex2D*)Allocator::alloc_arena(arena, vertices_2d_size, alignof(Vertex2D));
             buffer.indices_2d = (u32*)Allocator::alloc_arena(arena, indices_2d_size, alignof(u32));
 
-            // 3d
-            {
-                Renderer::Driver::BufferParams bufferParams;
-                bufferParams.vertexData = nullptr;
-                bufferParams.vertexSize = vertices_3d_size;
-                bufferParams.memoryUsage = Renderer::Driver::BufferMemoryUsage::CPU;
-                bufferParams.accessType = Renderer::Driver::BufferAccessType::CPU;
-                bufferParams.type = Renderer::Driver::BufferTopologyType::Lines;
-                bufferParams.vertexCount = 0;
-                Driver::create_vertex_buffer(buffer.buffer_3d, bufferParams);
-            }
+            Driver::create_cbuffer(buffer.cbuffer, { sizeof(float4x4), 4 });
+            const Renderer::Driver::CBufferBindingDesc bufferBindings_MVP[] = {{ buffer.cbuffer, "type_PerGroup", Driver::CBufferStageMask::VS }};
+
             // 2d
             {
-                Renderer::Driver::IndexedBufferParams bufferParams;
+                const Driver::VertexAttribDesc attribs_color2d[] = {
+                    Driver::make_vertexAttribDesc("POSITION", OFFSET_OF(Vertex2D, pos), sizeof(Vertex2D), Driver::BufferAttributeFormat::R32G32_FLOAT),
+                    Driver::make_vertexAttribDesc("COLOR", OFFSET_OF(Vertex2D, color), sizeof(Vertex2D), Driver::BufferAttributeFormat::R8G8B8A8_UNORM)
+                };
+                Renderer::ShaderDesc desc = {};
+                desc.vertexAttrs = attribs_color2d;
+                desc.vertexAttr_count = COUNT_OF(attribs_color2d);
+                desc.textureBindings = nullptr;
+                desc.textureBinding_count = 0;
+                desc.bufferBindings = bufferBindings_MVP;
+                desc.bufferBinding_count = COUNT_OF(bufferBindings_MVP);
+                // reuse 3d shaders
+                desc.vs_name = Shaders::vs_color3d_unlit.name;
+                desc.vs_src = Shaders::vs_color3d_unlit.src;
+                desc.ps_name = Shaders::ps_color3d_unlit.name;
+                desc.ps_src = Shaders::ps_color3d_unlit.src;
+                Renderer::compile_shader(buffer.shader_2d, desc);
+
+                Renderer::Driver::IndexedVertexBufferDesc bufferParams;
                 bufferParams.vertexData = nullptr;
                 bufferParams.indexData = nullptr;
                 bufferParams.vertexSize = vertices_2d_size;
+                bufferParams.vertexCount = max_2d_vertices;
                 bufferParams.indexSize = indices_2d_size;
                 bufferParams.memoryUsage = Renderer::Driver::BufferMemoryUsage::CPU;
                 bufferParams.accessType = Renderer::Driver::BufferAccessType::CPU;
                 bufferParams.indexType = Renderer::Driver::BufferItemType::U32;
                 bufferParams.type = Renderer::Driver::BufferTopologyType::Triangles;
                 bufferParams.indexCount = 0;
-                Driver::create_indexed_vertex_buffer(buffer.buffer_2d, bufferParams);
+                Driver::create_indexed_vertex_buffer(buffer.buffer_2d, bufferParams, attribs_color2d, COUNT_OF(attribs_color2d));
             }
-        }
-        
-        {
-            Buffer::ShaderParams_3D::create_shader_from_techniques(buffer.shader_3d, buffer.cbuffers);
-            Buffer::ShaderParams_2D::create_shader_from_techniques(buffer.shader_2d, buffer.cbuffers);
+            // 3d
+            {
+                const Driver::VertexAttribDesc attribs_color3d[] = {
+                    Driver::make_vertexAttribDesc("POSITION", OFFSET_OF(Vertex3D, pos), sizeof(Vertex3D), Driver::BufferAttributeFormat::R32G32B32_FLOAT),
+                    Driver::make_vertexAttribDesc("COLOR", OFFSET_OF(Vertex3D, color), sizeof(Vertex3D), Driver::BufferAttributeFormat::R8G8B8A8_UNORM)
+                };
+                Renderer::ShaderDesc desc = {};
+                desc.vertexAttrs = attribs_color3d;
+                desc.vertexAttr_count = COUNT_OF(attribs_color3d);
+                desc.textureBindings = nullptr;
+                desc.textureBinding_count = 0;
+                desc.bufferBindings = bufferBindings_MVP;
+                desc.bufferBinding_count = COUNT_OF(bufferBindings_MVP);
+                desc.vs_name = Shaders::vs_color3d_unlit.name;
+                desc.vs_src = Shaders::vs_color3d_unlit.src;
+                desc.ps_name = Shaders::ps_color3d_unlit.name;
+                desc.ps_src = Shaders::ps_color3d_unlit.src;
+                Renderer::compile_shader(buffer.shader_3d, desc);
+
+                Renderer::Driver::VertexBufferDesc bufferParams;
+                bufferParams.vertexData = nullptr;
+                bufferParams.vertexSize = vertices_3d_size;
+                bufferParams.vertexCount = max_3d_vertices;
+                bufferParams.memoryUsage = Renderer::Driver::BufferMemoryUsage::CPU;
+                bufferParams.accessType = Renderer::Driver::BufferAccessType::CPU;
+                bufferParams.type = Renderer::Driver::BufferTopologyType::Lines;
+                Driver::create_vertex_buffer(buffer.buffer_3d, bufferParams, attribs_color3d, COUNT_OF(attribs_color3d));
+            }
         }
         
         Renderer::Driver::create_RS(buffer.rasterizerState, { Renderer::Driver::RasterizerFillMode::Fill, Renderer::Driver::RasterizerCullMode::CullBack });
@@ -314,7 +346,8 @@ namespace Immediate
     
     void present3d(Buffer& buffer, const float4x4& projMatrix, const float4x4& viewMatrix) {
         
-        SET_MARKER_NAME(Driver::Marker_t marker, "DEBUG 3D")
+        Driver::Marker_t marker;
+        Driver::set_marker_name(marker, "DEBUG 3D");
         Driver::start_event(marker);
         {
             Renderer::Driver::bind_RS(buffer.rasterizerState);
@@ -322,16 +355,15 @@ namespace Immediate
 
             Driver::BufferUpdateParams bufferUpdateParams;
             bufferUpdateParams.vertexData = buffer.vertices_3d;
-            bufferUpdateParams.vertexSize = sizeof(Layout_float3Color4B) * buffer.vertices_3d_head;
+            bufferUpdateParams.vertexSize = sizeof(Vertex3D) * buffer.vertices_3d_head;
             bufferUpdateParams.vertexCount = buffer.vertices_3d_head;
             Driver::update_vertex_buffer(buffer.buffer_3d, bufferUpdateParams);
 
             float4x4 mvp = Math::mult(projMatrix, viewMatrix);
-            Driver::update_cbuffer(buffer.cbuffers[Layout_CBuffer_DebugScene::Buffers::GroupData], mvp);
+            Driver::update_cbuffer(buffer.cbuffer, &mvp);
 
             Driver::bind_shader(buffer.shader_3d);
             Driver::bind_vertex_buffer(buffer.buffer_3d);
-            Driver::bind_cbuffers(buffer.cbuffers, Layout_CBuffer_DebugScene::Buffers::Count, { true, false });
             Driver::draw_vertex_buffer(buffer.buffer_3d);
         }
         Driver::end_event();
@@ -339,7 +371,8 @@ namespace Immediate
     
     void present2d(Buffer& buffer, const float4x4& projMatrix) {
 
-        SET_MARKER_NAME(Driver::Marker_t marker, "DEBUG 2D")
+        Driver::Marker_t marker;
+        Driver::set_marker_name(marker, "DEBUG 2D");
         Driver::start_event(marker);
         {
             Renderer::Driver::bind_RS(buffer.rasterizerState);
@@ -348,17 +381,16 @@ namespace Immediate
             u32 indexCount = vertexSizeToIndexCount(buffer.vertices_2d_head);
             Driver::IndexedBufferUpdateParams bufferUpdateParams;
             bufferUpdateParams.vertexData = buffer.vertices_2d;
-            bufferUpdateParams.vertexSize = sizeof(Layout_float2Color4B) * buffer.vertices_2d_head;
+            bufferUpdateParams.vertexSize = sizeof(Vertex2D) * buffer.vertices_2d_head;
             bufferUpdateParams.indexData = buffer.indices_2d;
             bufferUpdateParams.indexSize = indexCount * sizeof(u32);
             bufferUpdateParams.indexCount = indexCount;
             Driver::update_indexed_vertex_buffer(buffer.buffer_2d, bufferUpdateParams);
 
-            Driver::update_cbuffer(buffer.cbuffers[Layout_CBuffer_DebugScene::Buffers::GroupData], projMatrix);
+            Driver::update_cbuffer(buffer.cbuffer, &projMatrix);
 
             Driver::bind_shader(buffer.shader_2d);
             Driver::bind_indexed_vertex_buffer(buffer.buffer_2d);
-            Driver::bind_cbuffers(buffer.cbuffers, Layout_CBuffer_DebugScene::Buffers::Count, { true, false });
             Driver::draw_indexed_vertex_buffer(buffer.buffer_2d);
         }
         Driver::end_event();

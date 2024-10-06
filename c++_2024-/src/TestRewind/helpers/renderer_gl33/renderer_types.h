@@ -1,10 +1,10 @@
 #ifndef __WASTELADNS_RENDERER_TYPES_GL33_H__
 #define __WASTELADNS_RENDERER_TYPES_GL33_H__
 
-
 namespace Renderer {
 
-    constexpr ProjectionType::Enum defaultProjectionType = ProjectionType::Zminus1to1;
+    const auto generate_matrix_ortho = generate_matrix_ortho_zneg1to1;
+    const auto generate_matrix_persp = generate_matrix_persp_zneg1to1;
 
 namespace Driver {
 
@@ -20,60 +20,60 @@ namespace Driver {
     struct BufferItemType { enum Enum { U16 = GL_UNSIGNED_SHORT, U32 = GL_UNSIGNED_INT }; };
     struct BufferTopologyType { enum Enum { Triangles = GL_TRIANGLES, Lines = GL_LINES }; };
 
-    struct RscTexture {
-        GLuint texId;
-    };
+    struct RscTexture { GLuint id; };
 
-    struct RscMainRenderTarget {
-        u32 mask;
-    };
-    template<u32 _attachments>
+    struct RscMainRenderTarget { u32 mask; };
     struct RscRenderTarget {
-        RscTexture textures[_attachments];
+        RscTexture textures[RenderTarget_MaxCount];
         GLuint buffer;
         GLuint depthBuffer;
         u32 width, height;
         u32 mask;
+        u32 count;
     };
 
-    template <typename _vertexLayout, typename _cbufferLayout, Shaders::VSDrawType::Enum _drawType>
-    struct RscVertexShader {
-        GLuint shaderObject;
+    struct RscVertexShader { GLuint id; };
+    struct RscPixelShader { GLuint id; };
+    struct RscShaderSet { GLuint id; };
+
+    struct BufferAttributeFormat { enum Enum { R32G32B32_FLOAT, R32G32_FLOAT, R8G8B8A8_SINT, R8G8B8A8_UNORM }; };
+    struct VertexAttribDesc {
+        const char* name;
+        size_t offset;
+        size_t stride;
+        s32 size;
+        GLenum type;
+        GLenum normalized;
     };
-    template <Shaders::PSCBufferUsage::Enum _cbufferUsage>
-    struct RscPixelShader {
-        GLuint shaderObject;
-    };
-    template <typename _vertexLayout, typename _cbufferLayout, Shaders::PSCBufferUsage::Enum _cbufferUsage, Shaders::VSDrawType::Enum _drawType>
-    struct RscShaderSet {
-        GLuint shaderObject;
-    };
+    VertexAttribDesc make_vertexAttribDesc(const char* name, size_t offset, size_t stride, BufferAttributeFormat::Enum format) {
+        const s32 sizes[] = {3, 2, 4, 4};
+        const GLenum types[] = {GL_FLOAT, GL_FLOAT, GL_BYTE, GL_UNSIGNED_BYTE};
+        const GLenum normalized[] = {GL_FALSE, GL_FALSE, GL_FALSE, GL_TRUE};
+        return VertexAttribDesc{
+            name, offset, stride, sizes[format], types[format], normalized[format]
+        };
+    }
+    struct RscInputLayout {};
     
-    struct RscBlendState {
-        bool enable : 1;
-    };
-    
+    struct RscBlendState { bool enable; };
     struct RscRasterizerState {
         GLenum fillMode;
         GLenum cullFace;
     };
-
     struct RscDepthStencilState {
         bool enable;
         GLenum func;
         GLenum writemask;
     };
     
-    template <typename _layout>
-    struct RscBuffer {
+    struct RscVertexBuffer {
         GLsizei vertexCount;
         GLuint arrayObject;
         GLuint vertexBuffer;
         GLenum type;
     };
     
-    template <typename _layout>
-    struct RscIndexedBuffer {
+    struct RscIndexedVertexBuffer {
         GLsizei indexCount;
         GLuint arrayObject;
         GLuint vertexBuffer;
@@ -83,15 +83,12 @@ namespace Driver {
     };
     
     struct RscCBuffer {
-        GLuint bufferObject;
-        GLuint index;
+        GLuint id;
+        GLuint binding_index;
+        u32 byteWidth;
     };
 
-#define SET_MARKER_NAME(a, b) a = b;
     typedef const char* Marker_t;
-    void set_marker(Marker_t);
-    void start_event(Marker_t data);
-    void end_event();
 }
 }
 #endif // __WASTELADNS_RENDERER_TYPES_GL33_H__

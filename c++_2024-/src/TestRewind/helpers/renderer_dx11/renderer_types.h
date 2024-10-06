@@ -3,7 +3,8 @@
 
 namespace Renderer {
 
-    constexpr ProjectionType::Enum defaultProjectionType = ProjectionType::Z0to1;
+    const auto generate_matrix_ortho = generate_matrix_ortho_z0to1;
+    const auto generate_matrix_persp = generate_matrix_persp_z0to1;
 
 namespace Driver {
 
@@ -19,8 +20,9 @@ namespace Driver {
     struct BufferItemType { enum Enum { U16 = DXGI_FORMAT_R16_UINT, U32 = DXGI_FORMAT_R32_UINT }; };
     struct BufferTopologyType { enum Enum { Triangles = D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST, Lines = D3D_PRIMITIVE_TOPOLOGY_LINELIST }; };
 
+
     struct RscTexture {
-        ID3D11Texture2D* texture;
+        ID3D11Texture2D* impl;
         ID3D11ShaderResourceView* view;
         ID3D11SamplerState* samplerState;
         DXGI_FORMAT format;
@@ -30,52 +32,66 @@ namespace Driver {
         ID3D11RenderTargetView* view;
         ID3D11DepthStencilView* depthStencilView;
     };
-    template<u32 _attachments>
     struct RscRenderTarget {
-        RscTexture textures[_attachments];
-        ID3D11RenderTargetView* views[_attachments];
+        RscTexture textures[RenderTarget_MaxCount];
+        ID3D11RenderTargetView* views[RenderTarget_MaxCount];
         ID3D11DepthStencilView* depthStencilView;
+        u32 count;
     };
 
-    template <typename _vertexLayout, typename _cbufferLayout, Shaders::VSDrawType::Enum _drawType>
     struct RscVertexShader {
-        ID3D11VertexShader* shaderObject;
-        ID3D11InputLayout* inputLayout;
+        ID3D11VertexShader* impl;
+        ID3D11InputLayout* inputLayout_impl;
     };
-    template <Shaders::PSCBufferUsage::Enum _cbufferUsage>
     struct RscPixelShader {
-        ID3D11PixelShader* shaderObject;
+        ID3D11PixelShader* impl;
     };
-    template <typename _vertexLayout, typename _cbufferLayout, Shaders::PSCBufferUsage::Enum _cbufferUsage, Shaders::VSDrawType::Enum _drawType>
     struct RscShaderSet {
-        RscVertexShader<_vertexLayout, _cbufferLayout, _drawType> vs;
-        RscPixelShader<_cbufferUsage> ps;
+        ID3D11Buffer* cbuffers_vs[4];
+        ID3D11Buffer* cbuffers_ps[4];
+        RscVertexShader vs;
+        RscPixelShader ps;
+        u16 cbuffer_vs_count;
+        u16 cbuffer_ps_count;
     };
-    
+
+    struct BufferAttributeFormat { enum Enum {
+            R32G32B32_FLOAT = DXGI_FORMAT_R32G32B32_FLOAT,
+            R32G32_FLOAT = DXGI_FORMAT_R32G32_FLOAT,
+            R8G8B8A8_SINT = DXGI_FORMAT_R8G8B8A8_SINT,
+            R8G8B8A8_UNORM = DXGI_FORMAT_R8G8B8A8_UNORM,
+    }; };
+    typedef D3D11_INPUT_ELEMENT_DESC VertexAttribDesc;
+    VertexAttribDesc make_vertexAttribDesc(const char* name, size_t offset, size_t , BufferAttributeFormat::Enum format) {
+        return D3D11_INPUT_ELEMENT_DESC{
+            name, 0, (DXGI_FORMAT)format, 0, (u32)offset, D3D11_INPUT_PER_VERTEX_DATA, 0 };
+    }
+    struct RscInputLayout {
+        ID3D11InputLayout* impl;
+    };
+
     struct RscBlendState {
-        ID3D11BlendState1* bs;
+        ID3D11BlendState1* impl;
     };
     
     struct RscRasterizerState {
-        ID3D11RasterizerState* rs;
+        ID3D11RasterizerState* impl;
     };
 
     struct RscDepthStencilState {
-        ID3D11DepthStencilState* ds;
+        ID3D11DepthStencilState* impl;
     };
     
-    template <typename _layout>
-    struct RscBuffer {
-        ID3D11Buffer* vertexBuffer;
+    struct RscVertexBuffer {
+        ID3D11Buffer* impl;
         D3D11_PRIMITIVE_TOPOLOGY type;
         u32 vertexStride;
         u32 vertexCount;
     };
     
-    template <typename _layout>
-    struct RscIndexedBuffer {
-        ID3D11Buffer* vertexBuffer;
-        ID3D11Buffer* indexBuffer;
+    struct RscIndexedVertexBuffer {
+        ID3D11Buffer* vertexBuffer_impl;
+        ID3D11Buffer* indexBuffer_impl;
         D3D11_PRIMITIVE_TOPOLOGY type;
         DXGI_FORMAT indexType;
         u32 vertexStride;
@@ -83,14 +99,10 @@ namespace Driver {
     };
     
     struct RscCBuffer {
-        ID3D11Buffer* bufferObject;
+        ID3D11Buffer* impl;
     };
 
-    typedef LPCWSTR Marker_t;
-#define SET_MARKER_NAME(a, b) a = L##b;
-    void set_marker(Marker_t data);
-    void start_event(Marker_t data);
-    void end_event();
+    typedef wchar_t Marker_t[64];
 }
 }
 #endif // __WASTELADNS_RENDERER_TYPES_DX11_H__

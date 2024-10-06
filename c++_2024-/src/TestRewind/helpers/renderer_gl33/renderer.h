@@ -6,30 +6,11 @@
 #endif
 
 namespace Renderer {
-
-    void create_textured_quad(RenderTargetTexturedQuad& q) {
-        // Generally we use uv=(0,0) as top left, but only
-        // for texture data which is interpreted by opengl
-        // as bottom-to-top (they are stored top-to-bottom)
-        // Render targets are drawn bottom-to-top, hence (0,0)
-        // being the bottom left here
-        Renderer::Layout_Texturedfloat2* v = q.vertices;
-        u16* i = q.indices;
-        v[0] = { { -1.f, 1.f }, { 0.f, 1.f } };
-        v[1] = { { -1.f, -1.f }, { 0.f, 0.f } };
-        v[2] = { { 1.f, 1.f }, { 1.f, 1.f } };
-        v[3] = { { 1.f, -1.f }, { 1.f, 0.f } };
-        i[0] = 0; i[1] = 1; i[2] = 2;
-        i[3] = 2; i[4] = 1; i[5] = 3;
-    }
-
 namespace Driver {
 
     void create_main_RT(RscMainRenderTarget& rt, const MainRenderTargetParams& params) {
         rt.mask = GL_COLOR_BUFFER_BIT;
-        if (params.depth) {
-            rt.mask = rt.mask | GL_DEPTH_BUFFER_BIT;
-        }
+        if (params.depth) { rt.mask = rt.mask | GL_DEPTH_BUFFER_BIT; }
     }
     void clear_main_RT(RscMainRenderTarget& rt, Color32 color) {
         glClearColor( RGBA_PARAMS(color) );
@@ -37,10 +18,8 @@ namespace Driver {
     }
     void bind_main_RT(RscMainRenderTarget& rt) {
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
     }
-    template<u32 _attachments>
-    void create_RT(RscRenderTarget<_attachments>& rt, const RenderTargetParams& params) {
+    void create_RT(RscRenderTarget& rt, const RenderTargetParams& params) {
         GLuint buffer;
         glGenFramebuffers(1, &buffer);
         glBindFramebuffer(GL_FRAMEBUFFER, buffer);
@@ -61,8 +40,8 @@ namespace Driver {
 
         {
             glBindFramebuffer(GL_FRAMEBUFFER, rt.buffer);
-            GLuint attachments[_attachments];
-            for (u32 i = 0; i < _attachments; i++) {
+            GLuint attachments[COUNT_OF(rt.textures)];
+            for (u32 i = 0; i < params.count; i++) {
                 Renderer::Driver::TextureRenderTargetCreateParams texParams;
                 texParams.width = params.width;
                 texParams.height = params.height;
@@ -72,28 +51,25 @@ namespace Driver {
 
                 create_texture_empty(rt.textures[i], texParams);
                 u32 colorAttachment = GL_COLOR_ATTACHMENT0 + i;
-                glFramebufferTexture2D(GL_FRAMEBUFFER, colorAttachment, GL_TEXTURE_2D, rt.textures[i].texId, 0);
+                glFramebufferTexture2D(GL_FRAMEBUFFER, colorAttachment, GL_TEXTURE_2D, rt.textures[i].id, 0);
                 attachments[i] = colorAttachment;
             }
-            glDrawBuffers(_attachments, attachments);
+            rt.count = params.count;
+            glDrawBuffers(params.count, attachments);
             glBindFramebuffer(GL_FRAMEBUFFER, 0);
         }
     }
-    template<u32 _attachments>
-    void bind_RT(const RscRenderTarget<_attachments>& rt) {
+    void bind_RT(const RscRenderTarget& rt) {
         glBindFramebuffer(GL_FRAMEBUFFER, rt.buffer);
     }
-    template<u32 _attachments>
-    void clear_RT(const RscRenderTarget<_attachments>& rt) {
+    void clear_RT(const RscRenderTarget& rt) {
         glClear(rt.mask | GL_STENCIL_BUFFER_BIT);
     }
-    template<u32 _attachments>
-    void clear_RT(const RscRenderTarget<_attachments>& rt, Color32 color) {
+    void clear_RT(const RscRenderTarget& rt, Color32 color) {
         glClearColor(RGBA_PARAMS(color));
         glClear(rt.mask | GL_STENCIL_BUFFER_BIT);
     }
-    template<u32 _attachments>
-    void copy_RT_to_main_RT(RscMainRenderTarget& dst, const RscRenderTarget<_attachments>& src, const RenderTargetCopyParams& params) {
+    void copy_RT_to_main_RT(RscMainRenderTarget& dst, const RscRenderTarget& src, const RenderTargetCopyParams& params) {
         // TODO: UNTESTED
         glBindFramebuffer(GL_READ_FRAMEBUFFER, src.buffer);
         glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
@@ -149,7 +125,7 @@ namespace Driver {
 
             glBindTexture(GL_TEXTURE_2D, 0);
 
-            t.texId = texId;
+            t.id = texId;
             
             stbi_image_free(data);
         }
@@ -163,32 +139,26 @@ namespace Driver {
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
         glBindTexture(GL_TEXTURE_2D, 0);
 
-        t.texId = texId;
+        t.id = texId;
     }
     void bind_textures(const RscTexture* textures, const u32 count) {
         for (u32 i = 0; i < count; i++) {
             glActiveTexture(GL_TEXTURE0 + i);
-            glBindTexture(GL_TEXTURE_2D, textures[i].texId);
+            glBindTexture(GL_TEXTURE_2D, textures[i].id);
         }
     }
-    template <typename _vertexLayout, typename _cbufferLayout, Shaders::PSCBufferUsage::Enum _cbufferUsage, Shaders::VSDrawType::Enum _drawType>
-    void bind_shader_samplers(RscShaderSet<_vertexLayout, _cbufferLayout, _cbufferUsage, _drawType>& ss, const char** params, const u32 count) {
-        glUseProgram(ss.shaderObject);
-        for (u32 i = 0; i < count; i++) {
-            const s32 samplerLoc = glGetUniformLocation(ss.shaderObject, params[i]);
-            glUniform1i(samplerLoc, i);
-        }
+    void bind_shader_samplers(RscShaderSet& ss, const char** params, const u32 count) {
+
     }
     
-    template <typename _vertexLayout, typename _cbufferLayout, Shaders::VSDrawType::Enum _drawType>
-    ShaderResult create_shader_vs(RscVertexShader<_vertexLayout, _cbufferLayout, _drawType>& vs, const VertexShaderRuntimeCompileParams& params) {
+    ShaderResult create_shader_vs(RscVertexShader& vs, const VertexShaderRuntimeCompileParams& params) {
         GLuint vertexShader;
         
         vertexShader = glCreateShader(GL_VERTEX_SHADER);
-        glShaderSource(vertexShader, 1, &params.shaderStr, nullptr);
+        glShaderSource(vertexShader, 1, &params.shader_str, nullptr);
         glCompileShader(vertexShader);
         
-        vs.shaderObject = vertexShader;
+        vs.id = vertexShader;
         
         GLint compiled;
         glGetShaderiv(vertexShader, GL_COMPILE_STATUS, &compiled);
@@ -197,23 +167,22 @@ namespace Driver {
         result.compiled = compiled != 0;
         if (result.compiled) {} else {
             GLint infoLogLength;
-            glGetShaderiv(vs.shaderObject, GL_INFO_LOG_LENGTH, &infoLogLength);
+            glGetShaderiv(vs.id, GL_INFO_LOG_LENGTH, &infoLogLength);
             if (infoLogLength > 0) {
-                glGetShaderInfoLog(vs.shaderObject, Math::min(infoLogLength, (GLint)(sizeof(result.error)/sizeof(result.error[0]))), nullptr, &result.error[0]);
+                glGetShaderInfoLog(vs.id, Math::min(infoLogLength, (GLint)(sizeof(result.error)/sizeof(result.error[0]))), nullptr, &result.error[0]);
             }
         }
 
         return result;
     }
-    template <Shaders::PSCBufferUsage::Enum _cbufferUsage>
-    ShaderResult create_shader_ps(RscPixelShader<_cbufferUsage>& ps, const PixelShaderRuntimeCompileParams& params) {
+    ShaderResult create_shader_ps(RscPixelShader& ps, const PixelShaderRuntimeCompileParams& params) {
         GLuint pixelShader;
         
         pixelShader = glCreateShader(GL_FRAGMENT_SHADER);
-        glShaderSource(pixelShader, 1, &params.shaderStr, nullptr);
+        glShaderSource(pixelShader, 1, &params.shader_str, nullptr);
         glCompileShader(pixelShader);
         
-        ps.shaderObject = pixelShader;
+        ps.id = pixelShader;
         
         GLint compiled;
         glGetShaderiv(pixelShader, GL_COMPILE_STATUS, &compiled);
@@ -222,26 +191,25 @@ namespace Driver {
         result.compiled = compiled != 0;
         if (result.compiled) {} else {
             GLint infoLogLength;
-            glGetShaderiv(ps.shaderObject, GL_INFO_LOG_LENGTH, &infoLogLength);
+            glGetShaderiv(ps.id, GL_INFO_LOG_LENGTH, &infoLogLength);
             if (infoLogLength > 0) {
-                glGetShaderInfoLog(ps.shaderObject, Math::min(infoLogLength, (GLint)(sizeof(result.error)/sizeof(result.error[0]))), nullptr, &result.error[0]);
+                glGetShaderInfoLog(ps.id, Math::min(infoLogLength, (GLint)(sizeof(result.error)/sizeof(result.error[0]))), nullptr, &result.error[0]);
             }
         }
 
         return result;
     }
-    template <typename _vertexLayout, typename _cbufferLayout, Shaders::PSCBufferUsage::Enum _cbufferUsage, Shaders::VSDrawType::Enum _drawType>
-    ShaderResult create_shader_set(RscShaderSet<_vertexLayout, _cbufferLayout, _cbufferUsage, _drawType>& ss, const ShaderSetRuntimeCompileParams<_vertexLayout, _cbufferLayout, _cbufferUsage, _drawType>& params) {
+    ShaderResult create_shader_set(RscShaderSet& ss, const ShaderSetRuntimeCompileParams& params) {
         GLuint shader;
-        GLuint vs = params.rscVS.shaderObject;
-        GLuint ps = params.rscPS.shaderObject;
+        GLuint vs = params.vs.id;
+        GLuint ps = params.ps.id;
         
         shader = glCreateProgram();
         glAttachShader(shader, vs);
         glAttachShader(shader, ps);
         glLinkProgram(shader);
         
-        ss.shaderObject = shader;
+        ss.id = shader;
         
         GLint compiled;
         glGetProgramiv(shader, GL_LINK_STATUS, &compiled);
@@ -249,14 +217,24 @@ namespace Driver {
         ShaderResult result;
         result.compiled = compiled != 0;
         if (result.compiled) {
-            if (params.cbuffers) {
-                bind_cbuffers_to_shader(ss, params.cbuffers);
+			for (u32 i = 0; i < params.cbuffer_count; i++) {
+				const CBufferBindingDesc& binding = params.cbufferBindings[i];
+                GLuint index = glGetUniformBlockIndex(ss.id, binding.name);
+                if (index != GL_INVALID_INDEX) {
+                    glUniformBlockBinding(ss.id, index, binding.cbuffer.binding_index);
+                }
+			}
+            glUseProgram(ss.id);
+            for (u32 i = 0; i < params.texture_count; i++) {
+                const TextureBindingDesc& binding = params.textureBindings[i];
+                const s32 index = glGetUniformLocation(ss.id, binding.name);
+                glUniform1i(index, i);
             }
         } else {
             GLint infoLogLength;
-            glGetProgramiv(ss.shaderObject, GL_INFO_LOG_LENGTH, &infoLogLength);
+            glGetProgramiv(ss.id, GL_INFO_LOG_LENGTH, &infoLogLength);
             if (infoLogLength > 0) {
-                glGetProgramInfoLog(ss.shaderObject, Math::min(infoLogLength, (GLint)(sizeof(result.error)/sizeof(result.error[0]))), nullptr, &result.error[0]);
+                glGetProgramInfoLog(ss.id, Math::min(infoLogLength, (GLint)(sizeof(result.error)/sizeof(result.error[0]))), nullptr, &result.error[0]);
             }
         }
         
@@ -267,9 +245,8 @@ namespace Driver {
         
         return result;
     }
-    template <typename _vertexLayout, typename _cbufferLayout, Shaders::PSCBufferUsage::Enum _cbufferUsage, Shaders::VSDrawType::Enum _drawType>
-    void bind_shader(const RscShaderSet<_vertexLayout, _cbufferLayout, _cbufferUsage, _drawType>& ss) {
-        glUseProgram(ss.shaderObject);
+    void bind_shader(const RscShaderSet& ss) {
+        glUseProgram(ss.id);
     }
     
     void create_blend_state(RscBlendState& bs, const BlendStateParams& params) {
@@ -314,9 +291,8 @@ namespace Driver {
             glDisable(GL_DEPTH_TEST);
         }
     }
-    
-    template <typename _layout>
-    void create_vertex_buffer(RscBuffer<_layout>& t, const BufferParams& params) {
+
+    void create_vertex_buffer(RscVertexBuffer& t, const VertexBufferDesc& params, const VertexAttribDesc* attrs, const u32 attr_count) {
         GLuint vertexBuffer, arrayObject;
         
         // Vertex buffer binding is not part of the VAO state
@@ -325,8 +301,10 @@ namespace Driver {
         glBufferData(GL_ARRAY_BUFFER, params.vertexSize, params.vertexData, params.memoryUsage);
         glGenVertexArrays(1, &arrayObject);
         glBindVertexArray(arrayObject);
-        {
-            bind_vertex_layout<_layout>();
+        for (u32 i = 0; i < attr_count; i++) { // bind vertex layout
+            const VertexAttribDesc& attr = attrs[i];
+            glVertexAttribPointer(i, attr.size, attr.type, attr.normalized, attr.stride, (const void*)attr.offset);
+            glEnableVertexAttribArray(i);
         }
         glBindVertexArray(0);
         glBindBuffer(GL_ARRAY_BUFFER, 0);
@@ -336,24 +314,20 @@ namespace Driver {
         t.type = (GLenum) params.type;
         t.vertexCount = params.vertexCount;
     }
-    template <typename _layout>
-    void update_vertex_buffer(RscBuffer<_layout>& b, const BufferUpdateParams& params) {
+    void update_vertex_buffer(RscVertexBuffer& b, const BufferUpdateParams& params) {
         glBindBuffer(GL_ARRAY_BUFFER, b.vertexBuffer);
         glBufferSubData(GL_ARRAY_BUFFER, 0, params.vertexSize, params.vertexData);
         glBindBuffer(GL_ARRAY_BUFFER, 0);
         b.vertexCount = params.vertexCount;
     }
-    template <typename _layout>
-    void bind_vertex_buffer(const RscBuffer<_layout>& b) {
+    void bind_vertex_buffer(const RscVertexBuffer& b) {
         glBindVertexArray(b.arrayObject);
     }
-    template <typename _layout>
-    void draw_vertex_buffer(const RscBuffer<_layout>& b) {
+    void draw_vertex_buffer(const RscVertexBuffer& b) {
         glDrawArrays(b.type, 0, b.vertexCount);
     }
     
-    template <typename _layout>
-    void create_indexed_vertex_buffer(RscIndexedBuffer<_layout>& t, const IndexedBufferParams& params) {
+    void create_indexed_vertex_buffer(RscIndexedVertexBuffer& t, const IndexedVertexBufferDesc& params, const VertexAttribDesc* attrs, const u32 attr_count) {
         GLuint vertexBuffer, indexBuffer, arrayObject;
         
         // Vertex buffer binding is not part of the VAO state
@@ -362,13 +336,14 @@ namespace Driver {
         glBufferData(GL_ARRAY_BUFFER, params.vertexSize, params.vertexData, params.memoryUsage);
         glGenVertexArrays(1, &arrayObject);
         glBindVertexArray(arrayObject);
-        {
-            bind_vertex_layout<_layout>();
-            
-            glGenBuffers(1, &indexBuffer);
-            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBuffer);
-            glBufferData(GL_ELEMENT_ARRAY_BUFFER, params.indexSize, params.indexData, params.memoryUsage);
+        for (u32 i = 0; i < attr_count; i++) { // bind vertex layout
+            const VertexAttribDesc& attr = attrs[i];
+            glVertexAttribPointer(i, attr.size, attr.type, attr.normalized, attr.stride, (const void*)attr.offset);
+            glEnableVertexAttribArray(i);
         }
+        glGenBuffers(1, &indexBuffer);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBuffer);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, params.indexSize, params.indexData, params.memoryUsage);
         glBindVertexArray(0);
         glBindBuffer(GL_ARRAY_BUFFER, 0);
         
@@ -379,8 +354,7 @@ namespace Driver {
         t.type = (GLenum) params.type;
         t.indexCount = params.indexCount;
     }
-    template <typename _layout>
-    void update_indexed_vertex_buffer(RscIndexedBuffer<_layout>& b, const IndexedBufferUpdateParams& params) {
+    void update_indexed_vertex_buffer(RscIndexedVertexBuffer& b, const IndexedBufferUpdateParams& params) {
         glBindBuffer(GL_ARRAY_BUFFER, b.vertexBuffer);
         glBufferSubData(GL_ARRAY_BUFFER, 0, params.vertexSize, params.vertexData);
         glBindBuffer(GL_ARRAY_BUFFER, 0);
@@ -389,16 +363,13 @@ namespace Driver {
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
         b.indexCount = params.indexCount;
     }
-    template <typename _layout>
-    void bind_indexed_vertex_buffer(const RscIndexedBuffer<_layout>& b) {
+    void bind_indexed_vertex_buffer(const RscIndexedVertexBuffer& b) {
         glBindVertexArray(b.arrayObject);
     }
-    template <typename _layout>
-    void draw_indexed_vertex_buffer(const RscIndexedBuffer<_layout>& b) {
+    void draw_indexed_vertex_buffer(const RscIndexedVertexBuffer& b) {
         glDrawElements(b.type, b.indexCount, b.indexType, nullptr);
     }
-    template <typename _layout>
-    void draw_instances_indexed_vertex_buffer(const RscIndexedBuffer<_layout>& b, const u32 instanceCount) {
+    void draw_instances_indexed_vertex_buffer(const RscIndexedVertexBuffer& b, const u32 instanceCount) {
         glDrawElementsInstanced(b.type, b.indexCount, b.indexType, nullptr, instanceCount);
     }
 
@@ -406,139 +377,31 @@ namespace Driver {
         glDrawArrays(GL_TRIANGLES, 0, 3);
     }
     
-    template <typename _layout>
     void create_cbuffer(RscCBuffer& cb, const CBufferCreateParams& params) {
         GLuint buffer, index;
         
         glGenBuffers(1, &buffer);
-        index = buffer; // todo, index should be controlled by renderer?
+        index = params.bindingIndex;
         
         glBindBuffer(GL_UNIFORM_BUFFER, buffer);
-        glBufferData(GL_UNIFORM_BUFFER, sizeof(_layout), nullptr, GL_STATIC_DRAW);
+        glBufferData(GL_UNIFORM_BUFFER, params.byteWidth, nullptr, GL_STATIC_DRAW);
         
+        // TODO: can these be common? if not, why use a separate index??
         glBindBufferBase(GL_UNIFORM_BUFFER, index, buffer);
         
-        cb.index = index;
-        cb.bufferObject = buffer;
+        cb.id = buffer;
+        cb.binding_index = index;
+		cb.byteWidth = params.byteWidth;
     }
-    template <typename _layout>
-    void update_cbuffer(RscCBuffer& cb, const _layout& data) {
-        glBindBuffer(GL_UNIFORM_BUFFER, cb.bufferObject);
-        glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(_layout), &data);
+    void update_cbuffer(RscCBuffer& cb, const void* data) {
+        glBindBuffer(GL_UNIFORM_BUFFER, cb.id);
+        glBufferSubData(GL_UNIFORM_BUFFER, 0, cb.byteWidth, data);
     }
     void bind_cbuffers(const RscCBuffer* cb, const u32 count, const CBufferBindParams& params) {}
 
-    void set_marker(Marker_t) {
-    }
-    void start_event(Marker_t data) {
-        if (glPushDebugGroup) {
-            glPushDebugGroup(GL_DEBUG_SOURCE_APPLICATION, 0, -1, data);
-        }
-    }
-    void end_event() {
-        if (glPopDebugGroup) {
-            glPopDebugGroup();
-        }
-    }
-}
-}
-
-// supported vertex layouts
-namespace Renderer {
-namespace Driver {
-    
-    template <>
-    void bind_vertex_layout<Layout_float3>() {
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Layout_float3), (void*)0);
-        glEnableVertexAttribArray(0);
-    }
-    template <>
-    void bind_vertex_layout<Layout_Texturedfloat2>() {
-        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(Layout_Texturedfloat2), &(((Layout_Texturedfloat2*)0)->pos));
-        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(Layout_Texturedfloat2), &(((Layout_Texturedfloat2*)0)->uv));
-        glEnableVertexAttribArray(0);
-        glEnableVertexAttribArray(1);
-    }
-    template <>
-    void bind_vertex_layout<Layout_Texturedfloat3>() {
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Layout_Texturedfloat3), &(((Layout_Texturedfloat3*)0)->pos));
-        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(Layout_Texturedfloat3), &(((Layout_Texturedfloat3*)0)->uv));
-        glEnableVertexAttribArray(0);
-        glEnableVertexAttribArray(1);
-    }
-    template <>
-    void bind_vertex_layout<Layout_TexturedSkinnedfloat3>() {
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Layout_TexturedSkinnedfloat3), &(((Layout_TexturedSkinnedfloat3*)0)->pos));
-        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(Layout_TexturedSkinnedfloat3), &(((Layout_TexturedSkinnedfloat3*)0)->uv));
-        glVertexAttribPointer(2, 4, GL_BYTE, GL_FALSE, sizeof(Layout_TexturedSkinnedfloat3), &(((Layout_TexturedSkinnedfloat3*)0)->joint_indices));
-        glVertexAttribPointer(3, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(Layout_TexturedSkinnedfloat3), &(((Layout_TexturedSkinnedfloat3*)0)->joint_weights));
-        glEnableVertexAttribArray(0);
-        glEnableVertexAttribArray(1);
-        glEnableVertexAttribArray(2);
-        glEnableVertexAttribArray(3);
-    }
-    template <>
-    void bind_vertex_layout<Layout_float3TexturedMapped>() {
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Layout_float3TexturedMapped), &(((Layout_float3TexturedMapped*)0)->pos));
-        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(Layout_float3TexturedMapped), &(((Layout_float3TexturedMapped*)0)->uv));
-        glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(Layout_float3TexturedMapped), &(((Layout_float3TexturedMapped*)0)->normal));
-        glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, sizeof(Layout_float3TexturedMapped), &(((Layout_float3TexturedMapped*)0)->tangent));
-        glVertexAttribPointer(4, 3, GL_FLOAT, GL_FALSE, sizeof(Layout_float3TexturedMapped), &(((Layout_float3TexturedMapped*)0)->bitangent));
-        glEnableVertexAttribArray(0);
-        glEnableVertexAttribArray(1);
-        glEnableVertexAttribArray(2);
-        glEnableVertexAttribArray(3);
-        glEnableVertexAttribArray(4);
-    }
-    template <>
-    void bind_vertex_layout<Layout_float2Color4B>() {
-        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(Layout_float2Color4B), &(((Layout_float2Color4B*)0)->pos));
-        glVertexAttribPointer(1, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(Layout_float2Color4B), &(((Layout_float2Color4B*)0)->color));
-        glEnableVertexAttribArray(0);
-        glEnableVertexAttribArray(1);
-    }
-    template <>
-    void bind_vertex_layout<Layout_float3Color4B>() {
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Layout_float3Color4B), &(((Layout_float3Color4B*)0)->pos));
-        glVertexAttribPointer(1, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(Layout_float3Color4B), &(((Layout_float3Color4B*)0)->color));
-        glEnableVertexAttribArray(0);
-        glEnableVertexAttribArray(1);
-    }
-    template <>
-    void bind_vertex_layout<Layout_float3Color4BSkinned>() {
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Layout_float3Color4BSkinned), &(((Layout_float3Color4BSkinned*)0)->pos));
-        glVertexAttribPointer(1, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(Layout_float3Color4BSkinned), &(((Layout_float3Color4BSkinned*)0)->color));
-        glVertexAttribPointer(2, 4, GL_BYTE, GL_FALSE, sizeof(Layout_float3Color4BSkinned), &(((Layout_float3Color4BSkinned*)0)->joint_indices));
-        glVertexAttribPointer(3, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(Layout_float3Color4BSkinned), &(((Layout_float3Color4BSkinned*)0)->joint_weights));
-        glEnableVertexAttribArray(0);
-        glEnableVertexAttribArray(1);
-        glEnableVertexAttribArray(2);
-        glEnableVertexAttribArray(3);
-    }
-    template <typename _vertexLayout, Shaders::PSCBufferUsage::Enum _cbufferUsage, Shaders::VSDrawType::Enum _drawType>
-    void bind_cbuffers_to_shader(RscShaderSet<_vertexLayout, Layout_CNone, _cbufferUsage, _drawType>& ss, const RscCBuffer* cbuffers) {}
-    template <typename _vertexLayout, Shaders::PSCBufferUsage::Enum _cbufferUsage, Shaders::VSDrawType::Enum _drawType>
-    void bind_cbuffers_to_shader(RscShaderSet<_vertexLayout, Layout_CBuffer_3DScene, _cbufferUsage, _drawType>& ss, const RscCBuffer* cbuffers) {
-        GLuint perScene = glGetUniformBlockIndex(ss.shaderObject, "type_PerScene");
-        GLuint perRenderGroup = glGetUniformBlockIndex(ss.shaderObject, "type_PerGroup");
-        GLuint perInstance = glGetUniformBlockIndex(ss.shaderObject, "type_PerInstance");
-        if (perScene != GL_INVALID_INDEX)
-            glUniformBlockBinding(ss.shaderObject, perScene, cbuffers[Layout_CBuffer_3DScene::Buffers::SceneData].index);
-        if (perRenderGroup != GL_INVALID_INDEX)
-            glUniformBlockBinding(ss.shaderObject, perRenderGroup, cbuffers[Layout_CBuffer_3DScene::Buffers::GroupData].index);
-        if (perInstance != GL_INVALID_INDEX)
-            glUniformBlockBinding(ss.shaderObject, perInstance, cbuffers[Layout_CBuffer_3DScene::Buffers::InstanceData].index);
-    }
-    template <typename _vertexLayout, Shaders::PSCBufferUsage::Enum _cbufferUsage, Shaders::VSDrawType::Enum _drawType>
-    void bind_cbuffers_to_shader(RscShaderSet<_vertexLayout, Layout_CBuffer_LightPass, _cbufferUsage, _drawType>& ss, const RscCBuffer* cbuffers) {
-        GLuint perScene = glGetUniformBlockIndex(ss.shaderObject, "type_PerScene");
-        glUniformBlockBinding(ss.shaderObject, perScene, cbuffers[Layout_CBuffer_LightPass::Buffers::SceneData].index);
-    }
-    template <typename _vertexLayout, Shaders::PSCBufferUsage::Enum _cbufferUsage, Shaders::VSDrawType::Enum _drawType>
-    void bind_cbuffers_to_shader(RscShaderSet<_vertexLayout, Layout_CBuffer_DebugScene, _cbufferUsage, _drawType>& ss, const RscCBuffer* cbuffers) {
-        u32 renderGroupBlock = glGetUniformBlockIndex(ss.shaderObject, "type_PerGroup");
-        glUniformBlockBinding(ss.shaderObject, renderGroupBlock, cbuffers[Layout_CBuffer_DebugScene::Buffers::GroupData].index);
-    }
+    void set_marker_name(Marker_t& wide, const char* ansi) { wide = ansi; }
+    void start_event(Marker_t data) { if (glPushDebugGroup) { glPushDebugGroup(GL_DEBUG_SOURCE_APPLICATION, 0, -1, data); } }
+    void end_event() { if (glPopDebugGroup) { glPopDebugGroup(); } }
 }
 }
 #endif // __WASTELADNS_RENDERER_GL33_H__
