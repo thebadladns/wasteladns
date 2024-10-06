@@ -241,116 +241,136 @@ void addNodesToDrawlist(Drawlist& dl, float3 cameraPos, Store& store, const u32 
         "NODE INSTANCED FullscreenBlit",
         "NODE INSTANCED Instanced3D", "NODE INSTANCED Color3D", "NODE INSTANCED Color3DSkinned", "NODE INSTANCED Textured3D", "NODE INSTANCED Textured3DAlphaClip", "NODE INSTANCED Textured3DSkinned", "NODE INSTANCED Textured3DAlphaClipSkinned"
     } };
-
-	// very rough depth sorting, 10 bits for 1000 units, sort granularity is 1.023 units
-    const u32 depthbits = 10;
-    const u32 depthMask = (1 << depthbits) - 1;
-    const u32 maxValue = (1 << depthbits) - 1;
-    const f32 maxDistSq = 1000.f * 1000.f;
-    const u32 nodeBits = 10; // 1024 nodes
-    const u32 nodeMask = (1 << nodeBits) - 1;
-    const u32 shaderBits = 8; // 255 shader types
-    const u32 shaderMask = (1 << shaderBits) - 1;
-
-    for (u32 n = 0, count = 0; n < store.drawNodes.cap && count < store.drawNodes.count; n++) {
-		if (store.drawNodes.data[n].alive == 0) { continue; }
-        count++;
-		
-        const DrawNode& node = store.drawNodes.data[n].state.live;
-        const u32 maxMeshCount = COUNT_OF(node.meshHandles);
-
-        if (includeFilter & DrawlistFilter::Alpha) { if (node.nodeData.groupColor.w == 1.f) { continue; } }
-        if (excludeFilter & DrawlistFilter::Alpha) { if (node.nodeData.groupColor.w < 1.f) { continue; } }
-
-        f32 distSq = Math::magSq(Math::subtract(node.nodeData.worldMatrix.col3.xyz, cameraPos));
-        u32 distSqNormalized = u32(maxValue * Math::min(distSq / maxDistSq, 1.f));
+    {
+        // very rough depth sorting, 10 bits for 1000 units, sort granularity is 1.023 units
+        const u32 depthBits = 10;
+        const u32 depthMask = (1 << depthBits) - 1;
+        const u32 maxValue = (1 << depthBits) - 1;
+        const f32 maxDistSq = 1000.f * 1000.f;
+        const u32 nodeBits = 10; // 1024 nodes
+        const u32 nodeMask = (1 << nodeBits) - 1;
+        const u32 shaderBits = 8; // 255 shader types
+        const u32 shaderMask = (1 << shaderBits) - 1;
         
-        for (u32 m = 0; m < maxMeshCount; m++) {
-            if (node.meshHandles[m] == 0) { continue; }
-            u32 dl_index = dl.count[DrawlistBuckets::Base]++;
-            DrawCall_Item& item = dl.items[dl_index];
-            Key& key = dl.keys[dl_index];
-            key.idx = dl_index;
-            const DrawMesh& mesh = get_drawMesh(store, node.meshHandles[m]);
-            key.v = n & nodeMask;
-            key.v |= (mesh.type & shaderMask) << nodeBits;
-            key.v |= (distSqNormalized & depthMask) << (nodeBits + shaderBits);
-            item.shader = store.shaders[mesh.type];
-            item.vertexBuffer = mesh.vertexBuffer;
-            item.cbuffers[0] = store.cbuffers[Store::CBuffers::Node];
-            item.cbuffer_data[0] = (void*)&node.nodeData;
-            item.texture = mesh.texture;
-			item.blendState = mesh.type == ShaderType::Textured3DAlphaClip ? store.blendStateOn : store.blendStateOff;
-            item.name = shaderNames[DrawNodeMeshType::Default][mesh.type];
+        for (u32 n = 0, count = 0; n < store.drawNodes.cap && count < store.drawNodes.count; n++) {
+            if (store.drawNodes.data[n].alive == 0) { continue; }
+            count++;
+            
+            const DrawNode& node = store.drawNodes.data[n].state.live;
+            const u32 maxMeshCount = COUNT_OF(node.meshHandles);
+            
+            if (includeFilter & DrawlistFilter::Alpha) { if (node.nodeData.groupColor.w == 1.f) { continue; } }
+            if (excludeFilter & DrawlistFilter::Alpha) { if (node.nodeData.groupColor.w < 1.f) { continue; } }
+            
+            f32 distSq = Math::magSq(Math::subtract(node.nodeData.worldMatrix.col3.xyz, cameraPos));
+            u32 distSqNormalized = u32(maxValue * Math::min(distSq / maxDistSq, 1.f));
+            
+            for (u32 m = 0; m < maxMeshCount; m++) {
+                if (node.meshHandles[m] == 0) { continue; }
+                u32 dl_index = dl.count[DrawlistBuckets::Base]++;
+                DrawCall_Item& item = dl.items[dl_index];
+                Key& key = dl.keys[dl_index];
+                key.idx = dl_index;
+                const DrawMesh& mesh = get_drawMesh(store, node.meshHandles[m]);
+                u32 curr_shift = 0;
+                key.v = 0;
+                key.v |= (n & nodeMask) << curr_shift, curr_shift += nodeBits;
+                key.v |= (mesh.type & shaderMask) << curr_shift, curr_shift += shaderBits;
+                key.v |= (distSqNormalized & depthMask) << curr_shift, curr_shift += depthBits;
+                item.shader = store.shaders[mesh.type];
+                item.vertexBuffer = mesh.vertexBuffer;
+                item.cbuffers[0] = store.cbuffers[Store::CBuffers::Node];
+                item.cbuffer_data[0] = (void*)&node.nodeData;
+                item.texture = mesh.texture;
+                item.blendState = mesh.type == ShaderType::Textured3DAlphaClip ? store.blendStateOn : store.blendStateOff;
+                item.name = shaderNames[DrawNodeMeshType::Default][mesh.type];
+            }
         }
     }
-    for (u32 n = 0, count = 0; n < store.drawNodesSkinned.cap && count < store.drawNodesSkinned.count; n++) {
-        if (store.drawNodesSkinned.data[n].alive == 0) { continue; }
-        count++;
-        
-        const DrawNodeSkinned& node = store.drawNodesSkinned.data[n].state.live;
-        const u32 maxMeshCount = COUNT_OF(node.meshHandles);
-
-        if (includeFilter & DrawlistFilter::Alpha) { if (node.nodeData.groupColor.w == 1.f) { continue; } }
-        if (excludeFilter & DrawlistFilter::Alpha) { if (node.nodeData.groupColor.w < 1.f) { continue; } }
-        
-        f32 distSq = Math::magSq(Math::subtract(node.nodeData.worldMatrix.col3.xyz, cameraPos));
-        u32 distSqNormalized = u32(maxValue * Math::min(distSq / maxDistSq, 1.f));
-        
-        for (u32 m = 0; m < maxMeshCount; m++) {
-            if (node.meshHandles[m] == 0) { continue; }
-            u32 dl_index = dl.count[DrawlistBuckets::Base]++;
-            DrawCall_Item& item = dl.items[dl_index];
-            Key& key = dl.keys[dl_index];
-            key.idx = dl_index;
-            const DrawMesh& mesh = get_drawMesh(store, node.meshHandles[m]);
-            key.v = n & nodeMask;
-            key.v |= (mesh.type & shaderMask) << nodeBits;
-            key.v |= (distSqNormalized & depthMask) << (nodeBits + shaderBits);
-            item.shader = store.shaders[mesh.type];
-            item.vertexBuffer = mesh.vertexBuffer;
-            item.cbuffers[0] = store.cbuffers[Store::CBuffers::Node];
-            item.cbuffer_data[0] = (void*)&node.nodeData;
-            item.cbuffers[1] = store.cbuffers[Store::CBuffers::Matrices32];
-            item.cbuffer_data[1] = (void*)&node.skinningMatrixPalette;
-            item.texture = mesh.texture;
-            item.blendState = mesh.type == ShaderType::Textured3DAlphaClipSkinned ? store.blendStateOn : store.blendStateOff;
-            item.name = shaderNames[DrawNodeMeshType::Skinned][mesh.type];
+    {
+        // skinned nodes are sorted by node, then distance, then program
+        const u32 depthBits = 10;
+        const u32 depthMask = (1 << depthBits) - 1;
+        const u32 maxValue = (1 << depthBits) - 1;
+        const f32 maxDistSq = 1000.f * 1000.f;
+        const u32 nodeBits = 10; // 1024 nodes
+        const u32 nodeMask = (1 << nodeBits) - 1;
+        const u32 shaderBits = 8; // 255 shader types
+        const u32 shaderMask = (1 << shaderBits) - 1;
+        for (u32 n = 0, count = 0; n < store.drawNodesSkinned.cap && count < store.drawNodesSkinned.count; n++) {
+            if (store.drawNodesSkinned.data[n].alive == 0) { continue; }
+            count++;
+            
+            const DrawNodeSkinned& node = store.drawNodesSkinned.data[n].state.live;
+            const u32 maxMeshCount = COUNT_OF(node.meshHandles);
+            
+            if (includeFilter & DrawlistFilter::Alpha) { if (node.nodeData.groupColor.w == 1.f) { continue; } }
+            if (excludeFilter & DrawlistFilter::Alpha) { if (node.nodeData.groupColor.w < 1.f) { continue; } }
+            
+            f32 distSq = Math::magSq(Math::subtract(node.nodeData.worldMatrix.col3.xyz, cameraPos));
+            u32 distSqNormalized = u32(maxValue * Math::min(distSq / maxDistSq, 1.f));
+            
+            for (u32 m = 0; m < maxMeshCount; m++) {
+                if (node.meshHandles[m] == 0) { continue; }
+                u32 dl_index = dl.count[DrawlistBuckets::Base]++;
+                DrawCall_Item& item = dl.items[dl_index];
+                Key& key = dl.keys[dl_index];
+                key.idx = dl_index;
+                const DrawMesh& mesh = get_drawMesh(store, node.meshHandles[m]);
+                u32 curr_shift = 0;
+                key.v = 0;
+                key.v |= (mesh.type & shaderMask) << curr_shift, curr_shift += shaderBits;
+                key.v |= (n & nodeMask) << curr_shift, curr_shift += nodeBits;
+                key.v |= (distSqNormalized & depthMask) << curr_shift, curr_shift += depthBits;
+                item.shader = store.shaders[mesh.type];
+                item.vertexBuffer = mesh.vertexBuffer;
+                item.cbuffers[0] = store.cbuffers[Store::CBuffers::Node];
+                item.cbuffer_data[0] = (void*)&node.nodeData;
+                item.cbuffers[1] = store.cbuffers[Store::CBuffers::Matrices32];
+                item.cbuffer_data[1] = (void*)&node.skinningMatrixPalette;
+                item.texture = mesh.texture;
+                item.blendState = mesh.type == ShaderType::Textured3DAlphaClipSkinned ? store.blendStateOn : store.blendStateOff;
+                item.name = shaderNames[DrawNodeMeshType::Skinned][mesh.type];
+            }
         }
     }
-    for (u32 n = 0, count = 0; n < store.drawNodesInstanced.cap && count < store.drawNodesInstanced.count; n++) {
-        if (store.drawNodesInstanced.data[n].alive == 0) { continue; }
-        count++;
-
-        const DrawNodeInstanced& node = store.drawNodesInstanced.data[n].state.live;
-        const u32 maxMeshCount = COUNT_OF(node.meshHandles);
-
-        if (includeFilter & DrawlistFilter::Alpha) { if (node.nodeData.groupColor.w == 1.f) { continue; } }
-        if (excludeFilter & DrawlistFilter::Alpha) { if (node.nodeData.groupColor.w < 1.f) { continue; } }
-
-        f32 distSq = Math::magSq(Math::subtract(node.nodeData.worldMatrix.col3.xyz, cameraPos));
-        u32 distSqNormalized = u32(maxValue * Math::min(distSq / maxDistSq, 1.f));
-
-        for (u32 m = 0; m < maxMeshCount; m++) {
-            if (node.meshHandles[m] == 0) { continue; }
-            u32 dl_index = dl.count[DrawlistBuckets::Instanced]++;
-            DrawCall_Item& item = dl.items[dl_index];
-            Key& key = dl.keys[dl_index];
-            key.idx = dl_index;
-            const DrawMesh& mesh = get_drawMesh(store, node.meshHandles[m]);
-            key.v = n & nodeMask;
-            key.v |= (mesh.type & shaderMask) << nodeBits;
-            key.v |= (distSqNormalized & depthMask) << (nodeBits + shaderBits);
-            item.shader = store.shaders[mesh.type];
-            item.vertexBuffer = mesh.vertexBuffer;
-            item.cbuffers[0] = store.cbuffers[Store::CBuffers::Node];
-            item.cbuffer_data[0] = (void*)&node.nodeData;
-            item.cbuffers[1] = store.cbuffers[Store::CBuffers::Matrices64];
-            item.cbuffer_data[1] = (void*)&node.instanceMatrices;
-            item.texture = mesh.texture;
-            item.blendState = store.blendStateOff; // todo: support other blendstates when doing instances
-			item.drawcount = node.instanceCount;
-            item.name = shaderNames[DrawNodeMeshType::Instanced][mesh.type];
+    {
+        const u32 nodeBits = 10; // 1024 nodes
+        const u32 nodeMask = (1 << nodeBits) - 1;
+        const u32 shaderBits = 8; // 255 shader types
+        const u32 shaderMask = (1 << shaderBits) - 1;
+        for (u32 n = 0, count = 0; n < store.drawNodesInstanced.cap && count < store.drawNodesInstanced.count; n++) {
+            if (store.drawNodesInstanced.data[n].alive == 0) { continue; }
+            count++;
+            
+            const DrawNodeInstanced& node = store.drawNodesInstanced.data[n].state.live;
+            const u32 maxMeshCount = COUNT_OF(node.meshHandles);
+            
+            if (includeFilter & DrawlistFilter::Alpha) { if (node.nodeData.groupColor.w == 1.f) { continue; } }
+            if (excludeFilter & DrawlistFilter::Alpha) { if (node.nodeData.groupColor.w < 1.f) { continue; } }
+            
+            for (u32 m = 0; m < maxMeshCount; m++) {
+                if (node.meshHandles[m] == 0) { continue; }
+                u32 dl_index = dl.count[DrawlistBuckets::Instanced]++;
+                DrawCall_Item& item = dl.items[dl_index];
+                Key& key = dl.keys[dl_index];
+                key.idx = dl_index;
+                const DrawMesh& mesh = get_drawMesh(store, node.meshHandles[m]);
+                u32 curr_shift = 0;
+                key.v = 0;
+                key.v |= (mesh.type & shaderMask) << curr_shift, curr_shift += shaderBits;
+                key.v |= (n & nodeMask) << curr_shift, curr_shift += nodeBits;
+                item.shader = store.shaders[mesh.type];
+                item.vertexBuffer = mesh.vertexBuffer;
+                item.cbuffers[0] = store.cbuffers[Store::CBuffers::Node];
+                item.cbuffer_data[0] = (void*)&node.nodeData;
+                item.cbuffers[1] = store.cbuffers[Store::CBuffers::Matrices64];
+                item.cbuffer_data[1] = (void*)&node.instanceMatrices;
+                item.texture = mesh.texture;
+                item.blendState = store.blendStateOff; // todo: support other blendstates when doing instances
+                item.drawcount = node.instanceCount;
+                item.name = shaderNames[DrawNodeMeshType::Instanced][mesh.type];
+            }
         }
     }
 }
@@ -980,9 +1000,9 @@ void init_pipelines(Store& store, Allocator::Arena scratchArena, const Platform:
     };
     // from blender: export fbx -> Apply Scalings: FBX All -> Forward: the one in Blender -> Use Space Transform: yes
     const AssetData assets[] = {
-          { "assets/meshes/boar.fbx", { 5.f, 10.f, 2.30885f }, 1, false }
+          { "assets/meshes/boar.fbx", { 5.f, 10.f, 2.30885f }, 250, false }
         , { "assets/meshes/bird.fbx", { 1.f, 3.f, 2.23879f }, 1, true }
-        , { "assets/meshes/bird.fbx", { 0.f, 5.f, 2.23879f }, 255, false }
+        , { "assets/meshes/bird.fbx", { 0.f, 5.f, 2.23879f }, 1, false }
     };
 
     FBX::PipelineAssetContext ctx = {};
