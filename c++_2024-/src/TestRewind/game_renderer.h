@@ -99,8 +99,9 @@ struct DrawCall_Item {
 struct DrawlistFilter { enum Enum { Alpha = 1 }; };
 struct DrawlistBuckets { enum Enum { Base, Instanced, Count }; };
 struct Drawlist {
-    Key keys[128];
-    DrawCall_Item items[128];
+	enum { MaxItems = 2048 };
+    Key keys[MaxItems];
+    DrawCall_Item items[MaxItems];
     u32 count[DrawlistBuckets::Count];
 };
 struct DrawlistStreams { enum Enum { Color3D, Color3DSkinned, Textured3D, Textured3DAlphaClip, Textured3DSkinned, Textured3DAlphaClipSkinned, Count }; };
@@ -764,7 +765,7 @@ namespace FBX {
 void init_pipelines(Store& store, Allocator::Arena scratchArena, const Platform::Screen& screen) {
 
     Allocator::init_arena(store.persistentArena, 1024 * 1024); // 1MB
-    const u32 meshPoolSize = 256;
+    const u32 meshPoolSize = 2048;
     const u32 drawNodePoolSize = 256;
     const u32 drawNodeSkinnedPoolSize = 256;
     const u32 drawNodeInstancedPoolSize = 16;
@@ -974,13 +975,14 @@ void init_pipelines(Store& store, Allocator::Arena scratchArena, const Platform:
     struct AssetData {
         const char* path;
         float3 asset_init_pos;
-        bool player;
+        u32 count;
+        bool player; // only first count
     };
     // from blender: export fbx -> Apply Scalings: FBX All -> Forward: the one in Blender -> Use Space Transform: yes
     const AssetData assets[] = {
-          { "assets/meshes/boar.fbx", { 5.f, 10.f, 2.30885f }, false }
-        , { "assets/meshes/bird.fbx", { 1.f, 3.f, 2.23879f }, true }
-        , { "assets/meshes/bird.fbx", { 0.f, 5.f, 2.23879f }, false }
+          { "assets/meshes/boar.fbx", { 5.f, 10.f, 2.30885f }, 1, false }
+        , { "assets/meshes/bird.fbx", { 1.f, 3.f, 2.23879f }, 1, true }
+        , { "assets/meshes/bird.fbx", { 0.f, 5.f, 2.23879f }, 255, false }
     };
 
     FBX::PipelineAssetContext ctx = {};
@@ -997,45 +999,57 @@ void init_pipelines(Store& store, Allocator::Arena scratchArena, const Platform:
     ctx.vertexAttrs[DrawlistStreams::Textured3DAlphaClipSkinned] = attribs_textured3d_skinned;
     ctx.attr_count[DrawlistStreams::Textured3DAlphaClipSkinned] = COUNT_OF(attribs_textured3d_skinned);
 
-    for (u32 i = 0; i < COUNT_OF(assets); i++) {
-        const AssetData& asset = assets[i];
-        Animation::AnimatedNode animatedNode = {};
+    for (u32 asset_idx = 0; asset_idx < COUNT_OF(assets); asset_idx++) {
+        const AssetData& asset = assets[asset_idx];
 
-        u32 nodeHandle = 0;
-		ctx.scratchArena = scratchArena; // explicit copy
-        FBX::load_with_materials(nodeHandle, animatedNode, store, ctx, asset.path);
+        for (u32 asset_rep = 0; asset_rep < asset.count; asset_rep++) {
+            Animation::AnimatedNode animatedNode = {};
 
-        if ((nodeHandle >> 16) & DrawNodeMeshType::Skinned) {
-			DrawNodeSkinned& node = Allocator::get_pool_slot(store.drawNodesSkinned, nodeHandle & 0xffff);
-            Math::identity4x4(*(Transform*)&(node.nodeData.worldMatrix));
-            node.nodeData.worldMatrix.col3 = { asset.asset_init_pos, 1.f };
-			node.nodeData.groupColor = Color32(1.f, 1.f, 1.f, 1.f).RGBAv4();
-            for (u32 m = 0; m < animatedNode.skeleton.jointCount; m++) {
-                float4x4& matrix = node.skinningMatrixPalette.data[m];
-                Math::identity4x4(*(Transform*)&(matrix));
+            float3 asset_init_pos = asset.asset_init_pos;
+            const f32 spacing = 6.f;
+            const s32 grid_size = 16;
+            const s32 max_row = (asset.count - 1) % grid_size;
+            const s32 max_column = (asset.count - 1) / grid_size;
+            s32 row = asset_rep % grid_size;
+            s32 column = asset_rep / grid_size;
+            asset_init_pos = Math::add(asset_init_pos, { (row - max_row /2) * spacing, (column - max_column/2) * spacing, 0.f });
+
+            u32 nodeHandle = 0;
+		    ctx.scratchArena = scratchArena; // explicit copy
+            FBX::load_with_materials(nodeHandle, animatedNode, store, ctx, asset.path);
+
+            if ((nodeHandle >> 16) & DrawNodeMeshType::Skinned) {
+			    DrawNodeSkinned& node = Allocator::get_pool_slot(store.drawNodesSkinned, nodeHandle & 0xffff);
+                Math::identity4x4(*(Transform*)&(node.nodeData.worldMatrix));
+                node.nodeData.worldMatrix.col3 = { asset_init_pos, 1.f };
+			    node.nodeData.groupColor = Color32(1.f, 1.f, 1.f, 1.f).RGBAv4();
+                for (u32 m = 0; m < animatedNode.skeleton.jointCount; m++) {
+                    float4x4& matrix = node.skinningMatrixPalette.data[m];
+                    Math::identity4x4(*(Transform*)&(matrix));
+                }
+		    }
+		    else if ((nodeHandle >> 16) & DrawNodeMeshType::Default) {
+                DrawNode& node = Allocator::get_pool_slot(store.drawNodes, nodeHandle & 0xffff);
+                Math::identity4x4(*(Transform*)&(node.nodeData.worldMatrix));
+                node.nodeData.worldMatrix.col3 = { asset_init_pos, 1.f };
+                node.nodeData.groupColor = Color32(1.f, 1.f, 1.f, 1.f).RGBAv4();
             }
-		}
-		else if ((nodeHandle >> 16) & DrawNodeMeshType::Default) {
-            DrawNode& node = Allocator::get_pool_slot(store.drawNodes, nodeHandle & 0xffff);
-            Math::identity4x4(*(Transform*)&(node.nodeData.worldMatrix));
-            node.nodeData.worldMatrix.col3 = { asset.asset_init_pos, 1.f };
-            node.nodeData.groupColor = Color32(1.f, 1.f, 1.f, 1.f).RGBAv4();
-        }
 
-        u32 animHandle = 0;
-        if (animatedNode.skeleton.jointCount > 0) {
-            animatedNode.state.animIndex = 0;
-            animatedNode.state.time = 0.f;
-            animatedNode.state.scale = 1.f;
-            animatedNode.drawNodeHandle = nodeHandle;
-            Animation::AnimatedNode& animatedNodeToAdd = Allocator::alloc_pool(store.animatedNodes);
-            animatedNodeToAdd = animatedNode;
-            animHandle = handle_from_animatedNode(store, animatedNodeToAdd);
-        }
+            u32 animHandle = 0;
+            if (animatedNode.skeleton.jointCount > 0) {
+                animatedNode.state.animIndex = 0;
+                animatedNode.state.time = 0.f;
+                animatedNode.state.scale = 1.f;
+                animatedNode.drawNodeHandle = nodeHandle;
+                Animation::AnimatedNode& animatedNodeToAdd = Allocator::alloc_pool(store.animatedNodes);
+                animatedNodeToAdd = animatedNode;
+                animHandle = handle_from_animatedNode(store, animatedNodeToAdd);
+            }
 
-        if (asset.player) {
-            store.playerAnimatedNodeHandle = animHandle;
-            store.playerDrawNodeHandle = nodeHandle;
+            if (asset.player) {
+                store.playerAnimatedNodeHandle = animHandle;
+                store.playerDrawNodeHandle = nodeHandle;
+            }
         }
     }
 
