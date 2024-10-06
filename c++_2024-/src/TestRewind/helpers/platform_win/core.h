@@ -32,7 +32,8 @@
     #include <d3dcompiler.h> // Wall time: 8.460ms
     #pragma comment(lib, "d3dcompiler.lib")
 
-    #include <Stringapiset.h> // wide char support
+    // already included by stb_image, does not incur in extra cost
+    #include <stdlib.h> // Wall time: 10ms
 
 namespace Platform {
     const char* name = "WIN64+DX11";

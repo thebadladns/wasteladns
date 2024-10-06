@@ -303,7 +303,6 @@ namespace Driver {
     static ShaderCache shaderCache{ nullptr, 0 };
 #endif
     ShaderResult create_shader_vs(RscVertexShader& vs, const VertexShaderRuntimeCompileParams& params) {
-        ID3D11VertexShader* vertexShader = nullptr;
 #if WRITE_SHADERCACHE
         ID3DBlob* pShaderBlob = nullptr;
         ID3DBlob* pErrorBlob = nullptr;
@@ -352,7 +351,6 @@ namespace Driver {
         return result;
     }
     ShaderResult create_shader_ps(RscPixelShader& ps, const PixelShaderRuntimeCompileParams& params) {
-        ID3D11PixelShader* pixelShader = nullptr;
 #if WRITE_SHADERCACHE
         ID3DBlob* pShaderBlob = nullptr;
         ID3DBlob* pErrorBlob = nullptr;
@@ -583,7 +581,9 @@ namespace Driver {
 
     }
     void set_marker_name(Marker_t& wide, const char* ansi) {
-        MultiByteToWideChar(CP_UTF8, 0, ansi, -1, wide, COUNT_OF(wide));
+        size_t converted;
+		mbstowcs_s(&converted, wide, ansi, COUNT_OF(wide));
+        //MultiByteToWideChar(CP_UTF8, 0, ansi, -1, wide, COUNT_OF(wide)); via <Stringapiset.h> (Wall time: 11ms)
     }
     void set_marker(Marker_t data) {
         perf->SetMarker(data);
