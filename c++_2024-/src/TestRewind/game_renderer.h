@@ -58,6 +58,7 @@ struct VertexLayout_Textured_3D {
     float2 uv;
 };
 
+struct CBuffer_Binding { enum { Binding_0 = 0, Binding_1 = 1, Binding_2 = 2, Count }; };
 struct SceneData {
     float4x4 projectionMatrix;
     float4x4 viewMatrix;
@@ -78,11 +79,19 @@ struct Matrices64 {
 };
 
 struct Drawlist_Context {
+    Driver::RscCBuffer cbuffers[CBuffer_Binding::Count];
     Driver::RscShaderSet* shader;
     Driver::RscTexture* texture;
     Driver::RscBlendState* blendState;
     Driver::RscIndexedVertexBuffer* vertexBuffer;
-    void* cbuffer_data[2];
+    u32 cbuffer_count;
+};
+struct Drawlist_Overrides {
+    bool forced_shader;
+    bool forced_texture;
+    bool forced_blendState;
+    bool forced_vertexBuffer;
+    u32 forced_cbuffer_count;
 };
 
 struct DrawCall_Item {
@@ -91,8 +100,8 @@ struct DrawCall_Item {
     Driver::RscBlendState blendState;
     Driver::RscIndexedVertexBuffer vertexBuffer;
     Driver::RscCBuffer cbuffers[2];
-    void* cbuffer_data[2];
     const char* name;
+    u32 cbuffer_count;
     u32 drawcount;
 };
 
@@ -119,22 +128,31 @@ struct DrawMesh {
     Driver::RscTexture texture;
 };
 struct DrawNode {
-    NodeData nodeData;
     u32 meshHandles[DrawlistStreams::Count];
+    float3 min;
+    float3 max;
+    u32 cbuffer_node;
+    NodeData nodeData;
 };
 struct DrawNodeSkinned {
+    u32 meshHandles[DrawlistStreams::Count];
+    float3 min;
+    float3 max;
+    u32 cbuffer_node;
+    u32 cbuffer_skinning;
     NodeData nodeData;
     Matrices32 skinningMatrixPalette;
-    u32 meshHandles[DrawlistStreams::Count];
 };
 struct DrawNodeInstanced {
-    u32 meshHandles[4];
+    u32 meshHandles[DrawlistStreams::Count];
+    u32 cbuffer_node;
+    u32 cbuffer_instances;
     NodeData nodeData;
     Matrices64 instanceMatrices;
     u32 instanceCount;
 };
 
-void draw_drawlist(Drawlist& dl, Drawlist_Context& ctx, const Drawlist_Context& forcedCtx) {
+void draw_drawlist(Drawlist& dl, Drawlist_Context& ctx, const Drawlist_Overrides& overrides) {
     qsort(dl.keys, 0, dl.count[DrawlistBuckets::Base] - 1);
     qsort(dl.keys, dl.count[DrawlistBuckets::Base], dl.count[DrawlistBuckets::Instanced] - 1);
     
@@ -145,30 +163,26 @@ void draw_drawlist(Drawlist& dl, Drawlist_Context& ctx, const Drawlist_Context& 
         Driver::set_marker_name(marker, item.name);
         Renderer::Driver::start_event(marker);
         {
-            if (!forcedCtx.shader && ctx.shader != &item.shader) {
+            if (!overrides.forced_shader && ctx.shader != &item.shader) {
                 Driver::bind_shader(item.shader);
                 ctx.shader = &item.shader;
             }
-            if (!forcedCtx.cbuffer_data[0] && item.cbuffer_data[0] && ctx.cbuffer_data[0] != item.cbuffer_data[0]) {
-                Driver::update_cbuffer(item.cbuffers[0], item.cbuffer_data[0]);
-                ctx.cbuffer_data[0] = item.cbuffer_data[0];
-            }
-            if (!forcedCtx.cbuffer_data[1] && item.cbuffer_data[1] && ctx.cbuffer_data[1] != item.cbuffer_data[1]) {
-                Driver::update_cbuffer(item.cbuffers[1], item.cbuffer_data[1]);
-                ctx.cbuffer_data[1] = item.cbuffer_data[1];
-            }
-			if (!forcedCtx.blendState && ctx.blendState != &item.blendState) {
+			if (!overrides.forced_blendState && ctx.blendState != &item.blendState) {
 				Driver::bind_blend_state(item.blendState);
 				ctx.blendState = &item.blendState;
 			}
-            if (!forcedCtx.texture && ctx.texture != &item.texture) {
+            if (!overrides.forced_texture && ctx.texture != &item.texture) {
                 Driver::bind_textures(&item.texture, 1);
                 ctx.texture = &item.texture;
             }
-            if (!forcedCtx.vertexBuffer && ctx.vertexBuffer != &item.vertexBuffer) {
+            if (!overrides.forced_vertexBuffer && ctx.vertexBuffer != &item.vertexBuffer) {
                 Driver::bind_indexed_vertex_buffer(item.vertexBuffer);
                 ctx.vertexBuffer = &item.vertexBuffer;
             }
+            for (u32 i = 0; i < item.cbuffer_count; i++) {
+                ctx.cbuffers[i + overrides.forced_cbuffer_count] = item.cbuffers[i];
+            }
+            Driver::bind_cbuffers(*ctx.shader, ctx.cbuffers, ctx.cbuffer_count);
 			if (item.drawcount) {
                 Driver::draw_instances_indexed_vertex_buffer(item.vertexBuffer, item.drawcount);
             } else {
@@ -179,8 +193,7 @@ void draw_drawlist(Drawlist& dl, Drawlist_Context& ctx, const Drawlist_Context& 
     }
 }
 struct Store {
-    struct CBuffers { enum { Scene, Node, MVP, Matrices32, Matrices64, Count }; };
-    Driver::RscCBuffer cbuffers[CBuffers::Count];
+    Driver::RscCBuffer cbuffers[512]; // todo: check size?
     Driver::RscShaderSet shaders[ShaderType::Count];
 	Allocator::Arena persistentArena;
     Allocator::Pool<Animation::AnimatedNode> animatedNodes;
@@ -194,6 +207,8 @@ struct Store {
     Renderer::Driver::RscBlendState blendStateOff;
     Renderer::Driver::RscMainRenderTarget windowRT;
     Renderer::Driver::RscRenderTarget gameRT;
+    u32 cbuffer_count;
+    u32 cbuffer_scene;
     u32 playerDrawNodeHandle;
     u32 playerAnimatedNodeHandle;
     u32 particlesDrawHandle;
@@ -227,7 +242,13 @@ u32 handle_from_drawMesh(Store& store, DrawMesh& mesh) { return Allocator::get_p
 Animation::AnimatedNode& get_animatedNode(Store& store, const u32 nodeHandle) { return Allocator::get_pool_slot(store.animatedNodes, nodeHandle - 1); }
 u32 handle_from_animatedNode(Store& store, Animation::AnimatedNode& animatedNode) { return Allocator::get_pool_index(store.animatedNodes, animatedNode) + 1; }
 
-void addNodesToDrawlist(Drawlist& dl, float3 cameraPos, Store& store, const u32 includeFilter, const u32 excludeFilter) {
+struct VisibleNodes {
+    u32 visible_nodes[256];
+    u32 visible_nodes_skinned[256];
+    u32 visible_nodes_count;
+    u32 visible_nodes_skinned_count;
+};
+void addNodesToDrawlist(Drawlist& dl, const VisibleNodes& visibleNodes, float3 cameraPos, Store& store, const u32 includeFilter, const u32 excludeFilter) {
 
     // hack
     const char* shaderNames[DrawNodeMeshType::Count][ShaderType::Count] = {
@@ -252,10 +273,8 @@ void addNodesToDrawlist(Drawlist& dl, float3 cameraPos, Store& store, const u32 
         const u32 shaderBits = 8; // 255 shader types
         const u32 shaderMask = (1 << shaderBits) - 1;
         
-        for (u32 n = 0, count = 0; n < store.drawNodes.cap && count < store.drawNodes.count; n++) {
-            if (store.drawNodes.data[n].alive == 0) { continue; }
-            count++;
-            
+        for (u32 i = 0; i < visibleNodes.visible_nodes_count; i++) {
+            u32 n = visibleNodes.visible_nodes[i];
             const DrawNode& node = store.drawNodes.data[n].state.live;
             const u32 maxMeshCount = COUNT_OF(node.meshHandles);
             
@@ -269,6 +288,7 @@ void addNodesToDrawlist(Drawlist& dl, float3 cameraPos, Store& store, const u32 
                 if (node.meshHandles[m] == 0) { continue; }
                 u32 dl_index = dl.count[DrawlistBuckets::Base]++;
                 DrawCall_Item& item = dl.items[dl_index];
+                item = {};
                 Key& key = dl.keys[dl_index];
                 key.idx = dl_index;
                 const DrawMesh& mesh = get_drawMesh(store, node.meshHandles[m]);
@@ -279,8 +299,7 @@ void addNodesToDrawlist(Drawlist& dl, float3 cameraPos, Store& store, const u32 
                 key.v |= (distSqNormalized & depthMask) << curr_shift, curr_shift += depthBits;
                 item.shader = store.shaders[mesh.type];
                 item.vertexBuffer = mesh.vertexBuffer;
-                item.cbuffers[0] = store.cbuffers[Store::CBuffers::Node];
-                item.cbuffer_data[0] = (void*)&node.nodeData;
+                item.cbuffers[item.cbuffer_count++] = store.cbuffers[node.cbuffer_node];
                 item.texture = mesh.texture;
                 item.blendState = mesh.type == ShaderType::Textured3DAlphaClip ? store.blendStateOn : store.blendStateOff;
                 item.name = shaderNames[DrawNodeMeshType::Default][mesh.type];
@@ -297,10 +316,8 @@ void addNodesToDrawlist(Drawlist& dl, float3 cameraPos, Store& store, const u32 
         const u32 nodeMask = (1 << nodeBits) - 1;
         const u32 shaderBits = 8; // 255 shader types
         const u32 shaderMask = (1 << shaderBits) - 1;
-        for (u32 n = 0, count = 0; n < store.drawNodesSkinned.cap && count < store.drawNodesSkinned.count; n++) {
-            if (store.drawNodesSkinned.data[n].alive == 0) { continue; }
-            count++;
-            
+        for (u32 i = 0; i < visibleNodes.visible_nodes_skinned_count; i++) {
+            u32 n = visibleNodes.visible_nodes_skinned[i];
             const DrawNodeSkinned& node = store.drawNodesSkinned.data[n].state.live;
             const u32 maxMeshCount = COUNT_OF(node.meshHandles);
             
@@ -324,10 +341,8 @@ void addNodesToDrawlist(Drawlist& dl, float3 cameraPos, Store& store, const u32 
                 key.v |= (distSqNormalized & depthMask) << curr_shift, curr_shift += depthBits;
                 item.shader = store.shaders[mesh.type];
                 item.vertexBuffer = mesh.vertexBuffer;
-                item.cbuffers[0] = store.cbuffers[Store::CBuffers::Node];
-                item.cbuffer_data[0] = (void*)&node.nodeData;
-                item.cbuffers[1] = store.cbuffers[Store::CBuffers::Matrices32];
-                item.cbuffer_data[1] = (void*)&node.skinningMatrixPalette;
+                item.cbuffers[item.cbuffer_count++] = store.cbuffers[node.cbuffer_node];
+                item.cbuffers[item.cbuffer_count++] = store.cbuffers[node.cbuffer_skinning];
                 item.texture = mesh.texture;
                 item.blendState = mesh.type == ShaderType::Textured3DAlphaClipSkinned ? store.blendStateOn : store.blendStateOff;
                 item.name = shaderNames[DrawNodeMeshType::Skinned][mesh.type];
@@ -363,10 +378,8 @@ void addNodesToDrawlist(Drawlist& dl, float3 cameraPos, Store& store, const u32 
                 key.v |= (n & nodeMask) << curr_shift, curr_shift += nodeBits;
                 item.shader = store.shaders[mesh.type];
                 item.vertexBuffer = mesh.vertexBuffer;
-                item.cbuffers[0] = store.cbuffers[Store::CBuffers::Node];
-                item.cbuffer_data[0] = (void*)&node.nodeData;
-                item.cbuffers[1] = store.cbuffers[Store::CBuffers::Matrices64];
-                item.cbuffer_data[1] = (void*)&node.instanceMatrices;
+                item.cbuffers[item.cbuffer_count++] = store.cbuffers[node.cbuffer_node];
+                item.cbuffers[item.cbuffer_count++] = store.cbuffers[node.cbuffer_instances];
                 item.texture = mesh.texture;
                 item.blendState = store.blendStateOff; // todo: support other blendstates when doing instances
                 item.drawcount = node.instanceCount;
@@ -544,6 +557,10 @@ namespace FBX {
                 extract_anim_data(animatedNode.skeleton, animatedNode.clips, animatedNode.clipCount, store, *(scene->meshes[0]), *scene);
             }
 
+            // TODO: consider skinning
+            float3 min = { FLT_MAX, FLT_MAX, FLT_MAX };
+            float3 max = {-FLT_MAX,-FLT_MAX,-FLT_MAX };
+
             u32 vertexOffset = 0;
             for (size_t i = 0; i < scene->meshes.count; i++) {
                 ufbx_mesh& mesh = *scene->meshes.data[i];
@@ -556,18 +573,23 @@ namespace FBX {
                     for (size_t v = 0; v < mesh.num_vertices; v++) {
                         float3 vertex;
                         const ufbx_float3& v_fbx_ls = mesh.vertices[v];
+                        
+                        float3 transformed;
+                        transformed.x = v_fbx_ls.x * m.m00 + v_fbx_ls.y * m.m01 + v_fbx_ls.z * m.m02 + m.m03;
+                        transformed.y = v_fbx_ls.x * m.m10 + v_fbx_ls.y * m.m11 + v_fbx_ls.z * m.m12 + m.m13;
+                        transformed.z = v_fbx_ls.x * m.m20 + v_fbx_ls.y * m.m21 + v_fbx_ls.z * m.m22 + m.m23;
+                        max = Math::max(transformed, max);
+                        min = Math::min(transformed, min);
+
                         // If using skinning, we'll store the node hierarchy in the joints
                         if (mesh.skin_deformers.count) {
                             vertex.x = v_fbx_ls.x;
                             vertex.y = v_fbx_ls.y;
                             vertex.z = v_fbx_ls.z;
+                            Allocator::push(vertices, pipelineContext.scratchArena) = vertex;
+                        } else {
+                            Allocator::push(vertices, pipelineContext.scratchArena) = transformed;
                         }
-                        else {
-                            vertex.x = v_fbx_ls.x * m.m00 + v_fbx_ls.y * m.m01 + v_fbx_ls.z * m.m02 + m.m03;
-                            vertex.y = v_fbx_ls.x * m.m10 + v_fbx_ls.y * m.m11 + v_fbx_ls.z * m.m12 + m.m13;
-                            vertex.z = v_fbx_ls.x * m.m20 + v_fbx_ls.y * m.m21 + v_fbx_ls.z * m.m22 + m.m23;
-                        }
-                        Allocator::push(vertices, pipelineContext.scratchArena) = vertex;
                     }
                 }
 
@@ -743,11 +765,21 @@ namespace FBX {
 				DrawNodeSkinned& nodeToAdd = Allocator::alloc_pool(store.drawNodesSkinned);
                 nodeHandle = (DrawNodeMeshType::Skinned << 16) | (Allocator::get_pool_index(store.drawNodesSkinned, nodeToAdd) & 0xffff);
                 nodeToAdd = {};
+                nodeToAdd.max = max;
+                nodeToAdd.min = min;
+                nodeToAdd.cbuffer_node = store.cbuffer_count;
+                Driver::create_cbuffer(store.cbuffers[store.cbuffer_count++], { sizeof(NodeData) });
+                nodeToAdd.cbuffer_skinning = store.cbuffer_count;
+                Driver::create_cbuffer(store.cbuffers[store.cbuffer_count++], { sizeof(Matrices32) });
                 meshHandles = nodeToAdd.meshHandles;
             } else {
                 DrawNode& nodeToAdd = Allocator::alloc_pool(store.drawNodes);
                 nodeHandle = (DrawNodeMeshType::Default << 16) | (Allocator::get_pool_index(store.drawNodes, nodeToAdd) & 0xffff);
                 nodeToAdd = {};
+                nodeToAdd.max = max;
+                nodeToAdd.min = min;
+                nodeToAdd.cbuffer_node = store.cbuffer_count;
+                Driver::create_cbuffer(store.cbuffers[store.cbuffer_count++], { sizeof(NodeData) });
                 meshHandles = nodeToAdd.meshHandles;
             }
             const ShaderType::Enum shaderTypes[DrawlistStreams::Count] = {
@@ -826,11 +858,9 @@ void init_pipelines(Store& store, Allocator::Arena scratchArena, const Platform:
     Renderer::Driver::create_DS(store.depthStateReadOnly, { true, Renderer::Driver::DepthFunc::Less, Renderer::Driver::DepthWriteMask::Zero });
     Renderer::Driver::create_DS(store.depthStateOff, { false });
 
-    // cbuffers
-    Driver::create_cbuffer(store.cbuffers[Store::CBuffers::Scene], { sizeof(SceneData), 0 });
-    Driver::create_cbuffer(store.cbuffers[Store::CBuffers::Node], { sizeof(NodeData), 1 });
-    Driver::create_cbuffer(store.cbuffers[Store::CBuffers::Matrices32], { sizeof(Matrices32), 2 });
-    Driver::create_cbuffer(store.cbuffers[Store::CBuffers::Matrices64], { sizeof(Matrices64), 3 }); // TODO: see GL issues with shadered binding index
+    // known cbuffers
+    store.cbuffer_scene = store.cbuffer_count;
+    Driver::create_cbuffer(store.cbuffers[store.cbuffer_count++], { sizeof(SceneData) });
 
     // input layouts
     const Driver::VertexAttribDesc attribs_3d[] = {
@@ -859,18 +889,18 @@ void init_pipelines(Store& store, Allocator::Arena scratchArena, const Platform:
 
     // cbuffer bindings
     const Renderer::Driver::CBufferBindingDesc bufferBindings_base[] = {
-        { store.cbuffers[Store::CBuffers::Scene], "type_PerScene", Driver::CBufferStageMask::VS },
-        { store.cbuffers[Store::CBuffers::Node], "type_PerGroup", Driver::CBufferStageMask::VS }
+        { "type_PerScene", Driver::CBufferStageMask::VS },
+        { "type_PerGroup", Driver::CBufferStageMask::VS }
     };
     const Renderer::Driver::CBufferBindingDesc bufferBindings_skinned_base[] = {
-        { store.cbuffers[Store::CBuffers::Scene], "type_PerScene", Driver::CBufferStageMask::VS },
-        { store.cbuffers[Store::CBuffers::Node], "type_PerGroup", Driver::CBufferStageMask::VS },
-        { store.cbuffers[Store::CBuffers::Matrices32], "type_PerJoint", Driver::CBufferStageMask::VS }
+        { "type_PerScene", Driver::CBufferStageMask::VS },
+        { "type_PerGroup", Driver::CBufferStageMask::VS },
+        { "type_PerJoint", Driver::CBufferStageMask::VS }
     };
     const Renderer::Driver::CBufferBindingDesc bufferBindings_instanced_base[] = {
-        { store.cbuffers[Store::CBuffers::Scene], "type_PerScene", Driver::CBufferStageMask::VS },
-        { store.cbuffers[Store::CBuffers::Node], "type_PerGroup", Driver::CBufferStageMask::VS },
-        { store.cbuffers[Store::CBuffers::Matrices64], "type_PerInstance", Driver::CBufferStageMask::VS }
+        { "type_PerScene", Driver::CBufferStageMask::VS },
+        { "type_PerGroup", Driver::CBufferStageMask::VS },
+        { "type_PerInstance", Driver::CBufferStageMask::VS }
     };
 
     // texture bindings
@@ -1026,13 +1056,15 @@ void init_pipelines(Store& store, Allocator::Arena scratchArena, const Platform:
             Animation::AnimatedNode animatedNode = {};
 
             float3 asset_init_pos = asset.asset_init_pos;
-            const f32 spacing = 6.f;
-            const s32 grid_size = 16;
+            const f32 spacing = 10.f;
+            const s32 grid_size = 6;
             const s32 max_row = (asset.count - 1) % grid_size;
-            const s32 max_column = (asset.count - 1) / grid_size;
+            const s32 max_column = ((asset.count - 1) / grid_size) % grid_size;
+            const s32 max_stride = (asset.count - 1) / (grid_size * grid_size);
             s32 row = asset_rep % grid_size;
-            s32 column = asset_rep / grid_size;
-            asset_init_pos = Math::add(asset_init_pos, { (row - max_row /2) * spacing, (column - max_column/2) * spacing, 0.f });
+            s32 column = (asset_rep / grid_size) % grid_size;
+            s32 stride = asset_rep / (grid_size * grid_size);
+            asset_init_pos = Math::add(asset_init_pos, { (row - max_row /2) * spacing, (column - max_column/2) * spacing, (stride - max_stride / 2) * spacing });
 
             u32 nodeHandle = 0;
 		    ctx.scratchArena = scratchArena; // explicit copy
@@ -1085,6 +1117,10 @@ void init_pipelines(Store& store, Allocator::Arena scratchArena, const Platform:
         Math::identity4x4(*(Transform*)&(node.nodeData.worldMatrix));
         node.nodeData.groupColor = Color32(0.9f, 0.7f, 0.8f, 0.6f).RGBAv4();
         node.instanceCount = 4;
+        node.cbuffer_node = store.cbuffer_count;
+        Driver::create_cbuffer(store.cbuffers[store.cbuffer_count++], { sizeof(NodeData) });
+        node.cbuffer_instances = store.cbuffer_count;
+        Driver::create_cbuffer(store.cbuffers[store.cbuffer_count++], { sizeof(Matrices64) });
         for (u32 m = 0; m < COUNT_OF(node.instanceMatrices.data); m++) {
             float4x4& matrix = node.instanceMatrices.data[m];
             Math::identity4x4(*(Transform*)&(matrix));

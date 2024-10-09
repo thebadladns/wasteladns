@@ -139,8 +139,8 @@ namespace Driver {
         viewport.TopLeftY = params.topLeftY;
         viewport.Width = params.width;
         viewport.Height = params.height;
-        viewport.MinDepth = params.minDepth;
-        viewport.MaxDepth = params.maxDepth;
+        viewport.MinDepth = 0.f; // todo: check
+        viewport.MaxDepth = 1.f;
         d3dcontext->RSSetViewports(1, &viewport);
     }
 
@@ -286,7 +286,6 @@ namespace Driver {
         d3dcontext->PSSetShaderResources(0, count, textureViews);
         d3dcontext->PSSetSamplers(0, count, samplers);
     }
-    void bind_shader_samplers(RscShaderSet& ss, const char** params, const u32 count) {}
 
     struct ShaderBytecode {
         u8* data;
@@ -401,8 +400,8 @@ namespace Driver {
         ss.ps = params.ps;
         for (u32 i = 0; i < params.cbuffer_count; i++) {
             const CBufferBindingDesc& binding = params.cbufferBindings[i];
-            if (binding.stageMask & CBufferStageMask::VS) { ss.cbuffers_vs[ss.cbuffer_vs_count++] = binding.cbuffer.impl; }
-            if (binding.stageMask & CBufferStageMask::PS) { ss.cbuffers_ps[ss.cbuffer_ps_count++] = binding.cbuffer.impl; }
+            if (binding.stageMask & CBufferStageMask::VS) { ss.cbuffer_bindings_vs[ss.cbuffer_vs_count++] = i; }
+            if (binding.stageMask & CBufferStageMask::PS) { ss.cbuffer_bindings_ps[ss.cbuffer_ps_count++] = i; }
         }
         ShaderResult result;
         result.compiled = true;
@@ -412,8 +411,6 @@ namespace Driver {
         d3dcontext->VSSetShader(ss.vs.impl, nullptr, 0);
         d3dcontext->PSSetShader(ss.ps.impl, nullptr, 0);
         d3dcontext->IASetInputLayout(ss.vs.inputLayout_impl);
-        if (ss.cbuffer_vs_count) { d3dcontext->VSSetConstantBuffers(0, ss.cbuffer_vs_count, ss.cbuffers_vs); }
-        if (ss.cbuffer_ps_count) { d3dcontext->PSSetConstantBuffers(0, ss.cbuffer_ps_count, ss.cbuffers_ps); }
     }
     
     void create_blend_state(RscBlendState& bs, const BlendStateParams& params) {
@@ -575,10 +572,20 @@ namespace Driver {
         cb.impl = bufferObject;
     }
     void update_cbuffer(RscCBuffer& cb, const void* data) {
-        d3dcontext->UpdateSubresource(cb.impl, 0, nullptr, data, 0, 0);
+        d3dcontext->UpdateSubresource(cb.impl, 0, nullptr, data, 0, 0); // todo: this should probably be map/unmap
     }
-    void bind_cbuffers(const RscCBuffer* cb, const u32 count, const CBufferBindParams& params) {
-
+    void bind_cbuffers(const RscShaderSet& ss, const RscCBuffer* cb, const u32 count) {
+        u32 vs_count = 0, ps_count = 0;
+        ID3D11Buffer* vs_cbuffers[4];
+        ID3D11Buffer* ps_cbuffers[4];
+        for (u32 i = 0; i < ss.cbuffer_vs_count; i++) {
+            vs_cbuffers[vs_count++] = cb[ss.cbuffer_bindings_vs[i]].impl;
+        }
+        for (u32 i = 0; i < ss.cbuffer_ps_count; i++) {
+            ps_cbuffers[ps_count++] = cb[ss.cbuffer_bindings_ps[i]].impl;
+        }
+        if (vs_count) { d3dcontext->VSSetConstantBuffers(0, vs_count, vs_cbuffers); }
+        if (ps_count) { d3dcontext->PSSetConstantBuffers(0, ps_count, ps_cbuffers); }
     }
     void set_marker_name(Marker_t& wide, const char* ansi) {
         size_t converted;

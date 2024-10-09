@@ -25,7 +25,7 @@ namespace Immediate
         u32 color;
     };
 
-    const u32 max_3d_vertices = 1 << 12;
+    const u32 max_3d_vertices = 1 << 14;
     const u32 max_2d_vertices = 1 << 14;
     // 2d vertices are stored in quads: per 4 vertex quad, we store 6 indexes (2 tris) = 6 / 4 = 3 / 2
     inline u32 vertexSizeToIndexCount(const u32 count) { return 3 * count / 2; }
@@ -111,7 +111,7 @@ namespace Immediate
             segment(buffer, prev, next, color);
         }
     }
-    void box(Buffer& buffer, const float3 min, const float3 max, Color32 color) {
+    void aabb(Buffer& buffer, const float3 min, const float3 max, Color32 color) {
 
         float3 leftNearBottom(min.x, min.y, min.z);
         float3 leftFarBottom(min.x, max.y, min.z);
@@ -140,6 +140,45 @@ namespace Immediate
         // remaining bottom
         segment(buffer, leftNearBottom, rightNearBottom, color);
         segment(buffer, leftFarBottom, rightFarBottom, color);
+    }
+    void obb(Buffer& buffer, const float4x4& mat, const float3 aabb_min, const float3 aabb_max, Color32 color) {
+
+        float3 leftNearBottom(aabb_min.x, aabb_min.y, aabb_min.z);
+        float3 leftFarBottom(aabb_min.x, aabb_max.y, aabb_min.z);
+        float3 leftFarTop(aabb_min.x, aabb_max.y, aabb_max.z);
+        float3 leftNearTop(aabb_min.x, aabb_min.y, aabb_max.z);
+        float3 rightNearBottom(aabb_max.x, aabb_min.y, aabb_min.z);
+        float3 rightFarBottom(aabb_max.x, aabb_max.y, aabb_min.z);
+        float3 rightFarTop(aabb_max.x, aabb_max.y, aabb_max.z);
+        float3 rightNearTop(aabb_max.x, aabb_min.y, aabb_max.z);
+
+        float3 leftNearBottom_WS = Math::mult(mat, float4(leftNearBottom, 1.f)).xyz;
+        float3 leftFarBottom_WS = Math::mult(mat, float4(leftFarBottom, 1.f)).xyz;
+        float3 leftFarTop_WS = Math::mult(mat, float4(leftFarTop, 1.f)).xyz;
+        float3 leftNearTop_WS = Math::mult(mat, float4(leftNearTop, 1.f)).xyz;
+        float3 rightNearBottom_WS = Math::mult(mat, float4(rightNearBottom, 1.f)).xyz;
+        float3 rightFarBottom_WS = Math::mult(mat, float4(rightFarBottom, 1.f)).xyz;
+        float3 rightFarTop_WS = Math::mult(mat, float4(rightFarTop, 1.f)).xyz;
+        float3 rightNearTop_WS = Math::mult(mat, float4(rightNearTop, 1.f)).xyz;
+
+        // left plane
+        segment(buffer, leftNearBottom_WS, leftFarBottom_WS, color);
+        segment(buffer, leftFarBottom_WS, leftFarTop_WS, color);
+        segment(buffer, leftFarTop_WS, leftNearTop_WS, color);
+        segment(buffer, leftNearTop_WS, leftNearBottom_WS, color);
+
+        // right plane
+        segment(buffer, rightNearBottom_WS, rightFarBottom_WS, color);
+        segment(buffer, rightFarBottom_WS, rightFarTop_WS, color);
+        segment(buffer, rightFarTop_WS, rightNearTop_WS, color);
+        segment(buffer, rightNearTop_WS, rightNearBottom_WS, color);
+
+        // remaining top
+        segment(buffer, leftNearTop_WS, rightNearTop_WS, color);
+        segment(buffer, leftFarTop_WS, rightFarTop_WS, color);
+        // remaining bottom
+        segment(buffer, leftNearBottom_WS, rightNearBottom_WS, color);
+        segment(buffer, leftFarBottom_WS, rightFarBottom_WS, color);
     }
     void circle(Buffer& buffer, const float3& center, const float3& normal, const f32 radius, const Color32 color) {
         Transform33 m = Math::fromUp(normal);
@@ -274,7 +313,7 @@ namespace Immediate
             buffer.indices_2d = (u32*)Allocator::alloc_arena(arena, indices_2d_size, alignof(u32));
 
             Driver::create_cbuffer(buffer.cbuffer, { sizeof(float4x4), 4 });
-            const Renderer::Driver::CBufferBindingDesc bufferBindings_MVP[] = {{ buffer.cbuffer, "type_PerGroup", Driver::CBufferStageMask::VS }};
+            const Renderer::Driver::CBufferBindingDesc bufferBindings_MVP[] = {{ "type_PerGroup", Driver::CBufferStageMask::VS }};
 
             // 2d
             {
@@ -363,6 +402,8 @@ namespace Immediate
             Driver::update_cbuffer(buffer.cbuffer, &mvp);
 
             Driver::bind_shader(buffer.shader_3d);
+            Driver::RscCBuffer cbuffers[] = { buffer.cbuffer };
+            Driver::bind_cbuffers(buffer.shader_3d, cbuffers, 1);
             Driver::bind_vertex_buffer(buffer.buffer_3d);
             Driver::draw_vertex_buffer(buffer.buffer_3d);
         }
@@ -390,6 +431,8 @@ namespace Immediate
             Driver::update_cbuffer(buffer.cbuffer, &projMatrix);
 
             Driver::bind_shader(buffer.shader_2d);
+            Driver::RscCBuffer cbuffers[] = { buffer.cbuffer };
+            Driver::bind_cbuffers(buffer.shader_2d, cbuffers, 1);
             Driver::bind_indexed_vertex_buffer(buffer.buffer_2d);
             Driver::draw_indexed_vertex_buffer(buffer.buffer_2d);
         }

@@ -173,6 +173,13 @@ float3x3 mult(const float3x3& a, const float3x3& b) {
     o.dataCM[2] = dot(a_r2, b.col0); o.dataCM[5] = dot(a_r2, b.col1); o.dataCM[8] = dot(a_r2, b.col2);
     return o;
 }
+float3 mult(const float3x3& m, const float3& v) {
+    return float3(
+          m.col0.x * v.x + m.col1.x * v.y + m.col2.x * v.z
+        , m.col0.y * v.x + m.col1.y * v.y + m.col2.y * v.z
+        , m.col0.z * v.x + m.col1.z * v.y + m.col2.z * v.z
+    );
+}
 float3x3 scale(const float3x3& m, const f32 s) {
     float3x3 o;
     o.col0 = scale(m.col0, s);
@@ -193,12 +200,35 @@ float4x4 mult(const float4x4& a, const float4x4& b) {
     o.dataCM[3] = dot(a_r3, b.col0); o.dataCM[7] = dot(a_r3, b.col1); o.dataCM[11] = dot(a_r3, b.col2); o.dataCM[15] = dot(a_r3, b.col3);
     return o;
 }
+float4 mult(const float4x4& m, const float4& v) {
+    return float4(
+          m.col0.x * v.x + m.col1.x * v.y + m.col2.x * v.z + m.col3.x * v.w
+        , m.col0.y * v.x + m.col1.y * v.y + m.col2.y * v.z + m.col3.y * v.w
+        , m.col0.z * v.x + m.col1.z * v.y + m.col2.z * v.z + m.col3.z * v.w
+        , m.col0.w * v.x + m.col1.w * v.y + m.col2.w * v.z + m.col3.w * v.w
+    );
+}
+float3 mult3x3(const float4x4& m, const float3& v) {
+    return float3(
+          m.col0.x * v.x + m.col1.x * v.y + m.col2.x * v.z
+        , m.col0.y * v.x + m.col1.y * v.y + m.col2.y * v.z
+        , m.col0.z * v.x + m.col1.z * v.y + m.col2.z * v.z
+    );
+}
 float4x4 scale(const float4x4& a, const f32 s) {
     float4x4 o;
     o.col0 = scale(a.col0, s);
     o.col1 = scale(a.col1, s);
     o.col2 = scale(a.col2, s);
     o.col3 = scale(a.col3, s);
+    return o;
+}
+float4x4 transpose(const float4x4& m) {
+    float4x4 o;
+    o.col0 = { m.col0.x, m.col1.x, m.col2.x, m.col3.x };
+    o.col1 = { m.col0.y, m.col1.y, m.col2.y, m.col3.y };
+    o.col2 = { m.col0.z, m.col1.z, m.col2.z, m.col3.z };
+    o.col3 = { m.col0.w, m.col1.w, m.col2.w, m.col3.w };
     return o;
 }
 

@@ -47,6 +47,8 @@ namespace Game
         constexpr ::Input::Keyboard::Keys::Enum
               EXIT = ::Input::Keyboard::Keys::ESCAPE
             , TOGGLE_OVERLAY = ::Input::Keyboard::Keys::H
+            , TOGGLE_DEBUG3D = ::Input::Keyboard::Keys::V
+            , CAPTURE_CAMERA = ::Input::Keyboard::Keys::C
             ;
     };
 
@@ -55,6 +57,8 @@ namespace Game
         Camera cameras[CamCount];
         Gameplay::Orbit::State orbitCamera;
         Camera* activeCam;
+        __DEBUGDEF(Camera captured_camera);
+        __DEBUGDEF(bool captured_camera_initialized);
     };
 
     struct RenderManager {
@@ -67,11 +71,13 @@ namespace Game
     #if __DEBUG
     struct DebugVis {
         struct OverlayMode { enum Enum { All, HelpOnly, ArenaOnly, None, Count }; };
+        struct Debug3DView { enum Enum { All, Culling, None, Count }; };
 
         f64 frameHistory[60];
         f64 frameAvg = 0;
         u64 frameHistoryIdx = 0;
         OverlayMode::Enum overlaymode = OverlayMode::Enum::All;
+        Debug3DView::Enum debug3Dmode = Debug3DView::Enum::None;
     };
     #endif
 
@@ -256,6 +262,17 @@ namespace Game
             if (keyboard.pressed(Input::TOGGLE_OVERLAY)) {
                 game.debugVis.overlaymode = (DebugVis::OverlayMode::Enum)((game.debugVis.overlaymode + 1) % DebugVis::OverlayMode::Count);
             }
+            if (keyboard.pressed(Input::TOGGLE_DEBUG3D)) {
+                game.debugVis.debug3Dmode = (DebugVis::Debug3DView::Enum)((game.debugVis.debug3Dmode + 1) % DebugVis::Debug3DView::Count);
+            }
+            if (keyboard.pressed(Input::CAPTURE_CAMERA)) {
+                if (game.cameraMgr.captured_camera_initialized) {
+                    game.cameraMgr.captured_camera_initialized = false;
+                } else {
+                    game.cameraMgr.captured_camera = *game.cameraMgr.activeCam;
+                    game.cameraMgr.captured_camera_initialized = true;
+                }
+            }
             #endif      
             step = !game.time.paused;
         }
@@ -396,12 +413,15 @@ namespace Game
         }
 
          //Render update
+        Renderer::VisibleNodes visibleNodes = {}; // todo: move somewhere?
         {
             RenderManager& mgr = game.renderMgr;
             Renderer::Store& store = mgr.store;
             using namespace Renderer;
 
             // perspective cam set up
+            float4x4 vpMatrix;
+            Driver::RscCBuffer& scene_cbuffer = store.cbuffers[store.cbuffer_scene];
             {
                 Camera* activeCam = game.cameraMgr.activeCam;
                 Renderer::SceneData cbufferPerScene;
@@ -409,7 +429,8 @@ namespace Game
                 cbufferPerScene.viewMatrix = activeCam->viewMatrix;
                 cbufferPerScene.viewPos = activeCam->transform.pos;
                 cbufferPerScene.lightPos = float3(3.f, 8.f, 15.f);
-                Renderer::Driver::update_cbuffer(store.cbuffers[Renderer::Store::CBuffers::Scene], &cbufferPerScene);
+                Renderer::Driver::update_cbuffer(scene_cbuffer, &cbufferPerScene);
+                vpMatrix = Math::mult(mgr.perspProjection.matrix, activeCam->viewMatrix);
             }
 
             {
@@ -428,6 +449,79 @@ namespace Game
                     Renderer::Driver::set_VP(vpParams);
                 }
             
+                // cull nodes
+                {
+                    #if __DEBUG
+                    if (game.cameraMgr.captured_camera_initialized) {
+                        vpMatrix = Math::mult(mgr.perspProjection.matrix, game.cameraMgr.captured_camera.viewMatrix);
+                    }
+                    #endif
+
+                    auto cull_isVisible = [](float4x4 mvp, float3 min, float3 max) -> bool {
+                        float4 corners[8] = {
+                            {min.x, min.y, min.z, 1.0},
+                            {max.x, min.y, min.z, 1.0},
+                            {min.x, max.y, min.z, 1.0},
+                            {max.x, max.y, min.z, 1.0},
+
+                            {min.x, min.y, max.z, 1.0},
+                            {max.x, min.y, max.z, 1.0},
+                            {min.x, max.y, max.z, 1.0},
+                            {max.x, max.y, max.z, 1.0},
+                        };
+
+                        bool inside = false;
+                        for (u32 corner_id = 0; corner_id < 8; corner_id++) {
+                            float4 corner = Math::mult(mvp, corners[corner_id]);
+                            // Check vertex against clip space bounds
+                            inside = inside ||
+                                (((-corner.w < corner.x) && (corner.x < corner.w)) &&
+                                (((-corner.w < corner.y) && (corner.y < corner.w)) &&
+                                ((Renderer::min_z < corner.z) && (corner.z < corner.w))));
+                        }
+                        return inside;
+                    };
+
+                    for (u32 n = 0, count = 0; n < store.drawNodes.cap && count < store.drawNodes.count; n++) {
+                        if (store.drawNodes.data[n].alive == 0) { continue; }
+                        count++;
+
+                        const DrawNode& node = store.drawNodes.data[n].state.live;
+                        if (cull_isVisible(Math::mult(vpMatrix, node.nodeData.worldMatrix), node.min, node.max)) {
+                            visibleNodes.visible_nodes[visibleNodes.visible_nodes_count++] = n;
+                        }
+                    }
+                    for (u32 n = 0, count = 0; n < store.drawNodesSkinned.cap && count < store.drawNodesSkinned.count; n++) {
+                        if (store.drawNodesSkinned.data[n].alive == 0) { continue; }
+                        count++;
+
+                        const DrawNodeSkinned& node = store.drawNodesSkinned.data[n].state.live;
+                        if (cull_isVisible(Math::mult(vpMatrix, node.nodeData.worldMatrix), node.min, node.max)) {
+                            visibleNodes.visible_nodes_skinned[visibleNodes.visible_nodes_skinned_count++] = n;
+                        }
+                    }
+
+                    // update cbuffers for all visible nodes
+                    for (u32 i = 0; i < visibleNodes.visible_nodes_count; i++) {
+                        u32 n = visibleNodes.visible_nodes[i];
+                        const DrawNode& node = store.drawNodes.data[n].state.live;
+                        Driver::update_cbuffer(store.cbuffers[node.cbuffer_node], &node.nodeData);
+                    }
+                    for (u32 i = 0; i < visibleNodes.visible_nodes_skinned_count; i++) {
+                        u32 n = visibleNodes.visible_nodes_skinned[i];
+                        const DrawNodeSkinned& node = store.drawNodesSkinned.data[n].state.live;
+                        Driver::update_cbuffer(store.cbuffers[node.cbuffer_node], &node.nodeData);
+                        Driver::update_cbuffer(store.cbuffers[node.cbuffer_skinning], &node.skinningMatrixPalette);
+                    }
+                    for (u32 n = 0, count = 0; n < store.drawNodesInstanced.cap && count < store.drawNodesInstanced.count; n++) {
+                        if (store.drawNodesInstanced.data[n].alive == 0) { continue; }
+                        count++;
+                        const DrawNodeInstanced& node = store.drawNodesInstanced.data[n].state.live;
+                        Driver::update_cbuffer(store.cbuffers[node.cbuffer_node], &node.nodeData);
+                        Driver::update_cbuffer(store.cbuffers[node.cbuffer_instances], &node.instanceMatrices);
+                    }
+                }
+
                 // render phase - base scene
                 {
                 // opaque pass
@@ -435,11 +529,11 @@ namespace Game
                     Renderer::Drawlist dl = {};
                     Renderer::Driver::bind_DS(store.depthStateOn);
                     Renderer::Driver::bind_RS(store.rasterizerStateFill);
-                    Renderer::addNodesToDrawlist(dl, game.cameraMgr.activeCam->transform.pos, store, 0, Renderer::DrawlistFilter::Alpha);
+                    Renderer::addNodesToDrawlist(dl, visibleNodes, game.cameraMgr.activeCam->transform.pos, store, 0, Renderer::DrawlistFilter::Alpha);
                     Renderer::Drawlist_Context ctx = {};
-                    Renderer::Drawlist_Context forcedCtx = {};
-                    ctx.blendState = &store.blendStateOn;
-                    Renderer::draw_drawlist(dl, ctx, forcedCtx);
+                    Renderer::Drawlist_Overrides overrides = {};
+                    ctx.cbuffers[overrides.forced_cbuffer_count++] = scene_cbuffer;
+                    Renderer::draw_drawlist(dl, ctx, overrides);
                 }
 
                 // alpha pass
@@ -448,11 +542,13 @@ namespace Game
                     Renderer::Driver::bind_DS(store.depthStateReadOnly);
                     Renderer::Driver::bind_blend_state(store.blendStateOn);
                     Renderer::Driver::bind_RS(store.rasterizerStateFill);
-                    Renderer::addNodesToDrawlist(dl, game.cameraMgr.activeCam->transform.pos, store, Renderer::DrawlistFilter::Alpha, 0);
+                    Renderer::addNodesToDrawlist(dl, visibleNodes, game.cameraMgr.activeCam->transform.pos, store, Renderer::DrawlistFilter::Alpha, 0);
                     Renderer::Drawlist_Context ctx = {};
-                    Renderer::Drawlist_Context forcedCtx = {};
-                    forcedCtx.blendState = &store.blendStateOn;
-                    Renderer::draw_drawlist(dl, ctx, forcedCtx);
+                    Renderer::Drawlist_Overrides overrides = {};
+                    overrides.forced_blendState = true;
+                    ctx.blendState = &store.blendStateOn;
+                    ctx.cbuffers[overrides.forced_cbuffer_count++] = scene_cbuffer;
+                    Renderer::draw_drawlist(dl, ctx, overrides);
                 }
                 }
             }
@@ -460,8 +556,8 @@ namespace Game
             // Immediate-mode debug. Can be moved out of the render update, it only pushes data to cpu buffers
             #if __DEBUG
             {
-                // World axis
                 {
+                    // World axis
                     const Color32 axisX(0.8f, 0.15f, 0.25f, 0.7f);
                     const Color32 axisY(0.25f, 0.8f, 0.15f, 0.7f);
                     const Color32 axisZ(0.15f, 0.25f, 0.8f, 0.7f);
@@ -488,6 +584,52 @@ namespace Game
                               Math::add(pos, float3(-thickness, thickness, spacing * i))
                             , Math::add(pos, float3(thickness, -thickness, spacing * i))
                             , axisZ);
+                    }
+                    if (game.debugVis.debug3Dmode == DebugVis::Debug3DView::All || game.debugVis.debug3Dmode == DebugVis::Debug3DView::Culling)
+                    {
+                        const Color32 bbColor(0.8f, 0.15f, 0.25f, 0.7f);
+
+                        for (u32 i = 0; i < visibleNodes.visible_nodes_count; i++) {
+                            u32 n = visibleNodes.visible_nodes[i];
+                            const DrawNode& node = store.drawNodes.data[n].state.live;
+                            Immediate::obb(mgr.immediateBuffer, node.nodeData.worldMatrix, node.min, node.max, bbColor);
+                        }
+                        for (u32 i = 0; i < visibleNodes.visible_nodes_skinned_count; i++) {
+                            u32 n = visibleNodes.visible_nodes_skinned[i];
+                            const DrawNodeSkinned& node = store.drawNodesSkinned.data[n].state.live;
+                            Immediate::obb(mgr.immediateBuffer, node.nodeData.worldMatrix, node.min, node.max, bbColor);
+                        }
+
+                        if (game.cameraMgr.captured_camera_initialized)
+                        {
+                            const Color32 frustum_color(0.25f, 0.8f, 0.15f, 0.7f);
+
+                            f32 minz = Renderer::min_z;
+                            float3 v[24];
+                            v[0] = {  1.f,  1.f, minz }; v[1] = { -1.f, 1.f, minz }; v[2] = { -1.f, 1.f, 1.f }; v[3] = { 1.f, 1.f, 1.f };           // +y quad
+                            v[4] = { -1.f, -1.f, minz }; v[5] = { 1.f, -1.f, minz }; v[6] = { 1.f, -1.f, 1.f }; v[7] = { -1.f, -1.f, 1.f };         // -y quad
+
+                            v[8] = { 1.f,  -1.f, minz }; v[9]  = {  1.f,  1.f, minz };  v[10] = {  1.f,  1.f, 1.f };   v[11] = {  1.f, -1.f, 1.f }; // +x quad
+                            v[12] = { -1.f, 1.f, minz }; v[13] = { -1.f, -1.f, minz };  v[14] = { -1.f, -1.f, 1.f };   v[15] = { -1.f,  1.f, 1.f }; // -x quad
+
+                            v[16] = { -1.f, -1.f,  1.f }; v[17] = { 1.f, -1.f,  1.f }; v[18] = {  1.f,  1.f,  1.f }; v[19] = { -1.f, 1.f,  1.f };   // +z quad
+                            v[20] = {  1.f,  1.f, minz }; v[21] = { 1.f, -1.f, minz }; v[22] = { -1.f, -1.f, minz }; v[23] = { -1.f, 1.f, minz };   // -z quad
+
+                            float4x4 m = Math::mult(mgr.perspProjection.matrix, game.cameraMgr.captured_camera.viewMatrix);
+                            Math::inverse(m);
+                            float3 transformed_v[COUNT_OF(v)];
+                            for (u32 i = 0; i < COUNT_OF(transformed_v); i++) {
+                                float4 transformed = Math::mult(m, float4(v[i], 1.f));
+                                transformed_v[i] = Math::invScale(transformed.xyz, transformed.w);
+                            }
+
+                            Immediate::poly(mgr.immediateBuffer, &transformed_v[0], 4, frustum_color);
+                            Immediate::poly(mgr.immediateBuffer, &transformed_v[4], 4, frustum_color);
+                            Immediate::poly(mgr.immediateBuffer, &transformed_v[8], 4, frustum_color);
+                            Immediate::poly(mgr.immediateBuffer, &transformed_v[12], 4, frustum_color);
+                            Immediate::poly(mgr.immediateBuffer, &transformed_v[16], 4, frustum_color);
+                            Immediate::poly(mgr.immediateBuffer, &transformed_v[20], 4, frustum_color);
+                        }
                     }
                 }
                 // 2d debug info
@@ -701,8 +843,6 @@ namespace Game
                         vpParams.topLeftY = 0;
                         vpParams.width = (f32)platform.screen.window_width;
                         vpParams.height = (f32)platform.screen.window_height;
-                        vpParams.minDepth = 0.f;
-                        vpParams.maxDepth = 1.f;
                         Renderer::Driver::set_VP(vpParams);
                     }
 

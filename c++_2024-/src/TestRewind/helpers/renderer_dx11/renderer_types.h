@@ -5,6 +5,7 @@ namespace Renderer {
 
     const auto generate_matrix_ortho = generate_matrix_ortho_z0to1;
     const auto generate_matrix_persp = generate_matrix_persp_z0to1;
+    const f32 min_z = 0.f;
 
 namespace Driver {
 
@@ -47,8 +48,8 @@ namespace Driver {
         ID3D11PixelShader* impl;
     };
     struct RscShaderSet {
-        ID3D11Buffer* cbuffers_vs[4];
-        ID3D11Buffer* cbuffers_ps[4];
+        u32 cbuffer_bindings_vs[4];
+        u32 cbuffer_bindings_ps[4];
         RscVertexShader vs;
         RscPixelShader ps;
         u16 cbuffer_vs_count;

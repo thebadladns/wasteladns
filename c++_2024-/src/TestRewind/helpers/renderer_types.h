@@ -31,6 +31,7 @@ namespace Renderer {
     void generate_matrix_ortho_z0to1(float4x4& matrix, const WindowProjection::Config& config);
     void generate_matrix_persp_zneg1to1(float4x4& matrixRHwithYup, const PerspProjection::Config& config);
     void generate_matrix_persp_z0to1(float4x4& matrixRHwithYup, const PerspProjection::Config& config);
+    //const f32 min_z;
 
     namespace Shaders {
         struct VS_src {

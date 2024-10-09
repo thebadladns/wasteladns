@@ -201,7 +201,6 @@ void create_untextured_cube_coords(UntexturedCube& c, const CubeCreateParams& pa
     f32 d = params.depth;
     float3* v = c.vertices;
 
-    // vertex and texture coords
     v[0] = { w, d, -h }; v[1] = { -w, d, -h }; v[2] = { -w, d, h }; v[3] = { w, d, h };           // +y quad
     v[4] = { -w, -d, -h }; v[5] = { w, -d, -h }; v[6] = { w, -d, h }; v[7] = { -w, -d, h };       // -y quad
 
@@ -209,7 +208,7 @@ void create_untextured_cube_coords(UntexturedCube& c, const CubeCreateParams& pa
     v[12] = { -w, d, -h }; v[13] = { -w, -d, -h };  v[14] = { -w, -d, h }; v[15] = { -w, d, h };   // -x quad
 
     v[16] = { -w, -d, h }; v[17] = { w, -d, h }; v[18] = { w, d, h }; v[19] = { -w, d, h };         // +z quad
-    v[20] = { w, d, -h }; v[21] = { w, -d, -h }; v[22] = { -w, -d, -h }; v[23] = { -w, d, -h }; // -z quad
+    v[20] = { w, d, -h }; v[21] = { w, -d, -h }; v[22] = { -w, -d, -h }; v[23] = { -w, d, -h };     // -z quad
 
     u16* i = c.indices;
 
@@ -297,7 +296,6 @@ namespace Driver {
     };
     ShaderResult create_shader_ps(RscPixelShader&, const PixelShaderRuntimeCompileParams&);
     struct CBufferBindingDesc {
-        Driver::RscCBuffer cbuffer;
         const char* name;
         u32 stageMask;
     };
@@ -388,11 +386,7 @@ namespace Driver {
     };
     void create_cbuffer(RscCBuffer& cb, const CBufferCreateParams& params);
     void update_cbuffer(RscCBuffer& cb, const void* data);
-    struct CBufferBindParams {
-        bool vertex;
-        bool pixel;
-    };
-    void bind_cbuffers(const RscCBuffer* cb, const u32 count, const CBufferBindParams& params);
+    void bind_cbuffers(const RscShaderSet& ss, const RscCBuffer* cb, const u32 count);
 
     void set_marker_name(Marker_t& wide, const char* ansi);
     void set_marker(Marker_t);

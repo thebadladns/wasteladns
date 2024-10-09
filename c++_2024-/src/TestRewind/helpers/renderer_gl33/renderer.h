@@ -221,7 +221,7 @@ namespace Driver {
 				const CBufferBindingDesc& binding = params.cbufferBindings[i];
                 GLuint index = glGetUniformBlockIndex(ss.id, binding.name);
                 if (index != GL_INVALID_INDEX) {
-                    glUniformBlockBinding(ss.id, index, binding.cbuffer.binding_index);
+                    glUniformBlockBinding(ss.id, index, i);
                 }
 			}
             glUseProgram(ss.id);
@@ -386,9 +386,6 @@ namespace Driver {
         glBindBuffer(GL_UNIFORM_BUFFER, buffer);
         glBufferData(GL_UNIFORM_BUFFER, params.byteWidth, nullptr, GL_STATIC_DRAW);
         
-        // TODO: can these be common? if not, why use a separate index??
-        glBindBufferBase(GL_UNIFORM_BUFFER, index, buffer);
-        
         cb.id = buffer;
         cb.binding_index = index;
 		cb.byteWidth = params.byteWidth;
@@ -397,7 +394,11 @@ namespace Driver {
         glBindBuffer(GL_UNIFORM_BUFFER, cb.id);
         glBufferSubData(GL_UNIFORM_BUFFER, 0, cb.byteWidth, data);
     }
-    void bind_cbuffers(const RscCBuffer* cb, const u32 count, const CBufferBindParams& params) {}
+    void bind_cbuffers(const RscShaderSet&, const RscCBuffer* cb, const u32 count) {
+        for (u32 i = 0; i < count; i++) {
+            glBindBufferBase(GL_UNIFORM_BUFFER, i, cb[i].id);
+        }
+    }
 
     void set_marker_name(Marker_t& wide, const char* ansi) { wide = ansi; }
     void start_event(Marker_t data) { if (glPushDebugGroup) { glPushDebugGroup(GL_DEBUG_SOURCE_APPLICATION, 0, -1, data); } }
