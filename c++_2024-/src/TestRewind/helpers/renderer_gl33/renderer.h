@@ -378,16 +378,14 @@ namespace Driver {
     }
     
     void create_cbuffer(RscCBuffer& cb, const CBufferCreateParams& params) {
-        GLuint buffer, index;
+        GLuint buffer;
         
         glGenBuffers(1, &buffer);
-        index = params.bindingIndex;
         
         glBindBuffer(GL_UNIFORM_BUFFER, buffer);
         glBufferData(GL_UNIFORM_BUFFER, params.byteWidth, nullptr, GL_STATIC_DRAW);
         
         cb.id = buffer;
-        cb.binding_index = index;
 		cb.byteWidth = params.byteWidth;
     }
     void update_cbuffer(RscCBuffer& cb, const void* data) {
@@ -400,7 +398,7 @@ namespace Driver {
         }
     }
 
-    void set_marker_name(Marker_t& wide, const char* ansi) { wide = ansi; }
+    void set_marker_name(Marker_t& marker, const char* ansi) { marker = ansi; }
     void start_event(Marker_t data) { if (glPushDebugGroup) { glPushDebugGroup(GL_DEBUG_SOURCE_APPLICATION, 0, -1, data); } }
     void end_event() { if (glPopDebugGroup) { glPopDebugGroup(); } }
 }

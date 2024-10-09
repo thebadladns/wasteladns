@@ -33,7 +33,7 @@ struct AnimatedNode {
     Clip* clips;
     State state; // separate???
     u32 clipCount;
-    u32 drawNodeHandle; // todo: not here!
+    u32 drawNodeHandle;
 };
 struct AnimatedState {
     u32 animIndex;

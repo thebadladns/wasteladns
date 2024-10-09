@@ -4,19 +4,7 @@
 #include "gameplay.h"
 #include "shaders.h"
 #include "game_renderer.h"
-
-struct Scene_ModelLoadData {
-    const char* path;
-    float3 origin;
-    float scale;
-    bool player;
-};
-// from blender: export fbx -> Apply Scalings: FBX All -> Forward: the one in Blender -> Use Space Transform: yes 
-const Scene_ModelLoadData assets[] = {
-      { "assets/meshes/boar.fbx", {5.f, 10.f, 2.30885f}, 1.f, false }
-    , { "assets/meshes/bird.fbx", {1.f, 3.f, 2.23879f}, 1.f, true }
-    , { "assets/meshes/bird.fbx", {0.f, 5.f, 2.23879f}, 1.f, false }
-};
+;
 const u32 numCubes = 4;
 
 namespace Game

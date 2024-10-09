@@ -84,7 +84,6 @@ struct Drawlist_Context {
     Driver::RscTexture* texture;
     Driver::RscBlendState* blendState;
     Driver::RscIndexedVertexBuffer* vertexBuffer;
-    u32 cbuffer_count;
 };
 struct Drawlist_Overrides {
     bool forced_shader;
@@ -182,7 +181,7 @@ void draw_drawlist(Drawlist& dl, Drawlist_Context& ctx, const Drawlist_Overrides
             for (u32 i = 0; i < item.cbuffer_count; i++) {
                 ctx.cbuffers[i + overrides.forced_cbuffer_count] = item.cbuffers[i];
             }
-            Driver::bind_cbuffers(*ctx.shader, ctx.cbuffers, ctx.cbuffer_count);
+            Driver::bind_cbuffers(*ctx.shader, ctx.cbuffers, item.cbuffer_count + overrides.forced_cbuffer_count);
 			if (item.drawcount) {
                 Driver::draw_instances_indexed_vertex_buffer(item.vertexBuffer, item.drawcount);
             } else {

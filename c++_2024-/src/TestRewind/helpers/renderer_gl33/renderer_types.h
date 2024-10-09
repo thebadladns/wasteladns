@@ -85,7 +85,6 @@ namespace Driver {
     
     struct RscCBuffer {
         GLuint id;
-        GLuint binding_index;
         u32 byteWidth;
     };
 
