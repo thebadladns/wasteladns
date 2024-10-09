@@ -192,7 +192,7 @@ void draw_drawlist(Drawlist& dl, Drawlist_Context& ctx, const Drawlist_Overrides
     }
 }
 struct Store {
-    Driver::RscCBuffer cbuffers[512]; // todo: check size?
+    Driver::RscCBuffer cbuffers[512]; // todo: DEAL WITH SIZES PROPERLY
     Driver::RscShaderSet shaders[ShaderType::Count];
 	Allocator::Arena persistentArena;
     Allocator::Pool<Animation::AnimatedNode> animatedNodes;
@@ -293,9 +293,9 @@ void addNodesToDrawlist(Drawlist& dl, const VisibleNodes& visibleNodes, float3 c
                 const DrawMesh& mesh = get_drawMesh(store, node.meshHandles[m]);
                 u32 curr_shift = 0;
                 key.v = 0;
-                key.v |= (mesh.type & shaderMask) << curr_shift, curr_shift += shaderBits;
                 key.v |= (n & nodeMask) << curr_shift, curr_shift += nodeBits;
-                key.v |= (distSqNormalized & depthMask) << curr_shift, curr_shift += depthBits;
+                key.v |= (mesh.type & shaderMask) << curr_shift, curr_shift += shaderBits;
+                //key.v |= (distSqNormalized & depthMask) << curr_shift, curr_shift += depthBits;
                 item.shader = store.shaders[mesh.type];
                 item.vertexBuffer = mesh.vertexBuffer;
                 item.cbuffers[item.cbuffer_count++] = store.cbuffers[node.cbuffer_node];
@@ -335,9 +335,9 @@ void addNodesToDrawlist(Drawlist& dl, const VisibleNodes& visibleNodes, float3 c
                 const DrawMesh& mesh = get_drawMesh(store, node.meshHandles[m]);
                 u32 curr_shift = 0;
                 key.v = 0;
-                key.v |= (mesh.type & shaderMask) << curr_shift, curr_shift += shaderBits;
                 key.v |= (n & nodeMask) << curr_shift, curr_shift += nodeBits;
-                key.v |= (distSqNormalized & depthMask) << curr_shift, curr_shift += depthBits;
+                key.v |= (mesh.type & shaderMask) << curr_shift, curr_shift += shaderBits;
+                //key.v |= (distSqNormalized & depthMask) << curr_shift, curr_shift += depthBits;
                 item.shader = store.shaders[mesh.type];
                 item.vertexBuffer = mesh.vertexBuffer;
                 item.cbuffers[item.cbuffer_count++] = store.cbuffers[node.cbuffer_node];
@@ -373,8 +373,8 @@ void addNodesToDrawlist(Drawlist& dl, const VisibleNodes& visibleNodes, float3 c
                 const DrawMesh& mesh = get_drawMesh(store, node.meshHandles[m]);
                 u32 curr_shift = 0;
                 key.v = 0;
-                key.v |= (mesh.type & shaderMask) << curr_shift, curr_shift += shaderBits;
                 key.v |= (n & nodeMask) << curr_shift, curr_shift += nodeBits;
+                key.v |= (mesh.type & shaderMask) << curr_shift, curr_shift += shaderBits;
                 item.shader = store.shaders[mesh.type];
                 item.vertexBuffer = mesh.vertexBuffer;
                 item.cbuffers[item.cbuffer_count++] = store.cbuffers[node.cbuffer_node];
