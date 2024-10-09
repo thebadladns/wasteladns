@@ -6,8 +6,12 @@
 #include "types.h"
 #endif
 
+#ifndef FLT_MAX
 #define FLT_MAX 3.402823466e+38F // max value
+#endif
+#ifndef FLT_MIN
 #define FLT_MIN 1.175494351e-38F // min positive value
+#endif
 
 namespace Math {
 const f32 eps_f = 1.19e-07f;
