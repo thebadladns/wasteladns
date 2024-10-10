@@ -153,7 +153,7 @@ struct DrawNodeInstanced {
 
 void draw_drawlist(Drawlist& dl, Drawlist_Context& ctx, const Drawlist_Overrides& overrides) {
     qsort(dl.keys, 0, dl.count[DrawlistBuckets::Base] - 1);
-    qsort(dl.keys, dl.count[DrawlistBuckets::Base], dl.count[DrawlistBuckets::Instanced] - 1);
+    qsort(dl.keys, dl.count[DrawlistBuckets::Base], dl.count[DrawlistBuckets::Base] + dl.count[DrawlistBuckets::Instanced] - 1);
     
 	u32 count = dl.count[DrawlistBuckets::Base] + dl.count[DrawlistBuckets::Instanced];
     for (u32 i = 0; i < count; i++) {
@@ -211,6 +211,7 @@ struct Store {
     u32 playerDrawNodeHandle;
     u32 playerAnimatedNodeHandle;
     u32 particlesDrawHandle;
+    u32 mirrorDrawHandle;
 };
 
 NodeData& get_draw_node_data(Store& store, const u32 nodeHandle) {
@@ -241,13 +242,88 @@ u32 handle_from_drawMesh(Store& store, DrawMesh& mesh) { return Allocator::get_p
 Animation::AnimatedNode& get_animatedNode(Store& store, const u32 nodeHandle) { return Allocator::get_pool_slot(store.animatedNodes, nodeHandle - 1); }
 u32 handle_from_animatedNode(Store& store, Animation::AnimatedNode& animatedNode) { return Allocator::get_pool_index(store.animatedNodes, animatedNode) + 1; }
 
+
+struct SortParams {
+    struct Type { enum Enum { Default, FrontToBack }; };
+    SortParams::Type::Enum type;
+    DrawNodeMeshType::Enum meshType;
+    u32 depthBits;
+    u32 depthMask;
+    u32 maxDistValue;
+    f32 maxDistSq;
+    u32 nodeBits;
+    u32 nodeMask;
+    u32 shaderBits;
+    u32 shaderMask;
+    u32 distSqNormalized;
+};
+void makeSortKeyBitParams(SortParams& params, const DrawNodeMeshType::Enum meshType, const SortParams::Type::Enum sortType) {
+    params.nodeBits = 10; // 1024 nodes
+    params.nodeMask = (1 << params.nodeBits) - 1;
+    params.shaderBits = 8; // 255 shader types
+    params.shaderMask = (1 << params.shaderBits) - 1;
+    params.type = sortType;
+    params.meshType = meshType;
+    switch (sortType) {
+    case SortParams::Type::Default: {
+        // very rough depth sorting, 10 bits for 1000 units, sort granularity is 1.023 units
+        params.depthBits = 10;
+        params.depthMask = (1 << params.depthBits) - 1;
+        params.maxDistValue = (1 << params.depthBits) - 1;
+        params.maxDistSq = 1000.f * 1000.f;
+    }
+    break;
+    case SortParams::Type::FrontToBack: {
+        // very rough depth sorting, 14 bits for 1000 units, sort granularity is 0.06 units, but we only consider mesh centers
+        params.depthBits = 14;
+        params.depthMask = (1 << params.depthBits) - 1;
+        params.maxDistValue = (1 << params.depthBits) - 1;
+        params.maxDistSq = 1000.f * 1000.f; // todo: based on camera distance?
+    }
+    break;
+    };
+}
+void makeSortKeyDistParams(SortParams& params, const f32 distSq) {
+    switch (params.type) {
+    case SortParams::Type::Default: {
+        params.distSqNormalized = u32(params.maxDistValue * Math::min(distSq / params.maxDistSq, 1.f));
+    }
+    break;
+    case SortParams::Type::FrontToBack: {
+        params.distSqNormalized = ~u32(params.maxDistValue * Math::min(distSq / params.maxDistSq, 1.f));
+    }
+    break;
+    }
+}
+u32 makeSortKey(const u32 nodeIdx, const u32 shaderType, const SortParams& params) {
+    u32 key = 0;
+    u32 curr_shift = 0;
+    switch (params.type) {
+    case SortParams::Type::Default: {
+        key |= (nodeIdx & params.nodeMask) << curr_shift, curr_shift += params.nodeBits;
+        key |= (shaderType & params.shaderMask) << curr_shift, curr_shift += params.shaderBits;
+        //if (params.meshType != DrawNodeMeshType::Instanced) {
+        //    key |= (params.distSqNormalized & params.depthMask) << curr_shift, curr_shift += params.depthBits;
+        //}
+    }
+    break;
+    case SortParams::Type::FrontToBack: {
+        key |= (nodeIdx & params.nodeMask) << curr_shift, curr_shift += params.nodeBits;
+        key |= (shaderType & params.shaderMask) << curr_shift, curr_shift += params.shaderBits;
+        key |= (params.distSqNormalized & params.depthMask) << curr_shift, curr_shift += params.depthBits;
+    }
+    break;
+    }
+    return key;
+}
+
 struct VisibleNodes {
     u32 visible_nodes[256];
     u32 visible_nodes_skinned[256];
     u32 visible_nodes_count;
     u32 visible_nodes_skinned_count;
 };
-void addNodesToDrawlist(Drawlist& dl, const VisibleNodes& visibleNodes, float3 cameraPos, Store& store, const u32 includeFilter, const u32 excludeFilter) {
+void addNodesToDrawlist(Drawlist& dl, const VisibleNodes& visibleNodes, float3 cameraPos, Store& store, const u32 includeFilter, const u32 excludeFilter, const SortParams::Type::Enum sortType) {
 
     // hack
     const char* shaderNames[DrawNodeMeshType::Count][ShaderType::Count] = {
@@ -262,15 +338,8 @@ void addNodesToDrawlist(Drawlist& dl, const VisibleNodes& visibleNodes, float3 c
         "NODE INSTANCED Instanced3D", "NODE INSTANCED Color3D", "NODE INSTANCED Color3DSkinned", "NODE INSTANCED Textured3D", "NODE INSTANCED Textured3DAlphaClip", "NODE INSTANCED Textured3DSkinned", "NODE INSTANCED Textured3DAlphaClipSkinned"
     } };
     {
-        // very rough depth sorting, 10 bits for 1000 units, sort granularity is 1.023 units
-        const u32 depthBits = 10;
-        const u32 depthMask = (1 << depthBits) - 1;
-        const u32 maxValue = (1 << depthBits) - 1;
-        const f32 maxDistSq = 1000.f * 1000.f;
-        const u32 nodeBits = 10; // 1024 nodes
-        const u32 nodeMask = (1 << nodeBits) - 1;
-        const u32 shaderBits = 8; // 255 shader types
-        const u32 shaderMask = (1 << shaderBits) - 1;
+        SortParams sortParams;
+        makeSortKeyBitParams(sortParams, DrawNodeMeshType::Default, sortType);
         
         for (u32 i = 0; i < visibleNodes.visible_nodes_count; i++) {
             u32 n = visibleNodes.visible_nodes[i];
@@ -281,7 +350,7 @@ void addNodesToDrawlist(Drawlist& dl, const VisibleNodes& visibleNodes, float3 c
             if (excludeFilter & DrawlistFilter::Alpha) { if (node.nodeData.groupColor.w < 1.f) { continue; } }
             
             f32 distSq = Math::magSq(Math::subtract(node.nodeData.worldMatrix.col3.xyz, cameraPos));
-            u32 distSqNormalized = u32(maxValue * Math::min(distSq / maxDistSq, 1.f));
+            makeSortKeyDistParams(sortParams, distSq);
             
             for (u32 m = 0; m < maxMeshCount; m++) {
                 if (node.meshHandles[m] == 0) { continue; }
@@ -291,11 +360,7 @@ void addNodesToDrawlist(Drawlist& dl, const VisibleNodes& visibleNodes, float3 c
                 Key& key = dl.keys[dl_index];
                 key.idx = dl_index;
                 const DrawMesh& mesh = get_drawMesh(store, node.meshHandles[m]);
-                u32 curr_shift = 0;
-                key.v = 0;
-                key.v |= (n & nodeMask) << curr_shift, curr_shift += nodeBits;
-                key.v |= (mesh.type & shaderMask) << curr_shift, curr_shift += shaderBits;
-                //key.v |= (distSqNormalized & depthMask) << curr_shift, curr_shift += depthBits;
+                key.v = makeSortKey(n, mesh.type, sortParams);
                 item.shader = store.shaders[mesh.type];
                 item.vertexBuffer = mesh.vertexBuffer;
                 item.cbuffers[item.cbuffer_count++] = store.cbuffers[node.cbuffer_node];
@@ -306,15 +371,8 @@ void addNodesToDrawlist(Drawlist& dl, const VisibleNodes& visibleNodes, float3 c
         }
     }
     {
-        // skinned nodes are sorted by distance, then node, then program (important to minimize cbuffer writes)
-        const u32 depthBits = 10;
-        const u32 depthMask = (1 << depthBits) - 1;
-        const u32 maxValue = (1 << depthBits) - 1;
-        const f32 maxDistSq = 1000.f * 1000.f;
-        const u32 nodeBits = 10; // 1024 nodes
-        const u32 nodeMask = (1 << nodeBits) - 1;
-        const u32 shaderBits = 8; // 255 shader types
-        const u32 shaderMask = (1 << shaderBits) - 1;
+        SortParams sortParams;
+        makeSortKeyBitParams(sortParams, DrawNodeMeshType::Skinned, sortType);
         for (u32 i = 0; i < visibleNodes.visible_nodes_skinned_count; i++) {
             u32 n = visibleNodes.visible_nodes_skinned[i];
             const DrawNodeSkinned& node = store.drawNodesSkinned.data[n].state.live;
@@ -324,7 +382,7 @@ void addNodesToDrawlist(Drawlist& dl, const VisibleNodes& visibleNodes, float3 c
             if (excludeFilter & DrawlistFilter::Alpha) { if (node.nodeData.groupColor.w < 1.f) { continue; } }
             
             f32 distSq = Math::magSq(Math::subtract(node.nodeData.worldMatrix.col3.xyz, cameraPos));
-            u32 distSqNormalized = u32(maxValue * Math::min(distSq / maxDistSq, 1.f));
+            makeSortKeyDistParams(sortParams, distSq);
             
             for (u32 m = 0; m < maxMeshCount; m++) {
                 if (node.meshHandles[m] == 0) { continue; }
@@ -333,11 +391,10 @@ void addNodesToDrawlist(Drawlist& dl, const VisibleNodes& visibleNodes, float3 c
                 Key& key = dl.keys[dl_index];
                 key.idx = dl_index;
                 const DrawMesh& mesh = get_drawMesh(store, node.meshHandles[m]);
-                u32 curr_shift = 0;
-                key.v = 0;
-                key.v |= (n & nodeMask) << curr_shift, curr_shift += nodeBits;
-                key.v |= (mesh.type & shaderMask) << curr_shift, curr_shift += shaderBits;
-                //key.v |= (distSqNormalized & depthMask) << curr_shift, curr_shift += depthBits;
+                if (mesh.type == ShaderType::Textured3DAlphaClipSkinned || mesh.type == ShaderType::Textured3DSkinned) {
+                    printf("");
+                }
+                key.v = makeSortKey(n, mesh.type, sortParams);
                 item.shader = store.shaders[mesh.type];
                 item.vertexBuffer = mesh.vertexBuffer;
                 item.cbuffers[item.cbuffer_count++] = store.cbuffers[node.cbuffer_node];
@@ -349,11 +406,8 @@ void addNodesToDrawlist(Drawlist& dl, const VisibleNodes& visibleNodes, float3 c
         }
     }
     {
-        // instance nodes are sorted by node, then program (no distance sort)
-        const u32 nodeBits = 10; // 1024 nodes
-        const u32 nodeMask = (1 << nodeBits) - 1;
-        const u32 shaderBits = 8; // 255 shader types
-        const u32 shaderMask = (1 << shaderBits) - 1;
+        SortParams sortParams;
+        makeSortKeyBitParams(sortParams, DrawNodeMeshType::Instanced, sortType);
         for (u32 n = 0, count = 0; n < store.drawNodesInstanced.cap && count < store.drawNodesInstanced.count; n++) {
             if (store.drawNodesInstanced.data[n].alive == 0) { continue; }
             count++;
@@ -366,15 +420,12 @@ void addNodesToDrawlist(Drawlist& dl, const VisibleNodes& visibleNodes, float3 c
             
             for (u32 m = 0; m < maxMeshCount; m++) {
                 if (node.meshHandles[m] == 0) { continue; }
-                u32 dl_index = dl.count[DrawlistBuckets::Instanced]++;
+                u32 dl_index = dl.count[DrawlistBuckets::Instanced]++ + dl.count[DrawlistBuckets::Base];
                 DrawCall_Item& item = dl.items[dl_index];
                 Key& key = dl.keys[dl_index];
                 key.idx = dl_index;
                 const DrawMesh& mesh = get_drawMesh(store, node.meshHandles[m]);
-                u32 curr_shift = 0;
-                key.v = 0;
-                key.v |= (n & nodeMask) << curr_shift, curr_shift += nodeBits;
-                key.v |= (mesh.type & shaderMask) << curr_shift, curr_shift += shaderBits;
+                key.v = makeSortKey(n, mesh.type, sortParams);
                 item.shader = store.shaders[mesh.type];
                 item.vertexBuffer = mesh.vertexBuffer;
                 item.cbuffers[item.cbuffer_count++] = store.cbuffers[node.cbuffer_node];
@@ -887,13 +938,22 @@ void init_pipelines(Store& store, Allocator::Arena scratchArena, const Platform:
     };
 
     // cbuffer bindings
-    const Renderer::Driver::CBufferBindingDesc bufferBindings_base[] = {
+    const Renderer::Driver::CBufferBindingDesc bufferBindings_untextured_base[] = {
         { "type_PerScene", Driver::CBufferStageMask::VS },
         { "type_PerGroup", Driver::CBufferStageMask::VS }
     };
-    const Renderer::Driver::CBufferBindingDesc bufferBindings_skinned_base[] = {
+    const Renderer::Driver::CBufferBindingDesc bufferBindings_skinned_untextured_base[] = {
         { "type_PerScene", Driver::CBufferStageMask::VS },
         { "type_PerGroup", Driver::CBufferStageMask::VS },
+        { "type_PerJoint", Driver::CBufferStageMask::VS }
+    };
+    const Renderer::Driver::CBufferBindingDesc bufferBindings_textured_base[] = {
+        { "type_PerScene", Driver::CBufferStageMask::VS },
+        { "type_PerGroup", Driver::CBufferStageMask::VS | Driver::CBufferStageMask::PS }
+    };
+    const Renderer::Driver::CBufferBindingDesc bufferBindings_skinned_textured_base[] = {
+        { "type_PerScene", Driver::CBufferStageMask::VS },
+        { "type_PerGroup", Driver::CBufferStageMask::VS | Driver::CBufferStageMask::PS },
         { "type_PerJoint", Driver::CBufferStageMask::VS }
     };
     const Renderer::Driver::CBufferBindingDesc bufferBindings_instanced_base[] = {
@@ -942,8 +1002,8 @@ void init_pipelines(Store& store, Allocator::Arena scratchArena, const Platform:
         desc.vertexAttr_count = COUNT_OF(attribs_color3d);
         desc.textureBindings = nullptr;
         desc.textureBinding_count = 0;
-        desc.bufferBindings = bufferBindings_base;
-        desc.bufferBinding_count = COUNT_OF(bufferBindings_base);
+        desc.bufferBindings = bufferBindings_untextured_base;
+        desc.bufferBinding_count = COUNT_OF(bufferBindings_untextured_base);
         desc.vs_name = Shaders::vs_color3d_base.name;
         desc.vs_src = Shaders::vs_color3d_base.src;
         desc.ps_name = Shaders::ps_color3d_unlit.name;
@@ -956,8 +1016,8 @@ void init_pipelines(Store& store, Allocator::Arena scratchArena, const Platform:
         desc.vertexAttr_count = COUNT_OF(attribs_color3d_skinned);
         desc.textureBindings = nullptr;
         desc.textureBinding_count = 0;
-        desc.bufferBindings = bufferBindings_skinned_base;
-        desc.bufferBinding_count = COUNT_OF(bufferBindings_skinned_base);
+        desc.bufferBindings = bufferBindings_skinned_untextured_base;
+        desc.bufferBinding_count = COUNT_OF(bufferBindings_skinned_untextured_base);
         desc.vs_name = Shaders::vs_color3d_skinned_base.name;
         desc.vs_src = Shaders::vs_color3d_skinned_base.src;
         desc.ps_name = Shaders::ps_color3d_unlit.name;
@@ -970,8 +1030,8 @@ void init_pipelines(Store& store, Allocator::Arena scratchArena, const Platform:
         desc.vertexAttr_count = COUNT_OF(attribs_textured3d);
         desc.textureBindings = textureBindings_base;
         desc.textureBinding_count = COUNT_OF(textureBindings_base);
-        desc.bufferBindings = bufferBindings_base;
-        desc.bufferBinding_count = COUNT_OF(bufferBindings_base);
+        desc.bufferBindings = bufferBindings_textured_base;
+        desc.bufferBinding_count = COUNT_OF(bufferBindings_textured_base);
         desc.vs_name = Shaders::vs_textured3d_base.name;
         desc.vs_src = Shaders::vs_textured3d_base.src;
         desc.ps_name = Shaders::ps_textured3d_base.name;
@@ -984,8 +1044,8 @@ void init_pipelines(Store& store, Allocator::Arena scratchArena, const Platform:
         desc.vertexAttr_count = COUNT_OF(attribs_textured3d);
         desc.textureBindings = textureBindings_base;
         desc.textureBinding_count = COUNT_OF(textureBindings_base);
-        desc.bufferBindings = bufferBindings_base;
-        desc.bufferBinding_count = COUNT_OF(bufferBindings_base);
+        desc.bufferBindings = bufferBindings_textured_base;
+        desc.bufferBinding_count = COUNT_OF(bufferBindings_textured_base);
         desc.vs_name = Shaders::vs_textured3d_base.name;
         desc.vs_src = Shaders::vs_textured3d_base.src;
         desc.ps_name = Shaders::ps_textured3dalphaclip_base.name;
@@ -998,8 +1058,8 @@ void init_pipelines(Store& store, Allocator::Arena scratchArena, const Platform:
         desc.vertexAttr_count = COUNT_OF(attribs_textured3d_skinned);
         desc.textureBindings = textureBindings_base;
         desc.textureBinding_count = COUNT_OF(textureBindings_base);
-        desc.bufferBindings = bufferBindings_skinned_base;
-        desc.bufferBinding_count = COUNT_OF(bufferBindings_skinned_base);
+        desc.bufferBindings = bufferBindings_skinned_textured_base;
+        desc.bufferBinding_count = COUNT_OF(bufferBindings_skinned_textured_base);
         desc.vs_name = Shaders::vs_textured3d_skinned_base.name;
         desc.vs_src = Shaders::vs_textured3d_skinned_base.src;
         desc.ps_name = Shaders::ps_textured3d_base.name;
@@ -1012,8 +1072,8 @@ void init_pipelines(Store& store, Allocator::Arena scratchArena, const Platform:
         desc.vertexAttr_count = COUNT_OF(attribs_textured3d_skinned);
         desc.textureBindings = textureBindings_base;
         desc.textureBinding_count = COUNT_OF(textureBindings_base);
-        desc.bufferBindings = bufferBindings_skinned_base;
-        desc.bufferBinding_count = COUNT_OF(bufferBindings_skinned_base);
+        desc.bufferBindings = bufferBindings_skinned_textured_base;
+        desc.bufferBinding_count = COUNT_OF(bufferBindings_skinned_textured_base);
         desc.vs_name = Shaders::vs_textured3d_skinned_base.name;
         desc.vs_src = Shaders::vs_textured3d_skinned_base.src;
         desc.ps_name = Shaders::ps_textured3dalphaclip_base.name;
@@ -1125,6 +1185,66 @@ void init_pipelines(Store& store, Allocator::Arena scratchArena, const Platform:
             Math::identity4x4(*(Transform*)&(matrix));
         }
         store.particlesDrawHandle = (DrawNodeMeshType::Instanced << 16) | (Allocator::get_pool_index(store.drawNodesInstanced, node) & 0xffff); // todo: consolidate this
+    }
+
+    // mirror
+    {
+        Renderer::DrawMesh& mesh = Allocator::alloc_pool(store.meshes);
+        mesh = {};
+        mesh.type = ShaderType::Color3D;
+
+        Renderer::UntexturedCube cube;
+
+        f32 w = 8.f, h = 5.f;
+        u32 c = Color32(1.f, 1.f, 1.f, 1.f).ABGR();
+        VertexLayout_Color_3D v[] = { { { w, 0.f, -h }, c }, { { -w, 0.f, -h }, c }, { { -w, 0.f, h }, c }, { { w, 0.f, h }, c } };
+        u16 i[] = { 2, 1, 0, 0, 3, 2 };
+        Renderer::Driver::IndexedVertexBufferDesc bufferParams;
+        bufferParams.vertexData = v;
+        bufferParams.indexData = i;
+        bufferParams.vertexSize = sizeof(v);
+        bufferParams.vertexCount = COUNT_OF(v);
+        bufferParams.indexSize = sizeof(i);
+        bufferParams.indexCount = COUNT_OF(i);
+        bufferParams.memoryUsage = Renderer::Driver::BufferMemoryUsage::GPU;
+        bufferParams.accessType = Renderer::Driver::BufferAccessType::GPU;
+        bufferParams.indexType = Renderer::Driver::BufferItemType::U16;
+        bufferParams.type = Renderer::Driver::BufferTopologyType::Triangles;
+        Driver::VertexAttribDesc attribs[] = {
+            Driver::make_vertexAttribDesc("POSITION", OFFSET_OF(VertexLayout_Color_3D, pos), sizeof(VertexLayout_Color_3D), Driver::BufferAttributeFormat::R32G32B32_FLOAT),
+            Driver::make_vertexAttribDesc("COLOR", OFFSET_OF(VertexLayout_Color_3D, color), sizeof(VertexLayout_Color_3D), Driver::BufferAttributeFormat::R8G8B8A8_UNORM)
+        };
+        Renderer::Driver::create_indexed_vertex_buffer(mesh.vertexBuffer, bufferParams, attribs, COUNT_OF(attribs));
+        {
+            DrawNode& node = Allocator::alloc_pool(store.drawNodes);
+            node = {};
+            node.meshHandles[0] = handle_from_drawMesh(store, mesh);
+            Math::identity4x4(*(Transform*)&(node.nodeData.worldMatrix));
+            node.nodeData.groupColor = Color32(0.31f, 0.19f, 1.f, 0.62f).RGBAv4();
+            node.cbuffer_node = store.cbuffer_count;
+            Driver::create_cbuffer(store.cbuffers[store.cbuffer_count++], { sizeof(NodeData) });
+            store.mirrorDrawHandle = (DrawNodeMeshType::Default << 16) | (Allocator::get_pool_index(store.drawNodes, node) & 0xffff);
+        }
+        {
+            DrawNode& node = Allocator::alloc_pool(store.drawNodes);
+            node = {};
+            node.meshHandles[0] = handle_from_drawMesh(store, mesh);
+            Math::identity4x4(*(Transform*)&(node.nodeData.worldMatrix));
+            node.nodeData.worldMatrix.col3.xyz = float3(-5.f, -8.f, 0.f);
+            node.nodeData.groupColor = Color32(0.31f, 0.79f, 0.4f, 0.52f).RGBAv4();
+            node.cbuffer_node = store.cbuffer_count;
+            Driver::create_cbuffer(store.cbuffers[store.cbuffer_count++], { sizeof(NodeData) });
+        }
+        {
+            DrawNode& node = Allocator::alloc_pool(store.drawNodes);
+            node = {};
+            node.meshHandles[0] = handle_from_drawMesh(store, mesh);
+            Math::identity4x4(*(Transform*)&(node.nodeData.worldMatrix));
+            node.nodeData.worldMatrix.col3.xyz = float3(0.f, -14.f, 0.f);
+            node.nodeData.groupColor = Color32(0.01f, 0.19f, 0.3f, 0.32f).RGBAv4();
+            node.cbuffer_node = store.cbuffer_count;
+            Driver::create_cbuffer(store.cbuffers[store.cbuffer_count++], { sizeof(NodeData) });
+        }
     }
 }
 }

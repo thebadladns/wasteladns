@@ -556,6 +556,7 @@ namespace Driver {
     }
 
     void draw_fullscreen() {
+        d3dcontext->IASetInputLayout(nullptr); // todo: is this ok?
         d3dcontext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
         d3dcontext->Draw(3, 0);
     }

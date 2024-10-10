@@ -511,26 +511,34 @@ namespace Game
                 }
 
                 // render phase - base scene
+                Driver::Marker_t marker;
+                Driver::set_marker_name(marker, "BASE SCENE");
+                Renderer::Driver::start_event(marker);
                 {
                 // opaque pass
+                Driver::set_marker_name(marker, "OPAQUE");
+                Renderer::Driver::start_event(marker);
                 {
                     Renderer::Drawlist dl = {};
                     Renderer::Driver::bind_DS(store.depthStateOn);
                     Renderer::Driver::bind_RS(store.rasterizerStateFill);
-                    Renderer::addNodesToDrawlist(dl, visibleNodes, game.cameraMgr.activeCam->transform.pos, store, 0, Renderer::DrawlistFilter::Alpha);
+                    Renderer::addNodesToDrawlist(dl, visibleNodes, game.cameraMgr.activeCam->transform.pos, store, 0, Renderer::DrawlistFilter::Alpha, Renderer::SortParams::Type::Default);
                     Renderer::Drawlist_Context ctx = {};
                     Renderer::Drawlist_Overrides overrides = {};
                     ctx.cbuffers[overrides.forced_cbuffer_count++] = scene_cbuffer;
                     Renderer::draw_drawlist(dl, ctx, overrides);
                 }
+                Renderer::Driver::end_event();
 
                 // alpha pass
+                Driver::set_marker_name(marker, "ALPHA");
+                Renderer::Driver::start_event(marker);
                 {
                     Renderer::Drawlist dl = {};
                     Renderer::Driver::bind_DS(store.depthStateReadOnly);
                     Renderer::Driver::bind_blend_state(store.blendStateOn);
                     Renderer::Driver::bind_RS(store.rasterizerStateFill);
-                    Renderer::addNodesToDrawlist(dl, visibleNodes, game.cameraMgr.activeCam->transform.pos, store, Renderer::DrawlistFilter::Alpha, 0);
+                    Renderer::addNodesToDrawlist(dl, visibleNodes, game.cameraMgr.activeCam->transform.pos, store, Renderer::DrawlistFilter::Alpha, 0, Renderer::SortParams::Type::FrontToBack);
                     Renderer::Drawlist_Context ctx = {};
                     Renderer::Drawlist_Overrides overrides = {};
                     overrides.forced_blendState = true;
@@ -538,7 +546,9 @@ namespace Game
                     ctx.cbuffers[overrides.forced_cbuffer_count++] = scene_cbuffer;
                     Renderer::draw_drawlist(dl, ctx, overrides);
                 }
+                Renderer::Driver::end_event();
                 }
+                Renderer::Driver::end_event();
             }
 
             // Immediate-mode debug. Can be moved out of the render update, it only pushes data to cpu buffers
@@ -817,6 +827,8 @@ namespace Game
                     Driver::bind_shader(store.shaders[Renderer::ShaderType::FullscreenBlit]);
                     Driver::bind_textures(&store.gameRT.textures[0], 1);
                     Driver::draw_fullscreen();
+                    Renderer::Driver::RscTexture nullTex = {};
+                    Driver::bind_textures(&nullTex, 1); // unbind gameRT
                 }
                 Renderer::Driver::end_event();
                 Renderer::Driver::bind_blend_state(store.blendStateOff);

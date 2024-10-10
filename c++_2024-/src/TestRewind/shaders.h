@@ -21,9 +21,6 @@ cbuffer PerGroup : register(b1) {
     matrix modelMatrix;
     float4 groupColor;
 }
-cbuffer PerInstance : register(b2) {
-	matrix instanceMatrices[256];
-};
 struct AppData {
     float3 posMS : POSITION;
 };
@@ -57,9 +54,6 @@ cbuffer PerGroup : register(b1) {
     matrix modelMatrix;
     float4 groupColor;
 }
-cbuffer PerInstance : register(b2) {
-	matrix instanceMatrices[256];
-};
 struct AppData {
     float3 posMS : POSITION;
     float4 color : COLOR;
@@ -73,7 +67,7 @@ VertexOutput VS(AppData IN) {
     matrix vp = mul(projectionMatrix, viewMatrix);
     float4 posWS = mul(modelMatrix, float4(IN.posMS, 1.f));
     OUT.positionCS = mul(vp, posWS);
-    OUT.color = IN.color.rgba;
+    OUT.color = IN.color.rgba * groupColor;
     return OUT;
 }
 )"
@@ -95,7 +89,7 @@ cbuffer PerGroup : register(b1) {
     float4 groupColor;
 }
 cbuffer type_PerJoint : register(b2) {
-	matrix skinningMatrices[256];
+	matrix skinningMatrices[32];
 };
 struct AppData {
     float3 posMS : POSITION;
@@ -117,7 +111,7 @@ VertexOutput VS(AppData IN) {
     matrix vp = mul(projectionMatrix, viewMatrix);
     float4 posWS = mul(mul(modelMatrix,skinning), float4(IN.posMS, 1.f));
     OUT.positionCS = mul(vp, posWS);
-    OUT.color = IN.color.rgba;
+    OUT.color = IN.color.rgba * groupColor;
     return OUT;
 }
 )"
@@ -177,9 +171,6 @@ cbuffer PerGroup : register(b1) {
     matrix modelMatrix;
     float4 groupColor;
 }
-cbuffer PerInstance : register(b2) {
-	matrix instanceMatrices[256];
-};
 struct AppData {
     float3 posMS : POSITION;
     float2 uv : TEXCOORD;
@@ -215,7 +206,7 @@ cbuffer PerGroup : register(b1) {
     float4 groupColor;
 }
 cbuffer type_PerJoint : register(b2) {
-	matrix skinningMatrices[256];
+	matrix skinningMatrices[32];
 };
 struct AppData {
     float3 posMS : POSITION;
@@ -246,21 +237,10 @@ VertexOutput VS(AppData IN) {
 constexpr PS_src ps_textured3d_base = {
 "ps_textured3d_base",
 R"(
-cbuffer PerScene : register(b0) {
-    matrix projectionMatrix;
-    matrix viewMatrix;
-    float3 viewPosWS;
-    float padding1;
-    float3 lightPosWS;
-    float padding2;
-}
-cbuffer PerGroup : register(b1) {
+cbuffer PerGroup : register(b0) {
     matrix modelMatrix;
     float4 groupColor;
 }
-cbuffer PerInstance : register(b2) {
-	matrix instanceMatrices[256];
-};
 
 Texture2D texDiffuse : register(t0);
 SamplerState texDiffuseSampler : register(s0);
@@ -271,6 +251,7 @@ struct VertexOut {
 float4 PS(VertexOut IN) : SV_TARGET {
 
     float4 albedo = texDiffuse.Sample(texDiffuseSampler, IN.uv).rgba;
+    albedo = albedo * groupColor;
     //float3 color = albedo.a * albedo.rgb + (1.0 - albedo.a) * OUT.color.rgb;
     //return color;
     return albedo.rgba;
@@ -281,22 +262,10 @@ float4 PS(VertexOut IN) : SV_TARGET {
 constexpr PS_src ps_textured3dalphaclip_base = {
 "ps_textured3dalphaclip_base",
 R"(
-cbuffer PerScene : register(b0) {
-    matrix projectionMatrix;
-    matrix viewMatrix;
-    float3 viewPosWS;
-    float padding1;
-    float3 lightPosWS;
-    float padding2;
-}
-cbuffer PerGroup : register(b1) {
+cbuffer PerGroup : register(b0) {
     matrix modelMatrix;
     float4 groupColor;
 }
-cbuffer type_PerJoint : register(b2) {
-	matrix instanceMatrices[256];
-};
-
 Texture2D texDiffuse : register(t0);
 SamplerState texDiffuseSampler : register(s0);
 
@@ -306,6 +275,7 @@ struct VertexOut {
 float4 PS(VertexOut IN) : SV_TARGET {
 
     float4 albedo = texDiffuse.Sample(texDiffuseSampler, IN.uv).rgba;
+    albedo = albedo * groupColor;
     if (albedo.a < 0.1)
         discard;
     //float3 color = albedo.a * albedo.rgb + (1.0 - albedo.a) * OUT.color.rgb;
@@ -388,7 +358,7 @@ layout(location = 0) out vec4 varying_COLOR;
 
 void main()
 {
-    varying_COLOR = in_var_COLOR;
+    varying_COLOR = in_var_COLOR * PerGroup.groupColor;
     gl_Position = (PerScene.projectionMatrix * PerScene.viewMatrix) * (PerGroup.modelMatrix * vec4(in_var_POSITION, 1.0));
 }
 )"
@@ -422,7 +392,7 @@ layout(std140) uniform type_PerGroup
 } PerGroup;
 layout(std140) uniform type_PerJoint
 {
-    mat4 skinningMatrices[256];
+    mat4 skinningMatrices[32];
 } PerJoint;
 
 layout(location = 0) in vec3 in_var_POSITION;
@@ -433,7 +403,7 @@ layout(location = 0) out vec4 varying_COLOR;
 
 void main()
 {
-    varying_COLOR = in_var_COLOR;
+    varying_COLOR = in_var_COLOR * PerGroup.groupColor;
     mat4 joint0 = PerJoint.skinningMatrices[int(in_var_JOINTINDICES.x)] * in_var_JOINTWEIGHTS.x;
     mat4 joint1 = PerJoint.skinningMatrices[int(in_var_JOINTINDICES.y)] * in_var_JOINTWEIGHTS.y;
     mat4 joint2 = PerJoint.skinningMatrices[int(in_var_JOINTINDICES.z)] * in_var_JOINTWEIGHTS.z;
@@ -556,7 +526,7 @@ layout(std140) uniform type_PerGroup
 } PerGroup;
 layout(std140) uniform type_PerJoint
 {
-    mat4 skinningMatrices[256];
+    mat4 skinningMatrices[32];
 } PerJoint;
 
 layout(location = 0) in vec3 in_var_POSITION;
@@ -584,15 +554,11 @@ R"(
 #version 330
 #extension GL_ARB_separate_shader_objects : require
 
-layout(std140) uniform type_PerScene
+layout(std140) uniform type_PerGroup
 {
-    mat4 projectionMatrix;
-    mat4 viewMatrix;
-    vec3 viewPosWS;
-    float padding1;
-    vec3 lightPosWS;
-    float padding2;
-} PerScene;
+    mat4 modelMatrix;
+    vec4 groupColor;
+} PerGroup;
 
 uniform sampler2D texDiffuse;
 
@@ -602,6 +568,7 @@ layout(location = 0) out vec4 out_var_SV_TARGET;
 void main()
 {
     vec4 diffuse = texture(texDiffuse, varying_TEXCOORD).rgba;
+    diffuse = diffuse * PerGroup.groupColor;
     //vec3 color = diffuse.a * diffuse.rgb + (1.0-diffuse.a) * varying_COLOR.rgb;
     //out_var_SV_TARGET = color;
     out_var_SV_TARGET = diffuse.rgba;
@@ -615,15 +582,11 @@ R"(
 #version 330
 #extension GL_ARB_separate_shader_objects : require
 
-layout(std140) uniform type_PerScene
+layout(std140) uniform type_PerGroup
 {
-    mat4 projectionMatrix;
-    mat4 viewMatrix;
-    vec3 viewPosWS;
-    float padding1;
-    vec3 lightPosWS;
-    float padding2;
-} PerScene;
+    mat4 modelMatrix;
+    vec4 groupColor;
+} PerGroup;
 
 uniform sampler2D texDiffuse;
 
@@ -633,6 +596,7 @@ layout(location = 0) out vec4 out_var_SV_TARGET;
 void main()
 {
     vec4 diffuse = texture(texDiffuse, varying_TEXCOORD).rgba;
+    diffuse = diffuse * PerGroup.groupColor;
     if (diffuse.w < 0.1)
         discard;
     //vec3 color = diffuse.a * diffuse.rgb + (1.0-diffuse.a) * varying_COLOR.rgb;
