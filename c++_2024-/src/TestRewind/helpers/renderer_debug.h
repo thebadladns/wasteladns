@@ -152,33 +152,41 @@ namespace Immediate
         float3 rightFarTop(aabb_max.x, aabb_max.y, aabb_max.z);
         float3 rightNearTop(aabb_max.x, aabb_min.y, aabb_max.z);
 
-        float3 leftNearBottom_WS = Math::mult(mat, float4(leftNearBottom, 1.f)).xyz;
-        float3 leftFarBottom_WS = Math::mult(mat, float4(leftFarBottom, 1.f)).xyz;
-        float3 leftFarTop_WS = Math::mult(mat, float4(leftFarTop, 1.f)).xyz;
-        float3 leftNearTop_WS = Math::mult(mat, float4(leftNearTop, 1.f)).xyz;
-        float3 rightNearBottom_WS = Math::mult(mat, float4(rightNearBottom, 1.f)).xyz;
-        float3 rightFarBottom_WS = Math::mult(mat, float4(rightFarBottom, 1.f)).xyz;
-        float3 rightFarTop_WS = Math::mult(mat, float4(rightFarTop, 1.f)).xyz;
-        float3 rightNearTop_WS = Math::mult(mat, float4(rightNearTop, 1.f)).xyz;
+        float4 leftNearBottom_WS = Math::mult(mat, float4(leftNearBottom, 1.f));
+        float4 leftFarBottom_WS = Math::mult(mat, float4(leftFarBottom, 1.f));
+        float4 leftFarTop_WS = Math::mult(mat, float4(leftFarTop, 1.f));
+        float4 leftNearTop_WS = Math::mult(mat, float4(leftNearTop, 1.f));
+        float4 rightNearBottom_WS = Math::mult(mat, float4(rightNearBottom, 1.f));
+        float4 rightFarBottom_WS = Math::mult(mat, float4(rightFarBottom, 1.f));
+        float4 rightFarTop_WS = Math::mult(mat, float4(rightFarTop, 1.f));
+        float4 rightNearTop_WS = Math::mult(mat, float4(rightNearTop, 1.f));
+        float3 leftNearBottom_NDC = Math::invScale(leftNearBottom_WS.xyz, leftNearBottom_WS.w);
+        float3 leftFarBottom_NDC = Math::invScale(leftFarBottom_WS.xyz, leftFarBottom_WS.w);
+        float3 leftFarTop_NDC = Math::invScale(leftFarTop_WS.xyz, leftFarTop_WS.w);
+        float3 leftNearTop_NDC = Math::invScale(leftNearTop_WS.xyz, leftNearTop_WS.w);
+        float3 rightNearBottom_NDC = Math::invScale(rightNearBottom_WS.xyz, rightNearBottom_WS.w);
+        float3 rightFarBottom_NDC = Math::invScale(rightFarBottom_WS.xyz, rightFarBottom_WS.w);
+        float3 rightFarTop_NDC = Math::invScale(rightFarTop_WS.xyz, rightFarTop_WS.w);
+        float3 rightNearTop_NDC = Math::invScale(rightNearTop_WS.xyz, rightNearTop_WS.w);
 
         // left plane
-        segment(buffer, leftNearBottom_WS, leftFarBottom_WS, color);
-        segment(buffer, leftFarBottom_WS, leftFarTop_WS, color);
-        segment(buffer, leftFarTop_WS, leftNearTop_WS, color);
-        segment(buffer, leftNearTop_WS, leftNearBottom_WS, color);
+        segment(buffer, leftNearBottom_NDC, leftFarBottom_NDC, color);
+        segment(buffer, leftFarBottom_NDC, leftFarTop_NDC, color);
+        segment(buffer, leftFarTop_NDC, leftNearTop_NDC, color);
+        segment(buffer, leftNearTop_NDC, leftNearBottom_NDC, color);
 
         // right plane
-        segment(buffer, rightNearBottom_WS, rightFarBottom_WS, color);
-        segment(buffer, rightFarBottom_WS, rightFarTop_WS, color);
-        segment(buffer, rightFarTop_WS, rightNearTop_WS, color);
-        segment(buffer, rightNearTop_WS, rightNearBottom_WS, color);
+        segment(buffer, rightNearBottom_NDC, rightFarBottom_NDC, color);
+        segment(buffer, rightFarBottom_NDC, rightFarTop_NDC, color);
+        segment(buffer, rightFarTop_NDC, rightNearTop_NDC, color);
+        segment(buffer, rightNearTop_NDC, rightNearBottom_NDC, color);
 
         // remaining top
-        segment(buffer, leftNearTop_WS, rightNearTop_WS, color);
-        segment(buffer, leftFarTop_WS, rightFarTop_WS, color);
+        segment(buffer, leftNearTop_NDC, rightNearTop_NDC, color);
+        segment(buffer, leftFarTop_NDC, rightFarTop_NDC, color);
         // remaining bottom
-        segment(buffer, leftNearBottom_WS, rightNearBottom_WS, color);
-        segment(buffer, leftFarBottom_WS, rightFarBottom_WS, color);
+        segment(buffer, leftNearBottom_NDC, rightNearBottom_NDC, color);
+        segment(buffer, leftFarBottom_NDC, rightFarBottom_NDC, color);
     }
     void circle(Buffer& buffer, const float3& center, const float3& normal, const f32 radius, const Color32 color) {
         Transform33 m = Math::fromUp(normal);

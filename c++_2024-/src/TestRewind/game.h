@@ -573,8 +573,7 @@ namespace Game
                             , Math::add(pos, float3(thickness, -thickness, spacing * i))
                             , axisZ);
                     }
-                    if (game.debugVis.debug3Dmode == DebugVis::Debug3DView::All || game.debugVis.debug3Dmode == DebugVis::Debug3DView::Culling)
-                    {
+                    if (game.debugVis.debug3Dmode == DebugVis::Debug3DView::All || game.debugVis.debug3Dmode == DebugVis::Debug3DView::Culling) {
                         const Color32 bbColor(0.8f, 0.15f, 0.25f, 0.7f);
 
                         for (u32 i = 0; i < visibleNodes.visible_nodes_count; i++) {
@@ -588,35 +587,11 @@ namespace Game
                             Immediate::obb(mgr.immediateBuffer, node.nodeData.worldMatrix, node.min, node.max, bbColor);
                         }
 
-                        if (game.cameraMgr.captured_camera_initialized)
-                        {
+                        if (game.cameraMgr.captured_camera_initialized) {
                             const Color32 frustum_color(0.25f, 0.8f, 0.15f, 0.7f);
-
-                            f32 minz = Renderer::min_z;
-                            float3 v[24];
-                            v[0] = {  1.f,  1.f, minz }; v[1] = { -1.f, 1.f, minz }; v[2] = { -1.f, 1.f, 1.f }; v[3] = { 1.f, 1.f, 1.f };           // +y quad
-                            v[4] = { -1.f, -1.f, minz }; v[5] = { 1.f, -1.f, minz }; v[6] = { 1.f, -1.f, 1.f }; v[7] = { -1.f, -1.f, 1.f };         // -y quad
-
-                            v[8] = { 1.f,  -1.f, minz }; v[9]  = {  1.f,  1.f, minz };  v[10] = {  1.f,  1.f, 1.f };   v[11] = {  1.f, -1.f, 1.f }; // +x quad
-                            v[12] = { -1.f, 1.f, minz }; v[13] = { -1.f, -1.f, minz };  v[14] = { -1.f, -1.f, 1.f };   v[15] = { -1.f,  1.f, 1.f }; // -x quad
-
-                            v[16] = { -1.f, -1.f,  1.f }; v[17] = { 1.f, -1.f,  1.f }; v[18] = {  1.f,  1.f,  1.f }; v[19] = { -1.f, 1.f,  1.f };   // +z quad
-                            v[20] = {  1.f,  1.f, minz }; v[21] = { 1.f, -1.f, minz }; v[22] = { -1.f, -1.f, minz }; v[23] = { -1.f, 1.f, minz };   // -z quad
-
                             float4x4 m = Math::mult(mgr.perspProjection.matrix, game.cameraMgr.captured_camera.viewMatrix);
                             Math::inverse(m);
-                            float3 transformed_v[COUNT_OF(v)];
-                            for (u32 i = 0; i < COUNT_OF(transformed_v); i++) {
-                                float4 transformed = Math::mult(m, float4(v[i], 1.f));
-                                transformed_v[i] = Math::invScale(transformed.xyz, transformed.w);
-                            }
-
-                            Immediate::poly(mgr.immediateBuffer, &transformed_v[0], 4, frustum_color);
-                            Immediate::poly(mgr.immediateBuffer, &transformed_v[4], 4, frustum_color);
-                            Immediate::poly(mgr.immediateBuffer, &transformed_v[8], 4, frustum_color);
-                            Immediate::poly(mgr.immediateBuffer, &transformed_v[12], 4, frustum_color);
-                            Immediate::poly(mgr.immediateBuffer, &transformed_v[16], 4, frustum_color);
-                            Immediate::poly(mgr.immediateBuffer, &transformed_v[20], 4, frustum_color);
+                            Immediate::obb(mgr.immediateBuffer, m, float3(-1.f, -1.f, Renderer::min_z), float3(1.f, 1.f, 1.f), frustum_color);
                         }
                     }
                 }
