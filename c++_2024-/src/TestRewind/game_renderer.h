@@ -385,17 +385,11 @@ void computeVisibility(VisibleNodes& visibleNodes, float4x4& vpMatrix, Store& st
         out = 0; for (u32 corner_id = 0; corner_id < 8; corner_id++) { if (-box_CS[corner_id].y > box_CS[corner_id].w) { out++; } } if (out == 8) return false;
 
         // check whether the frustum is fully out at least one plane of the box
-        // near plane { 0.f, 0.f, 1.f, -Renderer::min_z } -> dot(p,box) = box.z - Renderer::min_z & box.w -> box.z < -Renderer::min_z & box.w
         out = 0; for (u32 corner_id = 0; corner_id < 8; corner_id++) { if (frustum[corner_id].z < boxmin_CS.z) { out++; } } if (out == 8) return false;
-        // far plane { 0.f, 0.f, -1.f, 1.f } -> dot(p,box) = -box.z + box.w -> box.z > box.w
         out = 0; for (u32 corner_id = 0; corner_id < 8; corner_id++) { if (frustum[corner_id].z > boxmax_CS.z) { out++; } } if (out == 8) return false;
-        // left plane { 1.f, 0.f, 0.f, 1.f } -> dot(p,box) = box.x + box.w -> box.x < -box.w
         out = 0; for (u32 corner_id = 0; corner_id < 8; corner_id++) { if (frustum[corner_id].x < boxmin_CS.z) { out++; } } if (out == 8) return false;
-        // right plane { 1.f, 0.f, 0.f, 1.f } -> dot(p,box) = -box.x + box.w -> box.x > box.w
         out = 0; for (u32 corner_id = 0; corner_id < 8; corner_id++) { if (frustum[corner_id].x > boxmax_CS.z) { out++; } } if (out == 8) return false;
-        // bottom plane { 0.f, 1.f, 0.f, 1.f } -> dot(p,box) = box.y + box.w -> box.y < -box.w
         out = 0; for (u32 corner_id = 0; corner_id < 8; corner_id++) { if (frustum[corner_id].y < boxmin_CS.z) { out++; } } if (out == 8) return false;
-        // top plane { 0.f, -1.f, 0.f, 1.f } -> dot(p,box) = -box.y + box.w -> box.y > box.w
         out = 0; for (u32 corner_id = 0; corner_id < 8; corner_id++) { if (frustum[corner_id].y > boxmax_CS.z) { out++; } } if (out == 8) return false;
 
         return true;
