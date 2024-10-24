@@ -104,23 +104,27 @@ struct DrawCall_Item {
     u32 drawcount;
 };
 
-struct DrawlistFilter { enum Enum { Alpha = 1 }; };
+struct DrawlistFilter { enum Enum { Alpha = 1, Mirror = 2 }; };
 struct DrawlistBuckets { enum Enum { Base, Instanced, Count }; };
 struct Drawlist {
-	enum { MaxItems = 2048 };
-    Key keys[MaxItems];
-    DrawCall_Item items[MaxItems];
+    Key* keys;
+    DrawCall_Item* items;
     u32 count[DrawlistBuckets::Count];
 };
 struct DrawlistStreams { enum Enum { Color3D, Color3DSkinned, Textured3D, Textured3DAlphaClip, Textured3DSkinned, Textured3DAlphaClipSkinned, Count }; };
 struct DrawNodeMeshType { enum Enum { Invalid = 0, Default = 1, Skinned, Instanced, Count }; }; // invalid type is 0, to support 0 initialization
 struct ShaderType { enum Enum {
-    FullscreenBlit,
-    Instanced3D,
-    Color3D, Color3DSkinned,
-    Textured3D, Textured3DAlphaClip, Textured3DSkinned, Textured3DAlphaClipSkinned,
-    Count
+        FullscreenBlit,
+        Instanced3D,
+        Color3D, Color3DSkinned,
+        Textured3D, Textured3DAlphaClip, Textured3DSkinned, Textured3DAlphaClipSkinned,
+        Count
 }; };
+const char* shaderNames[] = {
+    "FullscreenBlit", "Instanced3D", "Color3D", "Color3DSkinned", "Textured3D", "Textured3DAlphaClip", "Textured3DSkinned", "Textured3DAlphaClipSkinned"
+};
+static_assert(COUNT_OF(shaderNames) == ShaderType::Count, "Make sure there are enough shaderNames strings as there are ShaderType::Enum values");
+
 struct DrawMesh {
     ShaderType::Enum type;
     Driver::RscIndexedVertexBuffer vertexBuffer;
@@ -134,27 +138,18 @@ struct DrawNode {
     NodeData nodeData;
 };
 struct DrawNodeSkinned {
-    u32 meshHandles[DrawlistStreams::Count];
-    float3 min;
-    float3 max;
-    u32 cbuffer_node;
+    DrawNode core;
     u32 cbuffer_skinning;
-    NodeData nodeData;
     Matrices32 skinningMatrixPalette;
 };
 struct DrawNodeInstanced {
-    u32 meshHandles[DrawlistStreams::Count];
-    u32 cbuffer_node;
+    DrawNode core;
     u32 cbuffer_instances;
-    NodeData nodeData;
     Matrices64 instanceMatrices;
     u32 instanceCount;
 };
 
 void draw_drawlist(Drawlist& dl, Drawlist_Context& ctx, const Drawlist_Overrides& overrides) {
-    qsort(dl.keys, 0, dl.count[DrawlistBuckets::Base] - 1);
-    qsort(dl.keys, dl.count[DrawlistBuckets::Base], dl.count[DrawlistBuckets::Base] + dl.count[DrawlistBuckets::Instanced] - 1);
-    
 	u32 count = dl.count[DrawlistBuckets::Base] + dl.count[DrawlistBuckets::Instanced];
     for (u32 i = 0; i < count; i++) {
         DrawCall_Item& item = dl.items[dl.keys[i].idx];
@@ -192,6 +187,16 @@ void draw_drawlist(Drawlist& dl, Drawlist_Context& ctx, const Drawlist_Overrides
     }
 }
 struct Store {
+    struct Mirror { // todo: make this not so temp
+        float3 pos;
+        float3 normal;
+        u32 drawHandle;
+    };
+    struct Sky {
+        Driver::RscCBuffer cbuffer;
+        NodeData nodeData;
+        Driver::RscIndexedVertexBuffer buffers[6];
+    };
     Driver::RscCBuffer cbuffers[512]; // todo: DEAL WITH SIZES PROPERLY
     Driver::RscShaderSet shaders[ShaderType::Count];
 	Allocator::Arena persistentArena;
@@ -200,39 +205,49 @@ struct Store {
     Allocator::Pool<DrawNodeSkinned> drawNodesSkinned;
     Allocator::Pool<DrawNodeInstanced> drawNodesInstanced;
     Allocator::Pool<DrawMesh> meshes;
-    Renderer::Driver::RscRasterizerState rasterizerStateFill, rasterizerStateFillCullNone, rasterizerStateLine;
+    Renderer::Driver::RscRasterizerState rasterizerStateFillFrontfaces, rasterizerStateFillBackfaces, rasterizerStateFillCullNone, rasterizerStateLine;
     Renderer::Driver::RscDepthStencilState depthStateOn, depthStateReadOnly, depthStateOff;
-    Renderer::Driver::RscBlendState blendStateOn;
-    Renderer::Driver::RscBlendState blendStateOff;
+    Renderer::Driver::RscDepthStencilState depthStateMarkMirrors, depthStateMirrorReflections, depthStateMirrorReflectionsDepthReadOnly;
+    Renderer::Driver::RscBlendState blendStateOn, blendStateBlendOff, blendStateOff;
     Renderer::Driver::RscMainRenderTarget windowRT;
     Renderer::Driver::RscRenderTarget gameRT;
+    Mirror mirror;
+    Sky sky;
     u32 cbuffer_count;
     u32 cbuffer_scene;
     u32 playerDrawNodeHandle;
     u32 playerAnimatedNodeHandle;
     u32 particlesDrawHandle;
-    u32 mirrorDrawHandle;
 };
 
-NodeData& get_draw_node_data(Store& store, const u32 nodeHandle) {
-    if ((nodeHandle >> 16) & DrawNodeMeshType::Skinned) {
+u32 handle_from_node(Store& store, DrawNode& node) {
+    return (DrawNodeMeshType::Default << 16) | (Allocator::get_pool_index(store.drawNodes, node) & 0xffff);
+}
+u32 handle_from_node(Store& store, DrawNodeSkinned& node) {
+    return (DrawNodeMeshType::Skinned << 16) | (Allocator::get_pool_index(store.drawNodesSkinned, node) & 0xffff);
+}
+u32 handle_from_node(Store& store, DrawNodeInstanced& node) {
+    return  (DrawNodeMeshType::Instanced << 16) | (Allocator::get_pool_index(store.drawNodesInstanced, node) & 0xffff);
+}
+DrawNode& get_draw_node_core(Store& store, const u32 nodeHandle) {
+    if ((nodeHandle >> 16) == DrawNodeMeshType::Skinned) {
         DrawNodeSkinned& node = Allocator::get_pool_slot(store.drawNodesSkinned, nodeHandle & 0xffff);
-        return node.nodeData;
-    } else if ((nodeHandle >> 16) & DrawNodeMeshType::Instanced) {
+        return node.core;
+    } else if ((nodeHandle >> 16) == DrawNodeMeshType::Instanced) {
         DrawNodeInstanced& node = Allocator::get_pool_slot(store.drawNodesInstanced, nodeHandle & 0xffff);
-        return node.nodeData;
-    } else { // if ((nodeHandle >> 16) & DrawNodeMeshType::Default) {
+        return node.core;
+    } else { // if ((nodeHandle >> 16) == DrawNodeMeshType::Default) {
         DrawNode& node = Allocator::get_pool_slot(store.drawNodes, nodeHandle & 0xffff);
-        return node.nodeData;
+        return node;
     }
 }
 Matrices32& get_draw_skinning_data(Store& store, const u32 nodeHandle) {
-    //if ((nodeHandle >> 16) & DrawNodeMeshType::Skinned) {
+    //if ((nodeHandle >> 16) == DrawNodeMeshType::Skinned) {
     DrawNodeSkinned& node = Allocator::get_pool_slot(store.drawNodesSkinned, nodeHandle & 0xffff);
     return node.skinningMatrixPalette;
 }
 void get_draw_instanced_data(Matrices64*& matrices, u32*& count, Store& store, const u32 nodeHandle) {
-    //if ((nodeHandle >> 16) & DrawNodeMeshType::Instanced) {
+    //if ((nodeHandle >> 16) == DrawNodeMeshType::Instanced) {
     DrawNodeInstanced& node = Allocator::get_pool_slot(store.drawNodesInstanced, nodeHandle & 0xffff);
     matrices = &node.instanceMatrices;
 	count = &node.instanceCount;
@@ -244,7 +259,7 @@ u32 handle_from_animatedNode(Store& store, Animation::AnimatedNode& animatedNode
 
 
 struct SortParams {
-    struct Type { enum Enum { Default, FrontToBack }; };
+    struct Type { enum Enum { Default, BackToFront }; };
     SortParams::Type::Enum type;
     DrawNodeMeshType::Enum meshType;
     u32 depthBits;
@@ -273,7 +288,7 @@ void makeSortKeyBitParams(SortParams& params, const DrawNodeMeshType::Enum meshT
         params.maxDistSq = 1000.f * 1000.f;
     }
     break;
-    case SortParams::Type::FrontToBack: {
+    case SortParams::Type::BackToFront: {
         // very rough depth sorting, 14 bits for 1000 units, sort granularity is 0.06 units, but we only consider mesh centers
         params.depthBits = 14;
         params.depthMask = (1 << params.depthBits) - 1;
@@ -289,7 +304,7 @@ void makeSortKeyDistParams(SortParams& params, const f32 distSq) {
         params.distSqNormalized = u32(params.maxDistValue * Math::min(distSq / params.maxDistSq, 1.f));
     }
     break;
-    case SortParams::Type::FrontToBack: {
+    case SortParams::Type::BackToFront: {
         params.distSqNormalized = ~u32(params.maxDistValue * Math::min(distSq / params.maxDistSq, 1.f));
     }
     break;
@@ -307,7 +322,7 @@ u32 makeSortKey(const u32 nodeIdx, const u32 shaderType, const SortParams& param
         //}
     }
     break;
-    case SortParams::Type::FrontToBack: {
+    case SortParams::Type::BackToFront: {
         key |= (nodeIdx & params.nodeMask) << curr_shift, curr_shift += params.nodeBits;
         key |= (shaderType & params.shaderMask) << curr_shift, curr_shift += params.shaderBits;
         key |= (params.distSqNormalized & params.depthMask) << curr_shift, curr_shift += params.depthBits;
@@ -323,31 +338,78 @@ struct VisibleNodes {
     u32 visible_nodes_count;
     u32 visible_nodes_skinned_count;
 };
-void addNodesToDrawlist(Drawlist& dl, const VisibleNodes& visibleNodes, float3 cameraPos, Store& store, const u32 includeFilter, const u32 excludeFilter, const SortParams::Type::Enum sortType) {
+void computeVisibility(VisibleNodes& visibleNodes, float4x4& vpMatrix, Store& store) {
+    // todo: check this https://iquilezles.org/articles/frustumcorrect/
+    auto cull_isVisible = [](float4x4 mvp, float3 min, float3 max) -> bool {
+        float4 corners[8] = {
+            {min.x, min.y, min.z, 1.0},
+            {max.x, min.y, min.z, 1.0},
+            {min.x, max.y, min.z, 1.0},
+            {max.x, max.y, min.z, 1.0},
 
-    // hack
-    const char* shaderNames[DrawNodeMeshType::Count][ShaderType::Count] = {
-    { 0 }, {
-        "NODE FullscreenBlit",
-        "NODE Instanced3D", "NODE Color3D", "NODE Color3DSkinned", "NODE Textured3D", "NODE Textured3DAlphaClip", "NODE Textured3DSkinned", "NODE Textured3DAlphaClipSkinned"
-	}, {
-		"NODE SKINNED FullscreenBlit",
-		"NODE SKINNED Instanced3D", "NODE SKINNED Color3D", "NODE SKINNED Color3DSkinned", "NODE SKINNED Textured3D", "NODE SKINNED Textured3DAlphaClip", "NODE SKINNED Textured3DSkinned", "NODE SKINNED Textured3DAlphaClipSkinned"
-    }, {
-        "NODE INSTANCED FullscreenBlit",
-        "NODE INSTANCED Instanced3D", "NODE INSTANCED Color3D", "NODE INSTANCED Color3DSkinned", "NODE INSTANCED Textured3D", "NODE INSTANCED Textured3DAlphaClip", "NODE INSTANCED Textured3DSkinned", "NODE INSTANCED Textured3DAlphaClipSkinned"
-    } };
+            {min.x, min.y, max.z, 1.0},
+            {max.x, min.y, max.z, 1.0},
+            {min.x, max.y, max.z, 1.0},
+            {max.x, max.y, max.z, 1.0},
+        };
+        float4 corners_CS[8]; // corners in clip space
+        for (u32 corner_id = 0; corner_id < 8; corner_id++) { corners_CS[corner_id] = Math::mult(mvp, corners[corner_id]); }
+
+        // check if any vertex is within all clip space bounds
+        u32 out = 0;
+        for (u32 corner_id = 0; corner_id < 8; corner_id++) {
+            float4& c = corners_CS[corner_id];
+            if (((-c.w < c.x) && (c.x < c.w)) && (((-c.w < c.y) && (c.y < c.w)) && ((Renderer::min_z < c.z) && (c.z < c.w)))) {}
+            else { out++; }
+        }
+        if (out < 8) return true;
+
+        // check that the frustum is not (todo: make it actually work)
+        out = 0; for (u32 corner_id = 0; corner_id < 8; corner_id++) { if (corners_CS[corner_id].x < -corners_CS[corner_id].w) { out++; } } if (out == 8) return false;
+        out = 0; for (u32 corner_id = 0; corner_id < 8; corner_id++) { if (corners_CS[corner_id].x >  corners_CS[corner_id].w) { out++; } } if (out == 8) return false;
+        out = 0; for (u32 corner_id = 0; corner_id < 8; corner_id++) { if (corners_CS[corner_id].y < -corners_CS[corner_id].w) { out++; } } if (out == 8) return false;
+        out = 0; for (u32 corner_id = 0; corner_id < 8; corner_id++) { if (corners_CS[corner_id].y >  corners_CS[corner_id].w) { out++; } } if (out == 8) return false;
+        out = 0; for (u32 corner_id = 0; corner_id < 8; corner_id++) { if (corners_CS[corner_id].z < -corners_CS[corner_id].w) { out++; } } if (out == 8) return false;
+        out = 0; for (u32 corner_id = 0; corner_id < 8; corner_id++) { if (corners_CS[corner_id].z >  corners_CS[corner_id].w) { out++; } } if (out == 8) return false;
+
+        return true;
+    };
+
+    for (u32 n = 0, count = 0; n < store.drawNodes.cap && count < store.drawNodes.count; n++) {
+        if (store.drawNodes.data[n].alive == 0) { continue; }
+        count++;
+
+        const DrawNode& node = store.drawNodes.data[n].state.live;
+        if (cull_isVisible(Math::mult(vpMatrix, node.nodeData.worldMatrix), node.min, node.max)) {
+            visibleNodes.visible_nodes[visibleNodes.visible_nodes_count++] = n;
+        }
+    }
+    for (u32 n = 0, count = 0; n < store.drawNodesSkinned.cap && count < store.drawNodesSkinned.count; n++) {
+        if (store.drawNodesSkinned.data[n].alive == 0) { continue; }
+        count++;
+
+        const DrawNodeSkinned& node = store.drawNodesSkinned.data[n].state.live;
+        if (cull_isVisible(Math::mult(vpMatrix, node.core.nodeData.worldMatrix), node.core.min, node.core.max)) {
+            visibleNodes.visible_nodes_skinned[visibleNodes.visible_nodes_skinned_count++] = n;
+        }
+    }
+}
+
+void addNodesToDrawlistSorted(Drawlist& dl, const VisibleNodes& visibleNodes, float3 cameraPos, Store& store, const u32 includeFilter, const u32 excludeFilter, const SortParams::Type::Enum sortType) {
+
     {
         SortParams sortParams;
         makeSortKeyBitParams(sortParams, DrawNodeMeshType::Default, sortType);
         
         for (u32 i = 0; i < visibleNodes.visible_nodes_count; i++) {
             u32 n = visibleNodes.visible_nodes[i];
-            const DrawNode& node = store.drawNodes.data[n].state.live;
+            DrawNode& node = store.drawNodes.data[n].state.live;
             const u32 maxMeshCount = COUNT_OF(node.meshHandles);
             
             if (includeFilter & DrawlistFilter::Alpha) { if (node.nodeData.groupColor.w == 1.f) { continue; } }
             if (excludeFilter & DrawlistFilter::Alpha) { if (node.nodeData.groupColor.w < 1.f) { continue; } }
+            if (includeFilter & DrawlistFilter::Mirror) { if (store.mirror.drawHandle != handle_from_node(store, node)) { continue; } }
+            if (excludeFilter & DrawlistFilter::Mirror) { if (store.mirror.drawHandle == handle_from_node(store, node)) { continue; } }
             
             f32 distSq = Math::magSq(Math::subtract(node.nodeData.worldMatrix.col3.xyz, cameraPos));
             makeSortKeyDistParams(sortParams, distSq);
@@ -365,46 +427,49 @@ void addNodesToDrawlist(Drawlist& dl, const VisibleNodes& visibleNodes, float3 c
                 item.vertexBuffer = mesh.vertexBuffer;
                 item.cbuffers[item.cbuffer_count++] = store.cbuffers[node.cbuffer_node];
                 item.texture = mesh.texture;
-                item.blendState = mesh.type == ShaderType::Textured3DAlphaClip ? store.blendStateOn : store.blendStateOff;
-                item.name = shaderNames[DrawNodeMeshType::Default][mesh.type];
+                item.blendState = mesh.type == ShaderType::Textured3DAlphaClip ? store.blendStateOn : store.blendStateBlendOff;
+                item.name = shaderNames[mesh.type];
             }
         }
     }
+    const bool addSkinnedNodes = (includeFilter & DrawlistFilter::Mirror) == 0;
+    if (addSkinnedNodes)
     {
         SortParams sortParams;
         makeSortKeyBitParams(sortParams, DrawNodeMeshType::Skinned, sortType);
         for (u32 i = 0; i < visibleNodes.visible_nodes_skinned_count; i++) {
             u32 n = visibleNodes.visible_nodes_skinned[i];
             const DrawNodeSkinned& node = store.drawNodesSkinned.data[n].state.live;
-            const u32 maxMeshCount = COUNT_OF(node.meshHandles);
+            const u32 maxMeshCount = COUNT_OF(node.core.meshHandles);
             
-            if (includeFilter & DrawlistFilter::Alpha) { if (node.nodeData.groupColor.w == 1.f) { continue; } }
-            if (excludeFilter & DrawlistFilter::Alpha) { if (node.nodeData.groupColor.w < 1.f) { continue; } }
+            if (includeFilter & DrawlistFilter::Alpha) { if (node.core.nodeData.groupColor.w == 1.f) { continue; } }
+            if (excludeFilter & DrawlistFilter::Alpha) { if (node.core.nodeData.groupColor.w < 1.f) { continue; } }
             
-            f32 distSq = Math::magSq(Math::subtract(node.nodeData.worldMatrix.col3.xyz, cameraPos));
+            f32 distSq = Math::magSq(Math::subtract(node.core.nodeData.worldMatrix.col3.xyz, cameraPos));
             makeSortKeyDistParams(sortParams, distSq);
             
             for (u32 m = 0; m < maxMeshCount; m++) {
-                if (node.meshHandles[m] == 0) { continue; }
+                if (node.core.meshHandles[m] == 0) { continue; }
                 u32 dl_index = dl.count[DrawlistBuckets::Base]++;
                 DrawCall_Item& item = dl.items[dl_index];
+                item = {};
                 Key& key = dl.keys[dl_index];
+                key = {};
                 key.idx = dl_index;
-                const DrawMesh& mesh = get_drawMesh(store, node.meshHandles[m]);
-                if (mesh.type == ShaderType::Textured3DAlphaClipSkinned || mesh.type == ShaderType::Textured3DSkinned) {
-                    printf("");
-                }
+                const DrawMesh& mesh = get_drawMesh(store, node.core.meshHandles[m]);
                 key.v = makeSortKey(n, mesh.type, sortParams);
                 item.shader = store.shaders[mesh.type];
                 item.vertexBuffer = mesh.vertexBuffer;
-                item.cbuffers[item.cbuffer_count++] = store.cbuffers[node.cbuffer_node];
+                item.cbuffers[item.cbuffer_count++] = store.cbuffers[node.core.cbuffer_node];
                 item.cbuffers[item.cbuffer_count++] = store.cbuffers[node.cbuffer_skinning];
                 item.texture = mesh.texture;
-                item.blendState = mesh.type == ShaderType::Textured3DAlphaClipSkinned ? store.blendStateOn : store.blendStateOff;
-                item.name = shaderNames[DrawNodeMeshType::Skinned][mesh.type];
+                item.blendState = mesh.type == ShaderType::Textured3DAlphaClipSkinned ? store.blendStateOn : store.blendStateBlendOff;
+                item.name = shaderNames[mesh.type];
             }
         }
     }
+    const bool addInstancedNodes = (includeFilter & DrawlistFilter::Mirror) == 0;
+    if (addInstancedNodes)
     {
         SortParams sortParams;
         makeSortKeyBitParams(sortParams, DrawNodeMeshType::Instanced, sortType);
@@ -413,30 +478,36 @@ void addNodesToDrawlist(Drawlist& dl, const VisibleNodes& visibleNodes, float3 c
             count++;
             
             const DrawNodeInstanced& node = store.drawNodesInstanced.data[n].state.live;
-            const u32 maxMeshCount = COUNT_OF(node.meshHandles);
+            const u32 maxMeshCount = COUNT_OF(node.core.meshHandles);
             
-            if (includeFilter & DrawlistFilter::Alpha) { if (node.nodeData.groupColor.w == 1.f) { continue; } }
-            if (excludeFilter & DrawlistFilter::Alpha) { if (node.nodeData.groupColor.w < 1.f) { continue; } }
+            if (includeFilter & DrawlistFilter::Alpha) { if (node.core.nodeData.groupColor.w == 1.f) { continue; } }
+            if (excludeFilter & DrawlistFilter::Alpha) { if (node.core.nodeData.groupColor.w < 1.f) { continue; } }
             
             for (u32 m = 0; m < maxMeshCount; m++) {
-                if (node.meshHandles[m] == 0) { continue; }
+                if (node.core.meshHandles[m] == 0) { continue; }
                 u32 dl_index = dl.count[DrawlistBuckets::Instanced]++ + dl.count[DrawlistBuckets::Base];
                 DrawCall_Item& item = dl.items[dl_index];
+                item = {};
                 Key& key = dl.keys[dl_index];
+                key = {};
                 key.idx = dl_index;
-                const DrawMesh& mesh = get_drawMesh(store, node.meshHandles[m]);
+                const DrawMesh& mesh = get_drawMesh(store, node.core.meshHandles[m]);
                 key.v = makeSortKey(n, mesh.type, sortParams);
                 item.shader = store.shaders[mesh.type];
                 item.vertexBuffer = mesh.vertexBuffer;
-                item.cbuffers[item.cbuffer_count++] = store.cbuffers[node.cbuffer_node];
+                item.cbuffers[item.cbuffer_count++] = store.cbuffers[node.core.cbuffer_node];
                 item.cbuffers[item.cbuffer_count++] = store.cbuffers[node.cbuffer_instances];
                 item.texture = mesh.texture;
-                item.blendState = store.blendStateOff; // todo: support other blendstates when doing instances
+                item.blendState = store.blendStateBlendOff; // todo: support other blendstates when doing instances
                 item.drawcount = node.instanceCount;
-                item.name = shaderNames[DrawNodeMeshType::Instanced][mesh.type];
+                item.name = shaderNames[mesh.type];
             }
         }
     }
+
+    // sort
+    qsort(dl.keys, 0, dl.count[DrawlistBuckets::Base] - 1);
+    qsort(dl.keys, dl.count[DrawlistBuckets::Base], dl.count[DrawlistBuckets::Base] + dl.count[DrawlistBuckets::Instanced] - 1);
 }
 
 namespace FBX {
@@ -813,18 +884,18 @@ namespace FBX {
             u32* meshHandles;
             if (animatedNode.skeleton.jointCount) {
 				DrawNodeSkinned& nodeToAdd = Allocator::alloc_pool(store.drawNodesSkinned);
-                nodeHandle = (DrawNodeMeshType::Skinned << 16) | (Allocator::get_pool_index(store.drawNodesSkinned, nodeToAdd) & 0xffff);
+                nodeHandle = handle_from_node(store, nodeToAdd);
                 nodeToAdd = {};
-                nodeToAdd.max = max;
-                nodeToAdd.min = min;
-                nodeToAdd.cbuffer_node = store.cbuffer_count;
+                nodeToAdd.core.max = max;
+                nodeToAdd.core.min = min;
+                nodeToAdd.core.cbuffer_node = store.cbuffer_count;
                 Driver::create_cbuffer(store.cbuffers[store.cbuffer_count++], { sizeof(NodeData) });
                 nodeToAdd.cbuffer_skinning = store.cbuffer_count;
                 Driver::create_cbuffer(store.cbuffers[store.cbuffer_count++], { sizeof(Matrices32) });
-                meshHandles = nodeToAdd.meshHandles;
+                meshHandles = nodeToAdd.core.meshHandles;
             } else {
                 DrawNode& nodeToAdd = Allocator::alloc_pool(store.drawNodes);
-                nodeHandle = (DrawNodeMeshType::Default << 16) | (Allocator::get_pool_index(store.drawNodes, nodeToAdd) & 0xffff);
+                nodeHandle = handle_from_node(store, nodeToAdd);
                 nodeToAdd = {};
                 nodeToAdd.max = max;
                 nodeToAdd.min = min;
@@ -898,15 +969,69 @@ void init_pipelines(Store& store, Allocator::Arena scratchArena, const Platform:
     gameRTparams.count = 1;
     Renderer::Driver::create_RT(store.gameRT, gameRTparams);
 
-    // rasterizer states
-    Renderer::Driver::create_blend_state(store.blendStateOn, { true });
-    Renderer::Driver::create_blend_state(store.blendStateOff, { false });
-    Renderer::Driver::create_RS(store.rasterizerStateFill, { Renderer::Driver::RasterizerFillMode::Fill, Renderer::Driver::RasterizerCullMode::CullBack });
+    {
+        Renderer::Driver::BlendStateParams blendState_params;
+        blendState_params = {};
+        blendState_params.renderTargetWriteMask = Driver::RenderTargetWriteMask::All; blendState_params.blendEnable = true;
+        Renderer::Driver::create_blend_state(store.blendStateOn, blendState_params);
+        blendState_params = {};
+        blendState_params.renderTargetWriteMask = Driver::RenderTargetWriteMask::All;
+        Renderer::Driver::create_blend_state(store.blendStateBlendOff, blendState_params);
+        blendState_params = {};
+        blendState_params.renderTargetWriteMask = Driver::RenderTargetWriteMask::None;
+        Renderer::Driver::create_blend_state(store.blendStateOff, blendState_params);
+    }
+    Renderer::Driver::create_RS(store.rasterizerStateFillFrontfaces, { Renderer::Driver::RasterizerFillMode::Fill, Renderer::Driver::RasterizerCullMode::CullBack });
+    Renderer::Driver::create_RS(store.rasterizerStateFillBackfaces, { Renderer::Driver::RasterizerFillMode::Fill, Renderer::Driver::RasterizerCullMode::CullFront });
     Renderer::Driver::create_RS(store.rasterizerStateFillCullNone, { Renderer::Driver::RasterizerFillMode::Fill, Renderer::Driver::RasterizerCullMode::CullNone });
     Renderer::Driver::create_RS(store.rasterizerStateLine, { Renderer::Driver::RasterizerFillMode::Line, Renderer::Driver::RasterizerCullMode::CullNone });
-    Renderer::Driver::create_DS(store.depthStateOn, { true, Renderer::Driver::DepthFunc::Less, Renderer::Driver::DepthWriteMask::All });
-    Renderer::Driver::create_DS(store.depthStateReadOnly, { true, Renderer::Driver::DepthFunc::Less, Renderer::Driver::DepthWriteMask::Zero });
-    Renderer::Driver::create_DS(store.depthStateOff, { false });
+    {
+        Renderer::Driver::DepthStencilStateParams dsParams;
+        dsParams = {};
+        dsParams.depth_enable = true;
+        dsParams.depth_func = Renderer::Driver::CompFunc::Less;
+        dsParams.depth_writemask = Renderer::Driver::DepthWriteMask::All;
+        Renderer::Driver::create_DS(store.depthStateOn, dsParams);
+        dsParams = {};
+        dsParams.depth_enable = true;
+        dsParams.depth_func = Renderer::Driver::CompFunc::Less;
+        dsParams.depth_writemask = Renderer::Driver::DepthWriteMask::Zero;
+        Renderer::Driver::create_DS(store.depthStateReadOnly, dsParams);
+        dsParams = {};
+        dsParams.depth_enable = false;
+        Renderer::Driver::create_DS(store.depthStateOff, dsParams);
+        dsParams = {};
+        dsParams.depth_enable = true;
+        dsParams.depth_func = Renderer::Driver::CompFunc::Less;
+        dsParams.depth_writemask = Renderer::Driver::DepthWriteMask::All;
+        dsParams.stencil_enable = true;
+        dsParams.stencil_readmask = dsParams.stencil_writemask = 0xff;
+        dsParams.stencil_failOp = Renderer::Driver::StencilOp::Keep;
+        dsParams.stencil_depthFailOp = Renderer::Driver::StencilOp::Keep;
+        dsParams.stencil_passOp = Renderer::Driver::StencilOp::Replace;
+        dsParams.stencil_func = Renderer::Driver::CompFunc::Always;
+        Renderer::Driver::create_DS(store.depthStateMarkMirrors, dsParams);
+        dsParams.depth_enable = true;
+        dsParams.depth_func = Renderer::Driver::CompFunc::Less;
+        dsParams.depth_writemask = Renderer::Driver::DepthWriteMask::All;
+        dsParams.stencil_enable = true;
+        dsParams.stencil_readmask = dsParams.stencil_writemask = 0xff;
+        dsParams.stencil_failOp = Renderer::Driver::StencilOp::Keep;
+        dsParams.stencil_depthFailOp = Renderer::Driver::StencilOp::Keep;
+        dsParams.stencil_passOp = Renderer::Driver::StencilOp::Keep;
+        dsParams.stencil_func = Renderer::Driver::CompFunc::Equal;
+        Renderer::Driver::create_DS(store.depthStateMirrorReflections, dsParams);
+        dsParams.depth_enable = true;
+        dsParams.depth_func = Renderer::Driver::CompFunc::Less;
+        dsParams.depth_writemask = Renderer::Driver::DepthWriteMask::Zero;
+        dsParams.stencil_enable = true;
+        dsParams.stencil_readmask = dsParams.stencil_writemask = 0xff;
+        dsParams.stencil_failOp = Renderer::Driver::StencilOp::Keep;
+        dsParams.stencil_depthFailOp = Renderer::Driver::StencilOp::Keep;
+        dsParams.stencil_passOp = Renderer::Driver::StencilOp::Keep;
+        dsParams.stencil_func = Renderer::Driver::CompFunc::Equal;
+        Renderer::Driver::create_DS(store.depthStateMirrorReflectionsDepthReadOnly, dsParams);
+    }
 
     // known cbuffers
     store.cbuffer_scene = store.cbuffer_count;
@@ -1091,7 +1216,7 @@ void init_pipelines(Store& store, Allocator::Arena scratchArena, const Platform:
     const AssetData assets[] = {
           { "assets/meshes/boar.fbx", { 5.f, 10.f, 2.30885f }, 1, false }
         , { "assets/meshes/bird.fbx", { 1.f, 3.f, 2.23879f }, 1, true }
-        , { "assets/meshes/bird.fbx", { 0.f, 5.f, 2.23879f }, 250, false }
+        , { "assets/meshes/bird.fbx", { 0.f, 5.f, 2.23879f }, 1, false }
     };
 
     FBX::PipelineAssetContext ctx = {};
@@ -1119,27 +1244,26 @@ void init_pipelines(Store& store, Allocator::Arena scratchArena, const Platform:
             const s32 grid_size = 6;
             const s32 max_row = (asset.count - 1) % grid_size;
             const s32 max_column = ((asset.count - 1) / grid_size) % grid_size;
-            const s32 max_stride = (asset.count - 1) / (grid_size * grid_size);
             s32 row = asset_rep % grid_size;
             s32 column = (asset_rep / grid_size) % grid_size;
             s32 stride = asset_rep / (grid_size * grid_size);
-            asset_init_pos = Math::add(asset_init_pos, { (row - max_row /2) * spacing, (column - max_column/2) * spacing, (stride - max_stride / 2) * spacing });
+            asset_init_pos = Math::add(asset_init_pos, { (row - max_row /2) * spacing, (column - max_column/2) * spacing, stride * spacing });
 
             u32 nodeHandle = 0;
 		    ctx.scratchArena = scratchArena; // explicit copy
             FBX::load_with_materials(nodeHandle, animatedNode, store, ctx, asset.path);
 
-            if ((nodeHandle >> 16) & DrawNodeMeshType::Skinned) {
+            if ((nodeHandle >> 16) == DrawNodeMeshType::Skinned) {
 			    DrawNodeSkinned& node = Allocator::get_pool_slot(store.drawNodesSkinned, nodeHandle & 0xffff);
-                Math::identity4x4(*(Transform*)&(node.nodeData.worldMatrix));
-                node.nodeData.worldMatrix.col3 = { asset_init_pos, 1.f };
-			    node.nodeData.groupColor = Color32(1.f, 1.f, 1.f, 1.f).RGBAv4();
+                Math::identity4x4(*(Transform*)&(node.core.nodeData.worldMatrix));
+                node.core.nodeData.worldMatrix.col3 = { asset_init_pos, 1.f };
+			    node.core.nodeData.groupColor = Color32(1.f, 1.f, 1.f, 1.f).RGBAv4();
                 for (u32 m = 0; m < animatedNode.skeleton.jointCount; m++) {
                     float4x4& matrix = node.skinningMatrixPalette.data[m];
                     Math::identity4x4(*(Transform*)&(matrix));
                 }
 		    }
-		    else if ((nodeHandle >> 16) & DrawNodeMeshType::Default) {
+		    else if ((nodeHandle >> 16) == DrawNodeMeshType::Default) {
                 DrawNode& node = Allocator::get_pool_slot(store.drawNodes, nodeHandle & 0xffff);
                 Math::identity4x4(*(Transform*)&(node.nodeData.worldMatrix));
                 node.nodeData.worldMatrix.col3 = { asset_init_pos, 1.f };
@@ -1164,7 +1288,76 @@ void init_pipelines(Store& store, Allocator::Arena scratchArena, const Platform:
         }
     }
 
-    // unit cubes
+    // sky
+    {
+        Driver::create_cbuffer(store.sky.cbuffer, { sizeof(NodeData) });
+        Math::identity4x4(*(Transform*)&(store.sky.nodeData.worldMatrix));
+        store.sky.nodeData.worldMatrix.col3.xyz = float3(-5.f, -8.f, 5.f);
+        store.sky.nodeData.groupColor = Color32(1.f, 1.f, 1.f, 1.f).RGBAv4();
+        Driver::update_cbuffer(store.sky.cbuffer, &store.sky.nodeData);
+
+        Renderer::Driver::IndexedVertexBufferDesc bufferParams;
+        bufferParams.vertexSize = 4 * sizeof(VertexLayout_Color_3D);
+        bufferParams.vertexCount = 4;
+        bufferParams.indexSize = 6 * sizeof(u16);
+        bufferParams.indexCount = 6;
+        bufferParams.memoryUsage = Renderer::Driver::BufferMemoryUsage::GPU;
+        bufferParams.accessType = Renderer::Driver::BufferAccessType::GPU;
+        bufferParams.indexType = Renderer::Driver::BufferItemType::U16;
+        bufferParams.type = Renderer::Driver::BufferTopologyType::Triangles;
+        Driver::VertexAttribDesc attribs[] = {
+            Driver::make_vertexAttribDesc("POSITION", OFFSET_OF(VertexLayout_Color_3D, pos), sizeof(VertexLayout_Color_3D), Driver::BufferAttributeFormat::R32G32B32_FLOAT),
+            Driver::make_vertexAttribDesc("COLOR", OFFSET_OF(VertexLayout_Color_3D, color), sizeof(VertexLayout_Color_3D), Driver::BufferAttributeFormat::R8G8B8A8_UNORM)
+        };
+
+        u32 c = Color32(0.2f, 0.344f, 0.59f, 1.f).ABGR();
+        f32 w = 150.f;
+        f32 h = 500.f;
+        {
+            VertexLayout_Color_3D v[] = { { { w, w, -h }, c }, { { -w, w, -h }, c }, { { -w, w, h }, c }, { { w, w, h }, c } };
+            u16 i[] = { 0, 1, 2, 2, 3, 0 };
+            bufferParams.vertexData = v;
+            bufferParams.indexData = i;
+            Renderer::Driver::create_indexed_vertex_buffer(store.sky.buffers[0], bufferParams, attribs, COUNT_OF(attribs));
+        }
+        {
+            VertexLayout_Color_3D v[] = { { { w, -w, -h }, c }, { { -w, -w, -h }, c }, { { -w, -w, h }, c }, { { w, -w, h }, c } };
+            u16 i[] = { 2, 1, 0, 0, 3, 2 };
+            bufferParams.vertexData = v;
+            bufferParams.indexData = i;
+            Renderer::Driver::create_indexed_vertex_buffer(store.sky.buffers[1], bufferParams, attribs, COUNT_OF(attribs));
+        }
+        {
+            VertexLayout_Color_3D v[] = { { { w, w, -h }, c }, { { w, -w, -h }, c }, { { w, -w, h }, c }, { { w, w, h }, c } };
+            u16 i[] = { 2, 1, 0, 0, 3, 2 };
+            bufferParams.vertexData = v;
+            bufferParams.indexData = i;
+            Renderer::Driver::create_indexed_vertex_buffer(store.sky.buffers[2], bufferParams, attribs, COUNT_OF(attribs));
+        }
+        {
+            VertexLayout_Color_3D v[] = { { { -w, w, -h }, c }, { { -w, -w, -h }, c }, { { -w, -w, h }, c }, { { -w, w, h }, c } };
+            u16 i[] = { 0, 1, 2, 0, 2, 3 };
+            bufferParams.vertexData = v;
+            bufferParams.indexData = i;
+            Renderer::Driver::create_indexed_vertex_buffer(store.sky.buffers[3], bufferParams, attribs, COUNT_OF(attribs));
+        }
+        {
+            VertexLayout_Color_3D v[] = { { { -w, w, h }, c }, { { -w, -w, h }, c }, { { w, -w, h }, c }, { { w, w, h }, c } };
+            u16 i[] = { 0, 1, 2, 0, 2, 3 };
+            bufferParams.vertexData = v;
+            bufferParams.indexData = i;
+            Renderer::Driver::create_indexed_vertex_buffer(store.sky.buffers[4], bufferParams, attribs, COUNT_OF(attribs));
+        }
+        {
+            VertexLayout_Color_3D v[] = { { { -w, w, -h/4 }, c }, { { -w, -w, -h/4 }, c }, { { w, -w, -h/4 }, c }, { { w, w, -h/4 }, c } };
+            u16 i[] = { 2, 1, 0, 0, 3, 2 };
+            bufferParams.vertexData = v;
+            bufferParams.indexData = i;
+            Renderer::Driver::create_indexed_vertex_buffer(store.sky.buffers[5], bufferParams, attribs, COUNT_OF(attribs));
+        }
+    }
+
+    // alpha unit cubes (todo: shouldn't be alpha and instanced)
     {
         Renderer::DrawMesh& mesh = Allocator::alloc_pool(store.meshes);
         mesh = {};
@@ -1172,11 +1365,11 @@ void init_pipelines(Store& store, Allocator::Arena scratchArena, const Platform:
         Renderer::create_indexed_vertex_buffer_from_untextured_cube(mesh.vertexBuffer, { 1.f, 1.f, 1.f });
         DrawNodeInstanced& node = Allocator::alloc_pool(store.drawNodesInstanced);
         node = {};
-		node.meshHandles[0] = handle_from_drawMesh(store, mesh);
-        Math::identity4x4(*(Transform*)&(node.nodeData.worldMatrix));
-        node.nodeData.groupColor = Color32(0.9f, 0.7f, 0.8f, 0.6f).RGBAv4();
+		node.core.meshHandles[0] = handle_from_drawMesh(store, mesh);
+        Math::identity4x4(*(Transform*)&(node.core.nodeData.worldMatrix));
+        node.core.nodeData.groupColor = Color32(0.9f, 0.7f, 0.8f, 0.6f).RGBAv4();
         node.instanceCount = 4;
-        node.cbuffer_node = store.cbuffer_count;
+        node.core.cbuffer_node = store.cbuffer_count;
         Driver::create_cbuffer(store.cbuffers[store.cbuffer_count++], { sizeof(NodeData) });
         node.cbuffer_instances = store.cbuffer_count;
         Driver::create_cbuffer(store.cbuffers[store.cbuffer_count++], { sizeof(Matrices64) });
@@ -1184,7 +1377,44 @@ void init_pipelines(Store& store, Allocator::Arena scratchArena, const Platform:
             float4x4& matrix = node.instanceMatrices.data[m];
             Math::identity4x4(*(Transform*)&(matrix));
         }
-        store.particlesDrawHandle = (DrawNodeMeshType::Instanced << 16) | (Allocator::get_pool_index(store.drawNodesInstanced, node) & 0xffff); // todo: consolidate this
+        store.particlesDrawHandle = handle_from_node(store, node);
+    }
+
+    // ground
+    {
+        Renderer::DrawMesh& mesh = Allocator::alloc_pool(store.meshes);
+        mesh = {};
+        mesh.type = ShaderType::Color3D;
+        f32 w = 30.f, h = 30.f;
+        u32 c = Color32(1.f, 1.f, 1.f, 1.f).ABGR();
+        VertexLayout_Color_3D v[] = { { { w, -h, 0.f }, c }, { { -w, -h, 0.f }, c }, { { -w, h, 0.f }, c }, { { w, h, 0.f }, c } };
+        u16 i[] = { 0, 1, 2, 2, 3, 0 };
+        Renderer::Driver::IndexedVertexBufferDesc bufferParams;
+        bufferParams.vertexData = v;
+        bufferParams.indexData = i;
+        bufferParams.vertexSize = sizeof(v);
+        bufferParams.vertexCount = COUNT_OF(v);
+        bufferParams.indexSize = sizeof(i);
+        bufferParams.indexCount = COUNT_OF(i);
+        bufferParams.memoryUsage = Renderer::Driver::BufferMemoryUsage::GPU;
+        bufferParams.accessType = Renderer::Driver::BufferAccessType::GPU;
+        bufferParams.indexType = Renderer::Driver::BufferItemType::U16;
+        bufferParams.type = Renderer::Driver::BufferTopologyType::Triangles;
+        Driver::VertexAttribDesc attribs[] = {
+            Driver::make_vertexAttribDesc("POSITION", OFFSET_OF(VertexLayout_Color_3D, pos), sizeof(VertexLayout_Color_3D), Driver::BufferAttributeFormat::R32G32B32_FLOAT),
+            Driver::make_vertexAttribDesc("COLOR", OFFSET_OF(VertexLayout_Color_3D, color), sizeof(VertexLayout_Color_3D), Driver::BufferAttributeFormat::R8G8B8A8_UNORM)
+        };
+        Renderer::Driver::create_indexed_vertex_buffer(mesh.vertexBuffer, bufferParams, attribs, COUNT_OF(attribs));
+        DrawNode& node = Allocator::alloc_pool(store.drawNodes);
+        node = {};
+        node.meshHandles[0] = handle_from_drawMesh(store, mesh);
+        Math::identity4x4(*(Transform*)&(node.nodeData.worldMatrix));
+        node.nodeData.worldMatrix.col3.xyz = float3(0.f, 0.f, 0.f);
+        node.nodeData.groupColor = Color32(0.13f, 0.51f, 0.23f, 1.f).RGBAv4();
+        node.cbuffer_node = store.cbuffer_count;
+        node.max = float3(w, h, 0.f); // todo: improve node generation!!! I KEEP MISSING THIS
+        node.min = float3(-w, -h, 0.f);
+        Driver::create_cbuffer(store.cbuffers[store.cbuffer_count++], { sizeof(NodeData) });
     }
 
     // mirror
@@ -1192,9 +1422,6 @@ void init_pipelines(Store& store, Allocator::Arena scratchArena, const Platform:
         Renderer::DrawMesh& mesh = Allocator::alloc_pool(store.meshes);
         mesh = {};
         mesh.type = ShaderType::Color3D;
-
-        Renderer::UntexturedCube cube;
-
         f32 w = 8.f, h = 5.f;
         u32 c = Color32(1.f, 1.f, 1.f, 1.f).ABGR();
         VertexLayout_Color_3D v[] = { { { w, 0.f, -h }, c }, { { -w, 0.f, -h }, c }, { { -w, 0.f, h }, c }, { { w, 0.f, h }, c } };
@@ -1215,7 +1442,7 @@ void init_pipelines(Store& store, Allocator::Arena scratchArena, const Platform:
             Driver::make_vertexAttribDesc("COLOR", OFFSET_OF(VertexLayout_Color_3D, color), sizeof(VertexLayout_Color_3D), Driver::BufferAttributeFormat::R8G8B8A8_UNORM)
         };
         Renderer::Driver::create_indexed_vertex_buffer(mesh.vertexBuffer, bufferParams, attribs, COUNT_OF(attribs));
-        {
+       /* {
             DrawNode& node = Allocator::alloc_pool(store.drawNodes);
             node = {};
             node.meshHandles[0] = handle_from_drawMesh(store, mesh);
@@ -1223,19 +1450,25 @@ void init_pipelines(Store& store, Allocator::Arena scratchArena, const Platform:
             node.nodeData.groupColor = Color32(0.31f, 0.19f, 1.f, 0.62f).RGBAv4();
             node.cbuffer_node = store.cbuffer_count;
             Driver::create_cbuffer(store.cbuffers[store.cbuffer_count++], { sizeof(NodeData) });
-            store.mirrorDrawHandle = (DrawNodeMeshType::Default << 16) | (Allocator::get_pool_index(store.drawNodes, node) & 0xffff);
-        }
+        }*/
         {
             DrawNode& node = Allocator::alloc_pool(store.drawNodes);
             node = {};
             node.meshHandles[0] = handle_from_drawMesh(store, mesh);
             Math::identity4x4(*(Transform*)&(node.nodeData.worldMatrix));
-            node.nodeData.worldMatrix.col3.xyz = float3(-5.f, -8.f, 0.f);
-            node.nodeData.groupColor = Color32(0.31f, 0.79f, 0.4f, 0.52f).RGBAv4();
+            node.nodeData.worldMatrix.col3.xyz = float3(-5.f, -8.f, 5.f);
+            node.nodeData.groupColor = Color32(0.01f, 0.19f, 0.3f, 0.32f).RGBAv4();
+            //node.nodeData.groupColor = Color32(0.31f, 0.79f, 0.4f, 0.52f).RGBAv4();
             node.cbuffer_node = store.cbuffer_count;
+            node.max = float3(w, 0.f, h);
+            node.min = float3(-w, 0.f, -h); // todo: improooove
             Driver::create_cbuffer(store.cbuffers[store.cbuffer_count++], { sizeof(NodeData) });
+            store.mirror = {};
+            store.mirror.drawHandle = handle_from_node(store, node);
+            store.mirror.normal = float3(0.f, 1.f, 0.f);
+            store.mirror.pos = node.nodeData.worldMatrix.col3.xyz;
         }
-        {
+        /*{
             DrawNode& node = Allocator::alloc_pool(store.drawNodes);
             node = {};
             node.meshHandles[0] = handle_from_drawMesh(store, mesh);
@@ -1244,7 +1477,7 @@ void init_pipelines(Store& store, Allocator::Arena scratchArena, const Platform:
             node.nodeData.groupColor = Color32(0.01f, 0.19f, 0.3f, 0.32f).RGBAv4();
             node.cbuffer_node = store.cbuffer_count;
             Driver::create_cbuffer(store.cbuffers[store.cbuffer_count++], { sizeof(NodeData) });
-        }
+        }*/
     }
 }
 }

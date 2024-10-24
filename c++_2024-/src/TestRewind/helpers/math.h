@@ -77,13 +77,14 @@ namespace Math {
             default: return powf(e_f, x);
         }
     }
-    
     f32 bias(f32 a) { return (a + 1.f) * 0.5f; }
     f64 bias(f64 a) { return (a + 1.0) * 0.5; }
     f32 unbias(f32 a) { return a * 2.f - 1.f; }
     f64 unbias(f64 a) { return a * 2.0 - 1.0; }
     f32 round(f32 a) { return ::roundf(a); }
     f64 round(f64 a) { return ::round(a); }
+    f32 sign(f32 a) { if (a > 0.f) return 1.f; else if (a < 0.f) return -1.f; else return 0.f; }
+    f64 sign(f64 a) { if (a > 0) return 1; else if (a < 0) return -1; else return 0; }
     f32 lerp(f32 t, f32 a, f32 b) { return a + (b - a) * t; }
     f64 lerp(f64 t, f64 a, f64 b) { return a + (b - a) * t; }
 

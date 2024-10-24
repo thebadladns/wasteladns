@@ -5,6 +5,7 @@ namespace Renderer {
 
     const auto generate_matrix_ortho = generate_matrix_ortho_z0to1;
     const auto generate_matrix_persp = generate_matrix_persp_z0to1;
+    const auto add_oblique_plane_to_persp = add_oblique_plane_to_persp_z0to1;
     const f32 min_z = 0.f;
 
 namespace Driver {
@@ -12,15 +13,25 @@ namespace Driver {
     struct Type { enum Enum { Float }; }; // unused, compatibility-only
     struct InternalTextureFormat { enum Enum { V4_8 = DXGI_FORMAT_B8G8R8A8_UNORM, V316 = DXGI_FORMAT_R16G16B16A16_FLOAT }; };
     struct TextureFormat { enum Enum { V4_8 = DXGI_FORMAT_B8G8R8A8_UNORM, V4_16 = DXGI_FORMAT_R16G16B16A16_FLOAT }; };
+    struct RenderTargetClearFlags { enum Enum { Stencil = D3D11_CLEAR_STENCIL, Depth = D3D11_CLEAR_DEPTH, Color = 0x4L }; };
+    struct RenderTargetWriteMask { enum Enum { All = D3D11_COLOR_WRITE_ENABLE_ALL, None = 0 }; };
     struct RasterizerFillMode { enum Enum { Fill = D3D11_FILL_SOLID, Line = D3D11_FILL_WIREFRAME }; };
     struct RasterizerCullMode { enum Enum { CullFront = D3D11_CULL_FRONT, CullBack = D3D11_CULL_BACK, CullNone = D3D11_CULL_NONE }; };
-    struct DepthFunc { enum Enum { Less = D3D11_COMPARISON_LESS }; }; // TODO
+    struct CompFunc { enum Enum {
+        Never = D3D11_COMPARISON_NEVER, Always = D3D11_COMPARISON_ALWAYS,
+        Less = D3D11_COMPARISON_LESS, LessEqual = D3D11_COMPARISON_LESS_EQUAL,
+        Equal = D3D11_COMPARISON_EQUAL, NotEqual = D3D11_COMPARISON_NOT_EQUAL,
+        Greater = D3D11_COMPARISON_GREATER, GreaterEqual = D3D11_COMPARISON_GREATER_EQUAL
+    }; };
     struct DepthWriteMask { enum Enum { All = D3D11_DEPTH_WRITE_MASK_ALL, Zero = D3D11_DEPTH_WRITE_MASK_ZERO }; };
+    struct StencilOp { enum Enum {
+        Keep = D3D11_STENCIL_OP_KEEP, Zero = D3D11_STENCIL_OP_ZERO, Replace = D3D11_STENCIL_OP_REPLACE, Invert = D3D11_STENCIL_OP_INVERT,
+        Incr = D3D11_STENCIL_OP_INCR, Decr = D3D11_STENCIL_OP_DECR
+    }; };
     struct BufferMemoryUsage { enum Enum { GPU = D3D11_USAGE_IMMUTABLE, CPU = D3D11_USAGE_DYNAMIC }; };
     struct BufferAccessType { enum Enum { GPU = 0, CPU = D3D11_CPU_ACCESS_WRITE }; };
     struct BufferItemType { enum Enum { U16 = DXGI_FORMAT_R16_UINT, U32 = DXGI_FORMAT_R32_UINT }; };
     struct BufferTopologyType { enum Enum { Triangles = D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST, Lines = D3D_PRIMITIVE_TOPOLOGY_LINELIST }; };
-
 
     struct RscTexture {
         ID3D11Texture2D* impl;

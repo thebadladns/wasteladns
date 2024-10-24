@@ -36,7 +36,7 @@ void generate_matrix_persp_zneg1to1(float4x4& matrixRHwithYup, const PerspProjec
     const f32 h = 1.f / Math::tan(config.fov * 0.5f * Math::d2r_f);
     const f32 w = h / config.aspect;
     
-    // maps each xyz axis to [-1,1] (left handed, y points up z moves away from the viewer)
+    // maps each xyz axis to [-1,1], not reversed-z (left handed, y points up z moves away from the viewer)
     f32 (&matrixCM)[16] = matrixRHwithYup.dataCM;
     memset(matrixCM, 0, sizeof(f32) * 16);
     matrixCM[0] = w;
@@ -44,11 +44,40 @@ void generate_matrix_persp_zneg1to1(float4x4& matrixRHwithYup, const PerspProjec
     matrixCM[10] = -(config.far + config.near) / (config.far - config.near);
     matrixCM[11] = -1.f;
     matrixCM[14] = -(2.f * config.far * config.near) / (config.far - config.near);
+    // inverse is
+    //matrixCM[0] = 1.f / w;
+    //matrixCM[5] = 1.f / h;
+    //matrixCM[10] = 0.f;
+    //matrixCM[11] = -(config.far - config.near) / (2.f * config.far * config.near);
+    //matrixCM[14] = -1.f;
+    //matrixCM[15] = (config.far + config.near) / (2.f * config.far * config.near);
+}
+void add_oblique_plane_to_persp_zneg1to1(float4x4& projectionMatrix, const float4& planeCameraSpace) {
+    // from https://terathon.com/lengyel/Lengyel-Oblique.pdf
+    // The near plane is (0, 0, 1, 1), so it can be expressed in the basis of the projection matrix as near = M3 (third row) + M4 (fourth row).
+    // We want the near plane to be equal to a clip plane C, new_M3 = aC - M4. The original far plane is (0,0,-1,1), or with the basis above, F = M4-M3
+    // new_F = M4 - new_M3 = 2*M4 - a*C. since M4 is aways (0,0,-1,0), a point P=(x,y,0,w) on our clip plane (dot(C,P)=0) will be such that
+    // dot(new_F,P) = 2*dot(M4,P) - a*dot(C,P) = 0, which means the new far plane intersects with the C plane on P, which is on the xy plane (no z coord). We find a point Q_proj on the edge
+    // of the original far plane, Q_proj=(sign(C_proj.x),sign(C_proj.y),1,1), and claim that the sign of C_proj will be the same that of C.
+    // We want our new far plane to go through Q_proj=(sign(C.x),sign(C.y),1,1), so in camera space, dot(new_F,Q)=0, then dot(new_F,Q) = 2*dot(M4,Q) - a*dot(C,Q) --> a = 2*dot(M4,Q) / dot(C,Q)
+    // Again, M4 is always (0,0,-1,0), so a = -2*Qz / dot(C,Q). With the projection P and inverse P_inv matrices in Renderer::generate_matrix_persp_zneg1to1,
+    // Q = P_inv * Q_proj = (sign(C.x)/w,sign(C.y)/h,-1,1/f), which is Q = (sign(C.x)/P[0], sign(C.y)/P[5],-1.f,(1 + P[10]) / P[14])
+    // This makes a = 2 / dot(C,Q), which combined with M3 = a*C - M4 = a*C - (0,0,-1,0), gives us this
+    float4 q;
+    q.x = Math::sign(planeCameraSpace.x) / projectionMatrix.dataCM[0];
+    q.y = Math::sign(planeCameraSpace.y) / projectionMatrix.dataCM[5];
+    q.z = -1.f;
+    q.w = (1.f + projectionMatrix.dataCM[10]) / projectionMatrix.dataCM[14];
+    float4 c = Math::scale(planeCameraSpace, (2.f / Math::dot(planeCameraSpace, q)));
+    projectionMatrix.dataCM[2] = c.x;
+    projectionMatrix.dataCM[6] = c.y;
+    projectionMatrix.dataCM[10] = c.z + 1.f;
+    projectionMatrix.dataCM[14] = c.w;
 }
 void generate_matrix_persp_z0to1(float4x4& matrixRHwithYup, const PerspProjection::Config& config) {
     const f32 h = 1.f / Math::tan(config.fov * 0.5f * Math::d2r_f);
     const f32 w = h / config.aspect;
-    // maps each xyz axis to [0,1] (left handed, y points up z moves away from the viewer)
+    // maps each xyz axis to [0,1], not reversed-z (left handed, y points up z moves away from the viewer)
     f32(&matrixCM)[16] = matrixRHwithYup.dataCM;
     memset(matrixCM, 0, sizeof(f32) * 16);
     matrixCM[0] = w;
@@ -56,6 +85,36 @@ void generate_matrix_persp_z0to1(float4x4& matrixRHwithYup, const PerspProjectio
     matrixCM[10] = config.far / (config.near - config.far);
     matrixCM[11] = -1.f;
     matrixCM[14] = config.far * config.near / (config.near - config.far);
+    // inverse is
+    //matrixCM[0] = 1.f / w;
+    //matrixCM[5] = 1.f / h;
+    //matrixCM[10] = 0.f;
+    //matrixCM[11] = (config.near - config.far) / (config.far * config.near);
+    //matrixCM[14] = -1.f;
+    //matrixCM[15] = 1.f / config.near;
+}
+void add_oblique_plane_to_persp_z0to1(float4x4& projectionMatrix, const float4& planeCameraSpace) { // todo: investigate issues with this
+    // adapted to work with z [0,1] from https://terathon.com/lengyel/Lengyel-Oblique.pdf
+    // The near plane is (0, 0, 1, 0), so it can be expressed in the basis of the projection matrix as near = M3 (third row).
+    // We want the near plane to be equal to a clip plane C, new_M3 = a*C. The original far plane is (0,0,-1,1), or with the basis above, F = M4 - M3
+    // new_F = M4 - new_M3 = M4 - a*C. since M4 is aways (0,0,-1,0), a point P=(x,y,0,w) on our clip plane (dot(C,P) = 0) will be such that
+    // dot(new_F,P) = dot(M4,P) - a*dot(C,P) = 0, which means the new far plane intersects with the C plane on P, which is on the xy plane (no z coord). We find a point Q_proj on the edge
+    // of the original far plane, Q_proj=(sign(C_proj.x),sign(C_proj.y),1,1), and claim that the sign of C_proj will be the same that of C.
+    // We want our new far plane to go through Q_proj=(sign(C.x),sign(C.y),1,1), so in camera space, dot(new_F,Q) = 0, then dot(new_F,Q) = dot(M4,Q) - a*dot(C,Q) -> a = dot(M4,Q) / dot(C,Q)
+    // Again, M4 is always (0,0,-1,0), so a = -Qz / dot(C,Q). With the projection P and inverse P_inv matrices in Renderer::generate_matrix_persp_z0to1,
+    // Q = P_inv * Q_proj = (sign(C.x)/w,sign(C.y)/h,-1,1/f), which is Q = (sign(C.x)/P[0],sign(C.y)/P[5],-1.f,(1 + P[10]) / P[14])
+    // This makes a = 1 / dot(C,Q), which combined with M3 = a*C, gives us this
+
+    float4 q;
+    q.x = Math::sign(planeCameraSpace.x) / projectionMatrix.dataCM[0];
+    q.y = Math::sign(planeCameraSpace.y) / projectionMatrix.dataCM[5];
+    q.z = -1.f;
+    q.w = (1.f + projectionMatrix.dataCM[10]) / projectionMatrix.dataCM[14];
+    float4 c = Math::scale(planeCameraSpace, (1.f / Math::dot(planeCameraSpace, q)));
+    projectionMatrix.dataCM[2] = c.x;
+    projectionMatrix.dataCM[6] = c.y;
+    projectionMatrix.dataCM[10] = c.z;
+    projectionMatrix.dataCM[14] = c.w;
 }
 
 void generate_MV_matrix(float4x4& modelview, const Transform& t) {
@@ -111,79 +170,29 @@ struct CubeCreateParams {
     f32 width;
     f32 height;
     f32 depth;
+    float3 offset;
 };
-void create_textured_cube_coords(TexturedCube& c, const CubeCreateParams& params) {
+void create_colored_cube_coords(ColoredCube& cube, const CubeCreateParams& params) {
 
-    enum Normals { Y, NY, X, NX, Z, NZ };
-    const float3 normals[] = {
-          { 0.f, 1.f, 0.f }
-        , { 0.f, -1.f, 0.f }
-        , { 1.f, 0.f, 0.f }
-        , { -1.f, 0.f, 0.f }
-        , { 0.f, 0.f, 1.f }
-        , { 0.f, 0.f, -1.f }
-    };
-    const float2
-          bl = { 0.f, 0.f }
-        , br = { 1.f, 0.f }
-        , tr = { 1.f, 1.f }
-        , tl = { 0.f, 1.f }
-    ;
-    f32 w = params.width;
-    f32 h = params.height;
-    f32 d = params.depth;
-    TexturedCube::Vertex* v = c.vertices;
+    f32 pos_w = params.width + params.offset.x;
+    f32 pos_h = params.height + params.offset.y;
+    f32 pos_d = params.depth + params.offset.z;
+    f32 neg_w = -params.width + params.offset.x;
+    f32 neg_h = -params.height + params.offset.y;
+    f32 neg_d = -params.depth + params.offset.z;
+    u32 c = Color32(1.f, 1.f, 1.f, 1.f).ABGR();
+    ColoredCube::Vertex* v = cube.vertices;
 
-    // vertex and texture coords
-    v[0] = { { w, d, -h } }; v[1] = { { -w, d, -h } }; v[2] = { { -w, d, h } }; v[3] = { { w, d, h } };           // +y quad
-    v[4] = { { -w, -d, -h } }; v[5] = { { w, -d, -h } }; v[6] = { { w, -d, h } }; v[7] = { { -w, -d, h } };       // -y quad
+    v[0] = { { pos_w, pos_d, neg_h }, c }; v[1] = { { neg_w, pos_d, neg_h }, c }; v[2] = { { neg_w, pos_d, pos_h }, c }; v[3] = { { pos_w, pos_d, pos_h }, c };     // +y quad
+    v[4] = { { neg_w, neg_d, neg_h }, c }; v[5] = { { pos_w, neg_d, neg_h }, c }; v[6] = { { pos_w, neg_d, pos_h }, c }; v[7] = { { neg_w, neg_d, pos_h }, c };     // -y quad
 
-    v[8] = { { w, -d, -h} }; v[9] = { { w, d, -h } }; v[10] = { { w, d, h } }; v[11] = { { w, -d, h } };          // +x quad
-    v[12] = { { -w, d, -h } }; v[13] = { { -w, -d, -h } }; v[14] = { { -w, -d, h } }; v[15] = { { -w, d, h } };   // -x quad
+    v[8] = { { pos_w, neg_d, neg_h}, c };   v[9] = { { pos_w, pos_d, neg_h }, c };  v[10] = { { pos_w, pos_d, pos_h }, c }; v[11] = { { pos_w, neg_d, pos_h }, c }; // +x quad
+    v[12] = { { neg_w, pos_d, neg_h }, c }; v[13] = { { neg_w, neg_d, neg_h }, c }; v[14] = { { neg_w, neg_d, pos_h }, c }; v[15] = { { neg_w, pos_d, pos_h }, c }; // -x quad
 
-    v[16] = { { -w, -d, h } }; v[17] = { { w, -d, h } }; v[18] = { { w, d, h } }; v[19] = { { -w, d, h } };         // +z quad
-    v[20] = { { w, d, -h } }; v[21] = { { w, -d, -h } }; v[22] = { { -w, -d, -h } }; v[23] = { { -w, d, -h } }; // -z quad
+    v[16] = { { neg_w, neg_d, pos_h }, c }; v[17] = { { pos_w, neg_d, pos_h }, c }; v[18] = { { pos_w, pos_d, pos_h }, c }; v[19] = { { neg_w, pos_d, pos_h }, c }; // +z quad
+    v[20] = { { pos_w, pos_d, neg_h }, c }; v[21] = { { pos_w, neg_d, neg_h }, c }; v[22] = { { neg_w, neg_d, neg_h }, c }; v[23] = { { neg_w, pos_d, neg_h }, c }; // -z quad
 
-    // normals, tangents and bitangents
-    float3 n, t, b;
-    n = normals[Y]; t = normals[NX]; b = normals[NZ];
-    // calculate_tangents(t, b, v[3].pos, v[1].pos, v[0].pos );
-    v[0].normal = n; v[1].normal = n; v[2].normal = n; v[3].normal = n;     // +y quad
-    v[0].tangent = t; v[1].tangent = t; v[2].tangent = t; v[3].tangent = t;
-    v[0].bitangent = b; v[1].bitangent = b; v[2].bitangent = b; v[3].bitangent = b;
-    v[0].uv = tl; v[1].uv = tr; v[2].uv = br; v[3].uv = bl;
-    n = normals[NY]; t = normals[X]; b = normals[NZ];
-    // calculate_tangents(t, b, v[7].pos, v[5].pos, v[4].pos );
-    v[4].normal = n; v[5].normal = n; v[6].normal = n; v[7].normal = n;     // -y quad
-    v[4].tangent = t; v[5].tangent = t; v[6].tangent = t; v[7].tangent = t;
-    v[4].bitangent = b; v[5].bitangent = b; v[6].bitangent = b; v[7].bitangent = b;
-    v[4].uv = tl; v[5].uv = tr; v[6].uv = br; v[7].uv = bl;
-    n = normals[X]; t = normals[Y]; b = normals[NZ];
-    // calculate_tangents(t, b, v[11].pos, v[9].pos, v[8].pos );
-    v[8].normal = n; v[9].normal = n; v[10].normal = n; v[11].normal = n;   // +x quad
-    v[8].tangent = t; v[9].tangent = t; v[10].tangent = t; v[11].tangent = t;
-    v[8].bitangent = b; v[9].bitangent = b; v[10].bitangent = b; v[11].bitangent = b;
-    v[8].uv = tl; v[9].uv = tr; v[10].uv = br; v[11].uv = bl;
-    n = normals[NX]; t = normals[NY]; b = normals[NZ];
-    // calculate_tangents(t, b, v[15].pos, v[13].pos, v[12].pos );
-    v[12].normal = n; v[13].normal = n; v[14].normal = n; v[15].normal = n; // -x quad
-    v[12].tangent = t; v[13].tangent = t; v[14].tangent = t; v[15].tangent = t;
-    v[12].bitangent = b; v[13].bitangent = b; v[14].bitangent = b; v[15].bitangent = b;
-    v[12].uv = tl; v[13].uv = tr; v[14].uv = br; v[15].uv = bl;
-    n = normals[Z]; t = normals[X]; b = normals[NY];
-    // calculate_tangents(t, b, v[19].pos, v[17].pos, v[16].pos );
-    v[16].normal = n; v[17].normal = n; v[18].normal = n; v[19].normal = n; // +z quad
-    v[16].tangent = t; v[17].tangent = t; v[18].tangent = t; v[19].tangent = t;
-    v[16].bitangent = b; v[17].bitangent = b; v[18].bitangent = b; v[19].bitangent = b;
-    v[16].uv = tl; v[17].uv = tr; v[18].uv = br; v[19].uv = bl;
-    n = normals[NZ]; t = normals[NX]; b = normals[NY];
-    // calculate_tangents(t, b, v[20].pos, v[22].pos, v[21].pos );
-    v[20].normal = n; v[21].normal = n; v[22].normal = n; v[23].normal = n; // -z quad
-    v[20].tangent = t; v[21].tangent = t; v[22].tangent = t; v[23].tangent = t;
-    v[20].bitangent = b; v[21].bitangent = b; v[22].bitangent = b; v[23].bitangent = b;
-    v[20].uv = bl; v[21].uv = tl; v[22].uv = tr; v[23].uv = br;
-
-    u16* i = c.indices;
+    u16* i = cube.indices;
 
     i[0] = 2; i[1] = 1; i[2] = 0; i[3] = 2; i[4] = 0; i[5] = 3;             // +y tris
     i[6] = 6; i[7] = 5; i[8] = 4; i[9] = 6; i[10] = 4; i[11] = 7;           // -y tris
@@ -196,19 +205,22 @@ void create_textured_cube_coords(TexturedCube& c, const CubeCreateParams& params
 }
 void create_untextured_cube_coords(UntexturedCube& c, const CubeCreateParams& params) {
 
-    f32 w = params.width;
-    f32 h = params.height;
-    f32 d = params.depth;
+    f32 pos_w = params.width + params.offset.x;
+    f32 pos_h = params.height + params.offset.y;
+    f32 pos_d = params.depth + params.offset.z;
+    f32 neg_w = -params.width + params.offset.x;
+    f32 neg_h = -params.height + params.offset.y;
+    f32 neg_d = -params.depth + params.offset.z;
     float3* v = c.vertices;
 
-    v[0] = { w, d, -h }; v[1] = { -w, d, -h }; v[2] = { -w, d, h }; v[3] = { w, d, h };           // +y quad
-    v[4] = { -w, -d, -h }; v[5] = { w, -d, -h }; v[6] = { w, -d, h }; v[7] = { -w, -d, h };       // -y quad
+    v[0] = { pos_w, pos_d, neg_h }; v[1] = { neg_w, pos_d, neg_h }; v[2] = { neg_w, pos_d, pos_h }; v[3] = { pos_w, pos_d, pos_h };     // +y quad
+    v[4] = { neg_w, neg_d, neg_h }; v[5] = { pos_w, neg_d, neg_h }; v[6] = { pos_w, neg_d, pos_h }; v[7] = { neg_w, neg_d, pos_h };     // -y quad
 
-    v[8] = { w, -d, -h }; v[9] = { w, d, -h }; v[10] = { w, d, h }; v[11] = { w, -d, h };          // +x quad
-    v[12] = { -w, d, -h }; v[13] = { -w, -d, -h };  v[14] = { -w, -d, h }; v[15] = { -w, d, h };   // -x quad
+    v[8] = { pos_w, neg_d, neg_h}; v[9] = { pos_w, pos_d, neg_h }; v[10] = { pos_w, pos_d, pos_h }; v[11] = { pos_w, neg_d, pos_h };    // +x quad
+    v[12] = { neg_w, pos_d, neg_h }; v[13] = { neg_w, neg_d, neg_h }; v[14] = { neg_w, neg_d, pos_h }; v[15] = { neg_w, pos_d, pos_h }; // -x quad
 
-    v[16] = { -w, -d, h }; v[17] = { w, -d, h }; v[18] = { w, d, h }; v[19] = { -w, d, h };         // +z quad
-    v[20] = { w, d, -h }; v[21] = { w, -d, -h }; v[22] = { -w, -d, -h }; v[23] = { -w, d, -h };     // -z quad
+    v[16] = { neg_w, neg_d, pos_h }; v[17] = { pos_w, neg_d, pos_h }; v[18] = { pos_w, pos_d, pos_h }; v[19] = { neg_w, pos_d, pos_h }; // +z quad
+    v[20] = { pos_w, pos_d, neg_h }; v[21] = { pos_w, neg_d, neg_h }; v[22] = { neg_w, neg_d, neg_h }; v[23] = { neg_w, pos_d, neg_h }; // -z quad
 
     u16* i = c.indices;
 
@@ -246,8 +258,8 @@ namespace Driver {
     };
     void create_RT(RscRenderTarget& rt, const RenderTargetParams& params);
     void bind_RT(const RscRenderTarget& rt);
-    void clear_RT(const RscRenderTarget& rt);
-    void clear_RT(const RscRenderTarget& rt, Color32 color);
+    void clear_RT(const RscRenderTarget& rt, u32 flags);
+    void clear_RT(const RscRenderTarget& rt, u32 flags, Color32 color);
     struct RenderTargetCopyParams {
         // for now
         bool depth;
@@ -315,7 +327,8 @@ namespace Driver {
     void bind_shader(const RscShaderSet& ss);
 
     struct BlendStateParams {
-        bool enable;
+        RenderTargetWriteMask::Enum renderTargetWriteMask;
+        bool blendEnable;
     };
     void create_blend_state(RscBlendState&, const BlendStateParams&);
     void bind_blend_state(const RscBlendState& bs);
@@ -328,9 +341,16 @@ namespace Driver {
     void bind_RS(const RscRasterizerState& rs);
 
     struct DepthStencilStateParams {
-        bool enable;
-        DepthFunc::Enum func;
-        DepthWriteMask::Enum writemask;
+        CompFunc::Enum depth_func;
+        DepthWriteMask::Enum depth_writemask;
+        StencilOp::Enum stencil_failOp;
+        StencilOp::Enum stencil_depthFailOp;
+        StencilOp::Enum stencil_passOp;
+        CompFunc::Enum stencil_func;
+        bool depth_enable;
+        bool stencil_enable;
+        u8 stencil_readmask;
+        u8 stencil_writemask;
     };
     void create_DS(RscDepthStencilState&, const DepthStencilStateParams&);
     void bind_DS(const RscDepthStencilState& ds);
@@ -397,7 +417,7 @@ namespace Driver {
 
 void create_indexed_vertex_buffer_from_untextured_cube(Renderer::Driver::RscIndexedVertexBuffer& buffer, const CubeCreateParams& params) {
     Renderer::UntexturedCube cube;
-    Renderer::create_untextured_cube_coords(cube, { 1.f, 1.f, 1.f });
+    Renderer::create_untextured_cube_coords(cube, params);
     Renderer::Driver::IndexedVertexBufferDesc bufferParams;
     bufferParams.vertexData = cube.vertices;
     bufferParams.indexData = cube.indices;
@@ -414,9 +434,9 @@ void create_indexed_vertex_buffer_from_untextured_cube(Renderer::Driver::RscInde
     };
     Renderer::Driver::create_indexed_vertex_buffer(buffer, bufferParams, attribs, COUNT_OF(attribs));
 }
-void create_indexed_vertex_buffer_from_textured_cube(Renderer::Driver::RscIndexedVertexBuffer& buffer, const CubeCreateParams& params) {
-    Renderer::TexturedCube cube;
-    Renderer::create_textured_cube_coords(cube, { 1.f, 1.f, 1.f });
+void create_indexed_vertex_buffer_from_colored_cube(Renderer::Driver::RscIndexedVertexBuffer& buffer, const CubeCreateParams& params) {
+    Renderer::ColoredCube cube;
+    Renderer::create_colored_cube_coords(cube, params);
     Renderer::Driver::IndexedVertexBufferDesc bufferParams;
     bufferParams.vertexData = cube.vertices;
     bufferParams.indexData = cube.indices;
@@ -429,11 +449,8 @@ void create_indexed_vertex_buffer_from_textured_cube(Renderer::Driver::RscIndexe
     bufferParams.indexType = Renderer::Driver::BufferItemType::U16;
     bufferParams.type = Renderer::Driver::BufferTopologyType::Triangles;
     Driver::VertexAttribDesc attribs[] = {
-        Driver::make_vertexAttribDesc("POSITION", OFFSET_OF(TexturedCube::Vertex, pos), sizeof(TexturedCube::Vertex), Driver::BufferAttributeFormat::R32G32B32_FLOAT),
-        Driver::make_vertexAttribDesc("TEXCOORD", OFFSET_OF(TexturedCube::Vertex, uv), sizeof(TexturedCube::Vertex), Driver::BufferAttributeFormat::R32G32_FLOAT),
-        Driver::make_vertexAttribDesc("NORMAL", OFFSET_OF(TexturedCube::Vertex, normal), sizeof(TexturedCube::Vertex), Driver::BufferAttributeFormat::R32G32B32_FLOAT),
-        Driver::make_vertexAttribDesc("TANGENT", OFFSET_OF(TexturedCube::Vertex, tangent), sizeof(TexturedCube::Vertex), Driver::BufferAttributeFormat::R32G32B32_FLOAT),
-        Driver::make_vertexAttribDesc("BITANGENT", OFFSET_OF(TexturedCube::Vertex, bitangent), sizeof(TexturedCube::Vertex), Driver::BufferAttributeFormat::R32G32B32_FLOAT)
+        Driver::make_vertexAttribDesc("POSITION", OFFSET_OF(ColoredCube::Vertex, pos), sizeof(ColoredCube::Vertex), Driver::BufferAttributeFormat::R32G32B32_FLOAT),
+        Driver::make_vertexAttribDesc("COLOR", OFFSET_OF(ColoredCube::Vertex, color), sizeof(ColoredCube::Vertex), Driver::BufferAttributeFormat::R8G8B8A8_UNORM)
     };
     Renderer::Driver::create_indexed_vertex_buffer(buffer, bufferParams, attribs, COUNT_OF(attribs));
 }

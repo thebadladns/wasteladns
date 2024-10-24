@@ -92,6 +92,14 @@ struct float3x3 {
     };
 };
 
+
+
+// Row Major would be
+//  0  1  2  3
+//  4  5  6  7
+//  8  9 10 11
+// 12 13 14 15
+
 // Column Major
 // 0  4  8  12
 // 1  5  9  13
@@ -158,6 +166,17 @@ float4 min(const float4& a, const float4& b) { return float4(Math::min(a.x,b.x),
 bool isCloseAll(const float2& a, const float2& b, const f32 d) { return Math::abs(a.x - b.x) < d && Math::abs(a.y - b.y) < d; }
 bool isCloseAll(const float3& a, const float3& b, const f32 d) { return Math::abs(a.x - b.x) < d && Math::abs(a.y - b.y) < d && Math::abs(a.z - b.z) < d; }
 bool isCloseAll(const float4& a, const float4& b, const f32 d) { return Math::abs(a.x - b.x) < d && Math::abs(a.y - b.y) < d && Math::abs(a.z - b.z) < d && Math::abs(a.w - b.w) < d; }
+bool isZeroAll(const float2& a) { return a.x == 0.f && a.y == 0.f; }
+bool isZeroAll(const float3& a) { return a.x == 0.f && a.y == 0.f && a.z == 0.f; }
+bool isZeroAll(const float4& a) { return a.x == 0.f && a.y == 0.f && a.z == 0.f && a.w == 0.f; }
+bool isZeroAll(const float3x3& m) {
+    return m.dataCM[0] == 0.f && m.dataCM[1] == 0.f && m.dataCM[2] == 0.f && m.dataCM[3] == 0.f && m.dataCM[4] == 0.f
+        && m.dataCM[5] == 0.f && m.dataCM[6] == 0.f && m.dataCM[7] == 0.f && m.dataCM[8] == 0.f;
+}
+bool isZeroAll(const float4x4& m) {
+    return m.dataCM[0] == 0.f && m.dataCM[1] == 0.f && m.dataCM[2] == 0.f && m.dataCM[3] == 0.f && m.dataCM[4] == 0.f && m.dataCM[5] == 0.f && m.dataCM[6] == 0.f && m.dataCM[7] == 0.f
+        && m.dataCM[8] == 0.f && m.dataCM[9] == 0.f && m.dataCM[10] == 0.f && m.dataCM[11] == 0.f && m.dataCM[12] == 0.f && m.dataCM[13] == 0.f && m.dataCM[14] == 0.f && m.dataCM[15] == 0.f;
+}
 float2 lerp(const f32 t, const float2& a, const float2& b) { return float2(a.x+t*(b.x-a.x), a.y+t*(b.y-a.y)); }
 float3 lerp(const f32 t, const float3& a, const float3& b) { return float3(a.x+t*(b.x-a.x), a.y+t*(b.y-a.y), a.z+t*(b.z-a.z)); }
 float4 lerp(const f32 t, const float4& a, const float4& b) { return float4(a.x+t*(b.x-a.x), a.y+t*(b.y-a.y), a.z+t*(b.z-a.z), a.w+t*(b.w-a.w)); }

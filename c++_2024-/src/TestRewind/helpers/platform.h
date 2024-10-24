@@ -58,8 +58,8 @@ namespace Platform
     };
     
     void loadLaunchConfig(LaunchConfig& config);
-    //void start(_GameData& game, Platform::GameConfig& config, const State& platform);
-    //void update(_GameData& game, GameConfig& config, const State& platform);
+    //void start(_GameData& game, Platform::GameConfig& config, Platform::State& platform);
+    //void update(_GameData& game, Platform::GameConfig& config, Platform::State& platform);
 }
 namespace OS = Platform;
 

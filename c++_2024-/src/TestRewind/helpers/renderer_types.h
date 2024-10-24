@@ -27,11 +27,14 @@ namespace Renderer {
     };
     //void generate_matrix_ortho(float4x4& matrix, const WindowProjection::Config& config);
     //void generate_matrix_persp(float4x4& matrixRHwithYup, const PerspProjection::Config& config);
+    //void add_oblique_plane_to_persp(float4x4& projectionMatrix, const float4& planeCameraSpace);
+    //const f32 min_z;
     void generate_matrix_ortho_zneg1to1(float4x4& matrix, const WindowProjection::Config& config);
     void generate_matrix_ortho_z0to1(float4x4& matrix, const WindowProjection::Config& config);
     void generate_matrix_persp_zneg1to1(float4x4& matrixRHwithYup, const PerspProjection::Config& config);
     void generate_matrix_persp_z0to1(float4x4& matrixRHwithYup, const PerspProjection::Config& config);
-    //const f32 min_z;
+    void add_oblique_plane_to_persp_zneg1to1(float4x4& projectionMatrix, const float4& planeCameraSpace);
+    void add_oblique_plane_to_persp_z0to1(float4x4& projectionMatrix, const float4& planeCameraSpace);
 
     namespace Shaders {
         struct VS_src {
@@ -74,13 +77,10 @@ namespace Renderer {
         Vertex vertices[4];
         u16 indices[6];
     };
-    struct TexturedCube {
+    struct ColoredCube {
         struct Vertex {
             float3 pos;
-            float2 uv;
-            float3 normal;
-            float3 tangent;
-            float3 bitangent;
+            u32 color;
         };
         Vertex vertices[24];
         u16 indices[36];

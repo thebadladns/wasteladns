@@ -124,6 +124,7 @@ typedef struct __GLsync* GLsync;
 #define GL_LINK_STATUS 0x8B82
 #define GL_INFO_LOG_LENGTH 0x8B84
 #define GL_DEPTH_ATTACHMENT 0x8D00
+#define GL_DEPTH_STENCIL_ATTACHMENT 0x821A
 #define GL_INVALID_INDEX 0xFFFFFFFF
 
 #define GL_TEXTURE_1D 0x0DE0
@@ -179,6 +180,7 @@ typedef struct __GLsync* GLsync;
 #define GL_READ_FRAMEBUFFER 0x8CA8
 #define GL_DRAW_FRAMEBUFFER 0x8CA9
 #define GL_DEPTH_COMPONENT 0x1902
+#define GL_DEPTH24_STENCIL8 0x88F0
 #define GL_RED 0x1903
 #define GL_GREEN 0x1904
 #define GL_BLUE 0x1905
@@ -201,6 +203,12 @@ typedef struct __GLsync* GLsync;
 #define GL_CW 0x0900
 #define GL_CCW 0x0901
 #define GL_DEPTH_TEST 0x0B71
+#define GL_STENCIL_TEST 0x0B90
+#define GL_KEEP 0x1E00
+#define GL_REPLACE 0x1E01
+#define GL_INCR 0x1E02
+#define GL_DECR 0x1E03
+#define GL_INVERT 0x150A
 
 int GL_KHR_debug = 0; //todo
 typedef void (APIENTRY* GLDEBUGPROC)(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const GLchar* message, const void* userParam);
@@ -329,6 +337,14 @@ typedef GLuint(APIENTRYP PFNGLGETUNIFORMBLOCKINDEXPROC)(GLuint program, const GL
 PFNGLGETUNIFORMBLOCKINDEXPROC glGetUniformBlockIndex;
 typedef void (APIENTRYP PFNGLDRAWELEMENTSINSTANCEDPROC)(GLenum mode, GLsizei count, GLenum type, const void* indices, GLsizei instancecount);
 PFNGLDRAWELEMENTSINSTANCEDPROC glDrawElementsInstanced;
+typedef void (APIENTRYP PFNGLCOLORMASKPROC)(GLboolean red, GLboolean green, GLboolean blue, GLboolean alpha);
+PFNGLCOLORMASKPROC glColorMask;
+typedef void (APIENTRYP PFNGLSTENCILMASKPROC)(GLuint mask);
+PFNGLSTENCILMASKPROC glStencilMask;
+typedef void (APIENTRYP PFNGLSTENCILFUNCPROC)(GLenum func, GLint ref, GLuint mask);
+PFNGLSTENCILFUNCPROC glStencilFunc;
+typedef void (APIENTRYP PFNGLSTENCILOPPROC)(GLenum fail, GLenum zfail, GLenum zpass);
+PFNGLSTENCILOPPROC glStencilOp;
 
 typedef void (APIENTRYP PFNGLDEBUGMESSAGECALLBACKPROC)(GLDEBUGPROC callback, const void* userParam);
 PFNGLDEBUGMESSAGECALLBACKPROC glDebugMessageCallback;
@@ -403,7 +419,10 @@ void loadGLExtensions() {
     glUniformBlockBinding = (PFNGLUNIFORMBLOCKBINDINGPROC)getGLProcAddress("glUniformBlockBinding");
     glGetUniformBlockIndex = (PFNGLGETUNIFORMBLOCKINDEXPROC)getGLProcAddress("glGetUniformBlockIndex");
     glDrawElementsInstanced = (PFNGLDRAWELEMENTSINSTANCEDPROC)getGLProcAddress("glDrawElementsInstanced");
-
+    glColorMask = (PFNGLCOLORMASKPROC)getGLProcAddress("glColorMask");
+    glStencilMask = (PFNGLSTENCILMASKPROC)getGLProcAddress("glStencilMask");
+    glStencilFunc = (PFNGLSTENCILFUNCPROC)getGLProcAddress("glStencilFunc");
+    glStencilOp = (PFNGLSTENCILOPPROC)getGLProcAddress("glStencilOp");
 
     glDebugMessageCallback = (PFNGLDEBUGMESSAGECALLBACKPROC)getGLProcAddress("glDebugMessageCallback");
 }

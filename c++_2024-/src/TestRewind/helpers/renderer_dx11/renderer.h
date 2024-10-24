@@ -97,22 +97,26 @@ namespace Driver {
     void bind_RT(const RscRenderTarget& rt) {
         d3dcontext->OMSetRenderTargets(rt.count, rt.views, rt.depthStencilView);
     }
-    void clear_RT(const RscRenderTarget& rt) {
-        float colorv[] = { 0.f, 0.f, 0.f, 0.f };
-        for (u32 i = 0; i < rt.count; i++) {
-            d3dcontext->ClearRenderTargetView(rt.views[i], colorv);
+    void clear_RT(const RscRenderTarget& rt, u32 flags) {
+        if (flags & RenderTargetClearFlags::Color) {
+            float colorv[] = { 0.f, 0.f, 0.f, 0.f };
+            for (u32 i = 0; i < rt.count; i++) {
+                d3dcontext->ClearRenderTargetView(rt.views[i], colorv);
+            }
         }
         if (rt.depthStencilView) {
-            d3dcontext->ClearDepthStencilView(rt.depthStencilView, D3D11_CLEAR_DEPTH, 1.f, 0);
+            flags &= ~RenderTargetClearFlags::Color;
+            d3dcontext->ClearDepthStencilView(rt.depthStencilView, flags, 1.f, 0);
         }
     }
-    void clear_RT(const RscRenderTarget& rt, Color32 color) {
+    void clear_RT(const RscRenderTarget& rt, u32 flags, Color32 color) {
         float colorv[] = { color.getRf(), color.getGf(), color.getBf(), color.getAf() };
         for (u32 i = 0; i < rt.count; i++) {
             d3dcontext->ClearRenderTargetView(rt.views[i], colorv);
         }
         if (rt.depthStencilView) {
-            d3dcontext->ClearDepthStencilView(rt.depthStencilView, D3D11_CLEAR_DEPTH, 1.f, 0);
+            flags &= ~RenderTargetClearFlags::Color;
+            d3dcontext->ClearDepthStencilView(rt.depthStencilView, flags, 1.f, 0);
         }
     }
     // ONLY WORKS WITH SAME RESOLUTION
@@ -417,14 +421,14 @@ namespace Driver {
         // Todo: make parameters when needed
         ID3D11BlendState1* blendState;
         D3D11_BLEND_DESC1 blendStateDesc = {};
-        blendStateDesc.RenderTarget[0].BlendEnable = params.enable ? TRUE : FALSE;
+        blendStateDesc.RenderTarget[0].BlendEnable = params.blendEnable;
         blendStateDesc.RenderTarget[0].SrcBlend = D3D11_BLEND_SRC_ALPHA;
         blendStateDesc.RenderTarget[0].DestBlend = D3D11_BLEND_INV_SRC_ALPHA;
         blendStateDesc.RenderTarget[0].BlendOp = D3D11_BLEND_OP_ADD;
         blendStateDesc.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_ONE;
         blendStateDesc.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_ZERO;
         blendStateDesc.RenderTarget[0].BlendOpAlpha = D3D11_BLEND_OP_ADD;
-        blendStateDesc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
+        blendStateDesc.RenderTarget[0].RenderTargetWriteMask = params.renderTargetWriteMask;
         d3ddev->CreateBlendState1(&blendStateDesc, &blendState);
 
         bs.impl = blendState;
@@ -456,10 +460,20 @@ namespace Driver {
     void create_DS(RscDepthStencilState& ds, const DepthStencilStateParams& params) {
         ID3D11DepthStencilState* depthStencilState;
         D3D11_DEPTH_STENCIL_DESC depthStencilStateDesc = {};
-        depthStencilStateDesc.DepthEnable = params.enable;
-        depthStencilStateDesc.DepthWriteMask = (D3D11_DEPTH_WRITE_MASK) params.writemask;
-        depthStencilStateDesc.DepthFunc = (D3D11_COMPARISON_FUNC) params.func;
-        depthStencilStateDesc.StencilEnable = false;
+        depthStencilStateDesc.DepthEnable = params.depth_enable;
+        depthStencilStateDesc.DepthWriteMask = (D3D11_DEPTH_WRITE_MASK) params.depth_writemask;
+        depthStencilStateDesc.DepthFunc = (D3D11_COMPARISON_FUNC) params.depth_func;
+        depthStencilStateDesc.StencilEnable = params.stencil_enable;
+        depthStencilStateDesc.StencilReadMask = params.stencil_readmask;
+        depthStencilStateDesc.StencilWriteMask = params.stencil_writemask;
+        depthStencilStateDesc.FrontFace.StencilFailOp = (D3D11_STENCIL_OP) params.stencil_failOp;
+        depthStencilStateDesc.FrontFace.StencilDepthFailOp = (D3D11_STENCIL_OP)params.stencil_depthFailOp;
+        depthStencilStateDesc.FrontFace.StencilPassOp = (D3D11_STENCIL_OP)params.stencil_passOp;
+        depthStencilStateDesc.FrontFace.StencilFunc = (D3D11_COMPARISON_FUNC) params.stencil_func;
+        depthStencilStateDesc.BackFace.StencilFailOp = (D3D11_STENCIL_OP)params.stencil_failOp;
+        depthStencilStateDesc.BackFace.StencilDepthFailOp = (D3D11_STENCIL_OP)params.stencil_depthFailOp;
+        depthStencilStateDesc.BackFace.StencilPassOp = (D3D11_STENCIL_OP)params.stencil_passOp;
+        depthStencilStateDesc.BackFace.StencilFunc = (D3D11_COMPARISON_FUNC) params.stencil_func;
         d3ddev->CreateDepthStencilState(&depthStencilStateDesc, &depthStencilState);
         ds.impl = depthStencilState;
     }

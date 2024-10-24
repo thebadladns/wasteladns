@@ -36,7 +36,8 @@ namespace Game
               EXIT = ::Input::Keyboard::Keys::ESCAPE
             , TOGGLE_OVERLAY = ::Input::Keyboard::Keys::H
             , TOGGLE_DEBUG3D = ::Input::Keyboard::Keys::V
-            , CAPTURE_CAMERA = ::Input::Keyboard::Keys::C
+            , CAPTURE_CAMERAS = ::Input::Keyboard::Keys::P
+            , TOGGLE_CAPTURED_CAMERA = ::Input::Keyboard::Keys::C
             ;
     };
 
@@ -45,8 +46,6 @@ namespace Game
         Camera cameras[CamCount];
         Gameplay::Orbit::State orbitCamera;
         Camera* activeCam;
-        __DEBUGDEF(Camera captured_camera);
-        __DEBUGDEF(bool captured_camera_initialized);
     };
 
     struct RenderManager {
@@ -60,18 +59,22 @@ namespace Game
     struct DebugVis {
         struct OverlayMode { enum Enum { All, HelpOnly, ArenaOnly, None, Count }; };
         struct Debug3DView { enum Enum { All, Culling, None, Count }; };
+        struct DebugCameraStage { enum Enum { Scene, SceneMirror, SceneMirrorClipped, Count }; };
 
         f64 frameHistory[60];
         f64 frameAvg = 0;
         u64 frameHistoryIdx = 0;
         OverlayMode::Enum overlaymode = OverlayMode::Enum::All;
         Debug3DView::Enum debug3Dmode = Debug3DView::Enum::None;
+        DebugCameraStage::Enum debugCameraStage = DebugCameraStage::Enum::Scene;
+        float4x4 capturedCameras[DebugCameraStage::Count] = {};
     };
     #endif
 
     struct Memory {
         Allocator::Arena persistentArena;
         __DEBUGDEF(Allocator::Arena imDebugArena;)
+        Allocator::Arena frameArena;
         u8* frameArenaBuffer; // used to reset Allocator::frameArena every frame
         __DEBUGDEF(u8* persistentArenaBuffer;) // used for debugging visualization
         __DEBUGDEF(uintptr_t frameArenaHighmark;)
@@ -111,9 +114,9 @@ namespace Game
             __DEBUGEXP(Allocator::init_arena(Allocator::emergencyArena, 1 << 20)); // 1MB
             Allocator::init_arena(game.memory.persistentArena, 1 << 20); // 1MB
             __DEBUGEXP(game.memory.persistentArenaBuffer = game.memory.persistentArena.curr);
-            Allocator::init_arena(Allocator::frameArena, 1 << 20); // 1MB
-            game.memory.frameArenaBuffer = Allocator::frameArena.curr;
-            __DEBUGEXP(game.memory.frameArenaHighmark = (uintptr_t)Allocator::frameArena.curr; Allocator::frameArena.highmark = &game.memory.frameArenaHighmark);
+            Allocator::init_arena(game.memory.frameArena, 1 << 20); // 1MB
+            game.memory.frameArenaBuffer = game.memory.frameArena.curr;
+            __DEBUGEXP(game.memory.frameArenaHighmark = (uintptr_t)game.memory.frameArena.curr; game.memory.frameArena.highmark = &game.memory.frameArenaHighmark);
             __DEBUGEXP(Allocator::init_arena(game.memory.imDebugArena, Renderer::Immediate::arena_size));
         }
 
@@ -171,7 +174,7 @@ namespace Game
         game.player = {};
         {
             Math::identity4x4(game.player.transform);
-            Renderer::NodeData& nodeData = Renderer::get_draw_node_data(game.renderMgr.store, game.renderMgr.store.playerDrawNodeHandle);
+            Renderer::NodeData& nodeData = Renderer::get_draw_node_core(game.renderMgr.store, game.renderMgr.store.playerDrawNodeHandle).nodeData;
             game.player.transform.pos = nodeData.worldMatrix.col3.xyz;
         }
 
@@ -211,10 +214,10 @@ namespace Game
 
     }
 
-    void update(Instance& game, Platform::GameConfig& config, const Platform::State& platform) {
+    void update(Instance& game, Platform::GameConfig& config, Platform::State& platform) {
 
         // frame arena reset
-        Allocator::frameArena.curr = game.memory.frameArenaBuffer;
+        game.memory.frameArena.curr = game.memory.frameArenaBuffer;
 
         // frame timing calculations
         {
@@ -242,25 +245,16 @@ namespace Game
         // meta input checks
         const ::Input::Keyboard::State& keyboard = platform.input.keyboard;
         bool step = true;
+        bool captureCameras = false;
         {
             if (keyboard.released(Input::EXIT)) {
                 config.quit = true;
             }
             #if __DEBUG
-            if (keyboard.pressed(Input::TOGGLE_OVERLAY)) {
-                game.debugVis.overlaymode = (DebugVis::OverlayMode::Enum)((game.debugVis.overlaymode + 1) % DebugVis::OverlayMode::Count);
-            }
-            if (keyboard.pressed(Input::TOGGLE_DEBUG3D)) {
-                game.debugVis.debug3Dmode = (DebugVis::Debug3DView::Enum)((game.debugVis.debug3Dmode + 1) % DebugVis::Debug3DView::Count);
-            }
-            if (keyboard.pressed(Input::CAPTURE_CAMERA)) {
-                if (game.cameraMgr.captured_camera_initialized) {
-                    game.cameraMgr.captured_camera_initialized = false;
-                } else {
-                    game.cameraMgr.captured_camera = *game.cameraMgr.activeCam;
-                    game.cameraMgr.captured_camera_initialized = true;
-                }
-            }
+            if (keyboard.pressed(Input::TOGGLE_OVERLAY)) { game.debugVis.overlaymode = (DebugVis::OverlayMode::Enum)((game.debugVis.overlaymode + 1) % DebugVis::OverlayMode::Count); }
+            if (keyboard.pressed(Input::TOGGLE_DEBUG3D)) { game.debugVis.debug3Dmode = (DebugVis::Debug3DView::Enum)((game.debugVis.debug3Dmode + 1) % DebugVis::Debug3DView::Count); }
+            if (keyboard.pressed(Input::TOGGLE_CAPTURED_CAMERA)) { game.debugVis.debugCameraStage = (DebugVis::DebugCameraStage::Enum)((game.debugVis.debugCameraStage + 1) % DebugVis::DebugCameraStage::Count); }
+            if (keyboard.pressed(Input::CAPTURE_CAMERAS)) { captureCameras = true; }
             #endif      
             step = !game.time.paused;
         }
@@ -284,7 +278,7 @@ namespace Game
                 Gameplay::Movement::process_cameraRelative(game.player.transform, game.player.movementController, game.player.control, activeCam->transform, dt);
 
                 // update player render
-                Renderer::NodeData& nodeData = Renderer::get_draw_node_data(game.renderMgr.store, game.renderMgr.store.playerDrawNodeHandle);
+                Renderer::NodeData& nodeData = Renderer::get_draw_node_core(game.renderMgr.store, game.renderMgr.store.playerDrawNodeHandle).nodeData;
                 nodeData.worldMatrix = game.player.transform.matrix;
 
                 { // animation hack
@@ -304,7 +298,7 @@ namespace Game
                     const f32 runParticleMaxScaley = -0.9f;
                     const f32 runParticleMinScalez = 0.4f;
                     const f32 runParticleMaxScalez = 0.5f;
-                    const f32 runParticleMinOffsetz = -1.2f; // 2.23879f
+                    const f32 runParticleMinOffsetz = -1.2f;
                     const f32 runParticleMaxOffsetz = -0.5f;
                     const f32 runMinScale = 5.f;
                     const f32 runMaxScale = 15.f;
@@ -400,208 +394,420 @@ namespace Game
             }
         }
 
-         //Render update
-        Renderer::VisibleNodes visibleNodes = {}; // todo: move somewhere?
+        //Render update
+        Renderer::VisibleNodes* visibleNodes, * mirrorVisibleNodes; // todo: move these two somewhere?
         {
             RenderManager& mgr = game.renderMgr;
             Renderer::Store& store = mgr.store;
             using namespace Renderer;
 
+            Camera* activeCam = game.cameraMgr.activeCam;
+            float4x4 viewMatrix = activeCam->viewMatrix;
+            float4x4 mirrorViewMatrix, mirrorProjectionMatrix, mirrorVPMatrix;
+
             // perspective cam set up
             float4x4 vpMatrix;
             Driver::RscCBuffer& scene_cbuffer = store.cbuffers[store.cbuffer_scene];
+            Renderer::SceneData cbufferPerScene;
             {
-                Camera* activeCam = game.cameraMgr.activeCam;
-                Renderer::SceneData cbufferPerScene;
                 cbufferPerScene.projectionMatrix = mgr.perspProjection.matrix;
-                cbufferPerScene.viewMatrix = activeCam->viewMatrix;
-                cbufferPerScene.viewPos = activeCam->transform.pos;
+                cbufferPerScene.viewMatrix = viewMatrix;
+                cbufferPerScene.viewPos = viewMatrix.col3.xyz;
                 cbufferPerScene.lightPos = float3(3.f, 8.f, 15.f);
                 Renderer::Driver::update_cbuffer(scene_cbuffer, &cbufferPerScene);
-                vpMatrix = Math::mult(mgr.perspProjection.matrix, activeCam->viewMatrix);
+                vpMatrix = Math::mult(mgr.perspProjection.matrix, viewMatrix);
+                __DEBUGEXP(if (captureCameras) { game.debugVis.capturedCameras[DebugVis::DebugCameraStage::Scene] = vpMatrix; });
             }
 
             {
-                Renderer::Driver::bind_blend_state(store.blendStateOn);
-                Renderer::Driver::bind_DS(store.depthStateOn);
-                Renderer::Driver::bind_RT(store.gameRT);
-                Renderer::Driver::clear_RT(store.gameRT, Color32(0.2f, 0.344f, 0.59f, 1.f));
                 {
-                    Renderer::Driver::ViewportParams vpParams;
+                    Driver::ViewportParams vpParams;
                     vpParams.topLeftX = 0;
                     vpParams.topLeftY = 0;
                     vpParams.width = (f32)platform.screen.width;
                     vpParams.height = (f32)platform.screen.height;
                     vpParams.minDepth = 0.f;
                     vpParams.maxDepth = 1.f;
-                    Renderer::Driver::set_VP(vpParams);
+                    Driver::set_VP(vpParams);
                 }
             
                 // cull nodes
                 {
-                    #if __DEBUG
-                    if (game.cameraMgr.captured_camera_initialized) {
-                        vpMatrix = Math::mult(mgr.perspProjection.matrix, game.cameraMgr.captured_camera.viewMatrix);
+                    {
+                        visibleNodes = (VisibleNodes*)Allocator::alloc_arena(game.memory.frameArena, sizeof(VisibleNodes), alignof(VisibleNodes));
+                        memset(visibleNodes, 0, sizeof(VisibleNodes));
+                        computeVisibility(*visibleNodes, vpMatrix, store);
                     }
-                    #endif
 
-                    auto cull_isVisible = [](float4x4 mvp, float3 min, float3 max) -> bool {
-                        float4 corners[8] = {
-                            {min.x, min.y, min.z, 1.0},
-                            {max.x, min.y, min.z, 1.0},
-                            {min.x, max.y, min.z, 1.0},
-                            {max.x, max.y, min.z, 1.0},
+                    // set up mirror scene if mirror is visible
+                    mirrorVisibleNodes = (VisibleNodes*)Allocator::alloc_arena(game.memory.frameArena, sizeof(VisibleNodes), alignof(VisibleNodes));
+                    memset(mirrorVisibleNodes, 0, sizeof(VisibleNodes));
+                    for (u32 i = 0; i < visibleNodes->visible_nodes_count; i++) {
+                        u32 n = visibleNodes->visible_nodes[i];
+                        DrawNode& node = store.drawNodes.data[n].state.live;
 
-                            {min.x, min.y, max.z, 1.0},
-                            {max.x, min.y, max.z, 1.0},
-                            {min.x, max.y, max.z, 1.0},
-                            {max.x, max.y, max.z, 1.0},
-                        };
+                        if (store.mirror.drawHandle != handle_from_node(store, node)) { // todo: improve?
 
-                        bool inside = false;
-                        for (u32 corner_id = 0; corner_id < 8; corner_id++) {
-                            float4 corner = Math::mult(mvp, corners[corner_id]);
-                            // Check vertex against clip space bounds
-                            inside = inside ||
-                                (((-corner.w < corner.x) && (corner.x < corner.w)) &&
-                                (((-corner.w < corner.y) && (corner.y < corner.w)) &&
-                                ((Renderer::min_z < corner.z) && (corner.z < corner.w))));
+                            // todo: investigate reflection at y = y
+                            auto reflectionMatrix = [](float4 p) -> float4x4 { // todo: understand properly
+                                float4x4 o;
+                                o.col0.x = 1 - 2.f * p.x * p.x; o.col1.x = -2.f * p.x * p.y;    o.col2.x = -2.f * p.x * p.z;        o.col3.x = -2.f * p.x * p.w;
+                                o.col0.y = -2.f * p.y * p.x;    o.col1.y = 1 - 2.f * p.y * p.y; o.col2.y = -2.f * p.y * p.z;        o.col3.y = -2.f * p.y * p.w;
+                                o.col0.z = -2.f * p.z * p.x;    o.col1.z = -2.f * p.z * p.y;    o.col2.z = 1.f - 2.f * p.z * p.z;   o.col3.z = -2.f * p.z * p.w;
+                                o.col0.w = 0.f;                 o.col1.w = 0.f;                 o.col2.w = 0.f;                     o.col3.w = 1.f;
+                                return o;
+                            };
+                            
+                            float4 plane { store.mirror.normal.x, store.mirror.normal.y, store.mirror.normal.z, -Math::dot(store.mirror.pos, store.mirror.normal) };
+                            float4x4 reflect = reflectionMatrix(plane);
+                            mirrorViewMatrix = Math::mult(viewMatrix, reflect);
+                            mirrorProjectionMatrix = mgr.perspProjection.matrix;
+                            __DEBUGEXP(if (captureCameras) { game.debugVis.capturedCameras[DebugVis::DebugCameraStage::SceneMirror] = Math::mult(mirrorProjectionMatrix, mirrorViewMatrix); });
+                            float3 normalCameraSpace = Math::mult(mirrorViewMatrix, float4(store.mirror.normal, 0.f)).xyz;
+                            float3 posCameraSpace = Math::mult(mirrorViewMatrix, float4(store.mirror.pos, 1.f)).xyz;
+                            float4 pCameraSpace{ normalCameraSpace.x, normalCameraSpace.y, normalCameraSpace.z, -Math::dot(posCameraSpace, normalCameraSpace) };
+                            add_oblique_plane_to_persp(mirrorProjectionMatrix, pCameraSpace);
+                            mirrorVPMatrix = Math::mult(mirrorProjectionMatrix, mirrorViewMatrix);
+                            __DEBUGEXP(if (captureCameras) { game.debugVis.capturedCameras[DebugVis::DebugCameraStage::SceneMirrorClipped] = mirrorVPMatrix; });
+                            computeVisibility(*mirrorVisibleNodes, mirrorVPMatrix, store);
+
+                            break;
                         }
-                        return inside;
-                    };
+                    }
+                }
+                // update visible nodes
+                {
+                    // figure out which nodes are visible among all of the visibility lists
+                    Allocator::Arena scratchArena = platform.memory.scratchArenaRoot;
+                    bool* nodesToUpdate = (bool*)Allocator::alloc_arena(scratchArena, store.drawNodes.count * sizeof(bool), alignof(bool));
+                    memset(nodesToUpdate, 0, store.drawNodes.count * sizeof(bool));
+                    for (u32 i = 0; i < visibleNodes->visible_nodes_count; i++) {
+                        u32 n = visibleNodes->visible_nodes[i];
+                        u32 index = Allocator::get_pool_index(store.drawNodes, store.drawNodes.data[n].state.live);
+                        nodesToUpdate[index] = true;
+                    }
+                    bool* nodesSkinnedToUpdate = (bool*)Allocator::alloc_arena(scratchArena, store.drawNodesSkinned.count * sizeof(bool), alignof(bool));
+                    memset(nodesSkinnedToUpdate, 0, store.drawNodesSkinned.count * sizeof(bool));
+                    for (u32 i = 0; i < visibleNodes->visible_nodes_skinned_count; i++) {
+                        u32 n = visibleNodes->visible_nodes_skinned[i];
+                        u32 index = Allocator::get_pool_index(store.drawNodesSkinned, store.drawNodesSkinned.data[n].state.live);
+                        nodesSkinnedToUpdate[index] = true;
+                    }
+                    for (u32 i = 0; i < mirrorVisibleNodes->visible_nodes_count; i++) {
+                        u32 n = mirrorVisibleNodes->visible_nodes[i];
+                        u32 index = Allocator::get_pool_index(store.drawNodes, store.drawNodes.data[n].state.live);
+                        nodesToUpdate[index] = true;
+                    }
+                    for (u32 i = 0; i < mirrorVisibleNodes->visible_nodes_skinned_count; i++) {
+                        u32 n = mirrorVisibleNodes->visible_nodes_skinned[i];
+                        u32 index = Allocator::get_pool_index(store.drawNodesSkinned, store.drawNodesSkinned.data[n].state.live);
+                        nodesSkinnedToUpdate[index] = true;
+                    }
 
+                    // update cbuffers for all visible nodes
                     for (u32 n = 0, count = 0; n < store.drawNodes.cap && count < store.drawNodes.count; n++) {
                         if (store.drawNodes.data[n].alive == 0) { continue; }
                         count++;
-
                         const DrawNode& node = store.drawNodes.data[n].state.live;
-                        if (cull_isVisible(Math::mult(vpMatrix, node.nodeData.worldMatrix), node.min, node.max)) {
-                            visibleNodes.visible_nodes[visibleNodes.visible_nodes_count++] = n;
-                        }
+                        if (!nodesToUpdate[n]) continue;
+                        Driver::update_cbuffer(store.cbuffers[node.cbuffer_node], &node.nodeData);
                     }
                     for (u32 n = 0, count = 0; n < store.drawNodesSkinned.cap && count < store.drawNodesSkinned.count; n++) {
                         if (store.drawNodesSkinned.data[n].alive == 0) { continue; }
                         count++;
-
                         const DrawNodeSkinned& node = store.drawNodesSkinned.data[n].state.live;
-                        if (cull_isVisible(Math::mult(vpMatrix, node.nodeData.worldMatrix), node.min, node.max)) {
-                            visibleNodes.visible_nodes_skinned[visibleNodes.visible_nodes_skinned_count++] = n;
-                        }
-                    }
-
-                    // update cbuffers for all visible nodes
-                    for (u32 i = 0; i < visibleNodes.visible_nodes_count; i++) {
-                        u32 n = visibleNodes.visible_nodes[i];
-                        const DrawNode& node = store.drawNodes.data[n].state.live;
-                        Driver::update_cbuffer(store.cbuffers[node.cbuffer_node], &node.nodeData);
-                    }
-                    for (u32 i = 0; i < visibleNodes.visible_nodes_skinned_count; i++) {
-                        u32 n = visibleNodes.visible_nodes_skinned[i];
-                        const DrawNodeSkinned& node = store.drawNodesSkinned.data[n].state.live;
-                        Driver::update_cbuffer(store.cbuffers[node.cbuffer_node], &node.nodeData);
+                        if (!nodesSkinnedToUpdate[n]) continue;
+                        Driver::update_cbuffer(store.cbuffers[node.core.cbuffer_node], &node.core.nodeData);
                         Driver::update_cbuffer(store.cbuffers[node.cbuffer_skinning], &node.skinningMatrixPalette);
                     }
                     for (u32 n = 0, count = 0; n < store.drawNodesInstanced.cap && count < store.drawNodesInstanced.count; n++) {
                         if (store.drawNodesInstanced.data[n].alive == 0) { continue; }
                         count++;
                         const DrawNodeInstanced& node = store.drawNodesInstanced.data[n].state.live;
-                        Driver::update_cbuffer(store.cbuffers[node.cbuffer_node], &node.nodeData);
+                        Driver::update_cbuffer(store.cbuffers[node.core.cbuffer_node], &node.core.nodeData);
                         Driver::update_cbuffer(store.cbuffers[node.cbuffer_instances], &node.instanceMatrices);
                     }
                 }
 
-                // render phase - base scene
                 Driver::Marker_t marker;
-                Driver::set_marker_name(marker, "BASE SCENE");
-                Renderer::Driver::start_event(marker);
+                Driver::set_marker_name(marker, "BASE SCENE"); Driver::start_event(marker);
                 {
-                // opaque pass
-                Driver::set_marker_name(marker, "OPAQUE");
-                Renderer::Driver::start_event(marker);
-                {
-                    Renderer::Drawlist dl = {};
-                    Renderer::Driver::bind_DS(store.depthStateOn);
-                    Renderer::Driver::bind_RS(store.rasterizerStateFill);
-                    Renderer::addNodesToDrawlist(dl, visibleNodes, game.cameraMgr.activeCam->transform.pos, store, 0, Renderer::DrawlistFilter::Alpha, Renderer::SortParams::Type::Default);
-                    Renderer::Drawlist_Context ctx = {};
-                    Renderer::Drawlist_Overrides overrides = {};
-                    ctx.cbuffers[overrides.forced_cbuffer_count++] = scene_cbuffer;
-                    Renderer::draw_drawlist(dl, ctx, overrides);
-                }
-                Renderer::Driver::end_event();
+                    Driver::bind_RT(store.gameRT);
 
-                // alpha pass
-                Driver::set_marker_name(marker, "ALPHA");
-                Renderer::Driver::start_event(marker);
-                {
-                    Renderer::Drawlist dl = {};
-                    Renderer::Driver::bind_DS(store.depthStateReadOnly);
-                    Renderer::Driver::bind_blend_state(store.blendStateOn);
-                    Renderer::Driver::bind_RS(store.rasterizerStateFill);
-                    Renderer::addNodesToDrawlist(dl, visibleNodes, game.cameraMgr.activeCam->transform.pos, store, Renderer::DrawlistFilter::Alpha, 0, Renderer::SortParams::Type::FrontToBack);
-                    Renderer::Drawlist_Context ctx = {};
-                    Renderer::Drawlist_Overrides overrides = {};
-                    overrides.forced_blendState = true;
-                    ctx.blendState = &store.blendStateOn;
-                    ctx.cbuffers[overrides.forced_cbuffer_count++] = scene_cbuffer;
-                    Renderer::draw_drawlist(dl, ctx, overrides);
+                    Driver::clear_RT(store.gameRT, Driver::RenderTargetClearFlags::Color | Driver::RenderTargetClearFlags::Depth | Driver::RenderTargetClearFlags::Stencil);
+                    Driver::bind_RS(store.rasterizerStateFillFrontfaces);
+
+                    Driver::set_marker_name(marker, "SKY"); Driver::start_event(marker); // todo: quad?
+                    {
+                        Driver::bind_DS(store.depthStateOff);
+                        Driver::bind_shader(store.shaders[ShaderType::Color3D]);
+                        Driver::bind_blend_state(store.blendStateBlendOff);
+                        for (u32 i = 0; i < COUNT_OF(store.sky.buffers); i++) {
+                            Driver::bind_indexed_vertex_buffer(store.sky.buffers[i]);
+                            Driver::RscCBuffer buffers[] = { scene_cbuffer, store.sky.cbuffer };
+                            Driver::bind_cbuffers(store.shaders[ShaderType::Color3D], buffers, 2);
+                            Driver::draw_indexed_vertex_buffer(store.sky.buffers[i]);
+                        }
+                    }
+                    Driver::end_event();
+
+                    Driver::set_marker_name(marker, "OPAQUE"); Driver::start_event(marker);
+                    {
+                        Driver::bind_DS(store.depthStateOn);
+                        Allocator::Arena scratchArena = platform.memory.scratchArenaRoot;
+                        Drawlist dl = {};
+                        u32 maxDrawCallsThisFrame = (visibleNodes->visible_nodes_count + visibleNodes->visible_nodes_skinned_count + (u32)store.drawNodesInstanced.count) * DrawlistStreams::Count;
+                        dl.items = (DrawCall_Item*)Allocator::alloc_arena(scratchArena, maxDrawCallsThisFrame * sizeof(DrawCall_Item), alignof(DrawCall_Item));
+                        dl.keys = (Key*)Allocator::alloc_arena(scratchArena, maxDrawCallsThisFrame * sizeof(Key), alignof(Key));
+                        addNodesToDrawlistSorted(dl, *visibleNodes, game.cameraMgr.activeCam->transform.pos, store, 0, Renderer::DrawlistFilter::Alpha | Renderer::DrawlistFilter::Mirror, Renderer::SortParams::Type::Default);
+                        Drawlist_Context ctx = {};
+                        Drawlist_Overrides overrides = {};
+                        ctx.cbuffers[overrides.forced_cbuffer_count++] = scene_cbuffer;
+                        draw_drawlist(dl, ctx, overrides);
+                    }
+                    Driver::end_event();
+
+                    Driver::set_marker_name(marker, "ALPHA"); Driver::start_event(marker);
+                    {
+                        Driver::bind_DS(store.depthStateReadOnly);
+
+                        Allocator::Arena scratchArena = platform.memory.scratchArenaRoot;
+                        Drawlist dl = {};
+                        u32 maxDrawCallsThisFrame = (visibleNodes->visible_nodes_count + visibleNodes->visible_nodes_skinned_count + (u32)store.drawNodesInstanced.count) * DrawlistStreams::Count;
+                        dl.items = (DrawCall_Item*)Allocator::alloc_arena(scratchArena, maxDrawCallsThisFrame * sizeof(DrawCall_Item), alignof(DrawCall_Item));
+                        dl.keys = (Key*)Allocator::alloc_arena(scratchArena, maxDrawCallsThisFrame * sizeof(Key), alignof(Key));
+                        Driver::bind_blend_state(store.blendStateOn);
+                        addNodesToDrawlistSorted(dl, *visibleNodes, game.cameraMgr.activeCam->transform.pos, store, Renderer::DrawlistFilter::Alpha, Renderer::DrawlistFilter::Mirror, Renderer::SortParams::Type::BackToFront);
+                        Drawlist_Context ctx = {};
+                        Drawlist_Overrides overrides = {};
+                        overrides.forced_blendState = true;
+                        ctx.blendState = &store.blendStateOn;
+                        ctx.cbuffers[overrides.forced_cbuffer_count++] = scene_cbuffer;
+                        draw_drawlist(dl, ctx, overrides);
+                    }
+                    Driver::end_event();
                 }
-                Renderer::Driver::end_event();
+                Driver::end_event();
+                
+                // Mirror passes
+                if (mirrorVisibleNodes->visible_nodes_count + mirrorVisibleNodes->visible_nodes_skinned_count) {
+
+                    Driver::set_marker_name(marker, "MARK MIRROR"); Driver::start_event(marker);
+                    {
+                        Allocator::Arena scratchArena = platform.memory.scratchArenaRoot;
+
+                        Driver::bind_DS(store.depthStateMarkMirrors);
+                        Driver::bind_RS(store.rasterizerStateFillFrontfaces);
+                        Driver::bind_blend_state(store.blendStateOff);
+                        Drawlist_Context ctx = {};
+                        Drawlist_Overrides overrides = {};
+                        overrides.forced_blendState = true;
+                        ctx.cbuffers[overrides.forced_cbuffer_count++] = scene_cbuffer;
+                        ctx.blendState = &store.blendStateOff;
+
+                        Drawlist dl = {};
+                        u32 maxDrawCallsThisFrame = DrawlistStreams::Count; // support for one single mirror
+                        dl.items = (DrawCall_Item*)Allocator::alloc_arena(scratchArena, maxDrawCallsThisFrame * sizeof(DrawCall_Item), alignof(DrawCall_Item));
+                        dl.keys = (Key*)Allocator::alloc_arena(scratchArena, maxDrawCallsThisFrame * sizeof(Key), alignof(Key));
+
+                        DrawNode& node = get_draw_node_core(store, store.mirror.drawHandle);
+                        const u32 maxMeshCount = COUNT_OF(node.meshHandles);
+                        for (u32 m = 0; m < maxMeshCount; m++) {
+                            if (node.meshHandles[m] == 0) { continue; }
+                            u32 dl_index = dl.count[DrawlistBuckets::Base]++;
+                            DrawCall_Item& item = dl.items[dl_index];
+
+                            item = {};
+                            Key& key = dl.keys[dl_index];
+                            key.idx = dl_index;
+                            const DrawMesh& mesh = get_drawMesh(store, node.meshHandles[m]);
+                            item.shader = store.shaders[mesh.type];
+                            item.vertexBuffer = mesh.vertexBuffer;
+                            item.cbuffers[item.cbuffer_count++] = store.cbuffers[node.cbuffer_node];
+                            item.texture = mesh.texture;
+                            item.blendState = store.blendStateOff;
+                            item.name = Renderer::shaderNames[mesh.type];
+                        }
+                        draw_drawlist(dl, ctx, overrides);
+                    }
+                    Driver::end_event();
+
+                    Driver::set_marker_name(marker, "REFLECTION SCENE"); Driver::start_event(marker);
+                    {
+                        Driver::RscCBuffer& scene_cbuffer = store.cbuffers[store.cbuffer_scene];
+                        {
+                            Renderer::SceneData cbufferPerSceneMirrored = cbufferPerScene;
+                            cbufferPerSceneMirrored.projectionMatrix = mirrorProjectionMatrix;
+                            cbufferPerSceneMirrored.viewMatrix = mirrorViewMatrix;
+                            cbufferPerSceneMirrored.viewPos = mirrorViewMatrix.col3.xyz;
+                            Renderer::Driver::update_cbuffer(scene_cbuffer, &cbufferPerSceneMirrored);
+                        }
+
+                        Driver::clear_RT(store.gameRT, Driver::RenderTargetClearFlags::Depth); // todo: can we get away without doing this for all the depth buffer?
+
+                        Driver::bind_RS(store.rasterizerStateFillBackfaces);
+
+                        Driver::set_marker_name(marker, "SKY"); Driver::start_event(marker);
+                        {
+                            Driver::bind_DS(store.depthStateMirrorReflectionsDepthReadOnly);
+                            Driver::bind_shader(store.shaders[ShaderType::Color3D]);
+                            Driver::bind_blend_state(store.blendStateBlendOff);
+                            for (u32 i = 0; i < COUNT_OF(store.sky.buffers); i++) {
+                                Driver::bind_indexed_vertex_buffer(store.sky.buffers[i]);
+                                Driver::RscCBuffer buffers[] = { scene_cbuffer, store.sky.cbuffer };
+                                Driver::bind_cbuffers(store.shaders[ShaderType::Color3D], buffers, 2);
+                                Driver::draw_indexed_vertex_buffer(store.sky.buffers[i]);
+                            }
+                        }
+                        Driver::end_event();
+
+                        Driver::set_marker_name(marker, "OPAQUE"); Driver::start_event(marker);
+                        {
+                            Driver::bind_DS(store.depthStateMirrorReflections);
+                            Allocator::Arena scratchArena = platform.memory.scratchArenaRoot;
+                            Drawlist dl = {};
+                            u32 maxDrawCallsThisFrame = (mirrorVisibleNodes->visible_nodes_count + mirrorVisibleNodes->visible_nodes_skinned_count + (u32)store.drawNodesInstanced.count) * DrawlistStreams::Count;
+                            dl.items = (DrawCall_Item*)Allocator::alloc_arena(scratchArena, maxDrawCallsThisFrame * sizeof(DrawCall_Item), alignof(DrawCall_Item));
+                            dl.keys = (Key*)Allocator::alloc_arena(scratchArena, maxDrawCallsThisFrame * sizeof(Key), alignof(Key));
+                            addNodesToDrawlistSorted(dl, *mirrorVisibleNodes, game.cameraMgr.activeCam->transform.pos, store, 0, Renderer::DrawlistFilter::Alpha, Renderer::SortParams::Type::Default);
+                            Drawlist_Context ctx = {};
+                            Drawlist_Overrides overrides = {};
+                            ctx.cbuffers[overrides.forced_cbuffer_count++] = scene_cbuffer;
+                            draw_drawlist(dl, ctx, overrides);
+                        }
+                        Driver::end_event();
+
+                        Driver::set_marker_name(marker, "ALPHA"); Driver::start_event(marker);
+                        {
+                            Driver::bind_DS(store.depthStateMirrorReflectionsDepthReadOnly);
+                            Driver::bind_blend_state(store.blendStateOn);
+
+                            Allocator::Arena scratchArena = platform.memory.scratchArenaRoot;
+                            Drawlist dl = {};
+                            u32 maxDrawCallsThisFrame = (mirrorVisibleNodes->visible_nodes_count + mirrorVisibleNodes->visible_nodes_skinned_count + (u32)store.drawNodesInstanced.count) * DrawlistStreams::Count;
+                            dl.items = (DrawCall_Item*)Allocator::alloc_arena(scratchArena, maxDrawCallsThisFrame * sizeof(DrawCall_Item), alignof(DrawCall_Item));
+                            dl.keys = (Key*)Allocator::alloc_arena(scratchArena, maxDrawCallsThisFrame * sizeof(Key), alignof(Key));
+                            addNodesToDrawlistSorted(dl, *mirrorVisibleNodes, game.cameraMgr.activeCam->transform.pos, store, Renderer::DrawlistFilter::Alpha, 0, Renderer::SortParams::Type::BackToFront);
+                            Drawlist_Context ctx = {};
+                            Drawlist_Overrides overrides = {};
+                            overrides.forced_blendState = true;
+                            ctx.blendState = &store.blendStateOn;
+                            ctx.cbuffers[overrides.forced_cbuffer_count++] = scene_cbuffer;
+                            draw_drawlist(dl, ctx, overrides);
+                        }
+                        Driver::end_event();
+                    }
+                    Driver::end_event();
+
+                    Driver::set_marker_name(marker, "MIRROR IN SCENE"); Driver::start_event(marker);
+                    {
+                        Driver::RscCBuffer& scene_cbuffer = store.cbuffers[store.cbuffer_scene];
+                        {
+                            Renderer::SceneData cbufferPerScene;
+                            cbufferPerScene.projectionMatrix = mgr.perspProjection.matrix;
+                            cbufferPerScene.viewMatrix = viewMatrix;
+                            cbufferPerScene.viewPos = viewMatrix.col3.xyz;
+                            cbufferPerScene.lightPos = float3(3.f, 8.f, 15.f); // todo: save off somewhere?
+                            Renderer::Driver::update_cbuffer(scene_cbuffer, &cbufferPerScene);
+                        }
+
+                        Driver::bind_DS(store.depthStateOn); // todo: this is a hack so opengl can clear depth
+                        Driver::clear_RT(store.gameRT, Driver::RenderTargetClearFlags::Depth); // todo: could we just clear the mirror?
+
+                        Driver::bind_DS(store.depthStateMirrorReflectionsDepthReadOnly);
+                        Driver::bind_RS(store.rasterizerStateFillFrontfaces);
+                        Driver::bind_blend_state(store.blendStateOn);
+                        Drawlist_Context ctx = {};
+                        Drawlist_Overrides overrides = {};
+                        overrides.forced_blendState = true;
+                        ctx.cbuffers[overrides.forced_cbuffer_count++] = scene_cbuffer;
+                        ctx.blendState = &store.blendStateOn;
+
+                        Allocator::Arena scratchArena = platform.memory.scratchArenaRoot;
+                        Drawlist dl = {};
+                        u32 maxDrawCallsThisFrame = DrawlistStreams::Count; // support for one single mirror
+                        dl.items = (DrawCall_Item*)Allocator::alloc_arena(scratchArena, maxDrawCallsThisFrame * sizeof(DrawCall_Item), alignof(DrawCall_Item));
+                        dl.keys = (Key*)Allocator::alloc_arena(scratchArena, maxDrawCallsThisFrame * sizeof(Key), alignof(Key));
+
+                        DrawNode& node = get_draw_node_core(store, store.mirror.drawHandle);
+                        const u32 maxMeshCount = COUNT_OF(node.meshHandles);
+                        for (u32 m = 0; m < maxMeshCount; m++) {
+                            if (node.meshHandles[m] == 0) { continue; }
+                            u32 dl_index = dl.count[DrawlistBuckets::Base]++;
+                            DrawCall_Item& item = dl.items[dl_index];
+
+                            item = {};
+                            Key& key = dl.keys[dl_index];
+                            key.idx = dl_index;
+                            const DrawMesh& mesh = get_drawMesh(store, node.meshHandles[m]);
+                            item.shader = store.shaders[mesh.type];
+                            item.vertexBuffer = mesh.vertexBuffer;
+                            item.cbuffers[item.cbuffer_count++] = store.cbuffers[node.cbuffer_node];
+                            item.texture = mesh.texture;
+                            item.blendState = store.blendStateOn;
+                            item.name = Renderer::shaderNames[mesh.type];
+                        }
+                        draw_drawlist(dl, ctx, overrides);
+                    }
+                    Driver::end_event();
                 }
-                Renderer::Driver::end_event();
             }
 
             // Immediate-mode debug. Can be moved out of the render update, it only pushes data to cpu buffers
             #if __DEBUG
             {
+                // World axis
+                //{
+                //    const Color32 axisX(0.8f, 0.15f, 0.25f, 0.7f); // x is red
+                //    const Color32 axisY(0.25f, 0.8f, 0.15f, 0.7f); // y is green
+                //    const Color32 axisZ(0.15f, 0.25f, 0.8f, 0.7f); // z is blue
+                //    const f32 axisSize = 30.f;
+                //    const float3 pos(0.f, 0.f, 0.1f);
+
+                //    Immediate::segment(mgr.immediateBuffer, pos, Math::add(pos, Math::scale(float3(1.f, 0.f, 0.f), axisSize)), axisX);
+                //    Immediate::segment(mgr.immediateBuffer, pos, Math::add(pos, Math::scale(float3(0.f, 1.f, 0.f), axisSize)), axisY);
+                //    Immediate::segment(mgr.immediateBuffer, pos, Math::add(pos, Math::scale(float3(0.f, 0.f, 1.f), axisSize)), axisZ);
+
+                //    const f32 thickness = 0.1f;
+                //    const u32 steps = 10;
+                //    const f32 spacing = 1.f / (f32)steps;
+                //    for (int i = 1; i <= steps; i++) {
+                //        Immediate::segment(mgr.immediateBuffer,
+                //              Math::add(pos, float3(spacing * i, 0.f, -thickness))
+                //            , Math::add(pos, float3(spacing * i, 0.f, thickness))
+                //            , axisX);
+                //        Immediate::segment(mgr.immediateBuffer,
+                //              Math::add(pos, float3(0.f, spacing * i, -thickness))
+                //            , Math::add(pos, float3(0.f, spacing * i, thickness))
+                //            , axisY);
+                //        Immediate::segment(mgr.immediateBuffer,
+                //              Math::add(pos, float3(-thickness, thickness, spacing * i))
+                //            , Math::add(pos, float3(thickness, -thickness, spacing * i))
+                //            , axisZ);
+                //    }
+                //}
                 {
-                    // World axis
-                    const Color32 axisX(0.8f, 0.15f, 0.25f, 0.7f);
-                    const Color32 axisY(0.25f, 0.8f, 0.15f, 0.7f);
-                    const Color32 axisZ(0.15f, 0.25f, 0.8f, 0.7f);
-                    const f32 axisSize = 30.f;
-                    const float3 pos = float3(0.f, 0.f, 0.1f);
-
-                    Immediate::segment(mgr.immediateBuffer, pos, Math::add(pos, Math::scale(float3(1.f, 0.f, 0.f), axisSize)), axisX);
-                    Immediate::segment(mgr.immediateBuffer, pos, Math::add(pos, Math::scale(float3(0.f, 1.f, 0.f), axisSize)), axisY);
-                    Immediate::segment(mgr.immediateBuffer, pos, Math::add(pos, Math::scale(float3(0.f, 0.f, 1.f), axisSize)), axisZ);
-
-                    const f32 thickness = 0.1f;
-                    const u32 steps = 10;
-                    const f32 spacing = 1.f / (f32)steps;
-                    for (int i = 1; i <= steps; i++) {
-                        Immediate::segment(mgr.immediateBuffer,
-                              Math::add(pos, float3(spacing * i, 0.f, -thickness))
-                            , Math::add(pos, float3(spacing * i, 0.f, thickness))
-                            , axisX);
-                        Immediate::segment(mgr.immediateBuffer,
-                              Math::add(pos, float3(0.f, spacing * i, -thickness))
-                            , Math::add(pos, float3(0.f, spacing * i, thickness))
-                            , axisY);
-                        Immediate::segment(mgr.immediateBuffer,
-                              Math::add(pos, float3(-thickness, thickness, spacing * i))
-                            , Math::add(pos, float3(thickness, -thickness, spacing * i))
-                            , axisZ);
-                    }
                     if (game.debugVis.debug3Dmode == DebugVis::Debug3DView::All || game.debugVis.debug3Dmode == DebugVis::Debug3DView::Culling) {
                         const Color32 bbColor(0.8f, 0.15f, 0.25f, 0.7f);
 
-                        for (u32 i = 0; i < visibleNodes.visible_nodes_count; i++) {
-                            u32 n = visibleNodes.visible_nodes[i];
-                            const DrawNode& node = store.drawNodes.data[n].state.live;
-                            Immediate::obb(mgr.immediateBuffer, node.nodeData.worldMatrix, node.min, node.max, bbColor);
-                        }
-                        for (u32 i = 0; i < visibleNodes.visible_nodes_skinned_count; i++) {
-                            u32 n = visibleNodes.visible_nodes_skinned[i];
-                            const DrawNodeSkinned& node = store.drawNodesSkinned.data[n].state.live;
-                            Immediate::obb(mgr.immediateBuffer, node.nodeData.worldMatrix, node.min, node.max, bbColor);
-                        }
+                        Renderer::VisibleNodes visibleNodesDebug = {};
+                        float4x4 matrix = game.debugVis.capturedCameras[game.debugVis.debugCameraStage];
+                        if (!Math::isZeroAll(matrix)) {
+                            Renderer::computeVisibility(visibleNodesDebug, matrix, store);
+                            for (u32 i = 0; i < visibleNodesDebug.visible_nodes_count; i++) {
+                                u32 n = visibleNodesDebug.visible_nodes[i];
+                                const DrawNode& node = store.drawNodes.data[n].state.live;
+                                Immediate::obb(mgr.immediateBuffer, node.nodeData.worldMatrix, node.min, node.max, bbColor);
+                            }
+                            for (u32 i = 0; i < visibleNodesDebug.visible_nodes_skinned_count; i++) {
+                                u32 n = visibleNodesDebug.visible_nodes_skinned[i];
+                                const DrawNodeSkinned& node = store.drawNodesSkinned.data[n].state.live;
+                                Immediate::obb(mgr.immediateBuffer, node.core.nodeData.worldMatrix, node.core.min, node.core.max, bbColor);
+                            }
 
-                        if (game.cameraMgr.captured_camera_initialized) {
                             const Color32 frustum_color(0.25f, 0.8f, 0.15f, 0.7f);
-                            float4x4 m = Math::mult(mgr.perspProjection.matrix, game.cameraMgr.captured_camera.viewMatrix);
-                            Math::inverse(m);
-                            Immediate::obb(mgr.immediateBuffer, m, float3(-1.f, -1.f, Renderer::min_z), float3(1.f, 1.f, 1.f), frustum_color);
+                            Math::inverse(matrix);
+                            Immediate::obb(mgr.immediateBuffer, matrix, float3(-1.f, -1.f, Renderer::min_z), float3(1.f, 1.f, 1.f), frustum_color);
                         }
                     }
                 }
@@ -628,6 +834,14 @@ namespace Game
                     const char* overlaynames[] = { "All", "Help Only", "Arenas only", "None" };
                     textParamsLeft.color = keyboard.pressed(Input::TOGGLE_OVERLAY) ? activeCol : defaultCol;
                     Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParamsLeft, "H to toggle overlays: %s", overlaynames[game.debugVis.overlaymode]);
+                    textParamsLeft.pos.y -= lineheight;
+                    const char* visualizationModes[] = { "All", "Culling", "None" };
+                    textParamsLeft.color = keyboard.pressed(Input::TOGGLE_DEBUG3D) ? activeCol : defaultCol;
+                    Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParamsLeft, "V to toggle 3D visualization modes: %s", visualizationModes[game.debugVis.debug3Dmode]);
+                    textParamsLeft.pos.y -= lineheight;
+                    const char* cameraStages[] = { "Scene", "Scene Mirror", "Scene Mirror Clipped" };
+                    textParamsLeft.color = keyboard.pressed(Input::TOGGLE_CAPTURED_CAMERA) ? activeCol : defaultCol;
+                    Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParamsLeft, "C to toggle camera capture stages: %s %s", cameraStages[game.debugVis.debugCameraStage], Math::isZeroAll(game.debugVis.capturedCameras[game.debugVis.debugCameraStage]) ? "Camera not captured" : "Camera Captured");
                     textParamsLeft.pos.y -= lineheight;
 
                     if (game.debugVis.overlaymode == DebugVis::OverlayMode::All || game.debugVis.overlaymode == DebugVis::OverlayMode::HelpOnly) {
@@ -727,7 +941,7 @@ namespace Game
                         {
                             const Color32 arenabaseCol(0.65f, 0.65f, 0.65f, 0.4f);
                             const Color32 arenahighmarkCol(0.95f, 0.35f, 0.8f, 1.f);
-                            renderArena(game.renderMgr.immediateBuffer, textParamsCenter, Allocator::frameArena.end, game.memory.frameArenaBuffer, game.memory.frameArenaHighmark
+                            renderArena(game.renderMgr.immediateBuffer, textParamsCenter, game.memory.frameArena.end, game.memory.frameArenaBuffer, game.memory.frameArenaHighmark
                                 , "Frame arena", defaultCol, arenabaseCol, arenahighmarkCol, lineheight, textscale);
                         }
                         {
@@ -799,7 +1013,7 @@ namespace Game
             //  Batched 3D debug (clear cpu buffers onto the screen)
             #if __DEBUG
             {
-                Immediate::present3d(mgr.immediateBuffer, mgr.perspProjection.matrix, game.cameraMgr.activeCam->viewMatrix);
+                Immediate::present3d(mgr.immediateBuffer, mgr.perspProjection.matrix, viewMatrix);
                 Immediate::clear3d(mgr.immediateBuffer);
             }
             #endif
@@ -819,9 +1033,9 @@ namespace Game
                         Renderer::Driver::set_VP(vpParams);
                     }
 
-                    Renderer::Driver::bind_blend_state(store.blendStateOff);
+                    Renderer::Driver::bind_blend_state(store.blendStateBlendOff);
                     Renderer::Driver::bind_DS(store.depthStateOff);
-                    Renderer::Driver::bind_RS(store.rasterizerStateFill);
+                    Renderer::Driver::bind_RS(store.rasterizerStateFillFrontfaces);
                     Renderer::Driver::bind_main_RT(store.windowRT);
 
                     Driver::bind_shader(store.shaders[Renderer::ShaderType::FullscreenBlit]);
@@ -831,13 +1045,12 @@ namespace Game
                     Driver::bind_textures(&nullTex, 1); // unbind gameRT
                 }
                 Renderer::Driver::end_event();
-                Renderer::Driver::bind_blend_state(store.blendStateOff);
-                Renderer::Driver::bind_DS(store.depthStateOff);
-                Renderer::Driver::bind_main_RT(store.windowRT);
             }
             // Batched 2d debug (clear cpu buffers onto the screen)
             #if __DEBUG
             {
+                Renderer::Driver::bind_blend_state(store.blendStateBlendOff);
+                Renderer::Driver::bind_main_RT(store.windowRT);
                 Immediate::present2d(mgr.immediateBuffer, mgr.windowProjection.matrix);
                 Immediate::clear2d(mgr.immediateBuffer);
             }

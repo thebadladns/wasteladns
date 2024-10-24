@@ -31,7 +31,7 @@ struct Transform33 {
 };
 
 struct Transform {
-    Transform() {}
+    Transform() : matrix() {}
     union {
         float4x4 matrix;
         struct {
@@ -123,7 +123,7 @@ namespace Math {
         return t;
     }
 
-    float4x4 toEyeSpace(const Transform tRHwithZup) { // RH_Zup to RH_Yup_Zfront
+    float4x4 toEyeSpace(const Transform tRHwithZup) { // RH_Zup to RH_Yup_negZfront
         float4x4 o_rh_yup_znegfront;
         float3& right = o_rh_yup_znegfront.col0.xyz;
         float3& up = o_rh_yup_znegfront.col1.xyz;

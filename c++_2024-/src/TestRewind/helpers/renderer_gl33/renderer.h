@@ -24,17 +24,15 @@ namespace Driver {
         glGenFramebuffers(1, &buffer);
         glBindFramebuffer(GL_FRAMEBUFFER, buffer);
         rt.buffer = buffer;
-        rt.mask = GL_COLOR_BUFFER_BIT;
         rt.width = params.width;
         rt.height = params.height;
         if (params.depth) {
             GLuint depthBuffer;
             glGenRenderbuffers(1, &depthBuffer);
             glBindRenderbuffer(GL_RENDERBUFFER, depthBuffer);
-            glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT, params.width, params.height);
-            glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, depthBuffer);
+            glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, params.width, params.height);
+            glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, depthBuffer);
             rt.depthBuffer = depthBuffer;
-            rt.mask = rt.mask | GL_DEPTH_BUFFER_BIT;
             glBindFramebuffer(GL_FRAMEBUFFER, 0);
         }
 
@@ -62,12 +60,12 @@ namespace Driver {
     void bind_RT(const RscRenderTarget& rt) {
         glBindFramebuffer(GL_FRAMEBUFFER, rt.buffer);
     }
-    void clear_RT(const RscRenderTarget& rt) {
-        glClear(rt.mask | GL_STENCIL_BUFFER_BIT);
+    void clear_RT(const RscRenderTarget& rt, u32 flags) {
+        glClear(flags);
     }
-    void clear_RT(const RscRenderTarget& rt, Color32 color) {
+    void clear_RT(const RscRenderTarget& rt, u32 flags, Color32 color) {
         glClearColor(RGBA_PARAMS(color));
-        glClear(rt.mask | GL_STENCIL_BUFFER_BIT);
+        glClear(flags | GL_COLOR_BUFFER_BIT);
     }
     void copy_RT_to_main_RT(RscMainRenderTarget& dst, const RscRenderTarget& src, const RenderTargetCopyParams& params) {
         // TODO: UNTESTED
@@ -250,14 +248,20 @@ namespace Driver {
     }
     
     void create_blend_state(RscBlendState& bs, const BlendStateParams& params) {
-        bs.enable = params.enable;
+        bs.blendEnable = params.blendEnable;
+        bs.writeColor = params.renderTargetWriteMask;
     }
     void bind_blend_state(const RscBlendState& bs) {
-        if (bs.enable) {
+        if (bs.blendEnable) {
             glEnable(GL_BLEND);
             glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
         } else {
             glDisable(GL_BLEND);
+        }
+        if (bs.writeColor) {
+            glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+        } else {
+            glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
         }
     }
     
@@ -277,18 +281,36 @@ namespace Driver {
     }
 
     void create_DS(RscDepthStencilState& ds, const DepthStencilStateParams& params) {
-        ds.enable = params.enable;
-        ds.func = (GLenum) params.func;
-        ds.writemask = (GLenum) params.writemask;
+        ds.depth_enable = params.depth_enable;
+        ds.depth_func = (GLenum) params.depth_func;
+        ds.depth_writemask = (GLenum) params.depth_writemask;
+        ds.stencil_enable = params.stencil_enable;
+
+        ds.stencil_enable = params.stencil_enable;
+        ds.stencil_readmask = params.stencil_readmask;
+        ds.stencil_writemask = params.stencil_writemask;
+        ds.stencil_failOp = (GLenum)params.stencil_failOp;
+        ds.stencil_depthFailOp = (GLenum)params.stencil_depthFailOp;
+        ds.stencil_passOp = (GLenum)params.stencil_passOp;
+        ds.stencil_func = (GLenum)params.stencil_func;
+
     }
     void bind_DS(const RscDepthStencilState& ds) {
-        if (ds.enable) {
+        if (ds.depth_enable) {
             glEnable(GL_DEPTH_TEST);
-            glDepthFunc(ds.func);
-            glDepthMask(ds.writemask);
-        }
-        else {
+            glDepthFunc(ds.depth_func);
+            glDepthMask(ds.depth_writemask);
+        } else {
             glDisable(GL_DEPTH_TEST);
+        }
+
+        if (ds.stencil_enable) {
+            glEnable(GL_STENCIL_TEST);
+            glStencilFunc(ds.stencil_func, 1, ds.stencil_readmask); // todo: check
+            glStencilOp(ds.stencil_failOp, ds.stencil_depthFailOp, ds.stencil_passOp);
+            glStencilMask(ds.stencil_writemask);
+        } else {
+            glDisable(GL_STENCIL_TEST);
         }
     }
 
@@ -303,7 +325,7 @@ namespace Driver {
         glBindVertexArray(arrayObject);
         for (u32 i = 0; i < attr_count; i++) { // bind vertex layout
             const VertexAttribDesc& attr = attrs[i];
-            glVertexAttribPointer(i, attr.size, attr.type, attr.normalized, attr.stride, (const void*)attr.offset);
+            glVertexAttribPointer(i, attr.size, attr.type, attr.normalized, (GLsizei)attr.stride, (const void*)attr.offset);
             glEnableVertexAttribArray(i);
         }
         glBindVertexArray(0);
@@ -338,7 +360,7 @@ namespace Driver {
         glBindVertexArray(arrayObject);
         for (u32 i = 0; i < attr_count; i++) { // bind vertex layout
             const VertexAttribDesc& attr = attrs[i];
-            glVertexAttribPointer(i, attr.size, attr.type, attr.normalized, attr.stride, (const void*)attr.offset);
+            glVertexAttribPointer(i, attr.size, attr.type, attr.normalized, (GLsizei)attr.stride, (const void*)attr.offset);
             glEnableVertexAttribArray(i);
         }
         glGenBuffers(1, &indexBuffer);

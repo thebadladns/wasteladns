@@ -8,7 +8,6 @@ struct Arena {
     __DEBUGDEF(uintptr_t* highmark;) // pointer to track overall allocations of scoped copies
 };
 
-Arena frameArena;
 __DEBUGDEF(Arena emergencyArena;) // to prevent crashes
 
 void init_arena(Arena& arena, size_t capacity) {
