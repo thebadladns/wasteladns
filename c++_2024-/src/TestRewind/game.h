@@ -447,8 +447,7 @@ namespace Game
                         DrawNode& node = store.drawNodes.data[n].state.live;
 
                         if (store.mirror.drawHandle != handle_from_node(store, node)) { // todo: improve?
-
-                            // todo: investigate reflection at y = y
+                            
                             auto reflectionMatrix = [](float4 p) -> float4x4 { // todo: understand properly
                                 float4x4 o;
                                 o.col0.x = 1 - 2.f * p.x * p.x; o.col1.x = -2.f * p.x * p.y;    o.col2.x = -2.f * p.x * p.z;        o.col3.x = -2.f * p.x * p.w;

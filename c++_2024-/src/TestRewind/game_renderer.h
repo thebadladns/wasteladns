@@ -382,7 +382,7 @@ void computeVisibility(VisibleNodes& visibleNodes, float4x4& vpMatrix, Store& st
         // bottom plane { 0.f, 1.f, 0.f, 1.f } -> dot(p,box) = box.y + box.w -> box.y < -box.w
         out = 0; for (u32 corner_id = 0; corner_id < 8; corner_id++) { if (box_CS[corner_id].y < -box_CS[corner_id].w) { out++; } } if (out == 8) return false;
         // top plane { 0.f, -1.f, 0.f, 1.f } -> dot(p,box) = -box.y + box.w -> box.y > box.w
-        out = 0; for (u32 corner_id = 0; corner_id < 8; corner_id++) { if (-box_CS[corner_id].y > box_CS[corner_id].w) { out++; } } if (out == 8) return false;
+        out = 0; for (u32 corner_id = 0; corner_id < 8; corner_id++) { if (box_CS[corner_id].y > box_CS[corner_id].w) { out++; } } if (out == 8) return false;
 
         // check whether the frustum is fully out at least one plane of the box
         out = 0; for (u32 corner_id = 0; corner_id < 8; corner_id++) { if (frustum[corner_id].z < boxmin_CS.z) { out++; } } if (out == 8) return false;
