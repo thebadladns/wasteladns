@@ -339,38 +339,64 @@ struct VisibleNodes {
     u32 visible_nodes_skinned_count;
 };
 void computeVisibility(VisibleNodes& visibleNodes, float4x4& vpMatrix, Store& store) {
-    // todo: check this https://iquilezles.org/articles/frustumcorrect/
     auto cull_isVisible = [](float4x4 mvp, float3 min, float3 max) -> bool {
-        float4 corners[8] = {
+        // adapted to clipspace from https://iquilezles.org/articles/frustumcorrect/
+        float4 box[8] = {
             {min.x, min.y, min.z, 1.0},
             {max.x, min.y, min.z, 1.0},
             {min.x, max.y, min.z, 1.0},
             {max.x, max.y, min.z, 1.0},
-
             {min.x, min.y, max.z, 1.0},
             {max.x, min.y, max.z, 1.0},
             {min.x, max.y, max.z, 1.0},
             {max.x, max.y, max.z, 1.0},
         };
-        float4 corners_CS[8]; // corners in clip space
-        for (u32 corner_id = 0; corner_id < 8; corner_id++) { corners_CS[corner_id] = Math::mult(mvp, corners[corner_id]); }
-
-        // check if any vertex is within all clip space bounds
-        u32 out = 0;
+        float3 frustum[8] = {
+            {-1.f, -1.f, Renderer::min_z},
+            {1.f, -1.f, Renderer::min_z},
+            {-1.f, 1.f, Renderer::min_z},
+            {1.f, 1.f, Renderer::min_z},
+            {-1.f, -1.f, 1.f},
+            {1.f, -1.f, 1.f},
+            {-1.f, 1.f, 1.f},
+            {1.f, 1.f, 1.f},
+        };
+        // box in clip space
+        float4 box_CS[8]; float3 boxmin_CS = { FLT_MAX, FLT_MAX, FLT_MAX }, boxmax_CS = { -FLT_MAX,-FLT_MAX,-FLT_MAX };
         for (u32 corner_id = 0; corner_id < 8; corner_id++) {
-            float4& c = corners_CS[corner_id];
-            if (((-c.w < c.x) && (c.x < c.w)) && (((-c.w < c.y) && (c.y < c.w)) && ((Renderer::min_z < c.z) && (c.z < c.w)))) {}
-            else { out++; }
+            box_CS[corner_id] = Math::mult(mvp, box[corner_id]);
+            boxmax_CS = Math::max(Math::invScale(box_CS[corner_id].xyz, box_CS[corner_id].w), boxmax_CS);
+            boxmin_CS = Math::min(Math::invScale(box_CS[corner_id].xyz, box_CS[corner_id].w), boxmin_CS);
         }
-        if (out < 8) return true;
+        u32 out;
 
-        // check that the frustum is not (todo: make it actually work)
-        out = 0; for (u32 corner_id = 0; corner_id < 8; corner_id++) { if (corners_CS[corner_id].x < -corners_CS[corner_id].w) { out++; } } if (out == 8) return false;
-        out = 0; for (u32 corner_id = 0; corner_id < 8; corner_id++) { if (corners_CS[corner_id].x >  corners_CS[corner_id].w) { out++; } } if (out == 8) return false;
-        out = 0; for (u32 corner_id = 0; corner_id < 8; corner_id++) { if (corners_CS[corner_id].y < -corners_CS[corner_id].w) { out++; } } if (out == 8) return false;
-        out = 0; for (u32 corner_id = 0; corner_id < 8; corner_id++) { if (corners_CS[corner_id].y >  corners_CS[corner_id].w) { out++; } } if (out == 8) return false;
-        out = 0; for (u32 corner_id = 0; corner_id < 8; corner_id++) { if (corners_CS[corner_id].z < -corners_CS[corner_id].w) { out++; } } if (out == 8) return false;
-        out = 0; for (u32 corner_id = 0; corner_id < 8; corner_id++) { if (corners_CS[corner_id].z >  corners_CS[corner_id].w) { out++; } } if (out == 8) return false;
+        // check whether the box is fully out of at least one frustum plane
+        // near plane { 0.f, 0.f, 1.f, -Renderer::min_z } -> dot(p,box) = box.z - Renderer::min_z & box.w -> box.z < -Renderer::min_z & box.w
+        out = 0; for (u32 corner_id = 0; corner_id < 8; corner_id++) { if (box_CS[corner_id].z < Renderer::min_z * box_CS[corner_id].w) { out++; } } if (out == 8) return false;
+        // far plane { 0.f, 0.f, -1.f, 1.f } -> dot(p,box) = -box.z + box.w -> box.z > box.w
+        out = 0; for (u32 corner_id = 0; corner_id < 8; corner_id++) { if (box_CS[corner_id].z > box_CS[corner_id].w) { out++; } } if (out == 8) return false;
+        // left plane { 1.f, 0.f, 0.f, 1.f } -> dot(p,box) = box.x + box.w -> box.x < -box.w
+        out = 0; for (u32 corner_id = 0; corner_id < 8; corner_id++) { if (box_CS[corner_id].x < -box_CS[corner_id].w) { out++; } } if (out == 8) return false;
+        // right plane { 1.f, 0.f, 0.f, 1.f } -> dot(p,box) = -box.x + box.w -> box.x > box.w
+        out = 0; for (u32 corner_id = 0; corner_id < 8; corner_id++) { if (box_CS[corner_id].x > box_CS[corner_id].w) { out++; } } if (out == 8) return false;
+        // bottom plane { 0.f, 1.f, 0.f, 1.f } -> dot(p,box) = box.y + box.w -> box.y < -box.w
+        out = 0; for (u32 corner_id = 0; corner_id < 8; corner_id++) { if (box_CS[corner_id].y < -box_CS[corner_id].w) { out++; } } if (out == 8) return false;
+        // top plane { 0.f, -1.f, 0.f, 1.f } -> dot(p,box) = -box.y + box.w -> box.y > box.w
+        out = 0; for (u32 corner_id = 0; corner_id < 8; corner_id++) { if (-box_CS[corner_id].y > box_CS[corner_id].w) { out++; } } if (out == 8) return false;
+
+        // check whether the frustum is fully out at least one plane of the box
+        // near plane { 0.f, 0.f, 1.f, -Renderer::min_z } -> dot(p,box) = box.z - Renderer::min_z & box.w -> box.z < -Renderer::min_z & box.w
+        out = 0; for (u32 corner_id = 0; corner_id < 8; corner_id++) { if (frustum[corner_id].z < boxmin_CS.z) { out++; } } if (out == 8) return false;
+        // far plane { 0.f, 0.f, -1.f, 1.f } -> dot(p,box) = -box.z + box.w -> box.z > box.w
+        out = 0; for (u32 corner_id = 0; corner_id < 8; corner_id++) { if (frustum[corner_id].z > boxmax_CS.z) { out++; } } if (out == 8) return false;
+        // left plane { 1.f, 0.f, 0.f, 1.f } -> dot(p,box) = box.x + box.w -> box.x < -box.w
+        out = 0; for (u32 corner_id = 0; corner_id < 8; corner_id++) { if (frustum[corner_id].x < boxmin_CS.z) { out++; } } if (out == 8) return false;
+        // right plane { 1.f, 0.f, 0.f, 1.f } -> dot(p,box) = -box.x + box.w -> box.x > box.w
+        out = 0; for (u32 corner_id = 0; corner_id < 8; corner_id++) { if (frustum[corner_id].x > boxmax_CS.z) { out++; } } if (out == 8) return false;
+        // bottom plane { 0.f, 1.f, 0.f, 1.f } -> dot(p,box) = box.y + box.w -> box.y < -box.w
+        out = 0; for (u32 corner_id = 0; corner_id < 8; corner_id++) { if (frustum[corner_id].y < boxmin_CS.z) { out++; } } if (out == 8) return false;
+        // top plane { 0.f, -1.f, 0.f, 1.f } -> dot(p,box) = -box.y + box.w -> box.y > box.w
+        out = 0; for (u32 corner_id = 0; corner_id < 8; corner_id++) { if (frustum[corner_id].y > boxmax_CS.z) { out++; } } if (out == 8) return false;
 
         return true;
     };
