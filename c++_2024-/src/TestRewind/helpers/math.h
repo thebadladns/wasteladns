@@ -64,10 +64,10 @@ namespace Math {
     f64 sqrt(f64 a) { return ::sqrt(a); }
     f32 square(f32 a) { return a * a; }
     f64 square(f64 a) { return a * a; }
-    f32 abs(f32 a) { return a > 0.f ? a : -a; }
-    f64 abs(f64 a) { return a > 0.0 ? a : -a; }
-    s32 abs(s32 a) { return a > 0 ? a : -a; }
-    s64 abs(s64 a) { return a > 0 ? a : -a; }
+    f32 abs(f32 a) { return ::fabsf(a); }
+    f64 abs(f64 a) { return ::fabs(a); }
+    s32 abs(s32 a) { return ::abs(a); }
+    s64 abs(s64 a) { return ::llabs(a); }
     f32 exp_taylor(f32 x) {
         const int order = 3;
         switch (order) {

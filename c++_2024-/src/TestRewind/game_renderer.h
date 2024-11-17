@@ -1234,9 +1234,9 @@ void init_pipelines(Store& store, Allocator::Arena scratchArena, const Platform:
     };
     // from blender: export fbx -> Apply Scalings: FBX All -> Forward: the one in Blender -> Use Space Transform: yes
     const AssetData assets[] = {
-          { "assets/meshes/boar.fbx", { 5.f, 10.f, 2.30885f }, 1, false }
+          { "assets/meshes/boar.fbx", { -5.f, 10.f, 2.30885f }, 1, false }
         , { "assets/meshes/bird.fbx", { 1.f, 3.f, 2.23879f }, 1, true }
-        , { "assets/meshes/bird.fbx", { 0.f, 5.f, 2.23879f }, 1, false }
+        , { "assets/meshes/bird.fbx", { -8.f, 12.f, 2.23879f }, 1, false }
     };
 
     FBX::PipelineAssetContext ctx = {};

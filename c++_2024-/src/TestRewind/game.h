@@ -533,7 +533,8 @@ namespace Game
                 {
                     Driver::bind_RT(store.gameRT);
 
-                    Driver::clear_RT(store.gameRT, Driver::RenderTargetClearFlags::Color | Driver::RenderTargetClearFlags::Depth | Driver::RenderTargetClearFlags::Stencil);
+                    Color32 skycolor(0.2f, 0.344f, 0.59f, 1.f);
+                    Driver::clear_RT(store.gameRT, Driver::RenderTargetClearFlags::Color | Driver::RenderTargetClearFlags::Depth | Driver::RenderTargetClearFlags::Stencil, skycolor);
                     Driver::bind_RS(store.rasterizerStateFillFrontfaces);
 
                     Driver::set_marker_name(marker, "SKY"); Driver::start_event(marker); // todo: quad?
@@ -804,9 +805,8 @@ namespace Game
                                 Immediate::obb(mgr.immediateBuffer, node.core.nodeData.worldMatrix, node.core.min, node.core.max, bbColor);
                             }
 
-                            const Color32 frustum_color(0.25f, 0.8f, 0.15f, 0.7f);
-                            Math::inverse(matrix);
-                            Immediate::obb(mgr.immediateBuffer, matrix, float3(-1.f, -1.f, Renderer::min_z), float3(1.f, 1.f, 1.f), frustum_color);
+                            const Color32 color(0.25f, 0.8f, 0.15f, 0.7f);
+                            Immediate::frustum(mgr.immediateBuffer, matrix, color);
                         }
                     }
                 }

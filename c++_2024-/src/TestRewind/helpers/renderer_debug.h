@@ -188,6 +188,171 @@ namespace Immediate
         segment(buffer, leftNearBottom_NDC, rightNearBottom_NDC, color);
         segment(buffer, leftFarBottom_NDC, rightFarBottom_NDC, color);
     }
+    void frustum(Buffer& buffer, const float4x4& projectionMat, Color32 color) {
+
+        // extract clipping planes (note that near plane depends on API's min z)
+        float4x4 transpose = Math::transpose(projectionMat);
+        float4 planes[6] = {
+            Math::add(Math::scale(transpose.col3, -Renderer::min_z), transpose.col2), // near
+            Math::subtract(transpose.col3, transpose.col2),   // far
+            Math::add(transpose.col3, transpose.col0),        // left
+            Math::subtract(transpose.col3, transpose.col0),   // right
+            Math::add(transpose.col3, transpose.col1),        // bottom
+            Math::subtract(transpose.col3, transpose.col1),   // top
+        };
+
+        for (float4& p : planes) { p = Math::invScale(p, Math::mag(p.xyz)); } // normalize so we can do thickness adjustments
+
+        // If the near and far planes are parallel, project the intersection points in clipspace back into world view
+        if (Math::abs(Math::dot(planes[0].xyz, planes[1].xyz) + 1.f) < Math::eps_f) {
+            float4x4 inverse = projectionMat;
+            Math::inverse(inverse);
+            const float3 aabb_min(-1.f, -1.f, Renderer::min_z);
+            const float3 aabb_max(1.f, 1.f, 1.f);
+            obb(buffer, inverse, aabb_min, aabb_max, color);
+            return;
+        }
+
+        // Otherwise, we'll generate a large cube and clip it via Sutherland–Hodgman
+        // (this code uses a variation where we add a new face for each clip plane,
+        // to prevent holes in our polyhedron
+        
+        // Build large cube around near plane (not too big, or we'll get floating point errors)
+        const f32 size = 100000.f;
+        float3 pts_in[8];
+        pts_in[0] = float3(-size, -size, -size);    // left near bottom
+        pts_in[1] = float3(-size, size, -size);     // left near top
+        pts_in[2] = float3(size, -size, -size);     // right near bottom
+        pts_in[3] = float3(size, size, -size);      // right near top
+        pts_in[4] = float3(-size, -size, size);     // left far bottom
+        pts_in[5] = float3(-size, size, size);      // left far top
+        pts_in[6] = float3(size, -size, size);      // right far bottom
+        pts_in[7] = float3(size, size, size);       // right far top
+        float3 pointOnNearPlane = Math::scale(planes[0].xyz, -planes[0].w);
+        for (float3& p : pts_in) {
+            p = Math::add(p, pointOnNearPlane);
+        }
+        struct Face { float3 pts[32]; u32 count; };
+        Face pts_out[12] = {};
+        pts_out[0] = { { pts_in[1], pts_in[0], pts_in[4], pts_in[5] }, 4 }; // left
+        pts_out[1] = { { pts_in[3], pts_in[2], pts_in[6], pts_in[7] }, 4 }; // right
+        pts_out[2] = { { pts_in[1], pts_in[5], pts_in[7], pts_in[3] }, 4 }; // top
+        pts_out[3] = { { pts_in[0], pts_in[2], pts_in[6], pts_in[4] }, 4 }; // bottom
+        pts_out[4] = { { pts_in[1], pts_in[3], pts_in[2], pts_in[0] }, 4 }; // near
+        pts_out[5] = { { pts_in[4], pts_in[6], pts_in[7], pts_in[5] }, 4 }; // far
+        u32 num_faces = 6;
+
+        // Cut our cube by each culling plane
+        for (u32 plane_id = 0; plane_id < 6; plane_id++) {
+            float4 plane = planes[plane_id];
+
+            Face cutface = {}; // each plane cut may generate one new face on our shape
+            for (u32 face_id = 0; face_id < num_faces; face_id++) {
+                Face& face_out = pts_out[face_id];
+                if (face_out.count == 0) continue;
+
+                const Face face_in = pts_out[face_id]; // explicit copy of inputs, so we can write directly on our input array
+                face_out.count = 0;
+                float3 va = face_in.pts[face_in.count - 1];
+                f32 va_d = Math::dot(va, plane.xyz) + plane.w;
+                for (u32 currvertex_in = 0; currvertex_in < face_in.count; currvertex_in++) {
+
+                    float3 vb = face_in.pts[currvertex_in];
+                    f32 vb_d = Math::dot(vb, plane.xyz) + plane.w;
+                    bool addToCutface = false;
+                    float3 intersection;
+
+                    const f32 eps = 0.001f;
+                    if (vb_d > eps) { // current vertex in positive zone, add to poly
+                        if (va_d < -eps) { // edge entering the positive zone, add intersection point first
+                            float3 ab = Math::subtract(vb, va);
+                            f32 t = (-va_d) / Math::dot(plane.xyz, ab);
+                            intersection = Math::add(va, Math::scale(ab, t));
+                            face_out.pts[face_out.count++] = intersection;
+                            addToCutface = true;
+                        }
+                        face_out.pts[face_out.count++] = vb;
+                    }
+                    else if (vb_d < -eps) { // current vertex in negative zone, don't add to poly
+                        if (va_d > eps) { // edge entering the negative zone, add intersection to face
+                            float3 ab = Math::subtract(vb, va);
+                            f32 t = (-va_d) / Math::dot(plane.xyz, ab);
+                            intersection = Math::add(va, Math::scale(ab, t));
+                            face_out.pts[face_out.count++] = intersection;
+                            addToCutface = true;
+                        }
+                    }
+                    else {
+                        face_out.pts[face_out.count++] = vb;
+                        addToCutface = true;
+                        intersection = vb;
+                    }
+
+                    // Skip repeated points on the new face
+                    for (u32 i = 0; i < cutface.count && addToCutface; i++) {
+                        if (Math::isCloseAll(cutface.pts[i], intersection, 0.01f)) { addToCutface = false; }
+                    }
+                    if (addToCutface) { cutface.pts[cutface.count++] = intersection; }
+
+                    va = vb;
+                    va_d = vb_d;
+                }
+            }
+
+            // If we have cut points with this plane, we need to compute a convex hull of the points, and add it as a new face to our shape
+            // We'll compute the hull using Andrew's monotone chain algorithm
+            if (cutface.count > 2) {
+                // Project onto xz, xy or yz depending on which will yield a larger area (based on largest component of normal)
+                f32 x = Math::abs(plane.x), y = Math::abs(plane.y), z = Math::abs(plane.z);
+                u32 ax = 0, ay = 1; // project on xy plane
+                if (x > y && x > z) { ax = 1; ay = 2; } // project on yz plane
+                else if (y > x && y > z) { ax = 0; ay = 2; } // project on xz plane
+
+                // Sort points on the x axis, then on the y axis, using insertion since we have a few amount of points
+                auto comp = [](const u32 ax, const u32 ay, const float3 a, const float3 b) -> bool {
+                    const float eps = 0.0001f;
+                    const float dx = a.coords[ax] - b.coords[ax];
+                    return dx > eps || (dx > -eps && a.coords[ay] > b.coords[ay]);
+                    };
+                for (s32 i = 1; i < (s32)cutface.count; i++) {
+                    float3 key = cutface.pts[i];
+                    s32 j = i - 1;
+                    while (j >= 0 && comp(ax, ay, cutface.pts[j], key)) {
+                        cutface.pts[j + 1] = cutface.pts[j];
+                        j--;
+                    }
+                    cutface.pts[j + 1] = key;
+                }
+                // Cross product in 2d will tell us wether the sequence O->A->B makes a counter clockwise turn
+                auto a_rightof_b = [](const u32 ax, const u32 ay, const float3 o, const float3 a, const float3 b) -> f32 {
+                    return (a.coords[ax] - o.coords[ax]) * (b.coords[ay] - o.coords[ay]) - (a.coords[ay] - o.coords[ay]) * (b.coords[ax] - o.coords[ax]);
+                    };
+                Face sortedcutface = {};
+                // Compute lower hull
+                for (u32 i = 0; i < cutface.count; i++) {
+                    while (sortedcutface.count >= 2 &&
+                        a_rightof_b(ax, ay, sortedcutface.pts[sortedcutface.count - 2], sortedcutface.pts[sortedcutface.count - 1], cutface.pts[i]) > 0.f) {
+                        sortedcutface.count--;
+                    }
+                    sortedcutface.pts[sortedcutface.count++] = cutface.pts[i];
+                }
+                // Compute upper hull
+                for (u32 i = cutface.count - 1, t = sortedcutface.count + 1; i > 0; i--) {
+                    while (sortedcutface.count >= t &&
+                        a_rightof_b(ax, ay, sortedcutface.pts[sortedcutface.count - 2], sortedcutface.pts[sortedcutface.count - 1], cutface.pts[i - 1]) > 0.f) {
+                        sortedcutface.count--;
+                    }
+                    sortedcutface.pts[sortedcutface.count++] = cutface.pts[i - 1];
+                }
+                sortedcutface.count--;
+                pts_out[num_faces++] = sortedcutface;
+            }
+        }
+
+        for (u32 face_id = 0; face_id < num_faces; face_id++) {
+            Immediate::poly(buffer, pts_out[face_id].pts, pts_out[face_id].count, color);
+        }
+    }
     void circle(Buffer& buffer, const float3& center, const float3& normal, const f32 radius, const Color32 color) {
         Transform33 m = Math::fromUp(normal);
         
