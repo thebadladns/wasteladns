@@ -16,12 +16,9 @@
 struct float2 {
     float2() : x{}, y{} {}
     float2(const f32 _x, const f32 _y) : x(_x), y(_y) {}
-
     union {
-        struct {
-            f32 x, y;
-        };
-        f32 coords[2];
+        struct { f32 x, y; };
+        f32 v[2];
     };
 };
 
@@ -30,19 +27,11 @@ struct float3 {
     float3(const f32 _x, const f32 _y, const f32 _z) : x(_x), y(_y), z(_z) {}
     float3(const f32 _x, const float2& _yz) : x(_x), y(_yz.x), z(_yz.y) {}
     float3(const float2& _xy, const f32 _z) : x(_xy.x), y(_xy.y), z(_z) {}
-    
     union {
-        struct {
-            f32 x, y, z;
-        };
-        f32 coords[3];
-        struct {
-            float2 xy;
-        };
-        struct {
-            f32 _padding;
-            float2 yz;
-        };
+        struct { f32 x, y, z; };
+        f32 v[3];
+        struct { float2 xy; };
+        struct { f32 _padding; float2 yz; };
     };
 };
 
@@ -54,24 +43,13 @@ struct float4 {
     float4(const float2& _xy, const float2& _yz) : x(_xy.x), y(_xy.y), z(_yz.x), w(_yz.y) {}
 
     union {
-        struct {
-            f32 x, y, z, w;
+        struct { f32 x, y, z, w;
         };
-        f32 coords[4];
-        struct {
-            float2 xy, zw;
-        };
-        struct {
-            f32 _padding0;
-            float2 yz;
-        };
-        struct {
-            float3 xyz;
-        };
-        struct {
-            f32 _padding1;
-            float3 yzw;
-        };
+        f32 v[4];
+        struct { float2 xy, zw; };
+        struct { f32 _padding0; float2 yz; };
+        struct { float3 xyz; };
+        struct { f32 _padding1; float3 yzw; };
     };
 };
 
@@ -81,41 +59,27 @@ struct float4 {
 // 2  5  8
 struct float3x3 {
     float3x3() : col0{}, col1{}, col2{} {}
-
     union {
-        struct {
-            float3 col0;
-            float3 col1;
-            float3 col2;
-        };
-        f32 dataCM[9];
+        struct { float3 col0; float3 col1; float3 col2; };
+        f32 m[9];
     };
 };
-
-
 
 // Row Major would be
 //  0  1  2  3
 //  4  5  6  7
 //  8  9 10 11
 // 12 13 14 15
-
-// Column Major
+// Column Major is the one we use
 // 0  4  8  12
 // 1  5  9  13
 // 2  6  10 14
 // 3  7  11 15
 struct float4x4 {
     float4x4() : col0{}, col1{}, col2{}, col3{} {}
-
     union {
-        struct {
-            float4 col0;
-            float4 col1;
-            float4 col2;
-            float4 col3;
-        };
-        f32 dataCM[16];
+        struct { float4 col0; float4 col1; float4 col2; float4 col3; };
+        f32 m[16];
     };
 };
 
@@ -170,26 +134,26 @@ bool isZeroAll(const float2& a) { return a.x == 0.f && a.y == 0.f; }
 bool isZeroAll(const float3& a) { return a.x == 0.f && a.y == 0.f && a.z == 0.f; }
 bool isZeroAll(const float4& a) { return a.x == 0.f && a.y == 0.f && a.z == 0.f && a.w == 0.f; }
 bool isZeroAll(const float3x3& m) {
-    return m.dataCM[0] == 0.f && m.dataCM[1] == 0.f && m.dataCM[2] == 0.f && m.dataCM[3] == 0.f && m.dataCM[4] == 0.f
-        && m.dataCM[5] == 0.f && m.dataCM[6] == 0.f && m.dataCM[7] == 0.f && m.dataCM[8] == 0.f;
+    return m.m[0] == 0.f && m.m[1] == 0.f && m.m[2] == 0.f && m.m[3] == 0.f && m.m[4] == 0.f
+        && m.m[5] == 0.f && m.m[6] == 0.f && m.m[7] == 0.f && m.m[8] == 0.f;
 }
 bool isZeroAll(const float4x4& m) {
-    return m.dataCM[0] == 0.f && m.dataCM[1] == 0.f && m.dataCM[2] == 0.f && m.dataCM[3] == 0.f && m.dataCM[4] == 0.f && m.dataCM[5] == 0.f && m.dataCM[6] == 0.f && m.dataCM[7] == 0.f
-        && m.dataCM[8] == 0.f && m.dataCM[9] == 0.f && m.dataCM[10] == 0.f && m.dataCM[11] == 0.f && m.dataCM[12] == 0.f && m.dataCM[13] == 0.f && m.dataCM[14] == 0.f && m.dataCM[15] == 0.f;
+    return m.m[0] == 0.f && m.m[1] == 0.f && m.m[2] == 0.f && m.m[3] == 0.f && m.m[4] == 0.f && m.m[5] == 0.f && m.m[6] == 0.f && m.m[7] == 0.f
+        && m.m[8] == 0.f && m.m[9] == 0.f && m.m[10] == 0.f && m.m[11] == 0.f && m.m[12] == 0.f && m.m[13] == 0.f && m.m[14] == 0.f && m.m[15] == 0.f;
 }
 float2 lerp(const f32 t, const float2& a, const float2& b) { return float2(a.x+t*(b.x-a.x), a.y+t*(b.y-a.y)); }
 float3 lerp(const f32 t, const float3& a, const float3& b) { return float3(a.x+t*(b.x-a.x), a.y+t*(b.y-a.y), a.z+t*(b.z-a.z)); }
 float4 lerp(const f32 t, const float4& a, const float4& b) { return float4(a.x+t*(b.x-a.x), a.y+t*(b.y-a.y), a.z+t*(b.z-a.z), a.w+t*(b.w-a.w)); }
 
 float3x3 mult(const float3x3& a, const float3x3& b) {
-    float3 a_r0 ( a.dataCM[0], a.dataCM[3], a.dataCM[6] );
-    float3 a_r1 ( a.dataCM[1], a.dataCM[4], a.dataCM[7] );
-    float3 a_r2 ( a.dataCM[2], a.dataCM[5], a.dataCM[8] );
+    float3 a_r0 ( a.m[0], a.m[3], a.m[6] );
+    float3 a_r1 ( a.m[1], a.m[4], a.m[7] );
+    float3 a_r2 ( a.m[2], a.m[5], a.m[8] );
     
     float3x3 o;
-    o.dataCM[0] = dot(a_r0, b.col0); o.dataCM[3] = dot(a_r0, b.col1); o.dataCM[6] = dot(a_r0, b.col2);
-    o.dataCM[1] = dot(a_r1, b.col0); o.dataCM[4] = dot(a_r1, b.col1); o.dataCM[7] = dot(a_r1, b.col2);
-    o.dataCM[2] = dot(a_r2, b.col0); o.dataCM[5] = dot(a_r2, b.col1); o.dataCM[8] = dot(a_r2, b.col2);
+    o.m[0] = dot(a_r0, b.col0); o.m[3] = dot(a_r0, b.col1); o.m[6] = dot(a_r0, b.col2);
+    o.m[1] = dot(a_r1, b.col0); o.m[4] = dot(a_r1, b.col1); o.m[7] = dot(a_r1, b.col2);
+    o.m[2] = dot(a_r2, b.col0); o.m[5] = dot(a_r2, b.col1); o.m[8] = dot(a_r2, b.col2);
     return o;
 }
 float3 mult(const float3x3& m, const float3& v) {
@@ -207,16 +171,16 @@ float3x3 scale(const float3x3& m, const f32 s) {
     return o;
 }
 float4x4 mult(const float4x4& a, const float4x4& b) {
-    float4 a_r0 ( a.dataCM[0], a.dataCM[4], a.dataCM[8], a.dataCM[12] );
-    float4 a_r1 ( a.dataCM[1], a.dataCM[5], a.dataCM[9], a.dataCM[13] );
-    float4 a_r2 ( a.dataCM[2], a.dataCM[6], a.dataCM[10], a.dataCM[14] );
-    float4 a_r3 ( a.dataCM[3], a.dataCM[7], a.dataCM[11], a.dataCM[15] );
+    float4 a_r0 ( a.m[0], a.m[4], a.m[8], a.m[12] );
+    float4 a_r1 ( a.m[1], a.m[5], a.m[9], a.m[13] );
+    float4 a_r2 ( a.m[2], a.m[6], a.m[10], a.m[14] );
+    float4 a_r3 ( a.m[3], a.m[7], a.m[11], a.m[15] );
     
     float4x4 o;
-    o.dataCM[0] = dot(a_r0, b.col0); o.dataCM[4] = dot(a_r0, b.col1); o.dataCM[8] = dot(a_r0, b.col2); o.dataCM[12] = dot(a_r0, b.col3);
-    o.dataCM[1] = dot(a_r1, b.col0); o.dataCM[5] = dot(a_r1, b.col1); o.dataCM[9] = dot(a_r1, b.col2); o.dataCM[13] = dot(a_r1, b.col3);
-    o.dataCM[2] = dot(a_r2, b.col0); o.dataCM[6] = dot(a_r2, b.col1); o.dataCM[10] = dot(a_r2, b.col2); o.dataCM[14] = dot(a_r2, b.col3);
-    o.dataCM[3] = dot(a_r3, b.col0); o.dataCM[7] = dot(a_r3, b.col1); o.dataCM[11] = dot(a_r3, b.col2); o.dataCM[15] = dot(a_r3, b.col3);
+    o.m[0] = dot(a_r0, b.col0); o.m[4] = dot(a_r0, b.col1); o.m[8] = dot(a_r0, b.col2); o.m[12] = dot(a_r0, b.col3);
+    o.m[1] = dot(a_r1, b.col0); o.m[5] = dot(a_r1, b.col1); o.m[9] = dot(a_r1, b.col2); o.m[13] = dot(a_r1, b.col3);
+    o.m[2] = dot(a_r2, b.col0); o.m[6] = dot(a_r2, b.col1); o.m[10] = dot(a_r2, b.col2); o.m[14] = dot(a_r2, b.col3);
+    o.m[3] = dot(a_r3, b.col0); o.m[7] = dot(a_r3, b.col1); o.m[11] = dot(a_r3, b.col2); o.m[15] = dot(a_r3, b.col3);
     return o;
 }
 float4 mult(const float4x4& m, const float4& v) {

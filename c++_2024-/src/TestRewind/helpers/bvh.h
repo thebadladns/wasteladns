@@ -66,14 +66,14 @@ namespace BVH {
 			} else if (currExtents.z > Math::max(currExtents.x, currExtents.y)) {
 				widestCoord = 2;
 			}
-			f32 widestCoordCenter = (bvh.nodes[nodeId].max.coords[widestCoord] + bvh.nodes[nodeId].min.coords[widestCoord]) * 0.5f;
+			f32 widestCoordCenter = (bvh.nodes[nodeId].max.v[widestCoord] + bvh.nodes[nodeId].min.v[widestCoord]) * 0.5f;
 
 			// Split triangles on each side of the widest axis
 			for (u32 triangleId : triangleIds) {
 				const Triangle& tri = context.trianglePool[triangleId];
 				Node* selectedNode;
 				std::vector <u32>* selectedTriangleIds;
-				if (tri.center.coords[widestCoord] < widestCoordCenter) {
+				if (tri.center.v[widestCoord] < widestCoordCenter) {
 					selectedNode = &lchild;
 					selectedTriangleIds = &ltriangleIds;
 				} else {

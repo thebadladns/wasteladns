@@ -14,7 +14,7 @@
 
 namespace Renderer
 {
-namespace Immediate
+namespace im
 {
     struct Vertex2D {
         float2 pos;
@@ -34,7 +34,7 @@ namespace Immediate
         + max_2d_vertices * sizeof(Vertex2D)
         + vertexSizeToIndexCount(max_2d_vertices) * sizeof(u32);
     
-    struct Buffer {
+    struct Context {
 
         Vertex3D* vertices_3d;
         Vertex2D* vertices_2d;
@@ -67,17 +67,17 @@ namespace Immediate
         u8 scale;
     };
     
-    void clear3d(Buffer& buffer) {
+    void clear3d(Context& buffer) {
         buffer.vertices_3d_head = 0;
     }
-    void clear2d(Buffer& buffer) {
+    void clear2d(Context& buffer) {
         buffer.vertices_2d_head = 0;
     }
 
-    void segment(Buffer& buffer, const float3& v1, const float3& v2, const Color32 color) {
+    void segment(Context& buffer, const float3& v1, const float3& v2, const Color32 color) {
 
         // Too many vertex pushed during immediate mode
-        // Either bump Buffer::vertices_3d_head or re-implement
+        // Either bump Context::vertices_3d_head or re-implement
         // complex primitives to avoid vertex usage
         assert(buffer.vertices_3d_head + 2 < max_3d_vertices);
         
@@ -90,28 +90,28 @@ namespace Immediate
         vertexEnd.pos = v2;
         vertexEnd.color = color.ABGR();
     }
-    void openSegment(Buffer& buffer, const float3& start, const float3& dir, Color32 color) {
+    void openSegment(Context& buffer, const float3& start, const float3& dir, Color32 color) {
         const f32 segmentLength = 10000.f;
         const float3 end = Math::add(start, Math::scale(dir, segmentLength));
         segment(buffer, start, end, color);
     }
-    void ray(Buffer& buffer, const float3& start, const float3& dir, Color32 color) {
+    void ray(Context& buffer, const float3& start, const float3& dir, Color32 color) {
         openSegment(buffer, start, dir, color);
     }
-    void line(Buffer& buffer, const float3& pos, const float3& dir, Color32 color) {
+    void line(Context& buffer, const float3& pos, const float3& dir, Color32 color) {
         const f32 extents = 10000.f;
         const float3 start = Math::subtract(pos, Math::scale(dir, extents));
         const float3 end = Math::add(pos, Math::scale(dir, extents));
         segment(buffer, start, end, color);
     }
-    void poly(Buffer& buffer, const float3* vertices, const u8 count, Color32 color) {
+    void poly(Context& buffer, const float3* vertices, const u8 count, Color32 color) {
         for (u8 i = 0; i < count; i++) {
             const float3 prev = vertices[i];
             const float3 next = vertices[(i + 1) % count];
             segment(buffer, prev, next, color);
         }
     }
-    void aabb(Buffer& buffer, const float3 min, const float3 max, Color32 color) {
+    void aabb(Context& buffer, const float3 min, const float3 max, Color32 color) {
 
         float3 leftNearBottom(min.x, min.y, min.z);
         float3 leftFarBottom(min.x, max.y, min.z);
@@ -141,7 +141,7 @@ namespace Immediate
         segment(buffer, leftNearBottom, rightNearBottom, color);
         segment(buffer, leftFarBottom, rightFarBottom, color);
     }
-    void obb(Buffer& buffer, const float4x4& mat, const float3 aabb_min, const float3 aabb_max, Color32 color) {
+    void obb(Context& buffer, const float4x4& mat, const float3 aabb_min, const float3 aabb_max, Color32 color) {
 
         float3 leftNearBottom(aabb_min.x, aabb_min.y, aabb_min.z);
         float3 leftFarBottom(aabb_min.x, aabb_max.y, aabb_min.z);
@@ -188,7 +188,7 @@ namespace Immediate
         segment(buffer, leftNearBottom_NDC, rightNearBottom_NDC, color);
         segment(buffer, leftFarBottom_NDC, rightFarBottom_NDC, color);
     }
-    void frustum(Buffer& buffer, const float4x4& projectionMat, Color32 color) {
+    void frustum(Context& buffer, const float4x4& projectionMat, Color32 color) {
 
         // extract clipping planes (note that near plane depends on API's min z)
         float4x4 transpose = Math::transpose(projectionMat);
@@ -311,8 +311,8 @@ namespace Immediate
                 // Sort points on the x axis, then on the y axis, using insertion since we have a few amount of points
                 auto comp = [](const u32 ax, const u32 ay, const float3 a, const float3 b) -> bool {
                     const float eps = 0.0001f;
-                    const float dx = a.coords[ax] - b.coords[ax];
-                    return dx > eps || (dx > -eps && a.coords[ay] > b.coords[ay]);
+                    const float dx = a.v[ax] - b.v[ax];
+                    return dx > eps || (dx > -eps && a.v[ay] > b.v[ay]);
                     };
                 for (s32 i = 1; i < (s32)cutface.count; i++) {
                     float3 key = cutface.pts[i];
@@ -325,7 +325,7 @@ namespace Immediate
                 }
                 // Cross product in 2d will tell us wether the sequence O->A->B makes a counter clockwise turn
                 auto a_rightof_b = [](const u32 ax, const u32 ay, const float3 o, const float3 a, const float3 b) -> f32 {
-                    return (a.coords[ax] - o.coords[ax]) * (b.coords[ay] - o.coords[ay]) - (a.coords[ay] - o.coords[ay]) * (b.coords[ax] - o.coords[ax]);
+                    return (a.v[ax] - o.v[ax]) * (b.v[ay] - o.v[ay]) - (a.v[ay] - o.v[ay]) * (b.v[ax] - o.v[ax]);
                     };
                 Face sortedcutface = {};
                 // Compute lower hull
@@ -350,10 +350,10 @@ namespace Immediate
         }
 
         for (u32 face_id = 0; face_id < num_faces; face_id++) {
-            Immediate::poly(buffer, pts_out[face_id].pts, pts_out[face_id].count, color);
+            im::poly(buffer, pts_out[face_id].pts, pts_out[face_id].count, color);
         }
     }
-    void circle(Buffer& buffer, const float3& center, const float3& normal, const f32 radius, const Color32 color) {
+    void circle(Context& buffer, const float3& center, const float3& normal, const f32 radius, const Color32 color) {
         Transform33 m = Math::fromUp(normal);
         
         static constexpr u32 kVertexCount = 8;
@@ -367,7 +367,7 @@ namespace Immediate
         }
         poly(buffer, vertices, kVertexCount, color);
     }
-    void sphere(Buffer& buffer, const float3& center, const f32 radius, const Color32 color) {
+    void sphere(Context& buffer, const float3& center, const f32 radius, const Color32 color) {
         
         static constexpr u32 kSectionCount = 2;
         const Color32 colorVariation(0.25f, 0.25f, 0.25f, 0.f);
@@ -390,7 +390,7 @@ namespace Immediate
         }
     }
     
-    void box_2d(Buffer& buffer, const float2 min, const float2 max, Color32 color) {
+    void box_2d(Context& buffer, const float2 min, const float2 max, Color32 color) {
 
         u32 vertexStart = buffer.vertices_2d_head;
         Vertex2D& bottomLeft = buffer.vertices_2d[vertexStart];
@@ -418,7 +418,7 @@ namespace Immediate
         bottomRigth.color = color.ABGR();
     }
 #ifdef __WASTELADNS_DEBUG_TEXT__
-    void text2d(Buffer& buffer, const TextParams& params, const char* format, va_list argList) {
+    void text2d(Context& buffer, const TextParams& params, const char* format, va_list argList) {
         
         char text[256];
         Platform::format_va(text, sizeof(text), format, argList);
@@ -453,14 +453,14 @@ namespace Immediate
         }
     }
 
-    void text2d(Buffer& buffer, const TextParams& params, const char* format, ...) {
+    void text2d(Context& buffer, const TextParams& params, const char* format, ...) {
         va_list va;
         va_start(va, format);
         text2d(buffer, params, format, va);
         va_end(va);
     }
     
-    void text2d(Buffer& buffer, const float3& pos, const char* format, ...) {
+    void text2d(Context& buffer, const float3& pos, const char* format, ...) {
         TextParams params;
         params.pos = pos;
         params.scale = 1;
@@ -472,7 +472,7 @@ namespace Immediate
     }
 #endif // __WASTELADNS_DEBUG_TEXT__
     
-    void init(Buffer& buffer, Allocator::Arena& arena) {
+    void init(Context& buffer, Allocator::Arena& arena) {
 
         buffer = {};
 
@@ -565,7 +565,7 @@ namespace Immediate
         }
     }
     
-    void present3d(Buffer& buffer, const float4x4& projMatrix, const float4x4& viewMatrix) {
+    void present3d(Context& buffer, const float4x4& projMatrix, const float4x4& viewMatrix) {
         
         Driver::Marker_t marker;
         Driver::set_marker_name(marker, "DEBUG 3D");
@@ -592,7 +592,7 @@ namespace Immediate
         Driver::end_event();
     }
     
-    void present2d(Buffer& buffer, const float4x4& projMatrix) {
+    void present2d(Context& buffer, const float4x4& projMatrix) {
 
         Driver::Marker_t marker;
         Driver::set_marker_name(marker, "DEBUG 2D");

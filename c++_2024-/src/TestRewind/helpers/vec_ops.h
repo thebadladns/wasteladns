@@ -85,19 +85,19 @@ float3x3 quaternionToRotationMatrix(float4& q) {
     f32 q3 = q.w;
 
     // First row
-    m.dataCM[0] = 2 * (q0 * q0 + q1 * q1) - 1.f;
-    m.dataCM[3] = 2 * (q1 * q2 - q0 * q3);
-    m.dataCM[6] = 2 * (q1 * q3 + q0 * q2);
+    m.m[0] = 2 * (q0 * q0 + q1 * q1) - 1.f;
+    m.m[3] = 2 * (q1 * q2 - q0 * q3);
+    m.m[6] = 2 * (q1 * q3 + q0 * q2);
 
     // Second row
-    m.dataCM[1] = 2 * (q1 * q2 + q0 * q3);
-    m.dataCM[4] = 2 * (q0 * q0 + q2 * q2) - 1.f;
-    m.dataCM[7] = 2 * (q2 * q3 - q0 * q1);
+    m.m[1] = 2 * (q1 * q2 + q0 * q3);
+    m.m[4] = 2 * (q0 * q0 + q2 * q2) - 1.f;
+    m.m[7] = 2 * (q2 * q3 - q0 * q1);
 
     // Third row
-    m.dataCM[2] = 2 * (q1 * q3 - q0 * q2);
-    m.dataCM[5] = 2 * (q2 * q3 + q0 * q1);
-    m.dataCM[8] = 2 * (q0 * q0 + q3 * q3) - 1.f;
+    m.m[2] = 2 * (q1 * q3 - q0 * q2);
+    m.m[5] = 2 * (q2 * q3 + q0 * q1);
+    m.m[8] = 2 * (q0 * q0 + q3 * q3) - 1.f;
 
     return m;
 }
@@ -117,7 +117,7 @@ float4x4 trsToMatrix(float3 translation, float4 q /*quaternion*/, float3 scale) 
 
 float4 rotationMatrixToQuaternion(float3x3 m) {
     float4 q;
-    f32* a = m.dataCM;
+    f32* a = m.m;
     f32 trace = a[0] + a[4] + a[8];
     
     if (trace > 0.f) {
@@ -156,10 +156,10 @@ float4 rotationMatrixToQuaternion(float3x3 m) {
 bool inverse(float4x4& m) {
     
     float4x4 prev = m;
-    memset(m.dataCM, 0, sizeof(f32) * 16);
+    memset(m.m, 0, sizeof(f32) * 16);
     
-    f32* prev_m = prev.dataCM;
-    f32* next_m = m.dataCM;
+    f32* prev_m = prev.m;
+    f32* next_m = m.m;
     
     next_m[0] = prev_m[5]    * prev_m[10]   * prev_m[15] -
     prev_m[5]    * prev_m[11]   * prev_m[14] -

@@ -50,7 +50,7 @@ namespace Game
 
     struct RenderManager {
         Renderer::Store store;
-        __DEBUGDEF(Renderer::Immediate::Buffer immediateBuffer;)
+        __DEBUGDEF(Renderer::im::Context imCtx;)
         Renderer::WindowProjection windowProjection;
         Renderer::PerspProjection perspProjection;
     };
@@ -117,7 +117,7 @@ namespace Game
             Allocator::init_arena(game.memory.frameArena, 1 << 20); // 1MB
             game.memory.frameArenaBuffer = game.memory.frameArena.curr;
             __DEBUGEXP(game.memory.frameArenaHighmark = (uintptr_t)game.memory.frameArena.curr; game.memory.frameArena.highmark = &game.memory.frameArenaHighmark);
-            __DEBUGEXP(Allocator::init_arena(game.memory.imDebugArena, Renderer::Immediate::arena_size));
+            __DEBUGEXP(Allocator::init_arena(game.memory.imDebugArena, Renderer::im::arena_size));
         }
 
 
@@ -168,7 +168,7 @@ namespace Game
             // meshes in the scene
             game.renderMgr.store = {};
             Renderer::init_pipelines(game.renderMgr.store, platform.memory.scratchArenaRoot, platform.screen);
-            __DEBUGEXP(Renderer::Immediate::init(game.renderMgr.immediateBuffer, game.memory.imDebugArena));
+            __DEBUGEXP(Renderer::im::init(game.renderMgr.imCtx, game.memory.imDebugArena));
         }
 
         game.player = {};
@@ -756,6 +756,8 @@ namespace Game
             // Immediate-mode debug. Can be moved out of the render update, it only pushes data to cpu buffers
             #if __DEBUG
             {
+                im::Context& imCtx = mgr.imCtx;
+
                 // World axis
                 //{
                 //    const Color32 axisX(0.8f, 0.15f, 0.25f, 0.7f); // x is red
@@ -764,23 +766,23 @@ namespace Game
                 //    const f32 axisSize = 30.f;
                 //    const float3 pos(0.f, 0.f, 0.1f);
 
-                //    Immediate::segment(mgr.immediateBuffer, pos, Math::add(pos, Math::scale(float3(1.f, 0.f, 0.f), axisSize)), axisX);
-                //    Immediate::segment(mgr.immediateBuffer, pos, Math::add(pos, Math::scale(float3(0.f, 1.f, 0.f), axisSize)), axisY);
-                //    Immediate::segment(mgr.immediateBuffer, pos, Math::add(pos, Math::scale(float3(0.f, 0.f, 1.f), axisSize)), axisZ);
+                //    im::segment(imCtx, pos, Math::add(pos, Math::scale(float3(1.f, 0.f, 0.f), axisSize)), axisX);
+                //    im::segment(imCtx, pos, Math::add(pos, Math::scale(float3(0.f, 1.f, 0.f), axisSize)), axisY);
+                //    im::segment(imCtx, pos, Math::add(pos, Math::scale(float3(0.f, 0.f, 1.f), axisSize)), axisZ);
 
                 //    const f32 thickness = 0.1f;
                 //    const u32 steps = 10;
                 //    const f32 spacing = 1.f / (f32)steps;
                 //    for (int i = 1; i <= steps; i++) {
-                //        Immediate::segment(mgr.immediateBuffer,
+                //        im::segment(imCtx,
                 //              Math::add(pos, float3(spacing * i, 0.f, -thickness))
                 //            , Math::add(pos, float3(spacing * i, 0.f, thickness))
                 //            , axisX);
-                //        Immediate::segment(mgr.immediateBuffer,
+                //        im::segment(imCtx,
                 //              Math::add(pos, float3(0.f, spacing * i, -thickness))
                 //            , Math::add(pos, float3(0.f, spacing * i, thickness))
                 //            , axisY);
-                //        Immediate::segment(mgr.immediateBuffer,
+                //        im::segment(imCtx,
                 //              Math::add(pos, float3(-thickness, thickness, spacing * i))
                 //            , Math::add(pos, float3(thickness, -thickness, spacing * i))
                 //            , axisZ);
@@ -797,16 +799,16 @@ namespace Game
                             for (u32 i = 0; i < visibleNodesDebug.visible_nodes_count; i++) {
                                 u32 n = visibleNodesDebug.visible_nodes[i];
                                 const DrawNode& node = store.drawNodes.data[n].state.live;
-                                Immediate::obb(mgr.immediateBuffer, node.nodeData.worldMatrix, node.min, node.max, bbColor);
+                                im::obb(imCtx, node.nodeData.worldMatrix, node.min, node.max, bbColor);
                             }
                             for (u32 i = 0; i < visibleNodesDebug.visible_nodes_skinned_count; i++) {
                                 u32 n = visibleNodesDebug.visible_nodes_skinned[i];
                                 const DrawNodeSkinned& node = store.drawNodesSkinned.data[n].state.live;
-                                Immediate::obb(mgr.immediateBuffer, node.core.nodeData.worldMatrix, node.core.min, node.core.max, bbColor);
+                                im::obb(imCtx, node.core.nodeData.worldMatrix, node.core.min, node.core.max, bbColor);
                             }
 
                             const Color32 color(0.25f, 0.8f, 0.15f, 0.7f);
-                            Immediate::frustum(mgr.immediateBuffer, matrix, color);
+                            im::frustum(imCtx, matrix, color);
                         }
                     }
                 }
@@ -819,7 +821,7 @@ namespace Game
                     f32 textscale = platform.screen.text_scale;
                     f32 lineheight = 15.f * textscale;
 
-                    Renderer::Immediate::TextParams textParamsLeft, textParamsRight, textParamsCenter;
+                    Renderer::im::TextParams textParamsLeft, textParamsRight, textParamsCenter;
                     textParamsLeft.scale = (u8)platform.screen.text_scale;
                     textParamsLeft.pos = float3(game.renderMgr.windowProjection.config.left + 10.f * textscale, game.renderMgr.windowProjection.config.top - 10.f * textscale, -50);
                     textParamsLeft.color = defaultCol;
@@ -832,45 +834,45 @@ namespace Game
 
                     const char* overlaynames[] = { "All", "Help Only", "Arenas only", "None" };
                     textParamsLeft.color = keyboard.pressed(Input::TOGGLE_OVERLAY) ? activeCol : defaultCol;
-                    Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParamsLeft, "H to toggle overlays: %s", overlaynames[game.debugVis.overlaymode]);
+                    Renderer::im::text2d(game.renderMgr.imCtx, textParamsLeft, "H to toggle overlays: %s", overlaynames[game.debugVis.overlaymode]);
                     textParamsLeft.pos.y -= lineheight;
                     const char* visualizationModes[] = { "All", "Culling", "None" };
                     textParamsLeft.color = keyboard.pressed(Input::TOGGLE_DEBUG3D) ? activeCol : defaultCol;
-                    Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParamsLeft, "V to toggle 3D visualization modes: %s", visualizationModes[game.debugVis.debug3Dmode]);
+                    Renderer::im::text2d(game.renderMgr.imCtx, textParamsLeft, "V to toggle 3D visualization modes: %s", visualizationModes[game.debugVis.debug3Dmode]);
                     textParamsLeft.pos.y -= lineheight;
                     const char* cameraStages[] = { "Scene", "Scene Mirror", "Scene Mirror Clipped" };
                     textParamsLeft.color = keyboard.pressed(Input::TOGGLE_CAPTURED_CAMERA) ? activeCol : defaultCol;
-                    Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParamsLeft, "C to toggle camera capture stages: %s %s", cameraStages[game.debugVis.debugCameraStage], Math::isZeroAll(game.debugVis.capturedCameras[game.debugVis.debugCameraStage]) ? "Camera not captured" : "Camera Captured");
+                    Renderer::im::text2d(game.renderMgr.imCtx, textParamsLeft, "C to toggle camera capture stages: %s %s", cameraStages[game.debugVis.debugCameraStage], Math::isZeroAll(game.debugVis.capturedCameras[game.debugVis.debugCameraStage]) ? "Camera not captured" : "Camera Captured");
                     textParamsLeft.pos.y -= lineheight;
 
                     if (game.debugVis.overlaymode == DebugVis::OverlayMode::All || game.debugVis.overlaymode == DebugVis::OverlayMode::HelpOnly) {
                         textParamsLeft.color = platform.input.mouse.down(::Input::Mouse::Keys::BUTTON_LEFT) ? activeCol : defaultCol;
-                        Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParamsLeft, "Mouse (%.3f,%.3f)", platform.input.mouse.x, platform.input.mouse.y);
+                        Renderer::im::text2d(game.renderMgr.imCtx, textParamsLeft, "Mouse (%.3f,%.3f)", platform.input.mouse.x, platform.input.mouse.y);
                         textParamsLeft.pos.y -= lineheight;
                         textParamsLeft.color = platform.input.mouse.down(::Input::Mouse::Keys::BUTTON_LEFT) ? activeCol : defaultCol;
-                        Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParamsLeft, "   left click and drag to orbit");
+                        Renderer::im::text2d(game.renderMgr.imCtx, textParamsLeft, "   left click and drag to orbit");
                         textParamsLeft.pos.y -= lineheight;
                         textParamsLeft.color = platform.input.mouse.down(::Input::Mouse::Keys::BUTTON_RIGHT) ? activeCol : defaultCol;
-                        Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParamsLeft, "   right click and drag to pan");
+                        Renderer::im::text2d(game.renderMgr.imCtx, textParamsLeft, "   right click and drag to pan");
                         textParamsLeft.pos.y -= lineheight;
                         textParamsLeft.color = platform.input.mouse.scrolldy != 0 ? activeCol : defaultCol;
-                        Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParamsLeft, "   mouse wheel to scale");
+                        Renderer::im::text2d(game.renderMgr.imCtx, textParamsLeft, "   mouse wheel to scale");
                         textParamsLeft.pos.y -= lineheight;
                         textParamsLeft.color = defaultCol;
                         {
                             float3 eulers_deg = Math::scale(game.cameraMgr.orbitCamera.eulers, Math::r2d_f);
-                            Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParamsLeft, "Camera eulers: " float3_FORMAT("% .3f"), float3_PARAMS(eulers_deg));
+                            Renderer::im::text2d(game.renderMgr.imCtx, textParamsLeft, "Camera eulers: " float3_FORMAT("% .3f"), float3_PARAMS(eulers_deg));
                             textParamsLeft.pos.y -= lineheight;
                         }
-                        Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParamsLeft, "mouse wheel to scale");
+                        Renderer::im::text2d(game.renderMgr.imCtx, textParamsLeft, "mouse wheel to scale");
                         textParamsLeft.pos.y -= lineheight;
                         for (u32 i = 0; i < platform.input.padCount; i++)
                         {
                             namespace Pad = ::Input::Gamepad;
                             const Pad::State& pad = platform.input.pads[i];
-                            Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParamsLeft, "Pad: %s", pad.name);
+                            Renderer::im::text2d(game.renderMgr.imCtx, textParamsLeft, "Pad: %s", pad.name);
                             textParamsLeft.pos.y -= lineheight;
-                            Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParamsLeft
+                            Renderer::im::text2d(game.renderMgr.imCtx, textParamsLeft
                                 , "Pad: L:(%.3f,%.3f) R:(%.3f,%.3f) L2:%.3f R2:%.3f"
                                 , pad.sliders[Pad::Sliders::AXIS_X_LEFT], pad.sliders[Pad::Sliders::AXIS_Y_LEFT]
                                 , pad.sliders[Pad::Sliders::AXIS_X_RIGHT], pad.sliders[Pad::Sliders::AXIS_Y_RIGHT]
@@ -895,21 +897,21 @@ namespace Game
                                     curr += Platform::format(curr, (int)(last - curr), "");
                                 }
                             }
-                            Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParamsLeft, keys_str);
+                            Renderer::im::text2d(game.renderMgr.imCtx, textParamsLeft, keys_str);
                             textParamsLeft.pos.y -= lineheight;
                         }
 
                         textParamsRight.color = defaultCol;
                         textParamsRight.pos.x -= 30.f * textscale;
-                        Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParamsRight, "%s", Platform::name);
+                        Renderer::im::text2d(game.renderMgr.imCtx, textParamsRight, "%s", Platform::name);
                         textParamsRight.pos.y -= lineheight;
-                        Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParamsRight, "%.3lf fps", 1. / game.debugVis.frameAvg);
+                        Renderer::im::text2d(game.renderMgr.imCtx, textParamsRight, "%.3lf fps", 1. / game.debugVis.frameAvg);
                         textParamsRight.pos.y -= lineheight;
                     }
 
                     if (game.debugVis.overlaymode == DebugVis::OverlayMode::All || game.debugVis.overlaymode == DebugVis::OverlayMode::ArenaOnly)
                     {
-                        auto renderArena = [](Renderer::Immediate::Buffer& im, Renderer::Immediate::TextParams& textCfg, u8* arenaEnd, u8* arenaStart, uintptr_t arenaHighmark, const char* arenaName, const Color32 defaultCol, const Color32 baseCol, const Color32 highmarkCol, const f32 lineheight, const f32 textscale) {
+                        auto renderArena = [](Renderer::im::Context& im, Renderer::im::TextParams& textCfg, u8* arenaEnd, u8* arenaStart, uintptr_t arenaHighmark, const char* arenaName, const Color32 defaultCol, const Color32 baseCol, const Color32 highmarkCol, const f32 lineheight, const f32 textscale) {
                             const f32 barwidth = 150.f * textscale;
                             const f32 barheight = 10.f * textscale;
 
@@ -917,16 +919,16 @@ namespace Game
                             const ptrdiff_t arenaHighmarkBytes = (ptrdiff_t)arenaHighmark - (ptrdiff_t)arenaStart;
                             const f32 arenaHighmark_barwidth = barwidth * (arenaHighmarkBytes / (f32)arenaTotal);
                             textCfg.color = highmarkCol;
-                            Renderer::Immediate::text2d(im, textCfg, "%s highmark: %lu bytes", arenaName, arenaHighmarkBytes);
+                            Renderer::im::text2d(im, textCfg, "%s highmark: %lu bytes", arenaName, arenaHighmarkBytes);
                             textCfg.pos.y -= lineheight;
                             textCfg.color = defaultCol;
 
-                            Renderer::Immediate::box_2d(im
+                            Renderer::im::box_2d(im
                                 , float2(textCfg.pos.x, textCfg.pos.y - barheight)
                                 , float2(textCfg.pos.x + barwidth, textCfg.pos.y)
                                 , baseCol);
                             if (arenaHighmarkBytes) {
-                                Renderer::Immediate::box_2d(im
+                                Renderer::im::box_2d(im
                                                           , float2(textCfg.pos.x, textCfg.pos.y - barheight)
                                                           , float2(textCfg.pos.x + arenaHighmark_barwidth, textCfg.pos.y)
                                                           , highmarkCol);
@@ -940,23 +942,23 @@ namespace Game
                         {
                             const Color32 arenabaseCol(0.65f, 0.65f, 0.65f, 0.4f);
                             const Color32 arenahighmarkCol(0.95f, 0.35f, 0.8f, 1.f);
-                            renderArena(game.renderMgr.immediateBuffer, textParamsCenter, game.memory.frameArena.end, game.memory.frameArenaBuffer, game.memory.frameArenaHighmark
+                            renderArena(game.renderMgr.imCtx, textParamsCenter, game.memory.frameArena.end, game.memory.frameArenaBuffer, game.memory.frameArenaHighmark
                                 , "Frame arena", defaultCol, arenabaseCol, arenahighmarkCol, lineheight, textscale);
                         }
                         {
                             const Color32 arenabaseCol(0.65f, 0.65f, 0.65f, 0.4f);
                             const Color32 arenahighmarkCol(0.95f, 0.35f, 0.8f, 1.f);
-                            renderArena(game.renderMgr.immediateBuffer, textParamsCenter, platform.memory.scratchArenaRoot.end, platform.memory.scratchArenaRoot.curr, platform.memory.scratchArenaHighmark
+                            renderArena(game.renderMgr.imCtx, textParamsCenter, platform.memory.scratchArenaRoot.end, platform.memory.scratchArenaRoot.curr, platform.memory.scratchArenaHighmark
                                 , "Platform scratch arena", defaultCol, arenabaseCol, arenahighmarkCol, lineheight, textscale);
                         }
                         {
                             const Color32 arenabaseCol(0.65f, 0.65f, 0.65f, 0.4f);
                             const Color32 arenahighmarkCol(0.95f, 0.35f, 0.8f, 1.f);
-                            renderArena(game.renderMgr.immediateBuffer, textParamsCenter, game.memory.persistentArena.end, game.memory.persistentArenaBuffer, (ptrdiff_t)game.memory.persistentArena.curr
+                            renderArena(game.renderMgr.imCtx, textParamsCenter, game.memory.persistentArena.end, game.memory.persistentArenaBuffer, (ptrdiff_t)game.memory.persistentArena.curr
                                 , "Game persistent arena", defaultCol, arenabaseCol, arenahighmarkCol, lineheight, textscale);
                         }
                         {
-                            auto& im = game.renderMgr.immediateBuffer;
+                            auto& im = game.renderMgr.imCtx;
                             const Color32 baseCol(0.65f, 0.65f, 0.65f, 0.4f);
                             const Color32 used3dCol(0.95f, 0.35f, 0.8f, 1.f);
                             const Color32 used2dCol(0.35f, 0.95f, 0.8f, 1.f);
@@ -964,9 +966,9 @@ namespace Game
 
                             const ptrdiff_t memory_size = (ptrdiff_t)game.memory.imDebugArena.curr - (ptrdiff_t)im.vertices_3d;
                             const ptrdiff_t vertices_3d_start = (ptrdiff_t)im.vertices_3d - (ptrdiff_t)im.vertices_3d;
-                            const ptrdiff_t vertices_3d_size = (ptrdiff_t)im.vertices_3d_head * sizeof(Immediate::Vertex3D);
+                            const ptrdiff_t vertices_3d_size = (ptrdiff_t)im.vertices_3d_head * sizeof(im::Vertex3D);
                             const ptrdiff_t vertices_2d_start = (ptrdiff_t)im.vertices_2d - (ptrdiff_t)im.vertices_3d;
-                            const ptrdiff_t vertices_2d_size = (ptrdiff_t)im.vertices_2d_head * sizeof(Immediate::Vertex2D);
+                            const ptrdiff_t vertices_2d_size = (ptrdiff_t)im.vertices_2d_head * sizeof(im::Vertex2D);
                             const ptrdiff_t indices_2d_start = (ptrdiff_t)im.indices_2d - (ptrdiff_t)im.vertices_3d;
                             const ptrdiff_t indices_2d_size = (ptrdiff_t)(im.vertices_2d_head * 3 / 2) * sizeof(u32);
                             const f32 v3d_barstart = barwidth * vertices_3d_start / (f32)memory_size;
@@ -977,29 +979,29 @@ namespace Game
                             const f32 i2d_barwidth = barwidth * indices_2d_size / (f32)memory_size;
 
                             textParamsCenter.color = used3dCol;
-                            Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParamsCenter, "im 3d: %lu bytes", vertices_3d_size);
+                            Renderer::im::text2d(game.renderMgr.imCtx, textParamsCenter, "im 3d: %lu bytes", vertices_3d_size);
                             textParamsCenter.pos.y -= lineheight;
                             textParamsCenter.color = used2dCol;
-                            Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParamsCenter, "im 2d: %lu bytes", vertices_2d_size);
+                            Renderer::im::text2d(game.renderMgr.imCtx, textParamsCenter, "im 2d: %lu bytes", vertices_2d_size);
                             textParamsCenter.pos.y -= lineheight;
                             textParamsCenter.color = used2didxCol;
-                            Renderer::Immediate::text2d(game.renderMgr.immediateBuffer, textParamsCenter, "im 2d indices: %lu bytes", indices_2d_size);
+                            Renderer::im::text2d(game.renderMgr.imCtx, textParamsCenter, "im 2d indices: %lu bytes", indices_2d_size);
                             textParamsCenter.pos.y -= lineheight;
                             textParamsCenter.color = defaultCol;
 
-                            Renderer::Immediate::box_2d(game.renderMgr.immediateBuffer
+                            Renderer::im::box_2d(game.renderMgr.imCtx
                                 , float2(textParamsCenter.pos.x, textParamsCenter.pos.y - barheight)
                                 , float2(textParamsCenter.pos.x + barwidth, textParamsCenter.pos.y)
                                 , baseCol);
-                            Renderer::Immediate::box_2d(game.renderMgr.immediateBuffer
+                            Renderer::im::box_2d(game.renderMgr.imCtx
                                 , float2(textParamsCenter.pos.x + v3d_barstart, textParamsCenter.pos.y - barheight)
                                 , float2(textParamsCenter.pos.x + v3d_barwidth, textParamsCenter.pos.y)
                                 , used3dCol);
-                            Renderer::Immediate::box_2d(game.renderMgr.immediateBuffer
+                            Renderer::im::box_2d(game.renderMgr.imCtx
                                 , float2(textParamsCenter.pos.x + v2d_barstart, textParamsCenter.pos.y - barheight)
                                 , float2(textParamsCenter.pos.x + v2d_barstart + v2d_barwidth, textParamsCenter.pos.y)
                                 , used2dCol);
-                            Renderer::Immediate::box_2d(game.renderMgr.immediateBuffer
+                            Renderer::im::box_2d(game.renderMgr.imCtx
                                 , float2(textParamsCenter.pos.x + i2d_barstart, textParamsCenter.pos.y - barheight)
                                 , float2(textParamsCenter.pos.x + i2d_barstart + i2d_barwidth, textParamsCenter.pos.y)
                                 , used2didxCol);
@@ -1012,8 +1014,8 @@ namespace Game
             //  Batched 3D debug (clear cpu buffers onto the screen)
             #if __DEBUG
             {
-                Immediate::present3d(mgr.immediateBuffer, mgr.perspProjection.matrix, viewMatrix);
-                Immediate::clear3d(mgr.immediateBuffer);
+                im::present3d(mgr.imCtx, mgr.perspProjection.matrix, viewMatrix);
+                im::clear3d(mgr.imCtx);
             }
             #endif
 
@@ -1050,8 +1052,8 @@ namespace Game
             {
                 Renderer::Driver::bind_blend_state(store.blendStateBlendOff);
                 Renderer::Driver::bind_main_RT(store.windowRT);
-                Immediate::present2d(mgr.immediateBuffer, mgr.windowProjection.matrix);
-                Immediate::clear2d(mgr.immediateBuffer);
+                im::present2d(mgr.imCtx, mgr.windowProjection.matrix);
+                im::clear2d(mgr.imCtx);
             }
             #endif
 

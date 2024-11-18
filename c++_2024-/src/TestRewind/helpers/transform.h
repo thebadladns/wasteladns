@@ -26,7 +26,7 @@ struct Transform33 {
             float3 y;
             float3 z;
         };
-        f32 dataCM[9];
+        f32 m[9];
     };
 };
 
@@ -45,7 +45,7 @@ struct Transform {
             float3 y; f32 y_w;
             float3 z; f32 z_w;
         };
-        f32 dataCM[16];
+        f32 m[16];
     };
 };
 
@@ -103,22 +103,22 @@ namespace Math {
         Transform t;
         float4 toRotation = Math::eulersToQuaterion(rotationEulers);
         float3x3 rotation = Math::quaternionToRotationMatrix(toRotation);
-        t.matrix.col0.coords[0] = scale * rotation.col0.coords[0];
-        t.matrix.col0.coords[1] = scale * rotation.col0.coords[1];
-        t.matrix.col0.coords[2] = scale * rotation.col0.coords[2];
-        t.matrix.col1.coords[0] = scale * rotation.col1.coords[0];
-        t.matrix.col1.coords[1] = scale * rotation.col1.coords[1];
-        t.matrix.col1.coords[2] = scale * rotation.col1.coords[2];
-        t.matrix.col2.coords[0] = scale * rotation.col2.coords[0];
-        t.matrix.col2.coords[1] = scale * rotation.col2.coords[1];
-        t.matrix.col2.coords[2] = scale * rotation.col2.coords[2];
-        t.matrix.col3.coords[0] = position.coords[0];
-        t.matrix.col3.coords[1] = position.coords[1];
-        t.matrix.col3.coords[2] = position.coords[2];
-        t.matrix.col0.coords[3] = 0.f;
-        t.matrix.col1.coords[3] = 0.f;
-        t.matrix.col2.coords[3] = 0.f;
-        t.matrix.col3.coords[3] = 1.f;
+        t.matrix.col0.v[0] = scale * rotation.col0.v[0];
+        t.matrix.col0.v[1] = scale * rotation.col0.v[1];
+        t.matrix.col0.v[2] = scale * rotation.col0.v[2];
+        t.matrix.col1.v[0] = scale * rotation.col1.v[0];
+        t.matrix.col1.v[1] = scale * rotation.col1.v[1];
+        t.matrix.col1.v[2] = scale * rotation.col1.v[2];
+        t.matrix.col2.v[0] = scale * rotation.col2.v[0];
+        t.matrix.col2.v[1] = scale * rotation.col2.v[1];
+        t.matrix.col2.v[2] = scale * rotation.col2.v[2];
+        t.matrix.col3.v[0] = position.v[0];
+        t.matrix.col3.v[1] = position.v[1];
+        t.matrix.col3.v[2] = position.v[2];
+        t.matrix.col0.v[3] = 0.f;
+        t.matrix.col1.v[3] = 0.f;
+        t.matrix.col2.v[3] = 0.f;
+        t.matrix.col3.v[3] = 1.f;
 
         return t;
     }

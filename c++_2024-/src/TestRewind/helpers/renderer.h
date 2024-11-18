@@ -9,7 +9,7 @@
 namespace Renderer {
 
 void generate_matrix_ortho_zneg1to1(float4x4& matrix, const WindowProjection::Config& config) {
-    f32* matrixCM = matrix.dataCM;
+    f32* matrixCM = matrix.m;
     memset(matrixCM, 0, sizeof(f32) * 16);
     matrixCM[0] = 2.f / (config.right - config.left);
     matrixCM[5] = 2.f / (config.top - config.bottom);
@@ -20,7 +20,7 @@ void generate_matrix_ortho_zneg1to1(float4x4& matrix, const WindowProjection::Co
     matrixCM[15] = 1.f;
 }
 void generate_matrix_ortho_z0to1(float4x4& matrix, const WindowProjection::Config& config) {
-    f32* matrixCM = matrix.dataCM;
+    f32* matrixCM = matrix.m;
     memset(matrixCM, 0, sizeof(f32) * 16);
     matrixCM[0] = 2.f / (config.right - config.left);
     matrixCM[5] = 2.f / (config.top - config.bottom);
@@ -37,7 +37,7 @@ void generate_matrix_persp_zneg1to1(float4x4& matrixRHwithYup, const PerspProjec
     const f32 w = h / config.aspect;
     
     // maps each xyz axis to [-1,1], not reversed-z (left handed, y points up z moves away from the viewer)
-    f32 (&matrixCM)[16] = matrixRHwithYup.dataCM;
+    f32 (&matrixCM)[16] = matrixRHwithYup.m;
     memset(matrixCM, 0, sizeof(f32) * 16);
     matrixCM[0] = w;
     matrixCM[5] = h;
@@ -64,21 +64,21 @@ void add_oblique_plane_to_persp_zneg1to1(float4x4& projectionMatrix, const float
     // Q = P_inv * Q_proj = (sign(C.x)/w,sign(C.y)/h,-1,1/f), which is Q = (sign(C.x)/P[0], sign(C.y)/P[5],-1.f,(1 + P[10]) / P[14])
     // This makes a = 2 / dot(C,Q), which combined with M3 = a*C - M4 = a*C - (0,0,-1,0), gives us this
     float4 q;
-    q.x = Math::sign(planeCameraSpace.x) / projectionMatrix.dataCM[0];
-    q.y = Math::sign(planeCameraSpace.y) / projectionMatrix.dataCM[5];
+    q.x = Math::sign(planeCameraSpace.x) / projectionMatrix.m[0];
+    q.y = Math::sign(planeCameraSpace.y) / projectionMatrix.m[5];
     q.z = -1.f;
-    q.w = (1.f + projectionMatrix.dataCM[10]) / projectionMatrix.dataCM[14];
+    q.w = (1.f + projectionMatrix.m[10]) / projectionMatrix.m[14];
     float4 c = Math::scale(planeCameraSpace, (2.f / Math::dot(planeCameraSpace, q)));
-    projectionMatrix.dataCM[2] = c.x;
-    projectionMatrix.dataCM[6] = c.y;
-    projectionMatrix.dataCM[10] = c.z + 1.f;
-    projectionMatrix.dataCM[14] = c.w;
+    projectionMatrix.m[2] = c.x;
+    projectionMatrix.m[6] = c.y;
+    projectionMatrix.m[10] = c.z + 1.f;
+    projectionMatrix.m[14] = c.w;
 }
 void generate_matrix_persp_z0to1(float4x4& matrixRHwithYup, const PerspProjection::Config& config) {
     const f32 h = 1.f / Math::tan(config.fov * 0.5f * Math::d2r_f);
     const f32 w = h / config.aspect;
     // maps each xyz axis to [0,1], not reversed-z (left handed, y points up z moves away from the viewer)
-    f32(&matrixCM)[16] = matrixRHwithYup.dataCM;
+    f32(&matrixCM)[16] = matrixRHwithYup.m;
     memset(matrixCM, 0, sizeof(f32) * 16);
     matrixCM[0] = w;
     matrixCM[5] = h;
@@ -106,15 +106,15 @@ void add_oblique_plane_to_persp_z0to1(float4x4& projectionMatrix, const float4& 
     // This makes a = 1 / dot(C,Q), which combined with M3 = a*C, gives us this
 
     float4 q;
-    q.x = Math::sign(planeCameraSpace.x) / projectionMatrix.dataCM[0];
-    q.y = Math::sign(planeCameraSpace.y) / projectionMatrix.dataCM[5];
+    q.x = Math::sign(planeCameraSpace.x) / projectionMatrix.m[0];
+    q.y = Math::sign(planeCameraSpace.y) / projectionMatrix.m[5];
     q.z = -1.f;
-    q.w = (1.f + projectionMatrix.dataCM[10]) / projectionMatrix.dataCM[14];
+    q.w = (1.f + projectionMatrix.m[10]) / projectionMatrix.m[14];
     float4 c = Math::scale(planeCameraSpace, (1.f / Math::dot(planeCameraSpace, q)));
-    projectionMatrix.dataCM[2] = c.x;
-    projectionMatrix.dataCM[6] = c.y;
-    projectionMatrix.dataCM[10] = c.z;
-    projectionMatrix.dataCM[14] = c.w;
+    projectionMatrix.m[2] = c.x;
+    projectionMatrix.m[6] = c.y;
+    projectionMatrix.m[10] = c.z;
+    projectionMatrix.m[14] = c.w;
 }
 
 void generate_MV_matrix(float4x4& modelview, const Transform& t) {
@@ -128,26 +128,26 @@ void generate_MV_matrix(float4x4& modelview, const Transform& t) {
     const f32 ty = -Math::dot(mRHwithYUp.col3, mRHwithYUp.col1);
     const f32 tz = -Math::dot(mRHwithYUp.col3, mRHwithYUp.col2);
 
-    modelview.dataCM[0] = mRHwithYUp.col0.x;
-    modelview.dataCM[4] = mRHwithYUp.col0.y;
-    modelview.dataCM[8] = mRHwithYUp.col0.z;
+    modelview.m[0] = mRHwithYUp.col0.x;
+    modelview.m[4] = mRHwithYUp.col0.y;
+    modelview.m[8] = mRHwithYUp.col0.z;
 
-    modelview.dataCM[1] = mRHwithYUp.col1.x;
-    modelview.dataCM[5] = mRHwithYUp.col1.y;
-    modelview.dataCM[9] = mRHwithYUp.col1.z;
+    modelview.m[1] = mRHwithYUp.col1.x;
+    modelview.m[5] = mRHwithYUp.col1.y;
+    modelview.m[9] = mRHwithYUp.col1.z;
 
-    modelview.dataCM[2] = mRHwithYUp.col2.x;
-    modelview.dataCM[6] = mRHwithYUp.col2.y;
-    modelview.dataCM[10] = mRHwithYUp.col2.z;
+    modelview.m[2] = mRHwithYUp.col2.x;
+    modelview.m[6] = mRHwithYUp.col2.y;
+    modelview.m[10] = mRHwithYUp.col2.z;
 
-    modelview.dataCM[12] = tx;
-    modelview.dataCM[13] = ty;
-    modelview.dataCM[14] = tz;
+    modelview.m[12] = tx;
+    modelview.m[13] = ty;
+    modelview.m[14] = tz;
 
-    modelview.dataCM[3] = mRHwithYUp.col0.w;
-    modelview.dataCM[7] = mRHwithYUp.col1.w;;
-    modelview.dataCM[11] = mRHwithYUp.col2.w;
-    modelview.dataCM[15] = mRHwithYUp.col3.w;
+    modelview.m[3] = mRHwithYUp.col0.w;
+    modelview.m[7] = mRHwithYUp.col1.w;;
+    modelview.m[11] = mRHwithYUp.col2.w;
+    modelview.m[15] = mRHwithYUp.col3.w;
 }
 
 void calculate_tangents(float3& t, float3& b, const float3& vbl, const float3& vtr, const float3& vtl) {
