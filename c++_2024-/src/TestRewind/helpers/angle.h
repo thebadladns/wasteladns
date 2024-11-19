@@ -1,11 +1,7 @@
 #ifndef __WASTELADNS_ANGLE_H__
 #define __WASTELADNS_ANGLE_H__
 
-#ifndef UNITYBUILD
-#include "vec.h"
-#endif
-
-namespace Math {
+namespace math {
     
 const f32 pi_f = 3.1415927410125732421875f;
 const f64 pi_d = 3.14159265358979311599796346854;

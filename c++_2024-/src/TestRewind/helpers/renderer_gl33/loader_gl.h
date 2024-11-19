@@ -3,8 +3,8 @@
 
 #if __WIN64
 #define APIENTRYP APIENTRY *
-namespace Renderer {
-namespace Driver {
+namespace renderer {
+namespace driver {
 static HMODULE glModule;
 void loadGLFramework() {
     glModule = LoadLibraryA("opengl32.dll");
@@ -21,8 +21,8 @@ void* getGLProcAddress(const char* name) {
 #elif __MACOS
 #define APIENTRY
 #define APIENTRYP APIENTRY *
-namespace Renderer {
-namespace Driver {
+namespace renderer {
+namespace driver {
 CFBundleRef glFramework;
 void loadGLFramework() {
     glFramework = CFBundleGetBundleWithIdentifier(CFSTR("com.apple.opengl"));
@@ -349,8 +349,8 @@ PFNGLSTENCILOPPROC glStencilOp;
 typedef void (APIENTRYP PFNGLDEBUGMESSAGECALLBACKPROC)(GLDEBUGPROC callback, const void* userParam);
 PFNGLDEBUGMESSAGECALLBACKPROC glDebugMessageCallback;
 
-namespace Renderer {
-namespace Driver {
+namespace renderer {
+namespace driver {
 void loadGLExtensions() {
     
     loadGLFramework();

@@ -1,7 +1,7 @@
 #ifndef __WASTELADNS_RENDERER_TYPES_H__
 #define __WASTELADNS_RENDERER_TYPES_H__
 
-namespace Renderer {
+namespace renderer {
 
     struct WindowProjection {
         struct Config {
@@ -36,7 +36,7 @@ namespace Renderer {
     void add_oblique_plane_to_persp_zneg1to1(float4x4& projectionMatrix, const float4& planeCameraSpace);
     void add_oblique_plane_to_persp_z0to1(float4x4& projectionMatrix, const float4& planeCameraSpace);
 
-    namespace Shaders {
+    namespace shaders {
         struct VS_src {
             const char* name;
             const char* src;
@@ -47,7 +47,7 @@ namespace Renderer {
         };
     }
     
-    namespace Driver {
+    namespace driver {
         struct RscMainRenderTarget;
         enum { RenderTarget_MaxCount = 4 };
         struct RscRenderTarget;

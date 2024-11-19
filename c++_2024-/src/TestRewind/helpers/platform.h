@@ -1,11 +1,7 @@
 #ifndef __WASTELADNS_PLATFORM_H__
 #define __WASTELADNS_PLATFORM_H__
 
-#ifndef UNITYBUILD
-#include "input.h"
-#endif
-
-namespace Platform
+namespace platform
 {
     struct LaunchConfig {
         const char* title;
@@ -39,14 +35,14 @@ namespace Platform
     };
     
     struct Input {
-        ::Input::Keyboard::State keyboard;
-		::Input::Mouse::State mouse;
-        ::Input::Gamepad::State pads[4];
+        ::input::keyboard::State keyboard;
+		::input::mouse::State mouse;
+        ::input::gamepad::State pads[4];
         u32 padCount;
     };
     
     struct Memory {
-        Allocator::Arena scratchArenaRoot;
+        allocator::Arena scratchArenaRoot;
         __DEBUGDEF(uintptr_t scratchArenaHighmark;)
     };
 
@@ -58,9 +54,8 @@ namespace Platform
     };
     
     void loadLaunchConfig(LaunchConfig& config);
-    //void start(_GameData& game, Platform::GameConfig& config, Platform::State& platform);
-    //void update(_GameData& game, Platform::GameConfig& config, Platform::State& platform);
+    //void start(_GameData& game, platform::GameConfig& config, platform::State& platform);
+    //void update(_GameData& game, platform::GameConfig& config, platform::State& platform);
 }
-namespace OS = Platform;
 
 #endif // __WASTELADNS_PLATFORM_H__

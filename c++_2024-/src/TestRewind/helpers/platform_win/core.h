@@ -35,7 +35,7 @@
     // already included by stb_image, does not incur in extra cost
     #include <stdlib.h> // Wall time: 10ms
 
-namespace Platform {
+namespace platform {
     const char* name = "WIN64+DX11";
 }
 #elif __GL33
@@ -43,7 +43,7 @@ namespace Platform {
     #pragma comment(lib, "opengl32.lib")
     #include "../renderer_gl33/loader_gl.h"
 
-namespace Platform {
+namespace platform {
     const char* name = "WIN64+GL";
 }
 #endif

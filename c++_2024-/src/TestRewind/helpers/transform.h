@@ -7,7 +7,7 @@
 
 // coordinate system = right handed Z up
 
-namespace Math {
+namespace math {
     const float3 rightAxis() { return { 1.f, 0.f, 0.f }; };
     const float3 frontAxis() { return { 0.f, 1.f, 0.f }; };
     const float3 upAxis() { return { 0.f, 0.f, 1.f }; };
@@ -49,19 +49,24 @@ struct Transform {
     };
 };
 
-namespace Math {
+struct Camera {
+    Transform transform;
+    float4x4 viewMatrix;
+};
+
+namespace math {
     
     // Match a given ZY plane: Z dir is enforced, Y may be recomputed
     float3x3 fromYTowardsZ(const float3& y, const float3& z) {
         float3x3 t;
         t.col2 = z;
-        t.col1 = Math::normalize(y);
-        t.col0 = Math::cross(t.col1, t.col2);
-        if (!Math::normalizeSafe(t.col0)) {
-            t.col2 = Math::normalize(Math::cross(float3(1.f, 0.f, 0.f), t.col1));
-            t.col0 = Math::cross(t.col1, t.col2);
+        t.col1 = math::normalize(y);
+        t.col0 = math::cross(t.col1, t.col2);
+        if (!math::normalizeSafe(t.col0)) {
+            t.col2 = math::normalize(math::cross(float3(1.f, 0.f, 0.f), t.col1));
+            t.col0 = math::cross(t.col1, t.col2);
         } else {
-            t.col2 = Math::normalize(Math::cross(t.col0, t.col1));
+            t.col2 = math::normalize(math::cross(t.col0, t.col1));
         }
         return t;
     }
@@ -70,13 +75,13 @@ namespace Math {
     float3x3 fromZTowardsY(const float3& z, const float3& y) {
         float3x3 t;
         t.col1 = y;
-        t.col2 = Math::normalize(z);
-        t.col0 = Math::cross(t.col1, t.col2);
-        if (!Math::normalizeSafe(t.col0)) {
-            t.col1 = Math::normalize(Math::cross(t.col2, float3(1.f, 0.f, 0.f)));
-            t.col0 = Math::cross(t.col1, t.col2);
+        t.col2 = math::normalize(z);
+        t.col0 = math::cross(t.col1, t.col2);
+        if (!math::normalizeSafe(t.col0)) {
+            t.col1 = math::normalize(math::cross(t.col2, float3(1.f, 0.f, 0.f)));
+            t.col0 = math::cross(t.col1, t.col2);
         } else {
-            t.col1 = Math::normalize(Math::cross(t.col2, t.col0));
+            t.col1 = math::normalize(math::cross(t.col2, t.col0));
         }
 
         return t;
@@ -96,13 +101,13 @@ namespace Math {
     }
 }
 
-namespace Math {
+namespace math {
     
     Transform fromPositionScaleAndRotationEulers(const float3& position, f32 scale, const float3& rotationEulers) {
        
         Transform t;
-        float4 toRotation = Math::eulersToQuaterion(rotationEulers);
-        float3x3 rotation = Math::quaternionToRotationMatrix(toRotation);
+        float4 toRotation = math::eulersToQuaterion(rotationEulers);
+        float3x3 rotation = math::quaternionToRotationMatrix(toRotation);
         t.matrix.col0.v[0] = scale * rotation.col0.v[0];
         t.matrix.col0.v[1] = scale * rotation.col0.v[1];
         t.matrix.col0.v[2] = scale * rotation.col0.v[2];
@@ -131,7 +136,7 @@ namespace Math {
         float3& pos = o_rh_yup_znegfront.col3.xyz;
         right = tRHwithZup.right;
         up = tRHwithZup.up;
-        back = Math::negate(tRHwithZup.front);
+        back = math::negate(tRHwithZup.front);
         pos = tRHwithZup.pos;
         o_rh_yup_znegfront.col0.w = 0.f;
         o_rh_yup_znegfront.col1.w = 0.f;

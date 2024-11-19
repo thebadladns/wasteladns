@@ -1,8 +1,8 @@
 #ifndef __WASTELADNS_SHADERS_H__
 #define __WASTELADNS_SHADERS_H__
 
-namespace Renderer {
-namespace Shaders {
+namespace renderer {
+namespace shaders {
 
 #if __DX11
 

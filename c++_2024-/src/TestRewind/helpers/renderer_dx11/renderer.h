@@ -1,12 +1,8 @@
 #ifndef __WASTELADNS_RENDERER_DX11_H__
 #define __WASTELADNS_RENDERER_DX11_H__
 
-#ifndef UNITYBUILD
-#include "core.h"
-#endif
-
-namespace Renderer {
-namespace Driver {
+namespace renderer {
+namespace driver {
 
     // Todo: clean this up
     ID3D11Device1* d3ddev;
@@ -77,7 +73,7 @@ namespace Driver {
 
         {
             for (u32 i = 0; i < params.count; i++) {
-                Renderer::Driver::TextureRenderTargetCreateParams texParams;
+                renderer::driver::TextureRenderTargetCreateParams texParams;
                 texParams.width = params.width;
                 texParams.height = params.height;
                 texParams.format = params.textureFormat;
@@ -335,7 +331,7 @@ namespace Driver {
             void* shaderBufferPointer = byteCode.data;
             size_t shaderBufferSize = byteCode.size;
 #elif READ_SHADERCACHE
-            Renderer::Driver::ShaderBytecode& byteCode = Renderer::Driver::shaderCache.shaderBytecode[Renderer::Driver::shaderCache.shaderBytecodeCount++];
+            renderer::driver::ShaderBytecode& byteCode = renderer::driver::shaderCache.shaderBytecode[renderer::driver::shaderCache.shaderBytecodeCount++];
             void* shaderBufferPointer = byteCode.data;
             size_t shaderBufferSize = byteCode.size;
 #endif
@@ -343,7 +339,7 @@ namespace Driver {
             d3ddev->CreateVertexShader(shaderBufferPointer, shaderBufferSize, nullptr, &vs.impl);
             d3ddev->CreateInputLayout(params.attribs, params.attrib_count, shaderBufferPointer, shaderBufferSize, &vs.inputLayout_impl);
         } else {
-            Platform::format(result.error, 128, "%.128s", error ? (char*)error : "Unknown shader error");
+            platform::format(result.error, 128, "%.128s", error ? (char*)error : "Unknown shader error");
         }
 
 #if WRITE_SHADERCHACHE
@@ -382,14 +378,14 @@ namespace Driver {
             void* shaderBufferPointer = byteCode.data;
             size_t shaderBufferSize = byteCode.size;
 #elif READ_SHADERCACHE
-            Renderer::Driver::ShaderBytecode& byteCode = Renderer::Driver::shaderCache.shaderBytecode[Renderer::Driver::shaderCache.shaderBytecodeCount++];
+            renderer::driver::ShaderBytecode& byteCode = renderer::driver::shaderCache.shaderBytecode[renderer::driver::shaderCache.shaderBytecodeCount++];
             void* shaderBufferPointer = byteCode.data;
             size_t shaderBufferSize = byteCode.size;
 #endif
 
             d3ddev->CreatePixelShader(shaderBufferPointer, shaderBufferSize, nullptr, &ps.impl);
         } else {
-            Platform::format(result.error, 128, "%.128s", error ? (char*)error : "Unknown shader error");
+            platform::format(result.error, 128, "%.128s", error ? (char*)error : "Unknown shader error");
         }
 
 #if WRITE_SHADERCHACHE

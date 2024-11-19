@@ -1,12 +1,7 @@
 #ifndef __WASTELADNS_RENDERER_H__
 #define __WASTELADNS_RENDERER_H__
 
-#ifndef UNITYBUILD
-#include <cstring>
-#include "renderer_debug.h"
-#endif
-
-namespace Renderer {
+namespace renderer {
 
 void generate_matrix_ortho_zneg1to1(float4x4& matrix, const WindowProjection::Config& config) {
     f32* matrixCM = matrix.m;
@@ -33,7 +28,7 @@ void generate_matrix_ortho_z0to1(float4x4& matrix, const WindowProjection::Confi
 
 // Expects right-handed view matrix, z-coordinate point towards the viewer
 void generate_matrix_persp_zneg1to1(float4x4& matrixRHwithYup, const PerspProjection::Config& config) {
-    const f32 h = 1.f / Math::tan(config.fov * 0.5f * Math::d2r_f);
+    const f32 h = 1.f / math::tan(config.fov * 0.5f * math::d2r_f);
     const f32 w = h / config.aspect;
     
     // maps each xyz axis to [-1,1], not reversed-z (left handed, y points up z moves away from the viewer)
@@ -60,22 +55,22 @@ void add_oblique_plane_to_persp_zneg1to1(float4x4& projectionMatrix, const float
     // dot(new_F,P) = 2*dot(M4,P) - a*dot(C,P) = 0, which means the new far plane intersects with the C plane on P, which is on the xy plane (no z coord). We find a point Q_proj on the edge
     // of the original far plane, Q_proj=(sign(C_proj.x),sign(C_proj.y),1,1), and claim that the sign of C_proj will be the same that of C.
     // We want our new far plane to go through Q_proj=(sign(C.x),sign(C.y),1,1), so in camera space, dot(new_F,Q)=0, then dot(new_F,Q) = 2*dot(M4,Q) - a*dot(C,Q) --> a = 2*dot(M4,Q) / dot(C,Q)
-    // Again, M4 is always (0,0,-1,0), so a = -2*Qz / dot(C,Q). With the projection P and inverse P_inv matrices in Renderer::generate_matrix_persp_zneg1to1,
+    // Again, M4 is always (0,0,-1,0), so a = -2*Qz / dot(C,Q). With the projection P and inverse P_inv matrices in renderer::generate_matrix_persp_zneg1to1,
     // Q = P_inv * Q_proj = (sign(C.x)/w,sign(C.y)/h,-1,1/f), which is Q = (sign(C.x)/P[0], sign(C.y)/P[5],-1.f,(1 + P[10]) / P[14])
     // This makes a = 2 / dot(C,Q), which combined with M3 = a*C - M4 = a*C - (0,0,-1,0), gives us this
     float4 q;
-    q.x = Math::sign(planeCameraSpace.x) / projectionMatrix.m[0];
-    q.y = Math::sign(planeCameraSpace.y) / projectionMatrix.m[5];
+    q.x = math::sign(planeCameraSpace.x) / projectionMatrix.m[0];
+    q.y = math::sign(planeCameraSpace.y) / projectionMatrix.m[5];
     q.z = -1.f;
     q.w = (1.f + projectionMatrix.m[10]) / projectionMatrix.m[14];
-    float4 c = Math::scale(planeCameraSpace, (2.f / Math::dot(planeCameraSpace, q)));
+    float4 c = math::scale(planeCameraSpace, (2.f / math::dot(planeCameraSpace, q)));
     projectionMatrix.m[2] = c.x;
     projectionMatrix.m[6] = c.y;
     projectionMatrix.m[10] = c.z + 1.f;
     projectionMatrix.m[14] = c.w;
 }
 void generate_matrix_persp_z0to1(float4x4& matrixRHwithYup, const PerspProjection::Config& config) {
-    const f32 h = 1.f / Math::tan(config.fov * 0.5f * Math::d2r_f);
+    const f32 h = 1.f / math::tan(config.fov * 0.5f * math::d2r_f);
     const f32 w = h / config.aspect;
     // maps each xyz axis to [0,1], not reversed-z (left handed, y points up z moves away from the viewer)
     f32(&matrixCM)[16] = matrixRHwithYup.m;
@@ -101,16 +96,16 @@ void add_oblique_plane_to_persp_z0to1(float4x4& projectionMatrix, const float4& 
     // dot(new_F,P) = dot(M4,P) - a*dot(C,P) = 0, which means the new far plane intersects with the C plane on P, which is on the xy plane (no z coord). We find a point Q_proj on the edge
     // of the original far plane, Q_proj=(sign(C_proj.x),sign(C_proj.y),1,1), and claim that the sign of C_proj will be the same that of C.
     // We want our new far plane to go through Q_proj=(sign(C.x),sign(C.y),1,1), so in camera space, dot(new_F,Q) = 0, then dot(new_F,Q) = dot(M4,Q) - a*dot(C,Q) -> a = dot(M4,Q) / dot(C,Q)
-    // Again, M4 is always (0,0,-1,0), so a = -Qz / dot(C,Q). With the projection P and inverse P_inv matrices in Renderer::generate_matrix_persp_z0to1,
+    // Again, M4 is always (0,0,-1,0), so a = -Qz / dot(C,Q). With the projection P and inverse P_inv matrices in renderer::generate_matrix_persp_z0to1,
     // Q = P_inv * Q_proj = (sign(C.x)/w,sign(C.y)/h,-1,1/f), which is Q = (sign(C.x)/P[0],sign(C.y)/P[5],-1.f,(1 + P[10]) / P[14])
     // This makes a = 1 / dot(C,Q), which combined with M3 = a*C, gives us this
 
     float4 q;
-    q.x = Math::sign(planeCameraSpace.x) / projectionMatrix.m[0];
-    q.y = Math::sign(planeCameraSpace.y) / projectionMatrix.m[5];
+    q.x = math::sign(planeCameraSpace.x) / projectionMatrix.m[0];
+    q.y = math::sign(planeCameraSpace.y) / projectionMatrix.m[5];
     q.z = -1.f;
     q.w = (1.f + projectionMatrix.m[10]) / projectionMatrix.m[14];
-    float4 c = Math::scale(planeCameraSpace, (1.f / Math::dot(planeCameraSpace, q)));
+    float4 c = math::scale(planeCameraSpace, (1.f / math::dot(planeCameraSpace, q)));
     projectionMatrix.m[2] = c.x;
     projectionMatrix.m[6] = c.y;
     projectionMatrix.m[10] = c.z;
@@ -119,14 +114,14 @@ void add_oblique_plane_to_persp_z0to1(float4x4& projectionMatrix, const float4& 
 
 void generate_MV_matrix(float4x4& modelview, const Transform& t) {
     
-    const float4x4 mRHwithYUp = Math::toEyeSpace(t);
+    const float4x4 mRHwithYUp = math::toEyeSpace(t);
 
     // Simplified inverse
     // https://www.gamedev.net/forums/topic/647149-d3dxmatrixlookatlh-internally/?tab=comments#comment-5089654
 
-    const f32 tx = -Math::dot(mRHwithYUp.col3, mRHwithYUp.col0);
-    const f32 ty = -Math::dot(mRHwithYUp.col3, mRHwithYUp.col1);
-    const f32 tz = -Math::dot(mRHwithYUp.col3, mRHwithYUp.col2);
+    const f32 tx = -math::dot(mRHwithYUp.col3, mRHwithYUp.col0);
+    const f32 ty = -math::dot(mRHwithYUp.col3, mRHwithYUp.col1);
+    const f32 tz = -math::dot(mRHwithYUp.col3, mRHwithYUp.col2);
 
     modelview.m[0] = mRHwithYUp.col0.x;
     modelview.m[4] = mRHwithYUp.col0.y;
@@ -152,19 +147,19 @@ void generate_MV_matrix(float4x4& modelview, const Transform& t) {
 
 void calculate_tangents(float3& t, float3& b, const float3& vbl, const float3& vtr, const float3& vtl) {
     const float2 bl = { 0.f, 0.f }, tr = { 1.f, 1.f }, tl = { 0.f, 1.f };
-    float3 worldH = Math::subtract(vbl, vtl);
-    float3 worldV = Math::subtract(vtr, vtl);
-    float2 uvV = Math::subtract(bl, tl);
-    float2 uvH = Math::subtract(tr, tl);
+    float3 worldH = math::subtract(vbl, vtl);
+    float3 worldV = math::subtract(vtr, vtl);
+    float2 uvV = math::subtract(bl, tl);
+    float2 uvH = math::subtract(tr, tl);
     f32 invdet = 1.0f / (uvV.x * uvH.y - uvH.x * uvV.y);
     t.x = invdet * (uvH.y * worldH.x - uvV.y * worldV.x);
     t.y = invdet * (uvH.y * worldH.y - uvV.y * worldV.y);
     t.z = invdet * (uvH.y * worldH.z - uvV.y * worldV.z);
-    t = Math::normalize(t);
+    t = math::normalize(t);
     b.x = invdet * (-uvH.x * worldH.x + uvV.x * worldV.x);
     b.y = invdet * (-uvH.x * worldH.y + uvV.x * worldV.y);
     b.z = invdet * (-uvH.x * worldH.z + uvV.x * worldV.z);
-    b = Math::normalize(b);
+    b = math::normalize(b);
 }
 struct CubeCreateParams {
     f32 width;
@@ -235,9 +230,9 @@ void create_untextured_cube_coords(UntexturedCube& c, const CubeCreateParams& pa
 }
 };
 
-namespace Renderer {
+namespace renderer {
 
-namespace Driver {
+namespace driver {
     
     struct MainRenderTargetParams {
         u32 width;
@@ -312,7 +307,7 @@ namespace Driver {
         u32 stageMask;
     };
     struct TextureBindingDesc {
-        //Driver::RscTexture texture; TODO???
+        //driver::RscTexture texture; TODO???
         const char* name;
     };
     struct ShaderSetRuntimeCompileParams {
@@ -415,49 +410,49 @@ namespace Driver {
 
 } // Driver
 
-void create_indexed_vertex_buffer_from_untextured_cube(Renderer::Driver::RscIndexedVertexBuffer& buffer, const CubeCreateParams& params) {
-    Renderer::UntexturedCube cube;
-    Renderer::create_untextured_cube_coords(cube, params);
-    Renderer::Driver::IndexedVertexBufferDesc bufferParams;
+void create_indexed_vertex_buffer_from_untextured_cube(renderer::driver::RscIndexedVertexBuffer& buffer, const CubeCreateParams& params) {
+    renderer::UntexturedCube cube;
+    renderer::create_untextured_cube_coords(cube, params);
+    renderer::driver::IndexedVertexBufferDesc bufferParams;
     bufferParams.vertexData = cube.vertices;
     bufferParams.indexData = cube.indices;
     bufferParams.vertexSize = sizeof(cube.vertices);
     bufferParams.vertexCount = COUNT_OF(cube.vertices);
     bufferParams.indexSize = sizeof(cube.indices);
     bufferParams.indexCount = COUNT_OF(cube.indices);
-    bufferParams.memoryUsage = Renderer::Driver::BufferMemoryUsage::GPU;
-    bufferParams.accessType = Renderer::Driver::BufferAccessType::GPU;
-    bufferParams.indexType = Renderer::Driver::BufferItemType::U16;
-    bufferParams.type = Renderer::Driver::BufferTopologyType::Triangles;
-    Driver::VertexAttribDesc attribs[] = {
-        Driver::make_vertexAttribDesc("POSITION", 0, sizeof(float3), Driver::BufferAttributeFormat::R32G32B32_FLOAT)
+    bufferParams.memoryUsage = renderer::driver::BufferMemoryUsage::GPU;
+    bufferParams.accessType = renderer::driver::BufferAccessType::GPU;
+    bufferParams.indexType = renderer::driver::BufferItemType::U16;
+    bufferParams.type = renderer::driver::BufferTopologyType::Triangles;
+    driver::VertexAttribDesc attribs[] = {
+        driver::make_vertexAttribDesc("POSITION", 0, sizeof(float3), driver::BufferAttributeFormat::R32G32B32_FLOAT)
     };
-    Renderer::Driver::create_indexed_vertex_buffer(buffer, bufferParams, attribs, COUNT_OF(attribs));
+    renderer::driver::create_indexed_vertex_buffer(buffer, bufferParams, attribs, COUNT_OF(attribs));
 }
-void create_indexed_vertex_buffer_from_colored_cube(Renderer::Driver::RscIndexedVertexBuffer& buffer, const CubeCreateParams& params) {
-    Renderer::ColoredCube cube;
-    Renderer::create_colored_cube_coords(cube, params);
-    Renderer::Driver::IndexedVertexBufferDesc bufferParams;
+void create_indexed_vertex_buffer_from_colored_cube(renderer::driver::RscIndexedVertexBuffer& buffer, const CubeCreateParams& params) {
+    renderer::ColoredCube cube;
+    renderer::create_colored_cube_coords(cube, params);
+    renderer::driver::IndexedVertexBufferDesc bufferParams;
     bufferParams.vertexData = cube.vertices;
     bufferParams.indexData = cube.indices;
     bufferParams.vertexSize = sizeof(cube.vertices);
     bufferParams.vertexCount = COUNT_OF(cube.vertices);
     bufferParams.indexSize = sizeof(cube.indices);
     bufferParams.indexCount = COUNT_OF(cube.indices);
-    bufferParams.memoryUsage = Renderer::Driver::BufferMemoryUsage::GPU;
-    bufferParams.accessType = Renderer::Driver::BufferAccessType::GPU;
-    bufferParams.indexType = Renderer::Driver::BufferItemType::U16;
-    bufferParams.type = Renderer::Driver::BufferTopologyType::Triangles;
-    Driver::VertexAttribDesc attribs[] = {
-        Driver::make_vertexAttribDesc("POSITION", OFFSET_OF(ColoredCube::Vertex, pos), sizeof(ColoredCube::Vertex), Driver::BufferAttributeFormat::R32G32B32_FLOAT),
-        Driver::make_vertexAttribDesc("COLOR", OFFSET_OF(ColoredCube::Vertex, color), sizeof(ColoredCube::Vertex), Driver::BufferAttributeFormat::R8G8B8A8_UNORM)
+    bufferParams.memoryUsage = renderer::driver::BufferMemoryUsage::GPU;
+    bufferParams.accessType = renderer::driver::BufferAccessType::GPU;
+    bufferParams.indexType = renderer::driver::BufferItemType::U16;
+    bufferParams.type = renderer::driver::BufferTopologyType::Triangles;
+    driver::VertexAttribDesc attribs[] = {
+        driver::make_vertexAttribDesc("POSITION", OFFSET_OF(ColoredCube::Vertex, pos), sizeof(ColoredCube::Vertex), driver::BufferAttributeFormat::R32G32B32_FLOAT),
+        driver::make_vertexAttribDesc("COLOR", OFFSET_OF(ColoredCube::Vertex, color), sizeof(ColoredCube::Vertex), driver::BufferAttributeFormat::R8G8B8A8_UNORM)
     };
-    Renderer::Driver::create_indexed_vertex_buffer(buffer, bufferParams, attribs, COUNT_OF(attribs));
+    renderer::driver::create_indexed_vertex_buffer(buffer, bufferParams, attribs, COUNT_OF(attribs));
 }
 struct ShaderDesc {
-    const Driver::VertexAttribDesc* vertexAttrs;
-    const Renderer::Driver::CBufferBindingDesc* bufferBindings;
-    const Renderer::Driver::TextureBindingDesc* textureBindings;
+    const driver::VertexAttribDesc* vertexAttrs;
+    const renderer::driver::CBufferBindingDesc* bufferBindings;
+    const renderer::driver::TextureBindingDesc* textureBindings;
     const char* vs_name;
     const char* ps_name;
     const char* vs_src;
@@ -467,24 +462,24 @@ struct ShaderDesc {
     u32 textureBinding_count;
 };
 
-void compile_shader(Driver::RscShaderSet& shader, const ShaderDesc& desc) {
-    Renderer::Driver::RscVertexShader vs;
-    Renderer::Driver::RscPixelShader ps;
-    Renderer::Driver::ShaderResult pixelResult;
-    Renderer::Driver::ShaderResult vertexResult;
-    vertexResult = Renderer::Driver::create_shader_vs(vs, { desc.vs_src, desc.vertexAttrs, (u32)strlen(desc.vs_src), desc.vertexAttr_count });
+void compile_shader(driver::RscShaderSet& shader, const ShaderDesc& desc) {
+    renderer::driver::RscVertexShader vs;
+    renderer::driver::RscPixelShader ps;
+    renderer::driver::ShaderResult pixelResult;
+    renderer::driver::ShaderResult vertexResult;
+    vertexResult = renderer::driver::create_shader_vs(vs, { desc.vs_src, desc.vertexAttrs, (u32)strlen(desc.vs_src), desc.vertexAttr_count });
     if (!vertexResult.compiled) {
-        Platform::debuglog("%s: %s\n", desc.vs_name, vertexResult.error);
+        platform::debuglog("%s: %s\n", desc.vs_name, vertexResult.error);
         return;
     }
-    pixelResult = Renderer::Driver::create_shader_ps(ps, { desc.ps_src, (u32)strlen(desc.ps_src) });
+    pixelResult = renderer::driver::create_shader_ps(ps, { desc.ps_src, (u32)strlen(desc.ps_src) });
     if (!pixelResult.compiled) {
-        Platform::debuglog("%s: %s\n", desc.ps_name, pixelResult.error);
+        platform::debuglog("%s: %s\n", desc.ps_name, pixelResult.error);
         return;
     }
-    Renderer::Driver::ShaderResult result = Renderer::Driver::create_shader_set(shader, { vs, ps, desc.bufferBindings, desc.textureBindings, desc.bufferBinding_count, desc.textureBinding_count });
+    renderer::driver::ShaderResult result = renderer::driver::create_shader_set(shader, { vs, ps, desc.bufferBindings, desc.textureBindings, desc.bufferBinding_count, desc.textureBinding_count });
     if (!result.compiled) {
-        Platform::debuglog("Linking %s & %s: %s\n", desc.vs_name, desc.ps_name, result.error);
+        platform::debuglog("Linking %s & %s: %s\n", desc.vs_name, desc.ps_name, result.error);
     }
 }
 } // Renderer

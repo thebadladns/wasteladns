@@ -7,7 +7,28 @@
 ;
 const u32 numCubes = 4;
 
-namespace Game
+#if __DEBUG
+namespace debug {
+struct OverlayMode { enum Enum { All, HelpOnly, ArenaOnly, None, Count }; };
+struct Debug3DView { enum Enum { Culling, All, None, Count }; };
+struct DebugCameraStage { enum Enum { Scene, SceneMirror, SceneMirrorClipped, Count }; };
+struct EventText {
+    char text[256];
+    f64 time;
+};
+
+f64 frameHistory[60];
+f64 frameAvg = 0;
+u64 frameHistoryIdx = 0;
+OverlayMode::Enum overlaymode = OverlayMode::Enum::All;
+Debug3DView::Enum debug3Dmode = Debug3DView::Enum::None;
+DebugCameraStage::Enum debugCameraStage = DebugCameraStage::Enum::Scene;
+float4x4 capturedCameras[DebugCameraStage::Count] = {};
+EventText eventLabel = {};
+}
+#endif
+
+namespace game
 {
     struct Time {
         struct Config {
@@ -24,58 +45,49 @@ namespace Game
         bool paused;
     };
 
-    namespace Input
+    namespace input
     {
-        constexpr ::Input::Keyboard::Keys::Enum
-              UP = ::Input::Keyboard::Keys::W
-            , DOWN = ::Input::Keyboard::Keys::S
-            , LEFT = ::Input::Keyboard::Keys::A
-            , RIGHT = ::Input::Keyboard::Keys::D
+        constexpr ::input::keyboard::Keys::Enum
+              UP = ::input::keyboard::Keys::W
+            , DOWN = ::input::keyboard::Keys::S
+            , LEFT = ::input::keyboard::Keys::A
+            , RIGHT = ::input::keyboard::Keys::D
             ;
-        constexpr ::Input::Keyboard::Keys::Enum
-              EXIT = ::Input::Keyboard::Keys::ESCAPE
-            , TOGGLE_OVERLAY = ::Input::Keyboard::Keys::H
-            , TOGGLE_DEBUG3D = ::Input::Keyboard::Keys::V
-            , CAPTURE_CAMERAS = ::Input::Keyboard::Keys::P
-            , TOGGLE_CAPTURED_CAMERA = ::Input::Keyboard::Keys::C
+        constexpr ::input::keyboard::Keys::Enum
+              EXIT = ::input::keyboard::Keys::ESCAPE
+            , TOGGLE_OVERLAY = ::input::keyboard::Keys::H
+            , TOGGLE_DEBUG3D = ::input::keyboard::Keys::V
+            , CAPTURE_CAMERAS = ::input::keyboard::Keys::P
+            , TOGGLE_CAPTURED_CAMERA = ::input::keyboard::Keys::C
+            , TOGGLE_FRUSTUM_CUT = ::input::keyboard::Keys::NUM0
+            , TOGGLE_FRUSTUM_NEAR = ::input::keyboard::Keys::NUM1
+            , TOGGLE_FRUSTUM_FAR = ::input::keyboard::Keys::NUM2
+            , TOGGLE_FRUSTUM_LEFT = ::input::keyboard::Keys::NUM3
+            , TOGGLE_FRUSTUM_RIGHT = ::input::keyboard::Keys::NUM4
+            , TOGGLE_FRUSTUM_BOTTOM = ::input::keyboard::Keys::NUM5
+            , TOGGLE_FRUSTUM_TOP = ::input::keyboard::Keys::NUM6
             ;
     };
 
     struct CameraManager {
         enum { FlyCam, CamCount };
         Camera cameras[CamCount];
-        Gameplay::Orbit::State orbitCamera;
+        gameplay::orbit::State orbitCamera;
         Camera* activeCam;
     };
 
     struct RenderManager {
-        Renderer::Store store;
-        __DEBUGDEF(Renderer::im::Context imCtx;)
-        Renderer::WindowProjection windowProjection;
-        Renderer::PerspProjection perspProjection;
+        renderer::Store store;
+        __DEBUGDEF(renderer::im::Context imCtx;)
+        renderer::WindowProjection windowProjection;
+        renderer::PerspProjection perspProjection;
     };
-
-    #if __DEBUG
-    struct DebugVis {
-        struct OverlayMode { enum Enum { All, HelpOnly, ArenaOnly, None, Count }; };
-        struct Debug3DView { enum Enum { All, Culling, None, Count }; };
-        struct DebugCameraStage { enum Enum { Scene, SceneMirror, SceneMirrorClipped, Count }; };
-
-        f64 frameHistory[60];
-        f64 frameAvg = 0;
-        u64 frameHistoryIdx = 0;
-        OverlayMode::Enum overlaymode = OverlayMode::Enum::All;
-        Debug3DView::Enum debug3Dmode = Debug3DView::Enum::None;
-        DebugCameraStage::Enum debugCameraStage = DebugCameraStage::Enum::Scene;
-        float4x4 capturedCameras[DebugCameraStage::Count] = {};
-    };
-    #endif
 
     struct Memory {
-        Allocator::Arena persistentArena;
-        __DEBUGDEF(Allocator::Arena imDebugArena;)
-        Allocator::Arena frameArena;
-        u8* frameArenaBuffer; // used to reset Allocator::frameArena every frame
+        allocator::Arena persistentArena;
+        __DEBUGDEF(allocator::Arena imDebugArena;)
+        allocator::Arena frameArena;
+        u8* frameArenaBuffer; // used to reset allocator::frameArena every frame
         __DEBUGDEF(u8* persistentArenaBuffer;) // used for debugging visualization
         __DEBUGDEF(uintptr_t frameArenaHighmark;)
     };
@@ -84,12 +96,11 @@ namespace Game
         Time time;
         CameraManager cameraMgr;
         RenderManager renderMgr;
-        Gameplay::Movement::State player;
+        gameplay::movement::State player;
         Memory memory;
-        __DEBUGDEF(DebugVis debugVis;)
     };
 
-    void loadLaunchConfig(Platform::LaunchConfig& config) {
+    void loadLaunchConfig(platform::LaunchConfig& config) {
         // hardcoded for now
         config.window_width = 320 * 3;
         config.window_height = 240 * 3;
@@ -100,7 +111,7 @@ namespace Game
 		config.scratchArena_size = 1 << 20; // 1MB
     }
 
-    void start(Instance& game, Platform::GameConfig& config, const Platform::State& platform) {
+    void start(Instance& game, platform::GameConfig& config, const platform::State& platform) {
 
         game.time = {};
         game.time.config.maxFrameLength = 0.1;
@@ -111,32 +122,32 @@ namespace Game
         config.nextFrame = platform.time.now;
 
         {
-            __DEBUGEXP(Allocator::init_arena(Allocator::emergencyArena, 1 << 20)); // 1MB
-            Allocator::init_arena(game.memory.persistentArena, 1 << 20); // 1MB
+            __DEBUGEXP(allocator::init_arena(allocator::emergencyArena, 1 << 20)); // 1MB
+            allocator::init_arena(game.memory.persistentArena, 1 << 20); // 1MB
             __DEBUGEXP(game.memory.persistentArenaBuffer = game.memory.persistentArena.curr);
-            Allocator::init_arena(game.memory.frameArena, 1 << 20); // 1MB
+            allocator::init_arena(game.memory.frameArena, 1 << 20); // 1MB
             game.memory.frameArenaBuffer = game.memory.frameArena.curr;
             __DEBUGEXP(game.memory.frameArenaHighmark = (uintptr_t)game.memory.frameArena.curr; game.memory.frameArena.highmark = &game.memory.frameArenaHighmark);
-            __DEBUGEXP(Allocator::init_arena(game.memory.imDebugArena, Renderer::im::arena_size));
+            __DEBUGEXP(allocator::init_arena(game.memory.imDebugArena, renderer::im::arena_size));
         }
 
 
 #if READ_SHADERCACHE
         { // shader cache
             FILE* f;
-            if (Platform::fopen(&f, "shaderCache.bin", "rb") == 0) {
+            if (platform::fopen(&f, "shaderCache.bin", "rb") == 0) {
                 u64 count;
                 fread(&count, sizeof(u64), 1, f);
-                Renderer::Driver::shaderCache.shaderBytecode = (Renderer::Driver::ShaderBytecode*)malloc(sizeof(Renderer::Driver::ShaderBytecode) * count);
+                renderer::driver::shaderCache.shaderBytecode = (renderer::driver::ShaderBytecode*)malloc(sizeof(renderer::driver::ShaderBytecode) * count);
                 for (u64 i = 0; i < count; i++) {
                     u64 size;
                     fread(&size, sizeof(u64), 1, f);
-                    Renderer::Driver::ShaderBytecode& shader = Renderer::Driver::shaderCache.shaderBytecode[i];
+                    renderer::driver::ShaderBytecode& shader = renderer::driver::shaderCache.shaderBytecode[i];
                     shader.data = (u8*)malloc(sizeof(u8) * size);
                     shader.size = size;
                     fread(shader.data, sizeof(u8), size, f);
                 }
-                Platform::fclose(f);
+                platform::fclose(f);
             }
         }
 #endif
@@ -144,7 +155,7 @@ namespace Game
         game.renderMgr = {};
         {
             RenderManager& mgr = game.renderMgr;
-            using namespace Renderer;
+            using namespace renderer;
 
             WindowProjection::Config& ortho = mgr.windowProjection.config;
             ortho.right = platform.screen.window_width * 0.5f;
@@ -167,14 +178,14 @@ namespace Game
         {
             // meshes in the scene
             game.renderMgr.store = {};
-            Renderer::init_pipelines(game.renderMgr.store, platform.memory.scratchArenaRoot, platform.screen);
-            __DEBUGEXP(Renderer::im::init(game.renderMgr.imCtx, game.memory.imDebugArena));
+            renderer::init_pipelines(game.renderMgr.store, platform.memory.scratchArenaRoot, platform.screen);
+            __DEBUGEXP(renderer::im::init(game.renderMgr.imCtx, game.memory.imDebugArena));
         }
 
         game.player = {};
         {
-            Math::identity4x4(game.player.transform);
-            Renderer::NodeData& nodeData = Renderer::get_draw_node_core(game.renderMgr.store, game.renderMgr.store.playerDrawNodeHandle).nodeData;
+            math::identity4x4(game.player.transform);
+            renderer::NodeData& nodeData = renderer::get_draw_node_core(game.renderMgr.store, game.renderMgr.store.playerDrawNodeHandle).nodeData;
             game.player.transform.pos = nodeData.worldMatrix.col3.xyz;
         }
 
@@ -185,7 +196,7 @@ namespace Game
             mgr.activeCam = &cam;
 
             mgr.orbitCamera.offset = float3(0.f, -100.f, 0.f);
-            mgr.orbitCamera.eulers = float3(45.f * Math::d2r_f, 0.f, -25.f * Math::d2r_f);
+            mgr.orbitCamera.eulers = float3(45.f * math::d2r_f, 0.f, -25.f * math::d2r_f);
             mgr.orbitCamera.scale = 1.f;
             mgr.orbitCamera.origin = float3(0.f, 0.f, 0.f);
         }
@@ -193,28 +204,28 @@ namespace Game
 #if WRITE_SHADERCACHE
         { // shader cache
             FILE* f;
-            if (Platform::fopen(&f, "shaderCache.bin", "wb") == 0) {
-                fwrite(&Renderer::Driver::shaderCache.shaderBytecodeCount, sizeof(u64), 1, f);
-                for (size_t i = 0; i < Renderer::Driver::shaderCache.shaderBytecodeCount; i++) {
-                    fwrite(&Renderer::Driver::shaderCache.shaderBytecode[i].size, sizeof(u64), 1, f);
-                    fwrite(Renderer::Driver::shaderCache.shaderBytecode[i].data, sizeof(u8), Renderer::Driver::shaderCache.shaderBytecode[i].size, f);
+            if (platform::fopen(&f, "shaderCache.bin", "wb") == 0) {
+                fwrite(&renderer::driver::shaderCache.shaderBytecodeCount, sizeof(u64), 1, f);
+                for (size_t i = 0; i < renderer::driver::shaderCache.shaderBytecodeCount; i++) {
+                    fwrite(&renderer::driver::shaderCache.shaderBytecode[i].size, sizeof(u64), 1, f);
+                    fwrite(renderer::driver::shaderCache.shaderBytecode[i].data, sizeof(u8), renderer::driver::shaderCache.shaderBytecode[i].size, f);
                 }
-                Platform::fclose(f);
+                platform::fclose(f);
             }
         }
 #endif
 #if WRITE_SHADERCACHE || READ_SHADERCACHE
 		{ // shader cache cleanup
-			for (u64 i = 0; i < Renderer::Driver::shaderCache.shaderBytecodeCount; i++) {
-				free(Renderer::Driver::shaderCache.shaderBytecode[i].data);
+			for (u64 i = 0; i < renderer::driver::shaderCache.shaderBytecodeCount; i++) {
+				free(renderer::driver::shaderCache.shaderBytecode[i].data);
 			}
-			free(Renderer::Driver::shaderCache.shaderBytecode);
+			free(renderer::driver::shaderCache.shaderBytecode);
         }
 #endif
 
     }
 
-    void update(Instance& game, Platform::GameConfig& config, Platform::State& platform) {
+    void update(Instance& game, platform::GameConfig& config, platform::State& platform) {
 
         // frame arena reset
         game.memory.frameArena.curr = game.memory.frameArenaBuffer;
@@ -222,39 +233,46 @@ namespace Game
         // frame timing calculations
         {
             f64 raw_dt = platform.time.now - game.time.lastFrame;
-            game.time.lastFrameDelta = Math::min(raw_dt, game.time.config.maxFrameLength);
+            game.time.lastFrameDelta = math::min(raw_dt, game.time.config.maxFrameLength);
             game.time.lastFrame = platform.time.now;
             config.nextFrame = platform.time.now + game.time.config.targetFramerate;
 
             #if __DEBUG
             {
                 f64 frameAvg = 0.;
-                constexpr u64 frameHistoryCount = (sizeof(game.debugVis.frameHistory) / sizeof(game.debugVis.frameHistory[0]));
-                game.debugVis.frameHistory[game.debugVis.frameHistoryIdx] = raw_dt;
-                game.debugVis.frameHistoryIdx = (game.debugVis.frameHistoryIdx + 1) % frameHistoryCount;
-                for (f64 dt : game.debugVis.frameHistory) {
+                constexpr u64 frameHistoryCount = (sizeof(debug::frameHistory) / sizeof(debug::frameHistory[0]));
+                debug::frameHistory[debug::frameHistoryIdx] = raw_dt;
+                debug::frameHistoryIdx = (debug::frameHistoryIdx + 1) % frameHistoryCount;
+                for (f64 dt : debug::frameHistory) {
                     frameAvg += dt;
                 }
                 // miscalculated until the queue is full, but that's just the first second
                 frameAvg /= frameHistoryCount;
-                game.debugVis.frameAvg = frameAvg;
+                debug::frameAvg = frameAvg;
             }
             #endif
         }
 
         // meta input checks
-        const ::Input::Keyboard::State& keyboard = platform.input.keyboard;
+        const ::input::keyboard::State& keyboard = platform.input.keyboard;
         bool step = true;
         bool captureCameras = false;
         {
-            if (keyboard.released(Input::EXIT)) {
+            if (keyboard.released(input::EXIT)) {
                 config.quit = true;
             }
             #if __DEBUG
-            if (keyboard.pressed(Input::TOGGLE_OVERLAY)) { game.debugVis.overlaymode = (DebugVis::OverlayMode::Enum)((game.debugVis.overlaymode + 1) % DebugVis::OverlayMode::Count); }
-            if (keyboard.pressed(Input::TOGGLE_DEBUG3D)) { game.debugVis.debug3Dmode = (DebugVis::Debug3DView::Enum)((game.debugVis.debug3Dmode + 1) % DebugVis::Debug3DView::Count); }
-            if (keyboard.pressed(Input::TOGGLE_CAPTURED_CAMERA)) { game.debugVis.debugCameraStage = (DebugVis::DebugCameraStage::Enum)((game.debugVis.debugCameraStage + 1) % DebugVis::DebugCameraStage::Count); }
-            if (keyboard.pressed(Input::CAPTURE_CAMERAS)) { captureCameras = true; }
+            if (keyboard.pressed(input::TOGGLE_OVERLAY)) { debug::overlaymode = (debug::OverlayMode::Enum)((debug::overlaymode + 1) % debug::OverlayMode::Count); }
+            if (keyboard.pressed(input::TOGGLE_DEBUG3D)) { debug::debug3Dmode = (debug::Debug3DView::Enum)((debug::debug3Dmode + 1) % debug::Debug3DView::Count); }
+            if (keyboard.pressed(input::TOGGLE_CAPTURED_CAMERA)) { debug::debugCameraStage = (debug::DebugCameraStage::Enum)((debug::debugCameraStage + 1) % debug::DebugCameraStage::Count); }
+            if (keyboard.pressed(input::CAPTURE_CAMERAS)) { captureCameras = true; }
+            if (keyboard.pressed(input::TOGGLE_FRUSTUM_CUT)) { debug::force_cut_frustum = !debug::force_cut_frustum; }
+            if (keyboard.pressed(::input::keyboard::Keys::Enum(input::TOGGLE_FRUSTUM_NEAR))) { debug::frustum_planes_off[0] = !debug::frustum_planes_off[0]; }
+            if (keyboard.pressed(::input::keyboard::Keys::Enum(input::TOGGLE_FRUSTUM_FAR))) { debug::frustum_planes_off[1] = !debug::frustum_planes_off[1]; }
+            if (keyboard.pressed(::input::keyboard::Keys::Enum(input::TOGGLE_FRUSTUM_LEFT))) { debug::frustum_planes_off[2] = !debug::frustum_planes_off[2]; }
+            if (keyboard.pressed(::input::keyboard::Keys::Enum(input::TOGGLE_FRUSTUM_RIGHT))) { debug::frustum_planes_off[3] = !debug::frustum_planes_off[3]; }
+            if (keyboard.pressed(::input::keyboard::Keys::Enum(input::TOGGLE_FRUSTUM_BOTTOM))) { debug::frustum_planes_off[4] = !debug::frustum_planes_off[4]; }
+            if (keyboard.pressed(::input::keyboard::Keys::Enum(input::TOGGLE_FRUSTUM_TOP))) { debug::frustum_planes_off[5] = !debug::frustum_planes_off[5]; }
             #endif      
             step = !game.time.paused;
         }
@@ -263,26 +281,26 @@ namespace Game
         {
             f32 dt = (f32)(game.time.lastFrameDelta * (1.0 + game.time.updateOverspeed));
 
-            using namespace Game;
+            using namespace game;
 
             Camera* activeCam = game.cameraMgr.activeCam;
 
             // player movement update
             {
                 if (platform.input.padCount > 0) {
-                    Gameplay::Movement::process(game.player.control, platform.input.pads[0]);
+                    gameplay::movement::process(game.player.control, platform.input.pads[0]);
                 }
                 else {
-                    Gameplay::Movement::process(game.player.control, keyboard, { Input::UP, Input::DOWN, Input::LEFT, Input::RIGHT });
+                    gameplay::movement::process(game.player.control, keyboard, { input::UP, input::DOWN, input::LEFT, input::RIGHT });
                 }
-                Gameplay::Movement::process_cameraRelative(game.player.transform, game.player.movementController, game.player.control, activeCam->transform, dt);
+                gameplay::movement::process_cameraRelative(game.player.transform, game.player.movementController, game.player.control, activeCam->transform, dt);
 
                 // update player render
-                Renderer::NodeData& nodeData = Renderer::get_draw_node_core(game.renderMgr.store, game.renderMgr.store.playerDrawNodeHandle).nodeData;
+                renderer::NodeData& nodeData = renderer::get_draw_node_core(game.renderMgr.store, game.renderMgr.store.playerDrawNodeHandle).nodeData;
                 nodeData.worldMatrix = game.player.transform.matrix;
 
                 { // animation hack
-                    Animation::AnimatedNode& animatedData = Renderer::get_animatedNode(game.renderMgr.store, game.renderMgr.store.playerAnimatedNodeHandle);
+                    animation::AnimatedNode& animatedData = renderer::get_animatedNode(game.renderMgr.store, game.renderMgr.store.playerAnimatedNodeHandle);
 
                     enum Cycle { Idle = 0, JerkyRun = 1, Run = 2 };
                     const f32 maxSpeed = 15.f;
@@ -307,9 +325,9 @@ namespace Game
                     f32 particle_totalscale = 0.7f;
                     if (game.player.movementController.speed > jerkyRunSpeedStart) {
 						const f32 run_t = (game.player.movementController.speed - jerkyRunSpeedStart) / (maxSpeed - jerkyRunSpeedStart);
-                        const f32 scale = 1.f + Math::lerp(run_t, jerkyRunMinScale, jerkyRunMaxScale);
-                        particle_scaley = Math::lerp(run_t, jerkyRunParticleMinScaley, jerkyRunParticleMaxScaley);
-                        particle_scalez = Math::lerp(run_t, jerkyRunParticleMinScalez, jerkyRunParticleMaxScalez);
+                        const f32 scale = 1.f + math::lerp(run_t, jerkyRunMinScale, jerkyRunMaxScale);
+                        particle_scaley = math::lerp(run_t, jerkyRunParticleMinScaley, jerkyRunParticleMaxScaley);
+                        particle_scalez = math::lerp(run_t, jerkyRunParticleMinScalez, jerkyRunParticleMaxScalez);
                         particle_offsety = 0.3f;
                         animatedData.state.scale = scale;
                         if (animatedData.state.animIndex != 1) {
@@ -318,10 +336,10 @@ namespace Game
                         }
                     } else if (game.player.movementController.speed > 0.2f) {
                         const f32 run_t = (game.player.movementController.speed - runSpeedStart) / (jerkyRunSpeedStart - runSpeedStart);
-                        const f32 scale = 1.f + Math::lerp(run_t, runMinScale, runMaxScale);
-                        particle_scaley = Math::lerp(run_t, runParticleMinScaley, runParticleMaxScaley);
-                        particle_scalez = Math::lerp(run_t, runParticleMinScalez, runParticleMaxScalez);
-                        particle_offsetz = Math::lerp(run_t, runParticleMinOffsetz, runParticleMaxOffsetz);
+                        const f32 scale = 1.f + math::lerp(run_t, runMinScale, runMaxScale);
+                        particle_scaley = math::lerp(run_t, runParticleMinScaley, runParticleMaxScaley);
+                        particle_scalez = math::lerp(run_t, runParticleMinScalez, runParticleMaxScalez);
+                        particle_offsetz = math::lerp(run_t, runParticleMinOffsetz, runParticleMaxOffsetz);
                         particle_totalscale = 0.6f;
                         animatedData.state.scale = scale;
                         if (animatedData.state.animIndex != 2) {
@@ -341,9 +359,9 @@ namespace Game
                     }
 
                     // dust particles hack
-                    Renderer::Matrices64* instance_matrices;
+                    renderer::Matrices64* instance_matrices;
                     u32* instance_count;
-                    Renderer::get_draw_instanced_data(instance_matrices, instance_count, game.renderMgr.store, game.renderMgr.store.particlesDrawHandle);
+                    renderer::get_draw_instanced_data(instance_matrices, instance_count, game.renderMgr.store, game.renderMgr.store.particlesDrawHandle);
                     for (u32 i = 0; i < *instance_count; i++) {
 
                         const f32 scaley = particle_scaley;
@@ -353,15 +371,15 @@ namespace Game
                         const f32 scale = particle_totalscale;
 
                         Transform t;
-                        Math::identity4x4(t);
-                        t.pos = Math::add(game.player.transform.pos, Math::scale(game.player.transform.front, offsety + scaley * (i + 2)));
-                        t.pos.z = t.pos.z + offsetz + scalez * (Math::cos((f32)platform.time.now * 10.f + i * 2.f) - 1.5f);
+                        math::identity4x4(t);
+                        t.pos = math::add(game.player.transform.pos, math::scale(game.player.transform.front, offsety + scaley * (i + 2)));
+                        t.pos.z = t.pos.z + offsetz + scalez * (math::cos((f32)platform.time.now * 10.f + i * 2.f) - 1.5f);
                         t.matrix.col0.x = 0.2f;
                         t.matrix.col1.y = 0.2f;
                         t.matrix.col2.z = 0.2f;
-                        t.matrix.col0 = Math::scale(t.matrix.col0, scale);
-                        t.matrix.col1 = Math::scale(t.matrix.col1, scale);
-                        t.matrix.col2 = Math::scale(t.matrix.col2, scale);
+                        t.matrix.col0 = math::scale(t.matrix.col0, scale);
+                        t.matrix.col1 = math::scale(t.matrix.col1, scale);
+                        t.matrix.col2 = math::scale(t.matrix.col2, scale);
 
                         instance_matrices->data[i] = t.matrix;
                     }
@@ -369,14 +387,14 @@ namespace Game
 
                 // anim update
                 {
-                    Renderer::Store& store = game.renderMgr.store;
+                    renderer::Store& store = game.renderMgr.store;
                     for (u32 n = 0, count = 0; n < store.animatedNodes.cap && count < store.animatedNodes.count; n++) {
                         if (store.animatedNodes.data[n].alive == 0) { continue; }
                         count++;
 
-                        Animation::AnimatedNode& animatedData = store.animatedNodes.data[n].state.live;
-                        Renderer::Matrices32& skinningData = Renderer::get_draw_skinning_data(game.renderMgr.store, animatedData.drawNodeHandle );
-                        Animation::updateAnimation(skinningData.data, animatedData.state, animatedData.clips[animatedData.state.animIndex], animatedData.skeleton, dt);
+                        animation::AnimatedNode& animatedData = store.animatedNodes.data[n].state.live;
+                        renderer::Matrices32& skinningData = renderer::get_draw_skinning_data(game.renderMgr.store, animatedData.drawNodeHandle );
+                        animation::updateAnimation(skinningData.data, animatedData.state, animatedData.clips[animatedData.state.animIndex], animatedData.skeleton, dt);
                     }
                 }
             }
@@ -384,22 +402,22 @@ namespace Game
             // camera update
             {
                 if (platform.input.padCount > 0) {
-                    Gameplay::Orbit::process(game.cameraMgr.orbitCamera, platform.input.pads[0]);
+                    gameplay::orbit::process(game.cameraMgr.orbitCamera, platform.input.pads[0]);
                 } else {
-                    Gameplay::Orbit::process(game.cameraMgr.orbitCamera, platform.input.mouse);
+                    gameplay::orbit::process(game.cameraMgr.orbitCamera, platform.input.mouse);
                 }
-                Gameplay::Orbit::process(activeCam->transform, game.cameraMgr.orbitCamera);
+                gameplay::orbit::process(activeCam->transform, game.cameraMgr.orbitCamera);
                 // send camera data to render manager
-                Renderer::generate_MV_matrix(activeCam->viewMatrix, activeCam->transform);
+                renderer::generate_MV_matrix(activeCam->viewMatrix, activeCam->transform);
             }
         }
 
         //Render update
-        Renderer::VisibleNodes* visibleNodes, * mirrorVisibleNodes; // todo: move these two somewhere?
+        renderer::VisibleNodes* visibleNodes, * mirrorVisibleNodes; // todo: move these two somewhere?
         {
             RenderManager& mgr = game.renderMgr;
-            Renderer::Store& store = mgr.store;
-            using namespace Renderer;
+            renderer::Store& store = mgr.store;
+            using namespace renderer;
 
             Camera* activeCam = game.cameraMgr.activeCam;
             float4x4 viewMatrix = activeCam->viewMatrix;
@@ -407,40 +425,40 @@ namespace Game
 
             // perspective cam set up
             float4x4 vpMatrix;
-            Driver::RscCBuffer& scene_cbuffer = store.cbuffers[store.cbuffer_scene];
-            Renderer::SceneData cbufferPerScene;
+            driver::RscCBuffer& scene_cbuffer = store.cbuffers[store.cbuffer_scene];
+            renderer::SceneData cbufferPerScene;
             {
                 cbufferPerScene.projectionMatrix = mgr.perspProjection.matrix;
                 cbufferPerScene.viewMatrix = viewMatrix;
                 cbufferPerScene.viewPos = viewMatrix.col3.xyz;
                 cbufferPerScene.lightPos = float3(3.f, 8.f, 15.f);
-                Renderer::Driver::update_cbuffer(scene_cbuffer, &cbufferPerScene);
-                vpMatrix = Math::mult(mgr.perspProjection.matrix, viewMatrix);
-                __DEBUGEXP(if (captureCameras) { game.debugVis.capturedCameras[DebugVis::DebugCameraStage::Scene] = vpMatrix; });
+                renderer::driver::update_cbuffer(scene_cbuffer, &cbufferPerScene);
+                vpMatrix = math::mult(mgr.perspProjection.matrix, viewMatrix);
+                __DEBUGEXP(if (captureCameras) { debug::capturedCameras[debug::DebugCameraStage::Scene] = vpMatrix; });
             }
 
             {
                 {
-                    Driver::ViewportParams vpParams;
+                    driver::ViewportParams vpParams;
                     vpParams.topLeftX = 0;
                     vpParams.topLeftY = 0;
                     vpParams.width = (f32)platform.screen.width;
                     vpParams.height = (f32)platform.screen.height;
                     vpParams.minDepth = 0.f;
                     vpParams.maxDepth = 1.f;
-                    Driver::set_VP(vpParams);
+                    driver::set_VP(vpParams);
                 }
             
                 // cull nodes
                 {
                     {
-                        visibleNodes = (VisibleNodes*)Allocator::alloc_arena(game.memory.frameArena, sizeof(VisibleNodes), alignof(VisibleNodes));
+                        visibleNodes = (VisibleNodes*)allocator::alloc_arena(game.memory.frameArena, sizeof(VisibleNodes), alignof(VisibleNodes));
                         memset(visibleNodes, 0, sizeof(VisibleNodes));
                         computeVisibility(*visibleNodes, vpMatrix, store);
                     }
 
                     // set up mirror scene if mirror is visible
-                    mirrorVisibleNodes = (VisibleNodes*)Allocator::alloc_arena(game.memory.frameArena, sizeof(VisibleNodes), alignof(VisibleNodes));
+                    mirrorVisibleNodes = (VisibleNodes*)allocator::alloc_arena(game.memory.frameArena, sizeof(VisibleNodes), alignof(VisibleNodes));
                     memset(mirrorVisibleNodes, 0, sizeof(VisibleNodes));
                     for (u32 i = 0; i < visibleNodes->visible_nodes_count; i++) {
                         u32 n = visibleNodes->visible_nodes[i];
@@ -457,17 +475,17 @@ namespace Game
                                 return o;
                             };
                             
-                            float4 plane { store.mirror.normal.x, store.mirror.normal.y, store.mirror.normal.z, -Math::dot(store.mirror.pos, store.mirror.normal) };
+                            float4 plane { store.mirror.normal.x, store.mirror.normal.y, store.mirror.normal.z, -math::dot(store.mirror.pos, store.mirror.normal) };
                             float4x4 reflect = reflectionMatrix(plane);
-                            mirrorViewMatrix = Math::mult(viewMatrix, reflect);
+                            mirrorViewMatrix = math::mult(viewMatrix, reflect);
                             mirrorProjectionMatrix = mgr.perspProjection.matrix;
-                            __DEBUGEXP(if (captureCameras) { game.debugVis.capturedCameras[DebugVis::DebugCameraStage::SceneMirror] = Math::mult(mirrorProjectionMatrix, mirrorViewMatrix); });
-                            float3 normalCameraSpace = Math::mult(mirrorViewMatrix, float4(store.mirror.normal, 0.f)).xyz;
-                            float3 posCameraSpace = Math::mult(mirrorViewMatrix, float4(store.mirror.pos, 1.f)).xyz;
-                            float4 pCameraSpace{ normalCameraSpace.x, normalCameraSpace.y, normalCameraSpace.z, -Math::dot(posCameraSpace, normalCameraSpace) };
+                            __DEBUGEXP(if (captureCameras) { debug::capturedCameras[debug::DebugCameraStage::SceneMirror] = math::mult(mirrorProjectionMatrix, mirrorViewMatrix); });
+                            float3 normalCameraSpace = math::mult(mirrorViewMatrix, float4(store.mirror.normal, 0.f)).xyz;
+                            float3 posCameraSpace = math::mult(mirrorViewMatrix, float4(store.mirror.pos, 1.f)).xyz;
+                            float4 pCameraSpace{ normalCameraSpace.x, normalCameraSpace.y, normalCameraSpace.z, -math::dot(posCameraSpace, normalCameraSpace) };
                             add_oblique_plane_to_persp(mirrorProjectionMatrix, pCameraSpace);
-                            mirrorVPMatrix = Math::mult(mirrorProjectionMatrix, mirrorViewMatrix);
-                            __DEBUGEXP(if (captureCameras) { game.debugVis.capturedCameras[DebugVis::DebugCameraStage::SceneMirrorClipped] = mirrorVPMatrix; });
+                            mirrorVPMatrix = math::mult(mirrorProjectionMatrix, mirrorViewMatrix);
+                            __DEBUGEXP(if (captureCameras) { debug::capturedCameras[debug::DebugCameraStage::SceneMirrorClipped] = mirrorVPMatrix; });
                             computeVisibility(*mirrorVisibleNodes, mirrorVPMatrix, store);
 
                             break;
@@ -477,29 +495,29 @@ namespace Game
                 // update visible nodes
                 {
                     // figure out which nodes are visible among all of the visibility lists
-                    Allocator::Arena scratchArena = platform.memory.scratchArenaRoot;
-                    bool* nodesToUpdate = (bool*)Allocator::alloc_arena(scratchArena, store.drawNodes.count * sizeof(bool), alignof(bool));
+                    allocator::Arena scratchArena = platform.memory.scratchArenaRoot;
+                    bool* nodesToUpdate = (bool*)allocator::alloc_arena(scratchArena, store.drawNodes.count * sizeof(bool), alignof(bool));
                     memset(nodesToUpdate, 0, store.drawNodes.count * sizeof(bool));
                     for (u32 i = 0; i < visibleNodes->visible_nodes_count; i++) {
                         u32 n = visibleNodes->visible_nodes[i];
-                        u32 index = Allocator::get_pool_index(store.drawNodes, store.drawNodes.data[n].state.live);
+                        u32 index = allocator::get_pool_index(store.drawNodes, store.drawNodes.data[n].state.live);
                         nodesToUpdate[index] = true;
                     }
-                    bool* nodesSkinnedToUpdate = (bool*)Allocator::alloc_arena(scratchArena, store.drawNodesSkinned.count * sizeof(bool), alignof(bool));
+                    bool* nodesSkinnedToUpdate = (bool*)allocator::alloc_arena(scratchArena, store.drawNodesSkinned.count * sizeof(bool), alignof(bool));
                     memset(nodesSkinnedToUpdate, 0, store.drawNodesSkinned.count * sizeof(bool));
                     for (u32 i = 0; i < visibleNodes->visible_nodes_skinned_count; i++) {
                         u32 n = visibleNodes->visible_nodes_skinned[i];
-                        u32 index = Allocator::get_pool_index(store.drawNodesSkinned, store.drawNodesSkinned.data[n].state.live);
+                        u32 index = allocator::get_pool_index(store.drawNodesSkinned, store.drawNodesSkinned.data[n].state.live);
                         nodesSkinnedToUpdate[index] = true;
                     }
                     for (u32 i = 0; i < mirrorVisibleNodes->visible_nodes_count; i++) {
                         u32 n = mirrorVisibleNodes->visible_nodes[i];
-                        u32 index = Allocator::get_pool_index(store.drawNodes, store.drawNodes.data[n].state.live);
+                        u32 index = allocator::get_pool_index(store.drawNodes, store.drawNodes.data[n].state.live);
                         nodesToUpdate[index] = true;
                     }
                     for (u32 i = 0; i < mirrorVisibleNodes->visible_nodes_skinned_count; i++) {
                         u32 n = mirrorVisibleNodes->visible_nodes_skinned[i];
-                        u32 index = Allocator::get_pool_index(store.drawNodesSkinned, store.drawNodesSkinned.data[n].state.live);
+                        u32 index = allocator::get_pool_index(store.drawNodesSkinned, store.drawNodesSkinned.data[n].state.live);
                         nodesSkinnedToUpdate[index] = true;
                     }
 
@@ -509,75 +527,141 @@ namespace Game
                         count++;
                         const DrawNode& node = store.drawNodes.data[n].state.live;
                         if (!nodesToUpdate[n]) continue;
-                        Driver::update_cbuffer(store.cbuffers[node.cbuffer_node], &node.nodeData);
+                        driver::update_cbuffer(store.cbuffers[node.cbuffer_node], &node.nodeData);
                     }
                     for (u32 n = 0, count = 0; n < store.drawNodesSkinned.cap && count < store.drawNodesSkinned.count; n++) {
                         if (store.drawNodesSkinned.data[n].alive == 0) { continue; }
                         count++;
                         const DrawNodeSkinned& node = store.drawNodesSkinned.data[n].state.live;
                         if (!nodesSkinnedToUpdate[n]) continue;
-                        Driver::update_cbuffer(store.cbuffers[node.core.cbuffer_node], &node.core.nodeData);
-                        Driver::update_cbuffer(store.cbuffers[node.cbuffer_skinning], &node.skinningMatrixPalette);
+                        driver::update_cbuffer(store.cbuffers[node.core.cbuffer_node], &node.core.nodeData);
+                        driver::update_cbuffer(store.cbuffers[node.cbuffer_skinning], &node.skinningMatrixPalette);
                     }
                     for (u32 n = 0, count = 0; n < store.drawNodesInstanced.cap && count < store.drawNodesInstanced.count; n++) {
                         if (store.drawNodesInstanced.data[n].alive == 0) { continue; }
                         count++;
                         const DrawNodeInstanced& node = store.drawNodesInstanced.data[n].state.live;
-                        Driver::update_cbuffer(store.cbuffers[node.core.cbuffer_node], &node.core.nodeData);
-                        Driver::update_cbuffer(store.cbuffers[node.cbuffer_instances], &node.instanceMatrices);
+                        driver::update_cbuffer(store.cbuffers[node.core.cbuffer_node], &node.core.nodeData);
+                        driver::update_cbuffer(store.cbuffers[node.cbuffer_instances], &node.instanceMatrices);
                     }
                 }
 
-                Driver::Marker_t marker;
-                Driver::set_marker_name(marker, "BASE SCENE"); Driver::start_event(marker);
+                driver::Marker_t marker;
+                driver::set_marker_name(marker, "BASE SCENE"); driver::start_event(marker);
                 {
-                    Driver::bind_RT(store.gameRT);
+                    driver::bind_RT(store.gameRT);
 
                     Color32 skycolor(0.2f, 0.344f, 0.59f, 1.f);
-                    Driver::clear_RT(store.gameRT, Driver::RenderTargetClearFlags::Color | Driver::RenderTargetClearFlags::Depth | Driver::RenderTargetClearFlags::Stencil, skycolor);
-                    Driver::bind_RS(store.rasterizerStateFillFrontfaces);
+                    driver::clear_RT(store.gameRT, driver::RenderTargetClearFlags::Color | driver::RenderTargetClearFlags::Depth | driver::RenderTargetClearFlags::Stencil, skycolor);
+                    driver::bind_RS(store.rasterizerStateFillFrontfaces);
 
-                    Driver::set_marker_name(marker, "SKY"); Driver::start_event(marker); // todo: quad?
+                    driver::set_marker_name(marker, "SKY"); driver::start_event(marker); // todo: quad?
                     {
-                        Driver::bind_DS(store.depthStateOff);
-                        Driver::bind_shader(store.shaders[ShaderType::Color3D]);
-                        Driver::bind_blend_state(store.blendStateBlendOff);
+                        driver::bind_DS(store.depthStateOff);
+                        driver::bind_shader(store.shaders[ShaderType::Color3D]);
+                        driver::bind_blend_state(store.blendStateBlendOff);
                         for (u32 i = 0; i < COUNT_OF(store.sky.buffers); i++) {
-                            Driver::bind_indexed_vertex_buffer(store.sky.buffers[i]);
-                            Driver::RscCBuffer buffers[] = { scene_cbuffer, store.sky.cbuffer };
-                            Driver::bind_cbuffers(store.shaders[ShaderType::Color3D], buffers, 2);
-                            Driver::draw_indexed_vertex_buffer(store.sky.buffers[i]);
+                            driver::bind_indexed_vertex_buffer(store.sky.buffers[i]);
+                            driver::RscCBuffer buffers[] = { scene_cbuffer, store.sky.cbuffer };
+                            driver::bind_cbuffers(store.shaders[ShaderType::Color3D], buffers, 2);
+                            driver::draw_indexed_vertex_buffer(store.sky.buffers[i]);
                         }
                     }
-                    Driver::end_event();
+                    driver::end_event();
 
-                    Driver::set_marker_name(marker, "OPAQUE"); Driver::start_event(marker);
+                    driver::set_marker_name(marker, "OPAQUE"); driver::start_event(marker);
                     {
-                        Driver::bind_DS(store.depthStateOn);
-                        Allocator::Arena scratchArena = platform.memory.scratchArenaRoot;
+                        driver::bind_DS(store.depthStateOn);
+                        allocator::Arena scratchArena = platform.memory.scratchArenaRoot;
                         Drawlist dl = {};
                         u32 maxDrawCallsThisFrame = (visibleNodes->visible_nodes_count + visibleNodes->visible_nodes_skinned_count + (u32)store.drawNodesInstanced.count) * DrawlistStreams::Count;
-                        dl.items = (DrawCall_Item*)Allocator::alloc_arena(scratchArena, maxDrawCallsThisFrame * sizeof(DrawCall_Item), alignof(DrawCall_Item));
-                        dl.keys = (Key*)Allocator::alloc_arena(scratchArena, maxDrawCallsThisFrame * sizeof(Key), alignof(Key));
-                        addNodesToDrawlistSorted(dl, *visibleNodes, game.cameraMgr.activeCam->transform.pos, store, 0, Renderer::DrawlistFilter::Alpha | Renderer::DrawlistFilter::Mirror, Renderer::SortParams::Type::Default);
+                        dl.items = (DrawCall_Item*)allocator::alloc_arena(scratchArena, maxDrawCallsThisFrame * sizeof(DrawCall_Item), alignof(DrawCall_Item));
+                        dl.keys = (Key*)allocator::alloc_arena(scratchArena, maxDrawCallsThisFrame * sizeof(Key), alignof(Key));
+                        addNodesToDrawlistSorted(dl, *visibleNodes, game.cameraMgr.activeCam->transform.pos, store, 0, renderer::DrawlistFilter::Alpha | renderer::DrawlistFilter::Mirror, renderer::SortParams::Type::Default);
                         Drawlist_Context ctx = {};
                         Drawlist_Overrides overrides = {};
                         ctx.cbuffers[overrides.forced_cbuffer_count++] = scene_cbuffer;
                         draw_drawlist(dl, ctx, overrides);
                     }
-                    Driver::end_event();
+                    driver::end_event();
 
-                    Driver::set_marker_name(marker, "ALPHA"); Driver::start_event(marker);
+                    #if __DEBUG
+                    // Immediate mode debug, to be rendered along with the 3D scene
+                    // Note that the buffers will be submitted to the GPU now, anything pushed to the immediate mode from here on will
+                    // be rendered on the next frame
                     {
-                        Driver::bind_DS(store.depthStateReadOnly);
+                        im::Context& imCtx = mgr.imCtx;
 
-                        Allocator::Arena scratchArena = platform.memory.scratchArenaRoot;
+                        //World axis
+                        const Color32 axisX(0.8f, 0.15f, 0.25f, 0.7f); // x is red
+                        const Color32 axisY(0.25f, 0.8f, 0.15f, 0.7f); // y is green
+                        const Color32 axisZ(0.15f, 0.25f, 0.8f, 0.7f); // z is blue
+                        const f32 axisSize = 7.f;
+                        const float3 pos(0.f, 0.f, 0.1f);
+
+                        im::segment(imCtx, pos, math::add(pos, math::scale(float3(1.f, 0.f, 0.f), axisSize)), axisX);
+                        im::segment(imCtx, pos, math::add(pos, math::scale(float3(0.f, 1.f, 0.f), axisSize)), axisY);
+                        im::segment(imCtx, pos, math::add(pos, math::scale(float3(0.f, 0.f, 1.f), axisSize)), axisZ);
+
+                        const f32 thickness = 0.1f;
+                        const u32 steps = 10;
+                        const f32 spacing = 1.f / (f32)steps;
+                        for (int i = 1; i <= steps; i++) {
+                            im::segment(imCtx,
+                                math::add(pos, float3(spacing * i, 0.f, -thickness))
+                                , math::add(pos, float3(spacing * i, 0.f, thickness))
+                                , axisX);
+                            im::segment(imCtx,
+                                math::add(pos, float3(0.f, spacing * i, -thickness))
+                                , math::add(pos, float3(0.f, spacing * i, thickness))
+                                , axisY);
+                            im::segment(imCtx,
+                                math::add(pos, float3(-thickness, thickness, spacing * i))
+                                , math::add(pos, float3(thickness, -thickness, spacing * i))
+                                , axisZ);
+                        }
+
+                        if (debug::debug3Dmode == debug::Debug3DView::All || debug::debug3Dmode == debug::Debug3DView::Culling) {
+                            const Color32 bbColor(0.8f, 0.15f, 0.25f, 0.7f);
+
+                            renderer::VisibleNodes visibleNodesDebug = {};
+                            float4x4 matrix = debug::capturedCameras[debug::debugCameraStage];
+                            if (!math::isZeroAll(matrix)) {
+                                renderer::computeVisibility(visibleNodesDebug, matrix, store);
+                                for (u32 i = 0; i < visibleNodesDebug.visible_nodes_count; i++) {
+                                    u32 n = visibleNodesDebug.visible_nodes[i];
+                                    const DrawNode& node = store.drawNodes.data[n].state.live;
+                                    im::obb(imCtx, node.nodeData.worldMatrix, node.min, node.max, bbColor);
+                                }
+                                for (u32 i = 0; i < visibleNodesDebug.visible_nodes_skinned_count; i++) {
+                                    u32 n = visibleNodesDebug.visible_nodes_skinned[i];
+                                    const DrawNodeSkinned& node = store.drawNodesSkinned.data[n].state.live;
+                                    im::obb(imCtx, node.core.nodeData.worldMatrix, node.core.min, node.core.max, bbColor);
+                                }
+
+                                const Color32 color(0.25f, 0.8f, 0.15f, 0.7f);
+                                im::frustum(imCtx, matrix, color);
+                            }
+                        }
+
+                        im::commit3d(mgr.imCtx);
+
+                        renderer::driver::bind_DS(store.depthStateOn);
+                        im::present3d(mgr.imCtx, mgr.perspProjection.matrix, viewMatrix);
+                    }
+                    #endif
+
+                    driver::set_marker_name(marker, "ALPHA"); driver::start_event(marker);
+                    {
+                        driver::bind_DS(store.depthStateReadOnly);
+
+                        allocator::Arena scratchArena = platform.memory.scratchArenaRoot;
                         Drawlist dl = {};
                         u32 maxDrawCallsThisFrame = (visibleNodes->visible_nodes_count + visibleNodes->visible_nodes_skinned_count + (u32)store.drawNodesInstanced.count) * DrawlistStreams::Count;
-                        dl.items = (DrawCall_Item*)Allocator::alloc_arena(scratchArena, maxDrawCallsThisFrame * sizeof(DrawCall_Item), alignof(DrawCall_Item));
-                        dl.keys = (Key*)Allocator::alloc_arena(scratchArena, maxDrawCallsThisFrame * sizeof(Key), alignof(Key));
-                        Driver::bind_blend_state(store.blendStateOn);
-                        addNodesToDrawlistSorted(dl, *visibleNodes, game.cameraMgr.activeCam->transform.pos, store, Renderer::DrawlistFilter::Alpha, Renderer::DrawlistFilter::Mirror, Renderer::SortParams::Type::BackToFront);
+                        dl.items = (DrawCall_Item*)allocator::alloc_arena(scratchArena, maxDrawCallsThisFrame * sizeof(DrawCall_Item), alignof(DrawCall_Item));
+                        dl.keys = (Key*)allocator::alloc_arena(scratchArena, maxDrawCallsThisFrame * sizeof(Key), alignof(Key));
+                        driver::bind_blend_state(store.blendStateOn);
+                        addNodesToDrawlistSorted(dl, *visibleNodes, game.cameraMgr.activeCam->transform.pos, store, renderer::DrawlistFilter::Alpha, renderer::DrawlistFilter::Mirror, renderer::SortParams::Type::BackToFront);
                         Drawlist_Context ctx = {};
                         Drawlist_Overrides overrides = {};
                         overrides.forced_blendState = true;
@@ -585,20 +669,20 @@ namespace Game
                         ctx.cbuffers[overrides.forced_cbuffer_count++] = scene_cbuffer;
                         draw_drawlist(dl, ctx, overrides);
                     }
-                    Driver::end_event();
+                    driver::end_event();
                 }
-                Driver::end_event();
+                driver::end_event();
                 
                 // Mirror passes
                 if (mirrorVisibleNodes->visible_nodes_count + mirrorVisibleNodes->visible_nodes_skinned_count) {
 
-                    Driver::set_marker_name(marker, "MARK MIRROR"); Driver::start_event(marker);
+                    driver::set_marker_name(marker, "MARK MIRROR"); driver::start_event(marker);
                     {
-                        Allocator::Arena scratchArena = platform.memory.scratchArenaRoot;
+                        allocator::Arena scratchArena = platform.memory.scratchArenaRoot;
 
-                        Driver::bind_DS(store.depthStateMarkMirrors);
-                        Driver::bind_RS(store.rasterizerStateFillFrontfaces);
-                        Driver::bind_blend_state(store.blendStateOff);
+                        driver::bind_DS(store.depthStateMarkMirrors);
+                        driver::bind_RS(store.rasterizerStateFillFrontfaces);
+                        driver::bind_blend_state(store.blendStateOff);
                         Drawlist_Context ctx = {};
                         Drawlist_Overrides overrides = {};
                         overrides.forced_blendState = true;
@@ -607,8 +691,8 @@ namespace Game
 
                         Drawlist dl = {};
                         u32 maxDrawCallsThisFrame = DrawlistStreams::Count; // support for one single mirror
-                        dl.items = (DrawCall_Item*)Allocator::alloc_arena(scratchArena, maxDrawCallsThisFrame * sizeof(DrawCall_Item), alignof(DrawCall_Item));
-                        dl.keys = (Key*)Allocator::alloc_arena(scratchArena, maxDrawCallsThisFrame * sizeof(Key), alignof(Key));
+                        dl.items = (DrawCall_Item*)allocator::alloc_arena(scratchArena, maxDrawCallsThisFrame * sizeof(DrawCall_Item), alignof(DrawCall_Item));
+                        dl.keys = (Key*)allocator::alloc_arena(scratchArena, maxDrawCallsThisFrame * sizeof(Key), alignof(Key));
 
                         DrawNode& node = get_draw_node_core(store, store.mirror.drawHandle);
                         const u32 maxMeshCount = COUNT_OF(node.meshHandles);
@@ -626,68 +710,77 @@ namespace Game
                             item.cbuffers[item.cbuffer_count++] = store.cbuffers[node.cbuffer_node];
                             item.texture = mesh.texture;
                             item.blendState = store.blendStateOff;
-                            item.name = Renderer::shaderNames[mesh.type];
+                            item.name = renderer::shaderNames[mesh.type];
                         }
                         draw_drawlist(dl, ctx, overrides);
                     }
-                    Driver::end_event();
+                    driver::end_event();
 
-                    Driver::set_marker_name(marker, "REFLECTION SCENE"); Driver::start_event(marker);
+                    driver::set_marker_name(marker, "REFLECTION SCENE"); driver::start_event(marker);
                     {
-                        Driver::RscCBuffer& scene_cbuffer = store.cbuffers[store.cbuffer_scene];
+                        driver::RscCBuffer& scene_cbuffer = store.cbuffers[store.cbuffer_scene];
                         {
-                            Renderer::SceneData cbufferPerSceneMirrored = cbufferPerScene;
+                            renderer::SceneData cbufferPerSceneMirrored = cbufferPerScene;
                             cbufferPerSceneMirrored.projectionMatrix = mirrorProjectionMatrix;
                             cbufferPerSceneMirrored.viewMatrix = mirrorViewMatrix;
                             cbufferPerSceneMirrored.viewPos = mirrorViewMatrix.col3.xyz;
-                            Renderer::Driver::update_cbuffer(scene_cbuffer, &cbufferPerSceneMirrored);
+                            renderer::driver::update_cbuffer(scene_cbuffer, &cbufferPerSceneMirrored);
                         }
 
-                        Driver::clear_RT(store.gameRT, Driver::RenderTargetClearFlags::Depth); // todo: can we get away without doing this for all the depth buffer?
+                        driver::clear_RT(store.gameRT, driver::RenderTargetClearFlags::Depth); // todo: can we get away without doing this for all the depth buffer?
 
-                        Driver::bind_RS(store.rasterizerStateFillBackfaces);
+                        driver::bind_RS(store.rasterizerStateFillBackfaces);
 
-                        Driver::set_marker_name(marker, "SKY"); Driver::start_event(marker);
+                        driver::set_marker_name(marker, "SKY"); driver::start_event(marker);
                         {
-                            Driver::bind_DS(store.depthStateMirrorReflectionsDepthReadOnly);
-                            Driver::bind_shader(store.shaders[ShaderType::Color3D]);
-                            Driver::bind_blend_state(store.blendStateBlendOff);
+                            driver::bind_DS(store.depthStateMirrorReflectionsDepthReadOnly);
+                            driver::bind_shader(store.shaders[ShaderType::Color3D]);
+                            driver::bind_blend_state(store.blendStateBlendOff);
                             for (u32 i = 0; i < COUNT_OF(store.sky.buffers); i++) {
-                                Driver::bind_indexed_vertex_buffer(store.sky.buffers[i]);
-                                Driver::RscCBuffer buffers[] = { scene_cbuffer, store.sky.cbuffer };
-                                Driver::bind_cbuffers(store.shaders[ShaderType::Color3D], buffers, 2);
-                                Driver::draw_indexed_vertex_buffer(store.sky.buffers[i]);
+                                driver::bind_indexed_vertex_buffer(store.sky.buffers[i]);
+                                driver::RscCBuffer buffers[] = { scene_cbuffer, store.sky.cbuffer };
+                                driver::bind_cbuffers(store.shaders[ShaderType::Color3D], buffers, 2);
+                                driver::draw_indexed_vertex_buffer(store.sky.buffers[i]);
                             }
                         }
-                        Driver::end_event();
+                        driver::end_event();
 
-                        Driver::set_marker_name(marker, "OPAQUE"); Driver::start_event(marker);
+                        driver::set_marker_name(marker, "OPAQUE"); driver::start_event(marker);
                         {
-                            Driver::bind_DS(store.depthStateMirrorReflections);
-                            Allocator::Arena scratchArena = platform.memory.scratchArenaRoot;
+                            driver::bind_DS(store.depthStateMirrorReflections);
+                            allocator::Arena scratchArena = platform.memory.scratchArenaRoot;
                             Drawlist dl = {};
                             u32 maxDrawCallsThisFrame = (mirrorVisibleNodes->visible_nodes_count + mirrorVisibleNodes->visible_nodes_skinned_count + (u32)store.drawNodesInstanced.count) * DrawlistStreams::Count;
-                            dl.items = (DrawCall_Item*)Allocator::alloc_arena(scratchArena, maxDrawCallsThisFrame * sizeof(DrawCall_Item), alignof(DrawCall_Item));
-                            dl.keys = (Key*)Allocator::alloc_arena(scratchArena, maxDrawCallsThisFrame * sizeof(Key), alignof(Key));
-                            addNodesToDrawlistSorted(dl, *mirrorVisibleNodes, game.cameraMgr.activeCam->transform.pos, store, 0, Renderer::DrawlistFilter::Alpha, Renderer::SortParams::Type::Default);
+                            dl.items = (DrawCall_Item*)allocator::alloc_arena(scratchArena, maxDrawCallsThisFrame * sizeof(DrawCall_Item), alignof(DrawCall_Item));
+                            dl.keys = (Key*)allocator::alloc_arena(scratchArena, maxDrawCallsThisFrame * sizeof(Key), alignof(Key));
+                            addNodesToDrawlistSorted(dl, *mirrorVisibleNodes, game.cameraMgr.activeCam->transform.pos, store, 0, renderer::DrawlistFilter::Alpha, renderer::SortParams::Type::Default);
                             Drawlist_Context ctx = {};
                             Drawlist_Overrides overrides = {};
                             ctx.cbuffers[overrides.forced_cbuffer_count++] = scene_cbuffer;
                             draw_drawlist(dl, ctx, overrides);
                         }
-                        Driver::end_event();
+                        driver::end_event();
 
-                        Driver::set_marker_name(marker, "ALPHA"); Driver::start_event(marker);
+
+                        #if __DEBUG
                         {
-                            Driver::bind_DS(store.depthStateMirrorReflectionsDepthReadOnly);
-                            Driver::bind_blend_state(store.blendStateOn);
+                            renderer::driver::bind_DS(store.depthStateMirrorReflections);
+                            im::present3d(mgr.imCtx, mirrorProjectionMatrix, mirrorViewMatrix);
+                        }
+                        #endif
 
-                            Allocator::Arena scratchArena = platform.memory.scratchArenaRoot;
+                        driver::set_marker_name(marker, "ALPHA"); driver::start_event(marker);
+                        {
+                            renderer::driver::bind_RS(store.rasterizerStateFillBackfaces);
+                            driver::bind_DS(store.depthStateMirrorReflectionsDepthReadOnly);
+                            driver::bind_blend_state(store.blendStateOn);
+
+                            allocator::Arena scratchArena = platform.memory.scratchArenaRoot;
                             Drawlist dl = {};
                             u32 maxDrawCallsThisFrame = (mirrorVisibleNodes->visible_nodes_count + mirrorVisibleNodes->visible_nodes_skinned_count + (u32)store.drawNodesInstanced.count) * DrawlistStreams::Count;
-                            dl.items = (DrawCall_Item*)Allocator::alloc_arena(scratchArena, maxDrawCallsThisFrame * sizeof(DrawCall_Item), alignof(DrawCall_Item));
-                            dl.keys = (Key*)Allocator::alloc_arena(scratchArena, maxDrawCallsThisFrame * sizeof(Key), alignof(Key));
-                            addNodesToDrawlistSorted(dl, *mirrorVisibleNodes, game.cameraMgr.activeCam->transform.pos, store, Renderer::DrawlistFilter::Alpha, 0, Renderer::SortParams::Type::BackToFront);
+                            dl.items = (DrawCall_Item*)allocator::alloc_arena(scratchArena, maxDrawCallsThisFrame * sizeof(DrawCall_Item), alignof(DrawCall_Item));
+                            dl.keys = (Key*)allocator::alloc_arena(scratchArena, maxDrawCallsThisFrame * sizeof(Key), alignof(Key));
+                            addNodesToDrawlistSorted(dl, *mirrorVisibleNodes, game.cameraMgr.activeCam->transform.pos, store, renderer::DrawlistFilter::Alpha, 0, renderer::SortParams::Type::BackToFront);
                             Drawlist_Context ctx = {};
                             Drawlist_Overrides overrides = {};
                             overrides.forced_blendState = true;
@@ -695,39 +788,39 @@ namespace Game
                             ctx.cbuffers[overrides.forced_cbuffer_count++] = scene_cbuffer;
                             draw_drawlist(dl, ctx, overrides);
                         }
-                        Driver::end_event();
+                        driver::end_event();
                     }
-                    Driver::end_event();
+                    driver::end_event();
 
-                    Driver::set_marker_name(marker, "MIRROR IN SCENE"); Driver::start_event(marker);
+                    driver::set_marker_name(marker, "MIRROR IN SCENE"); driver::start_event(marker);
                     {
-                        Driver::RscCBuffer& scene_cbuffer = store.cbuffers[store.cbuffer_scene];
+                        driver::RscCBuffer& scene_cbuffer = store.cbuffers[store.cbuffer_scene];
                         {
-                            Renderer::SceneData cbufferPerScene;
+                            renderer::SceneData cbufferPerScene;
                             cbufferPerScene.projectionMatrix = mgr.perspProjection.matrix;
                             cbufferPerScene.viewMatrix = viewMatrix;
                             cbufferPerScene.viewPos = viewMatrix.col3.xyz;
                             cbufferPerScene.lightPos = float3(3.f, 8.f, 15.f); // todo: save off somewhere?
-                            Renderer::Driver::update_cbuffer(scene_cbuffer, &cbufferPerScene);
+                            renderer::driver::update_cbuffer(scene_cbuffer, &cbufferPerScene);
                         }
 
-                        Driver::bind_DS(store.depthStateOn); // todo: this is a hack so opengl can clear depth
-                        Driver::clear_RT(store.gameRT, Driver::RenderTargetClearFlags::Depth); // todo: could we just clear the mirror?
+                        driver::bind_DS(store.depthStateOn); // todo: this is a hack so opengl can clear depth
+                        driver::clear_RT(store.gameRT, driver::RenderTargetClearFlags::Depth); // todo: could we just clear the mirror?
 
-                        Driver::bind_DS(store.depthStateMirrorReflectionsDepthReadOnly);
-                        Driver::bind_RS(store.rasterizerStateFillFrontfaces);
-                        Driver::bind_blend_state(store.blendStateOn);
+                        driver::bind_DS(store.depthStateMirrorReflectionsDepthReadOnly);
+                        driver::bind_RS(store.rasterizerStateFillFrontfaces);
+                        driver::bind_blend_state(store.blendStateOn);
                         Drawlist_Context ctx = {};
                         Drawlist_Overrides overrides = {};
                         overrides.forced_blendState = true;
                         ctx.cbuffers[overrides.forced_cbuffer_count++] = scene_cbuffer;
                         ctx.blendState = &store.blendStateOn;
 
-                        Allocator::Arena scratchArena = platform.memory.scratchArenaRoot;
+                        allocator::Arena scratchArena = platform.memory.scratchArenaRoot;
                         Drawlist dl = {};
                         u32 maxDrawCallsThisFrame = DrawlistStreams::Count; // support for one single mirror
-                        dl.items = (DrawCall_Item*)Allocator::alloc_arena(scratchArena, maxDrawCallsThisFrame * sizeof(DrawCall_Item), alignof(DrawCall_Item));
-                        dl.keys = (Key*)Allocator::alloc_arena(scratchArena, maxDrawCallsThisFrame * sizeof(Key), alignof(Key));
+                        dl.items = (DrawCall_Item*)allocator::alloc_arena(scratchArena, maxDrawCallsThisFrame * sizeof(DrawCall_Item), alignof(DrawCall_Item));
+                        dl.keys = (Key*)allocator::alloc_arena(scratchArena, maxDrawCallsThisFrame * sizeof(Key), alignof(Key));
 
                         DrawNode& node = get_draw_node_core(store, store.mirror.drawHandle);
                         const u32 maxMeshCount = COUNT_OF(node.meshHandles);
@@ -745,75 +838,19 @@ namespace Game
                             item.cbuffers[item.cbuffer_count++] = store.cbuffers[node.cbuffer_node];
                             item.texture = mesh.texture;
                             item.blendState = store.blendStateOn;
-                            item.name = Renderer::shaderNames[mesh.type];
+                            item.name = renderer::shaderNames[mesh.type];
                         }
                         draw_drawlist(dl, ctx, overrides);
                     }
-                    Driver::end_event();
+                    driver::end_event();
                 }
             }
 
-            // Immediate-mode debug. Can be moved out of the render update, it only pushes data to cpu buffers
+            // Immediate-mode debug in 2D. Can be moved out of the render update, it only pushes data to cpu buffers
             #if __DEBUG
             {
                 im::Context& imCtx = mgr.imCtx;
-
-                // World axis
-                //{
-                //    const Color32 axisX(0.8f, 0.15f, 0.25f, 0.7f); // x is red
-                //    const Color32 axisY(0.25f, 0.8f, 0.15f, 0.7f); // y is green
-                //    const Color32 axisZ(0.15f, 0.25f, 0.8f, 0.7f); // z is blue
-                //    const f32 axisSize = 30.f;
-                //    const float3 pos(0.f, 0.f, 0.1f);
-
-                //    im::segment(imCtx, pos, Math::add(pos, Math::scale(float3(1.f, 0.f, 0.f), axisSize)), axisX);
-                //    im::segment(imCtx, pos, Math::add(pos, Math::scale(float3(0.f, 1.f, 0.f), axisSize)), axisY);
-                //    im::segment(imCtx, pos, Math::add(pos, Math::scale(float3(0.f, 0.f, 1.f), axisSize)), axisZ);
-
-                //    const f32 thickness = 0.1f;
-                //    const u32 steps = 10;
-                //    const f32 spacing = 1.f / (f32)steps;
-                //    for (int i = 1; i <= steps; i++) {
-                //        im::segment(imCtx,
-                //              Math::add(pos, float3(spacing * i, 0.f, -thickness))
-                //            , Math::add(pos, float3(spacing * i, 0.f, thickness))
-                //            , axisX);
-                //        im::segment(imCtx,
-                //              Math::add(pos, float3(0.f, spacing * i, -thickness))
-                //            , Math::add(pos, float3(0.f, spacing * i, thickness))
-                //            , axisY);
-                //        im::segment(imCtx,
-                //              Math::add(pos, float3(-thickness, thickness, spacing * i))
-                //            , Math::add(pos, float3(thickness, -thickness, spacing * i))
-                //            , axisZ);
-                //    }
-                //}
-                {
-                    if (game.debugVis.debug3Dmode == DebugVis::Debug3DView::All || game.debugVis.debug3Dmode == DebugVis::Debug3DView::Culling) {
-                        const Color32 bbColor(0.8f, 0.15f, 0.25f, 0.7f);
-
-                        Renderer::VisibleNodes visibleNodesDebug = {};
-                        float4x4 matrix = game.debugVis.capturedCameras[game.debugVis.debugCameraStage];
-                        if (!Math::isZeroAll(matrix)) {
-                            Renderer::computeVisibility(visibleNodesDebug, matrix, store);
-                            for (u32 i = 0; i < visibleNodesDebug.visible_nodes_count; i++) {
-                                u32 n = visibleNodesDebug.visible_nodes[i];
-                                const DrawNode& node = store.drawNodes.data[n].state.live;
-                                im::obb(imCtx, node.nodeData.worldMatrix, node.min, node.max, bbColor);
-                            }
-                            for (u32 i = 0; i < visibleNodesDebug.visible_nodes_skinned_count; i++) {
-                                u32 n = visibleNodesDebug.visible_nodes_skinned[i];
-                                const DrawNodeSkinned& node = store.drawNodesSkinned.data[n].state.live;
-                                im::obb(imCtx, node.core.nodeData.worldMatrix, node.core.min, node.core.max, bbColor);
-                            }
-
-                            const Color32 color(0.25f, 0.8f, 0.15f, 0.7f);
-                            im::frustum(imCtx, matrix, color);
-                        }
-                    }
-                }
-                // 2d debug info
-                if (game.debugVis.overlaymode != DebugVis::OverlayMode::None)
+                if (debug::overlaymode != debug::OverlayMode::None)
                 {
                     Color32 defaultCol(0.7f, 0.8f, 0.15f, 1.0f);
                     Color32 activeCol(1.0f, 0.2f, 0.1f, 1.0f);
@@ -821,7 +858,11 @@ namespace Game
                     f32 textscale = platform.screen.text_scale;
                     f32 lineheight = 15.f * textscale;
 
-                    Renderer::im::TextParams textParamsLeft, textParamsRight, textParamsCenter;
+                    struct EventText {
+                        char text[256];
+                        f64 time;
+                    };
+                    renderer::im::TextParams textParamsLeft, textParamsRight, textParamsCenter;
                     textParamsLeft.scale = (u8)platform.screen.text_scale;
                     textParamsLeft.pos = float3(game.renderMgr.windowProjection.config.left + 10.f * textscale, game.renderMgr.windowProjection.config.top - 10.f * textscale, -50);
                     textParamsLeft.color = defaultCol;
@@ -833,85 +874,133 @@ namespace Game
                     textParamsCenter.color = defaultCol;
 
                     const char* overlaynames[] = { "All", "Help Only", "Arenas only", "None" };
-                    textParamsLeft.color = keyboard.pressed(Input::TOGGLE_OVERLAY) ? activeCol : defaultCol;
-                    Renderer::im::text2d(game.renderMgr.imCtx, textParamsLeft, "H to toggle overlays: %s", overlaynames[game.debugVis.overlaymode]);
-                    textParamsLeft.pos.y -= lineheight;
-                    const char* visualizationModes[] = { "All", "Culling", "None" };
-                    textParamsLeft.color = keyboard.pressed(Input::TOGGLE_DEBUG3D) ? activeCol : defaultCol;
-                    Renderer::im::text2d(game.renderMgr.imCtx, textParamsLeft, "V to toggle 3D visualization modes: %s", visualizationModes[game.debugVis.debug3Dmode]);
-                    textParamsLeft.pos.y -= lineheight;
-                    const char* cameraStages[] = { "Scene", "Scene Mirror", "Scene Mirror Clipped" };
-                    textParamsLeft.color = keyboard.pressed(Input::TOGGLE_CAPTURED_CAMERA) ? activeCol : defaultCol;
-                    Renderer::im::text2d(game.renderMgr.imCtx, textParamsLeft, "C to toggle camera capture stages: %s %s", cameraStages[game.debugVis.debugCameraStage], Math::isZeroAll(game.debugVis.capturedCameras[game.debugVis.debugCameraStage]) ? "Camera not captured" : "Camera Captured");
+                    if (keyboard.pressed(input::TOGGLE_OVERLAY)) {
+                        platform::format(debug::eventLabel.text, sizeof(debug::eventLabel.text), "Overlays: %s", overlaynames[debug::overlaymode]);
+                        debug::eventLabel.time = platform.time.now;
+                        textParamsLeft.color = activeCol;
+                    }
+                    else {
+                        textParamsLeft.color = defaultCol;
+                    }
+                    renderer::im::text2d(imCtx, textParamsLeft, "H to toggle overlays: %s", overlaynames[debug::overlaymode]);
                     textParamsLeft.pos.y -= lineheight;
 
-                    if (game.debugVis.overlaymode == DebugVis::OverlayMode::All || game.debugVis.overlaymode == DebugVis::OverlayMode::HelpOnly) {
-                        textParamsLeft.color = platform.input.mouse.down(::Input::Mouse::Keys::BUTTON_LEFT) ? activeCol : defaultCol;
-                        Renderer::im::text2d(game.renderMgr.imCtx, textParamsLeft, "Mouse (%.3f,%.3f)", platform.input.mouse.x, platform.input.mouse.y);
+                    const char* visualizationModes[] = { "Culling", "All", "None" };
+                    if (keyboard.pressed(input::TOGGLE_DEBUG3D)) {
+                        platform::format(debug::eventLabel.text, sizeof(debug::eventLabel.text), "Visualization mode: %s", visualizationModes[debug::debug3Dmode]);
+                        debug::eventLabel.time = platform.time.now;
+                        textParamsLeft.color = activeCol;
+                    }
+                    else {
+                        textParamsLeft.color = defaultCol;
+                    }
+                    renderer::im::text2d(imCtx, textParamsLeft, "V to toggle 3D visualization modes: %s", visualizationModes[debug::debug3Dmode]);
+                    textParamsLeft.pos.y -= lineheight;
+
+                    const char* cameraStages[] = { "Scene", "Scene Mirror", "Scene Mirror Clipped" };
+                    if (keyboard.pressed(input::CAPTURE_CAMERAS)) {
+                        platform::format(debug::eventLabel.text, sizeof(debug::eventLabel.text), "Capture cameras");
+                        debug::eventLabel.time = platform.time.now;
+                        textParamsLeft.color = activeCol;
+                    }
+                    else {
+                        textParamsLeft.color = defaultCol;
+                    }
+                    renderer::im::text2d(imCtx, textParamsLeft, "P to capture cameras in scene");
+                    textParamsLeft.color = defaultCol;
+                    textParamsLeft.pos.y -= lineheight;
+
+                    if (keyboard.pressed(input::TOGGLE_CAPTURED_CAMERA)) {
+                        platform::format(debug::eventLabel.text,sizeof(debug::eventLabel.text), "Camera: %s (%s)", cameraStages[debug::debugCameraStage], math::isZeroAll(debug::capturedCameras[debug::debugCameraStage]) ? "captured" : "captured");
+                        debug::eventLabel.time = platform.time.now;
+                        textParamsLeft.color = activeCol;
+                    } else {
+                        textParamsLeft.color = defaultCol;
+                    }
+                    renderer::im::text2d(imCtx, textParamsLeft, "C to toggle camera capture stages: %s %s", cameraStages[debug::debugCameraStage], math::isZeroAll(debug::capturedCameras[debug::debugCameraStage]) ? "Camera not captured" : "Camera Captured");
+                    textParamsLeft.color = defaultCol;
+                    textParamsLeft.pos.y -= lineheight;
+                   
+                    {
+                        constexpr ::input::keyboard::Keys::Enum keys[] = { input::TOGGLE_FRUSTUM_NEAR, input::TOGGLE_FRUSTUM_FAR, input::TOGGLE_FRUSTUM_LEFT, input::TOGGLE_FRUSTUM_RIGHT, input::TOGGLE_FRUSTUM_BOTTOM, input::TOGGLE_FRUSTUM_TOP };
+                        platform::StrBuilder frustumStr;
+                        frustumStr.append("%sFrustum planes applied: ", debug::force_cut_frustum ? "[forced cut] " : "");
+                        for (s32 i = 0; i < COUNT_OF(debug::frustum_planes_off) && !frustumStr.full(); i++) {
+                            if (!debug::frustum_planes_off[i]) { frustumStr.append("%s ", debug::frustum_planes_names[i]); }
+                            if (platform.input.keyboard.pressed(::input::keyboard::Keys::Enum(keys[i]))) {
+                                platform::format(debug::eventLabel.text, sizeof(debug::eventLabel.text), debug::frustum_planes_off[i] ? "%s frustum plane off" : "%s frustum plane on", debug::frustum_planes_names[i]);
+                                debug::eventLabel.time = platform.time.now;
+                            }
+                        };
+                        renderer::im::text2d(imCtx, textParamsLeft, frustumStr.str);
                         textParamsLeft.pos.y -= lineheight;
-                        textParamsLeft.color = platform.input.mouse.down(::Input::Mouse::Keys::BUTTON_LEFT) ? activeCol : defaultCol;
-                        Renderer::im::text2d(game.renderMgr.imCtx, textParamsLeft, "   left click and drag to orbit");
+                    }
+
+                    if (debug::overlaymode == debug::OverlayMode::All || debug::overlaymode == debug::OverlayMode::HelpOnly) {
+                        textParamsLeft.color = platform.input.mouse.down(::input::mouse::Keys::BUTTON_LEFT) ? activeCol : defaultCol;
+                        renderer::im::text2d(imCtx, textParamsLeft, "Mouse (%.3f,%.3f)", platform.input.mouse.x, platform.input.mouse.y);
                         textParamsLeft.pos.y -= lineheight;
-                        textParamsLeft.color = platform.input.mouse.down(::Input::Mouse::Keys::BUTTON_RIGHT) ? activeCol : defaultCol;
-                        Renderer::im::text2d(game.renderMgr.imCtx, textParamsLeft, "   right click and drag to pan");
+                        textParamsLeft.color = platform.input.mouse.down(::input::mouse::Keys::BUTTON_LEFT) ? activeCol : defaultCol;
+                        renderer::im::text2d(imCtx, textParamsLeft, "   left click and drag to orbit");
+                        textParamsLeft.pos.y -= lineheight;
+                        textParamsLeft.color = platform.input.mouse.down(::input::mouse::Keys::BUTTON_RIGHT) ? activeCol : defaultCol;
+                        renderer::im::text2d(imCtx, textParamsLeft, "   right click and drag to pan");
                         textParamsLeft.pos.y -= lineheight;
                         textParamsLeft.color = platform.input.mouse.scrolldy != 0 ? activeCol : defaultCol;
-                        Renderer::im::text2d(game.renderMgr.imCtx, textParamsLeft, "   mouse wheel to scale");
+                        renderer::im::text2d(imCtx, textParamsLeft, "   mouse wheel to scale");
                         textParamsLeft.pos.y -= lineheight;
                         textParamsLeft.color = defaultCol;
                         {
-                            float3 eulers_deg = Math::scale(game.cameraMgr.orbitCamera.eulers, Math::r2d_f);
-                            Renderer::im::text2d(game.renderMgr.imCtx, textParamsLeft, "Camera eulers: " float3_FORMAT("% .3f"), float3_PARAMS(eulers_deg));
+                            float3 eulers_deg = math::scale(game.cameraMgr.orbitCamera.eulers, math::r2d_f);
+                            renderer::im::text2d(imCtx, textParamsLeft, "Camera eulers: " float3_FORMAT("% .3f"), float3_PARAMS(eulers_deg));
                             textParamsLeft.pos.y -= lineheight;
                         }
-                        Renderer::im::text2d(game.renderMgr.imCtx, textParamsLeft, "mouse wheel to scale");
+                        renderer::im::text2d(imCtx, textParamsLeft, "mouse wheel to scale");
                         textParamsLeft.pos.y -= lineheight;
                         for (u32 i = 0; i < platform.input.padCount; i++)
                         {
-                            namespace Pad = ::Input::Gamepad;
-                            const Pad::State& pad = platform.input.pads[i];
-                            Renderer::im::text2d(game.renderMgr.imCtx, textParamsLeft, "Pad: %s", pad.name);
+                            const ::input::gamepad::State& pad = platform.input.pads[i];
+                            renderer::im::text2d(imCtx, textParamsLeft, "Pad: %s", pad.name);
                             textParamsLeft.pos.y -= lineheight;
-                            Renderer::im::text2d(game.renderMgr.imCtx, textParamsLeft
+                            renderer::im::text2d(imCtx, textParamsLeft
                                 , "Pad: L:(%.3f,%.3f) R:(%.3f,%.3f) L2:%.3f R2:%.3f"
-                                , pad.sliders[Pad::Sliders::AXIS_X_LEFT], pad.sliders[Pad::Sliders::AXIS_Y_LEFT]
-                                , pad.sliders[Pad::Sliders::AXIS_X_RIGHT], pad.sliders[Pad::Sliders::AXIS_Y_RIGHT]
-                                , pad.sliders[Pad::Sliders::TRIGGER_LEFT], pad.sliders[Pad::Sliders::TRIGGER_RIGHT]
+                                , pad.sliders[::input::gamepad::Sliders::AXIS_X_LEFT], pad.sliders[::input::gamepad::Sliders::AXIS_Y_LEFT]
+                                , pad.sliders[::input::gamepad::Sliders::AXIS_X_RIGHT], pad.sliders[::input::gamepad::Sliders::AXIS_Y_RIGHT]
+                                , pad.sliders[::input::gamepad::Sliders::TRIGGER_LEFT], pad.sliders[::input::gamepad::Sliders::TRIGGER_RIGHT]
                             );
-                            char keys_str[128];
-                            textParamsLeft.pos.y -= lineheight;
-                            char* curr = keys_str;
-                            char* last = keys_str + sizeof(keys_str);
-                            curr += Platform::format(keys_str, (int)(last-curr), "Keys: ");
-                            const char* key_names[] = {
-                                "BUTTON_N", "BUTTON_S", "BUTTON_W", "BUTTON_E"
-                              , "DPAD_UP", "DPAD_DOWN", "DPAD_LEFT", "DPAD_RIGHT"
-                              , "START", "SELECT"
-                              , "L1", "R1", "L2", "R2"
-                              , "LEFT_THUMB", "RIGHT_THUMB"
-                            };
-                            for (u32 key = 0; key < Pad::KeyMask::COUNT && curr < last; key++) {
-                                if (pad.down((Pad::KeyMask::Enum)(1<<key))) {
-                                    curr += Platform::format(curr, (int)(last - curr), "%s ", key_names[key]);
-                                } else {
-                                    curr += Platform::format(curr, (int)(last - curr), "");
+
+                            {
+                                platform::StrBuilder padStr;
+                                textParamsLeft.pos.y -= lineheight;
+                                padStr.append("Keys: ");
+                                const char* key_names[] = {
+                                    "BUTTON_N", "BUTTON_S", "BUTTON_W", "BUTTON_E"
+                                  , "DPAD_UP", "DPAD_DOWN", "DPAD_LEFT", "DPAD_RIGHT"
+                                  , "START", "SELECT"
+                                  , "L1", "R1", "L2", "R2"
+                                  , "LEFT_THUMB", "RIGHT_THUMB"
+                                };
+                                for (u32 key = 0; key < ::input::gamepad::KeyMask::COUNT && !padStr.full(); key++) {
+                                    if (pad.down((::input::gamepad::KeyMask::Enum)(1 << key))) {
+                                        padStr.append("%s ", key_names[key]);
+                                    }
                                 }
+                                renderer::im::text2d(imCtx, textParamsLeft, padStr.str);
+                                textParamsLeft.pos.y -= lineheight;
                             }
-                            Renderer::im::text2d(game.renderMgr.imCtx, textParamsLeft, keys_str);
-                            textParamsLeft.pos.y -= lineheight;
                         }
 
                         textParamsRight.color = defaultCol;
                         textParamsRight.pos.x -= 30.f * textscale;
-                        Renderer::im::text2d(game.renderMgr.imCtx, textParamsRight, "%s", Platform::name);
+                        renderer::im::text2d(imCtx, textParamsRight, "%s", platform::name);
                         textParamsRight.pos.y -= lineheight;
-                        Renderer::im::text2d(game.renderMgr.imCtx, textParamsRight, "%.3lf fps", 1. / game.debugVis.frameAvg);
+                        renderer::im::text2d(imCtx, textParamsRight, "%.3lf fps", 1. / debug::frameAvg);
                         textParamsRight.pos.y -= lineheight;
                     }
 
-                    if (game.debugVis.overlaymode == DebugVis::OverlayMode::All || game.debugVis.overlaymode == DebugVis::OverlayMode::ArenaOnly)
+                    if (debug::overlaymode == debug::OverlayMode::All || debug::overlaymode == debug::OverlayMode::ArenaOnly)
                     {
-                        auto renderArena = [](Renderer::im::Context& im, Renderer::im::TextParams& textCfg, u8* arenaEnd, u8* arenaStart, uintptr_t arenaHighmark, const char* arenaName, const Color32 defaultCol, const Color32 baseCol, const Color32 highmarkCol, const f32 lineheight, const f32 textscale) {
+                        auto renderArena = [](renderer::im::Context& im, renderer::im::TextParams& textCfg, u8* arenaEnd, u8* arenaStart, uintptr_t arenaHighmark, const char* arenaName, const Color32 defaultCol, const Color32 baseCol, const Color32 highmarkCol, const f32 lineheight, const f32 textscale) {
                             const f32 barwidth = 150.f * textscale;
                             const f32 barheight = 10.f * textscale;
 
@@ -919,16 +1008,16 @@ namespace Game
                             const ptrdiff_t arenaHighmarkBytes = (ptrdiff_t)arenaHighmark - (ptrdiff_t)arenaStart;
                             const f32 arenaHighmark_barwidth = barwidth * (arenaHighmarkBytes / (f32)arenaTotal);
                             textCfg.color = highmarkCol;
-                            Renderer::im::text2d(im, textCfg, "%s highmark: %lu bytes", arenaName, arenaHighmarkBytes);
+                            renderer::im::text2d(im, textCfg, "%s highmark: %lu bytes", arenaName, arenaHighmarkBytes);
                             textCfg.pos.y -= lineheight;
                             textCfg.color = defaultCol;
 
-                            Renderer::im::box_2d(im
+                            renderer::im::box_2d(im
                                 , float2(textCfg.pos.x, textCfg.pos.y - barheight)
                                 , float2(textCfg.pos.x + barwidth, textCfg.pos.y)
                                 , baseCol);
                             if (arenaHighmarkBytes) {
-                                Renderer::im::box_2d(im
+                                renderer::im::box_2d(im
                                                           , float2(textCfg.pos.x, textCfg.pos.y - barheight)
                                                           , float2(textCfg.pos.x + arenaHighmark_barwidth, textCfg.pos.y)
                                                           , highmarkCol);
@@ -942,23 +1031,23 @@ namespace Game
                         {
                             const Color32 arenabaseCol(0.65f, 0.65f, 0.65f, 0.4f);
                             const Color32 arenahighmarkCol(0.95f, 0.35f, 0.8f, 1.f);
-                            renderArena(game.renderMgr.imCtx, textParamsCenter, game.memory.frameArena.end, game.memory.frameArenaBuffer, game.memory.frameArenaHighmark
+                            renderArena(imCtx, textParamsCenter, game.memory.frameArena.end, game.memory.frameArenaBuffer, game.memory.frameArenaHighmark
                                 , "Frame arena", defaultCol, arenabaseCol, arenahighmarkCol, lineheight, textscale);
                         }
                         {
                             const Color32 arenabaseCol(0.65f, 0.65f, 0.65f, 0.4f);
                             const Color32 arenahighmarkCol(0.95f, 0.35f, 0.8f, 1.f);
-                            renderArena(game.renderMgr.imCtx, textParamsCenter, platform.memory.scratchArenaRoot.end, platform.memory.scratchArenaRoot.curr, platform.memory.scratchArenaHighmark
+                            renderArena(imCtx, textParamsCenter, platform.memory.scratchArenaRoot.end, platform.memory.scratchArenaRoot.curr, platform.memory.scratchArenaHighmark
                                 , "Platform scratch arena", defaultCol, arenabaseCol, arenahighmarkCol, lineheight, textscale);
                         }
                         {
                             const Color32 arenabaseCol(0.65f, 0.65f, 0.65f, 0.4f);
                             const Color32 arenahighmarkCol(0.95f, 0.35f, 0.8f, 1.f);
-                            renderArena(game.renderMgr.imCtx, textParamsCenter, game.memory.persistentArena.end, game.memory.persistentArenaBuffer, (ptrdiff_t)game.memory.persistentArena.curr
+                            renderArena(imCtx, textParamsCenter, game.memory.persistentArena.end, game.memory.persistentArenaBuffer, (ptrdiff_t)game.memory.persistentArena.curr
                                 , "Game persistent arena", defaultCol, arenabaseCol, arenahighmarkCol, lineheight, textscale);
                         }
                         {
-                            auto& im = game.renderMgr.imCtx;
+                            auto& im = imCtx;
                             const Color32 baseCol(0.65f, 0.65f, 0.65f, 0.4f);
                             const Color32 used3dCol(0.95f, 0.35f, 0.8f, 1.f);
                             const Color32 used2dCol(0.35f, 0.95f, 0.8f, 1.f);
@@ -979,81 +1068,90 @@ namespace Game
                             const f32 i2d_barwidth = barwidth * indices_2d_size / (f32)memory_size;
 
                             textParamsCenter.color = used3dCol;
-                            Renderer::im::text2d(game.renderMgr.imCtx, textParamsCenter, "im 3d: %lu bytes", vertices_3d_size);
+                            renderer::im::text2d(imCtx, textParamsCenter, "im 3d: %lu bytes", vertices_3d_size);
                             textParamsCenter.pos.y -= lineheight;
                             textParamsCenter.color = used2dCol;
-                            Renderer::im::text2d(game.renderMgr.imCtx, textParamsCenter, "im 2d: %lu bytes", vertices_2d_size);
+                            renderer::im::text2d(imCtx, textParamsCenter, "im 2d: %lu bytes", vertices_2d_size);
                             textParamsCenter.pos.y -= lineheight;
                             textParamsCenter.color = used2didxCol;
-                            Renderer::im::text2d(game.renderMgr.imCtx, textParamsCenter, "im 2d indices: %lu bytes", indices_2d_size);
+                            renderer::im::text2d(imCtx, textParamsCenter, "im 2d indices: %lu bytes", indices_2d_size);
                             textParamsCenter.pos.y -= lineheight;
                             textParamsCenter.color = defaultCol;
 
-                            Renderer::im::box_2d(game.renderMgr.imCtx
+                            renderer::im::box_2d(imCtx
                                 , float2(textParamsCenter.pos.x, textParamsCenter.pos.y - barheight)
                                 , float2(textParamsCenter.pos.x + barwidth, textParamsCenter.pos.y)
                                 , baseCol);
-                            Renderer::im::box_2d(game.renderMgr.imCtx
+                            renderer::im::box_2d(imCtx
                                 , float2(textParamsCenter.pos.x + v3d_barstart, textParamsCenter.pos.y - barheight)
                                 , float2(textParamsCenter.pos.x + v3d_barwidth, textParamsCenter.pos.y)
                                 , used3dCol);
-                            Renderer::im::box_2d(game.renderMgr.imCtx
+                            renderer::im::box_2d(imCtx
                                 , float2(textParamsCenter.pos.x + v2d_barstart, textParamsCenter.pos.y - barheight)
                                 , float2(textParamsCenter.pos.x + v2d_barstart + v2d_barwidth, textParamsCenter.pos.y)
                                 , used2dCol);
-                            Renderer::im::box_2d(game.renderMgr.imCtx
+                            renderer::im::box_2d(imCtx
                                 , float2(textParamsCenter.pos.x + i2d_barstart, textParamsCenter.pos.y - barheight)
                                 , float2(textParamsCenter.pos.x + i2d_barstart + i2d_barwidth, textParamsCenter.pos.y)
                                 , used2didxCol);
                         }
                     }
+
+                    // event label
+                    if (debug::eventLabel.time != 0.f) {
+                        f32 timeRunning = f32(platform.time.now - debug::eventLabel.time);
+                        f32 t = timeRunning / 2.f;
+                        if (t > 1.f) { debug::eventLabel.time = 0.f; }
+                        else {
+                            u8 oldScale = textParamsCenter.scale;
+                            textParamsCenter.color = Color32(1.0f, 0.2f, 0.1f, 1.f - t);
+                            textParamsCenter.scale *= 2;
+                            textParamsCenter.pos.y = math::min(textParamsCenter.pos.y, 180.f);
+                            renderer::im::text2d(imCtx, textParamsCenter, debug::eventLabel.text);
+                            textParamsCenter.pos.y = -lineheight;
+                            textParamsCenter.color = defaultCol;
+                            textParamsCenter.scale = oldScale;
+                        }
+                    }
                 }
-            }
-            #endif
-            
-            //  Batched 3D debug (clear cpu buffers onto the screen)
-            #if __DEBUG
-            {
-                im::present3d(mgr.imCtx, mgr.perspProjection.matrix, viewMatrix);
-                im::clear3d(mgr.imCtx);
             }
             #endif
 
             // copy backbuffer to window (upscale from game resolution to window resolution)
             {
-                Driver::Marker_t marker;
-                Driver::set_marker_name(marker, "UPSCALE TO WINDOW");
-                Renderer::Driver::start_event(marker);
+                driver::Marker_t marker;
+                driver::set_marker_name(marker, "UPSCALE TO WINDOW");
+                renderer::driver::start_event(marker);
                 {
                     {
-                        Renderer::Driver::ViewportParams vpParams;
+                        renderer::driver::ViewportParams vpParams;
                         vpParams.topLeftX = 0;
                         vpParams.topLeftY = 0;
                         vpParams.width = (f32)platform.screen.window_width;
                         vpParams.height = (f32)platform.screen.window_height;
-                        Renderer::Driver::set_VP(vpParams);
+                        renderer::driver::set_VP(vpParams);
                     }
 
-                    Renderer::Driver::bind_blend_state(store.blendStateBlendOff);
-                    Renderer::Driver::bind_DS(store.depthStateOff);
-                    Renderer::Driver::bind_RS(store.rasterizerStateFillFrontfaces);
-                    Renderer::Driver::bind_main_RT(store.windowRT);
+                    renderer::driver::bind_blend_state(store.blendStateBlendOff);
+                    renderer::driver::bind_DS(store.depthStateOff);
+                    renderer::driver::bind_RS(store.rasterizerStateFillFrontfaces);
+                    renderer::driver::bind_main_RT(store.windowRT);
 
-                    Driver::bind_shader(store.shaders[Renderer::ShaderType::FullscreenBlit]);
-                    Driver::bind_textures(&store.gameRT.textures[0], 1);
-                    Driver::draw_fullscreen();
-                    Renderer::Driver::RscTexture nullTex = {};
-                    Driver::bind_textures(&nullTex, 1); // unbind gameRT
+                    driver::bind_shader(store.shaders[renderer::ShaderType::FullscreenBlit]);
+                    driver::bind_textures(&store.gameRT.textures[0], 1);
+                    driver::draw_fullscreen();
+                    renderer::driver::RscTexture nullTex = {};
+                    driver::bind_textures(&nullTex, 1); // unbind gameRT
                 }
-                Renderer::Driver::end_event();
+                renderer::driver::end_event();
             }
             // Batched 2d debug (clear cpu buffers onto the screen)
             #if __DEBUG
             {
-                Renderer::Driver::bind_blend_state(store.blendStateBlendOff);
-                Renderer::Driver::bind_main_RT(store.windowRT);
+                renderer::driver::bind_blend_state(store.blendStateOn);
+                renderer::driver::bind_main_RT(store.windowRT);
+                im::commit2d(mgr.imCtx);
                 im::present2d(mgr.imCtx, mgr.windowProjection.matrix);
-                im::clear2d(mgr.imCtx);
             }
             #endif
 

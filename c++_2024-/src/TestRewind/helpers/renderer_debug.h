@@ -1,18 +1,17 @@
 #ifndef __WASTELADNS_DEBUGDRAW_H__
 #define __WASTELADNS_DEBUGDRAW_H__
 
-#ifndef UNITYBUILD
-#include "color.h"
-#include "angle.h"
-#include "transform.h"
-#include <assert.h>
-#endif
-
 #ifdef __WASTELADNS_DEBUG_TEXT__
 #include "../lib/stb/stb_easy_font.h"
 #endif
 
-namespace Renderer
+namespace debug {
+    bool frustum_planes_off[6] = {};
+    bool force_cut_frustum = false;
+    const char* frustum_planes_names[] = { "near", "far", "left", "right", "bottom", "top" };
+}
+
+namespace renderer
 {
 namespace im
 {
@@ -40,13 +39,13 @@ namespace im
         Vertex2D* vertices_2d;
         u32* indices_2d;
         
-        Driver::RscVertexBuffer buffer_3d;
-        Driver::RscIndexedVertexBuffer buffer_2d;
-        Driver::RscShaderSet shader_3d;
-        Driver::RscShaderSet shader_2d;
-        Driver::RscCBuffer cbuffer;
-        Driver::RscRasterizerState rasterizerState;
-        Driver::RscDepthStencilState orthoDepthState, perspDepthState;
+        driver::RscVertexBuffer buffer_3d;
+        driver::RscIndexedVertexBuffer buffer_2d;
+        driver::RscShaderSet shader_3d;
+        driver::RscShaderSet shader_2d;
+        driver::RscCBuffer cbuffer;
+        driver::RscRasterizerState rasterizerState;
+        driver::RscDepthStencilState orthoDepthState;
 
         u32 vertices_3d_head;
         u32 vertices_2d_head;
@@ -67,13 +66,6 @@ namespace im
         u8 scale;
     };
     
-    void clear3d(Context& buffer) {
-        buffer.vertices_3d_head = 0;
-    }
-    void clear2d(Context& buffer) {
-        buffer.vertices_2d_head = 0;
-    }
-
     void segment(Context& buffer, const float3& v1, const float3& v2, const Color32 color) {
 
         // Too many vertex pushed during immediate mode
@@ -92,7 +84,7 @@ namespace im
     }
     void openSegment(Context& buffer, const float3& start, const float3& dir, Color32 color) {
         const f32 segmentLength = 10000.f;
-        const float3 end = Math::add(start, Math::scale(dir, segmentLength));
+        const float3 end = math::add(start, math::scale(dir, segmentLength));
         segment(buffer, start, end, color);
     }
     void ray(Context& buffer, const float3& start, const float3& dir, Color32 color) {
@@ -100,8 +92,8 @@ namespace im
     }
     void line(Context& buffer, const float3& pos, const float3& dir, Color32 color) {
         const f32 extents = 10000.f;
-        const float3 start = Math::subtract(pos, Math::scale(dir, extents));
-        const float3 end = Math::add(pos, Math::scale(dir, extents));
+        const float3 start = math::subtract(pos, math::scale(dir, extents));
+        const float3 end = math::add(pos, math::scale(dir, extents));
         segment(buffer, start, end, color);
     }
     void poly(Context& buffer, const float3* vertices, const u8 count, Color32 color) {
@@ -152,22 +144,22 @@ namespace im
         float3 rightFarTop(aabb_max.x, aabb_max.y, aabb_max.z);
         float3 rightNearTop(aabb_max.x, aabb_min.y, aabb_max.z);
 
-        float4 leftNearBottom_WS = Math::mult(mat, float4(leftNearBottom, 1.f));
-        float4 leftFarBottom_WS = Math::mult(mat, float4(leftFarBottom, 1.f));
-        float4 leftFarTop_WS = Math::mult(mat, float4(leftFarTop, 1.f));
-        float4 leftNearTop_WS = Math::mult(mat, float4(leftNearTop, 1.f));
-        float4 rightNearBottom_WS = Math::mult(mat, float4(rightNearBottom, 1.f));
-        float4 rightFarBottom_WS = Math::mult(mat, float4(rightFarBottom, 1.f));
-        float4 rightFarTop_WS = Math::mult(mat, float4(rightFarTop, 1.f));
-        float4 rightNearTop_WS = Math::mult(mat, float4(rightNearTop, 1.f));
-        float3 leftNearBottom_NDC = Math::invScale(leftNearBottom_WS.xyz, leftNearBottom_WS.w);
-        float3 leftFarBottom_NDC = Math::invScale(leftFarBottom_WS.xyz, leftFarBottom_WS.w);
-        float3 leftFarTop_NDC = Math::invScale(leftFarTop_WS.xyz, leftFarTop_WS.w);
-        float3 leftNearTop_NDC = Math::invScale(leftNearTop_WS.xyz, leftNearTop_WS.w);
-        float3 rightNearBottom_NDC = Math::invScale(rightNearBottom_WS.xyz, rightNearBottom_WS.w);
-        float3 rightFarBottom_NDC = Math::invScale(rightFarBottom_WS.xyz, rightFarBottom_WS.w);
-        float3 rightFarTop_NDC = Math::invScale(rightFarTop_WS.xyz, rightFarTop_WS.w);
-        float3 rightNearTop_NDC = Math::invScale(rightNearTop_WS.xyz, rightNearTop_WS.w);
+        float4 leftNearBottom_WS = math::mult(mat, float4(leftNearBottom, 1.f));
+        float4 leftFarBottom_WS = math::mult(mat, float4(leftFarBottom, 1.f));
+        float4 leftFarTop_WS = math::mult(mat, float4(leftFarTop, 1.f));
+        float4 leftNearTop_WS = math::mult(mat, float4(leftNearTop, 1.f));
+        float4 rightNearBottom_WS = math::mult(mat, float4(rightNearBottom, 1.f));
+        float4 rightFarBottom_WS = math::mult(mat, float4(rightFarBottom, 1.f));
+        float4 rightFarTop_WS = math::mult(mat, float4(rightFarTop, 1.f));
+        float4 rightNearTop_WS = math::mult(mat, float4(rightNearTop, 1.f));
+        float3 leftNearBottom_NDC = math::invScale(leftNearBottom_WS.xyz, leftNearBottom_WS.w);
+        float3 leftFarBottom_NDC = math::invScale(leftFarBottom_WS.xyz, leftFarBottom_WS.w);
+        float3 leftFarTop_NDC = math::invScale(leftFarTop_WS.xyz, leftFarTop_WS.w);
+        float3 leftNearTop_NDC = math::invScale(leftNearTop_WS.xyz, leftNearTop_WS.w);
+        float3 rightNearBottom_NDC = math::invScale(rightNearBottom_WS.xyz, rightNearBottom_WS.w);
+        float3 rightFarBottom_NDC = math::invScale(rightFarBottom_WS.xyz, rightFarBottom_WS.w);
+        float3 rightFarTop_NDC = math::invScale(rightFarTop_WS.xyz, rightFarTop_WS.w);
+        float3 rightNearTop_NDC = math::invScale(rightNearTop_WS.xyz, rightNearTop_WS.w);
 
         // left plane
         segment(buffer, leftNearBottom_NDC, leftFarBottom_NDC, color);
@@ -191,23 +183,23 @@ namespace im
     void frustum(Context& buffer, const float4x4& projectionMat, Color32 color) {
 
         // extract clipping planes (note that near plane depends on API's min z)
-        float4x4 transpose = Math::transpose(projectionMat);
+        float4x4 transpose = math::transpose(projectionMat);
         float4 planes[6] = {
-            Math::add(Math::scale(transpose.col3, -Renderer::min_z), transpose.col2), // near
-            Math::subtract(transpose.col3, transpose.col2),   // far
-            Math::add(transpose.col3, transpose.col0),        // left
-            Math::subtract(transpose.col3, transpose.col0),   // right
-            Math::add(transpose.col3, transpose.col1),        // bottom
-            Math::subtract(transpose.col3, transpose.col1),   // top
+            math::add(math::scale(transpose.col3, -renderer::min_z), transpose.col2), // near
+            math::subtract(transpose.col3, transpose.col2),   // far
+            math::add(transpose.col3, transpose.col0),        // left
+            math::subtract(transpose.col3, transpose.col0),   // right
+            math::add(transpose.col3, transpose.col1),        // bottom
+            math::subtract(transpose.col3, transpose.col1),   // top
         };
 
-        for (float4& p : planes) { p = Math::invScale(p, Math::mag(p.xyz)); } // normalize so we can do thickness adjustments
+        for (float4& p : planes) { p = math::invScale(p, math::mag(p.xyz)); } // normalize so we can do thickness adjustments
 
         // If the near and far planes are parallel, project the intersection points in clipspace back into world view
-        if (Math::abs(Math::dot(planes[0].xyz, planes[1].xyz) + 1.f) < Math::eps_f) {
+        if (!debug::force_cut_frustum && math::abs(math::dot(planes[0].xyz, planes[1].xyz) + 1.f) < math::eps_f) {
             float4x4 inverse = projectionMat;
-            Math::inverse(inverse);
-            const float3 aabb_min(-1.f, -1.f, Renderer::min_z);
+            math::inverse(inverse);
+            const float3 aabb_min(-1.f, -1.f, renderer::min_z);
             const float3 aabb_max(1.f, 1.f, 1.f);
             obb(buffer, inverse, aabb_min, aabb_max, color);
             return;
@@ -216,6 +208,9 @@ namespace im
         // Otherwise, we'll generate a large cube and clip it via Sutherland–Hodgman
         // (this code uses a variation where we add a new face for each clip plane,
         // to prevent holes in our polyhedron
+        // note that if we were to store vertices in a shared array, and edges / faces referenced them,
+        // we'd only have to clip edges once (as opposed to once per face), and sorting faces would probably be easier,
+        // since we'd already have the vertex as pairs inside edges, and we'd just have to sort them by their common points
         
         // Build large cube around near plane (not too big, or we'll get floating point errors)
         const f32 size = 100000.f;
@@ -228,9 +223,9 @@ namespace im
         pts_in[5] = float3(-size, size, size);      // left far top
         pts_in[6] = float3(size, -size, size);      // right far bottom
         pts_in[7] = float3(size, size, size);       // right far top
-        float3 pointOnNearPlane = Math::scale(planes[0].xyz, -planes[0].w);
+        float3 pointOnNearPlane = math::scale(planes[0].xyz, -planes[0].w);
         for (float3& p : pts_in) {
-            p = Math::add(p, pointOnNearPlane);
+            p = math::add(p, pointOnNearPlane);
         }
         struct Face { float3 pts[32]; u32 count; };
         Face pts_out[12] = {};
@@ -244,6 +239,8 @@ namespace im
 
         // Cut our cube by each culling plane
         for (u32 plane_id = 0; plane_id < 6; plane_id++) {
+            if (debug::frustum_planes_off[plane_id]) continue;
+
             float4 plane = planes[plane_id];
 
             Face cutface = {}; // each plane cut may generate one new face on our shape
@@ -254,20 +251,20 @@ namespace im
                 const Face face_in = pts_out[face_id]; // explicit copy of inputs, so we can write directly on our input array
                 face_out.count = 0;
                 float3 va = face_in.pts[face_in.count - 1];
-                f32 va_d = Math::dot(va, plane.xyz) + plane.w;
+                f32 va_d = math::dot(va, plane.xyz) + plane.w;
                 for (u32 currvertex_in = 0; currvertex_in < face_in.count; currvertex_in++) {
 
                     float3 vb = face_in.pts[currvertex_in];
-                    f32 vb_d = Math::dot(vb, plane.xyz) + plane.w;
+                    f32 vb_d = math::dot(vb, plane.xyz) + plane.w;
                     bool addToCutface = false;
                     float3 intersection;
 
                     const f32 eps = 0.001f;
                     if (vb_d > eps) { // current vertex in positive zone, add to poly
                         if (va_d < -eps) { // edge entering the positive zone, add intersection point first
-                            float3 ab = Math::subtract(vb, va);
-                            f32 t = (-va_d) / Math::dot(plane.xyz, ab);
-                            intersection = Math::add(va, Math::scale(ab, t));
+                            float3 ab = math::subtract(vb, va);
+                            f32 t = (-va_d) / math::dot(plane.xyz, ab);
+                            intersection = math::add(va, math::scale(ab, t));
                             face_out.pts[face_out.count++] = intersection;
                             addToCutface = true;
                         }
@@ -275,9 +272,9 @@ namespace im
                     }
                     else if (vb_d < -eps) { // current vertex in negative zone, don't add to poly
                         if (va_d > eps) { // edge entering the negative zone, add intersection to face
-                            float3 ab = Math::subtract(vb, va);
-                            f32 t = (-va_d) / Math::dot(plane.xyz, ab);
-                            intersection = Math::add(va, Math::scale(ab, t));
+                            float3 ab = math::subtract(vb, va);
+                            f32 t = (-va_d) / math::dot(plane.xyz, ab);
+                            intersection = math::add(va, math::scale(ab, t));
                             face_out.pts[face_out.count++] = intersection;
                             addToCutface = true;
                         }
@@ -290,7 +287,7 @@ namespace im
 
                     // Skip repeated points on the new face
                     for (u32 i = 0; i < cutface.count && addToCutface; i++) {
-                        if (Math::isCloseAll(cutface.pts[i], intersection, 0.01f)) { addToCutface = false; }
+                        if (math::isCloseAll(cutface.pts[i], intersection, 0.01f)) { addToCutface = false; }
                     }
                     if (addToCutface) { cutface.pts[cutface.count++] = intersection; }
 
@@ -303,7 +300,7 @@ namespace im
             // We'll compute the hull using Andrew's monotone chain algorithm
             if (cutface.count > 2) {
                 // Project onto xz, xy or yz depending on which will yield a larger area (based on largest component of normal)
-                f32 x = Math::abs(plane.x), y = Math::abs(plane.y), z = Math::abs(plane.z);
+                f32 x = math::abs(plane.x), y = math::abs(plane.y), z = math::abs(plane.z);
                 u32 ax = 0, ay = 1; // project on xy plane
                 if (x > y && x > z) { ax = 1; ay = 2; } // project on yz plane
                 else if (y > x && y > z) { ax = 0; ay = 2; } // project on xz plane
@@ -354,16 +351,16 @@ namespace im
         }
     }
     void circle(Context& buffer, const float3& center, const float3& normal, const f32 radius, const Color32 color) {
-        Transform33 m = Math::fromUp(normal);
+        Transform33 m = math::fromUp(normal);
         
         static constexpr u32 kVertexCount = 8;
         float3 vertices[kVertexCount];
         for (u8 i = 0; i < kVertexCount; i++) {
             
-            const f32 angle = i * 2.f * Math::pi_f / (f32) kVertexCount;
-            const float3 vertexDirLocal = Math::add(Math::scale(m.right, Math::cos(angle)), Math::scale(m.front, Math::sin(angle)));
+            const f32 angle = i * 2.f * math::pi_f / (f32) kVertexCount;
+            const float3 vertexDirLocal = math::add(math::scale(m.right, math::cos(angle)), math::scale(m.front, math::sin(angle)));
             
-            vertices[i] = Math::add(center, Math::scale(vertexDirLocal, radius));
+            vertices[i] = math::add(center, math::scale(vertexDirLocal, radius));
         }
         poly(buffer, vertices, kVertexCount, color);
     }
@@ -371,21 +368,21 @@ namespace im
         
         static constexpr u32 kSectionCount = 2;
         const Color32 colorVariation(0.25f, 0.25f, 0.25f, 0.f);
-        const float3 up = Math::upAxis();
-        const float3 front = Math::frontAxis();
-        const float3 right = Math::rightAxis();
+        const float3 up = math::upAxis();
+        const float3 front = math::frontAxis();
+        const float3 right = math::rightAxis();
         for (u8 i = 0; i < kSectionCount; i++) {
             
-            const f32 angle = i * Math::pi_f / (f32) kSectionCount;
-            const f32 s = Math::sin(angle);
-            const f32 c = Math::cos(angle);
+            const f32 angle = i * math::pi_f / (f32) kSectionCount;
+            const f32 s = math::sin(angle);
+            const f32 c = math::cos(angle);
             
-            const float3 rotatedFront = Math::add(Math::scale(right, c), Math::scale(front, s));
+            const float3 rotatedFront = math::add(math::scale(right, c), math::scale(front, s));
             circle(buffer, center, rotatedFront, radius, color);
             
             const f32 sectionRadius = radius * s;
             const f32 sectionOffset = radius * c;
-            const float3 sectionPos = Math::add(center, Math::scale(up, sectionOffset));
+            const float3 sectionPos = math::add(center, math::scale(up, sectionOffset));
             circle(buffer, sectionPos, up, sectionRadius, color);
         }
     }
@@ -418,10 +415,10 @@ namespace im
         bottomRigth.color = color.ABGR();
     }
 #ifdef __WASTELADNS_DEBUG_TEXT__
-    void text2d(Context& buffer, const TextParams& params, const char* format, va_list argList) {
+    void text2d_va(Context& buffer, const TextParams& params, const char* format, va_list argList) {
         
         char text[256];
-        Platform::format_va(text, sizeof(text), format, argList);
+        platform::format_va(text, sizeof(text), format, argList);
         
         u32 vertexCount = buffer.vertices_2d_head;
         u32 indexCount = vertexSizeToIndexCount(buffer.vertices_2d_head);
@@ -456,7 +453,7 @@ namespace im
     void text2d(Context& buffer, const TextParams& params, const char* format, ...) {
         va_list va;
         va_start(va, format);
-        text2d(buffer, params, format, va);
+        text2d_va(buffer, params, format, va);
         va_end(va);
     }
     
@@ -467,12 +464,12 @@ namespace im
 
         va_list va;
         va_start(va, format);
-        text2d(buffer, params, format, va);
+        text2d_va(buffer, params, format, va);
         va_end(va);
     }
 #endif // __WASTELADNS_DEBUG_TEXT__
     
-    void init(Context& buffer, Allocator::Arena& arena) {
+    void init(Context& buffer, allocator::Arena& arena) {
 
         buffer = {};
 
@@ -481,20 +478,20 @@ namespace im
             u32 vertices_3d_size = max_3d_vertices * sizeof(Vertex3D);
             u32 vertices_2d_size = max_2d_vertices * sizeof(Vertex2D);
             u32 indices_2d_size = vertexSizeToIndexCount(max_2d_vertices) * sizeof(u32);
-            buffer.vertices_3d = (Vertex3D*)Allocator::alloc_arena(arena, vertices_3d_size, alignof(Vertex3D));
-            buffer.vertices_2d = (Vertex2D*)Allocator::alloc_arena(arena, vertices_2d_size, alignof(Vertex2D));
-            buffer.indices_2d = (u32*)Allocator::alloc_arena(arena, indices_2d_size, alignof(u32));
+            buffer.vertices_3d = (Vertex3D*)allocator::alloc_arena(arena, vertices_3d_size, alignof(Vertex3D));
+            buffer.vertices_2d = (Vertex2D*)allocator::alloc_arena(arena, vertices_2d_size, alignof(Vertex2D));
+            buffer.indices_2d = (u32*)allocator::alloc_arena(arena, indices_2d_size, alignof(u32));
 
-            Driver::create_cbuffer(buffer.cbuffer, { sizeof(float4x4), 4 });
-            const Renderer::Driver::CBufferBindingDesc bufferBindings_MVP[] = {{ "type_PerGroup", Driver::CBufferStageMask::VS }};
+            driver::create_cbuffer(buffer.cbuffer, { sizeof(float4x4), 4 });
+            const renderer::driver::CBufferBindingDesc bufferBindings_MVP[] = {{ "type_PerGroup", driver::CBufferStageMask::VS }};
 
             // 2d
             {
-                const Driver::VertexAttribDesc attribs_color2d[] = {
-                    Driver::make_vertexAttribDesc("POSITION", OFFSET_OF(Vertex2D, pos), sizeof(Vertex2D), Driver::BufferAttributeFormat::R32G32_FLOAT),
-                    Driver::make_vertexAttribDesc("COLOR", OFFSET_OF(Vertex2D, color), sizeof(Vertex2D), Driver::BufferAttributeFormat::R8G8B8A8_UNORM)
+                const driver::VertexAttribDesc attribs_color2d[] = {
+                    driver::make_vertexAttribDesc("POSITION", OFFSET_OF(Vertex2D, pos), sizeof(Vertex2D), driver::BufferAttributeFormat::R32G32_FLOAT),
+                    driver::make_vertexAttribDesc("COLOR", OFFSET_OF(Vertex2D, color), sizeof(Vertex2D), driver::BufferAttributeFormat::R8G8B8A8_UNORM)
                 };
-                Renderer::ShaderDesc desc = {};
+                renderer::ShaderDesc desc = {};
                 desc.vertexAttrs = attribs_color2d;
                 desc.vertexAttr_count = COUNT_OF(attribs_color2d);
                 desc.textureBindings = nullptr;
@@ -502,123 +499,121 @@ namespace im
                 desc.bufferBindings = bufferBindings_MVP;
                 desc.bufferBinding_count = COUNT_OF(bufferBindings_MVP);
                 // reuse 3d shaders
-                desc.vs_name = Shaders::vs_color3d_unlit.name;
-                desc.vs_src = Shaders::vs_color3d_unlit.src;
-                desc.ps_name = Shaders::ps_color3d_unlit.name;
-                desc.ps_src = Shaders::ps_color3d_unlit.src;
-                Renderer::compile_shader(buffer.shader_2d, desc);
+                desc.vs_name = shaders::vs_color3d_unlit.name;
+                desc.vs_src = shaders::vs_color3d_unlit.src;
+                desc.ps_name = shaders::ps_color3d_unlit.name;
+                desc.ps_src = shaders::ps_color3d_unlit.src;
+                renderer::compile_shader(buffer.shader_2d, desc);
 
-                Renderer::Driver::IndexedVertexBufferDesc bufferParams;
+                renderer::driver::IndexedVertexBufferDesc bufferParams;
                 bufferParams.vertexData = nullptr;
                 bufferParams.indexData = nullptr;
                 bufferParams.vertexSize = vertices_2d_size;
                 bufferParams.vertexCount = max_2d_vertices;
                 bufferParams.indexSize = indices_2d_size;
-                bufferParams.memoryUsage = Renderer::Driver::BufferMemoryUsage::CPU;
-                bufferParams.accessType = Renderer::Driver::BufferAccessType::CPU;
-                bufferParams.indexType = Renderer::Driver::BufferItemType::U32;
-                bufferParams.type = Renderer::Driver::BufferTopologyType::Triangles;
+                bufferParams.memoryUsage = renderer::driver::BufferMemoryUsage::CPU;
+                bufferParams.accessType = renderer::driver::BufferAccessType::CPU;
+                bufferParams.indexType = renderer::driver::BufferItemType::U32;
+                bufferParams.type = renderer::driver::BufferTopologyType::Triangles;
                 bufferParams.indexCount = 0;
-                Driver::create_indexed_vertex_buffer(buffer.buffer_2d, bufferParams, attribs_color2d, COUNT_OF(attribs_color2d));
+                driver::create_indexed_vertex_buffer(buffer.buffer_2d, bufferParams, attribs_color2d, COUNT_OF(attribs_color2d));
             }
             // 3d
             {
-                const Driver::VertexAttribDesc attribs_color3d[] = {
-                    Driver::make_vertexAttribDesc("POSITION", OFFSET_OF(Vertex3D, pos), sizeof(Vertex3D), Driver::BufferAttributeFormat::R32G32B32_FLOAT),
-                    Driver::make_vertexAttribDesc("COLOR", OFFSET_OF(Vertex3D, color), sizeof(Vertex3D), Driver::BufferAttributeFormat::R8G8B8A8_UNORM)
+                const driver::VertexAttribDesc attribs_color3d[] = {
+                    driver::make_vertexAttribDesc("POSITION", OFFSET_OF(Vertex3D, pos), sizeof(Vertex3D), driver::BufferAttributeFormat::R32G32B32_FLOAT),
+                    driver::make_vertexAttribDesc("COLOR", OFFSET_OF(Vertex3D, color), sizeof(Vertex3D), driver::BufferAttributeFormat::R8G8B8A8_UNORM)
                 };
-                Renderer::ShaderDesc desc = {};
+                renderer::ShaderDesc desc = {};
                 desc.vertexAttrs = attribs_color3d;
                 desc.vertexAttr_count = COUNT_OF(attribs_color3d);
                 desc.textureBindings = nullptr;
                 desc.textureBinding_count = 0;
                 desc.bufferBindings = bufferBindings_MVP;
                 desc.bufferBinding_count = COUNT_OF(bufferBindings_MVP);
-                desc.vs_name = Shaders::vs_color3d_unlit.name;
-                desc.vs_src = Shaders::vs_color3d_unlit.src;
-                desc.ps_name = Shaders::ps_color3d_unlit.name;
-                desc.ps_src = Shaders::ps_color3d_unlit.src;
-                Renderer::compile_shader(buffer.shader_3d, desc);
+                desc.vs_name = shaders::vs_color3d_unlit.name;
+                desc.vs_src = shaders::vs_color3d_unlit.src;
+                desc.ps_name = shaders::ps_color3d_unlit.name;
+                desc.ps_src = shaders::ps_color3d_unlit.src;
+                renderer::compile_shader(buffer.shader_3d, desc);
 
-                Renderer::Driver::VertexBufferDesc bufferParams;
+                renderer::driver::VertexBufferDesc bufferParams;
                 bufferParams.vertexData = nullptr;
                 bufferParams.vertexSize = vertices_3d_size;
                 bufferParams.vertexCount = max_3d_vertices;
-                bufferParams.memoryUsage = Renderer::Driver::BufferMemoryUsage::CPU;
-                bufferParams.accessType = Renderer::Driver::BufferAccessType::CPU;
-                bufferParams.type = Renderer::Driver::BufferTopologyType::Lines;
-                Driver::create_vertex_buffer(buffer.buffer_3d, bufferParams, attribs_color3d, COUNT_OF(attribs_color3d));
+                bufferParams.memoryUsage = renderer::driver::BufferMemoryUsage::CPU;
+                bufferParams.accessType = renderer::driver::BufferAccessType::CPU;
+                bufferParams.type = renderer::driver::BufferTopologyType::Lines;
+                driver::create_vertex_buffer(buffer.buffer_3d, bufferParams, attribs_color3d, COUNT_OF(attribs_color3d));
             }
         }
         
-        Renderer::Driver::create_RS(buffer.rasterizerState, { Renderer::Driver::RasterizerFillMode::Fill, Renderer::Driver::RasterizerCullMode::CullBack });
+        renderer::driver::create_RS(buffer.rasterizerState, { renderer::driver::RasterizerFillMode::Fill, renderer::driver::RasterizerCullMode::CullBack });
         {
-            Renderer::Driver::DepthStencilStateParams dsParams;
+            renderer::driver::DepthStencilStateParams dsParams;
             dsParams = {};
             dsParams.depth_enable = false;
-            Renderer::Driver::create_DS(buffer.orthoDepthState, dsParams);
-            dsParams = {};
-            dsParams.depth_enable = true;
-            dsParams.depth_func = Renderer::Driver::CompFunc::Less;
-            dsParams.depth_writemask = Renderer::Driver::DepthWriteMask::All;
-            Renderer::Driver::create_DS(buffer.perspDepthState, dsParams);
+            renderer::driver::create_DS(buffer.orthoDepthState, dsParams);
         }
     }
-    
+    void commit3d(Context& buffer) {
+        driver::BufferUpdateParams bufferUpdateParams;
+        bufferUpdateParams.vertexData = buffer.vertices_3d;
+        bufferUpdateParams.vertexSize = sizeof(Vertex3D) * buffer.vertices_3d_head;
+        bufferUpdateParams.vertexCount = buffer.vertices_3d_head;
+        driver::update_vertex_buffer(buffer.buffer_3d, bufferUpdateParams);
+        buffer.vertices_3d_head = 0;
+    }
     void present3d(Context& buffer, const float4x4& projMatrix, const float4x4& viewMatrix) {
-        
-        Driver::Marker_t marker;
-        Driver::set_marker_name(marker, "DEBUG 3D");
-        Driver::start_event(marker);
+        driver::Marker_t marker;
+        driver::set_marker_name(marker, "DEBUG 3D");
+        driver::start_event(marker);
         {
-            Renderer::Driver::bind_RS(buffer.rasterizerState);
-            Renderer::Driver::bind_DS(buffer.perspDepthState);
+            // depth state needs to be set by the caller
+            renderer::driver::bind_RS(buffer.rasterizerState);
 
-            Driver::BufferUpdateParams bufferUpdateParams;
-            bufferUpdateParams.vertexData = buffer.vertices_3d;
-            bufferUpdateParams.vertexSize = sizeof(Vertex3D) * buffer.vertices_3d_head;
-            bufferUpdateParams.vertexCount = buffer.vertices_3d_head;
-            Driver::update_vertex_buffer(buffer.buffer_3d, bufferUpdateParams);
+            float4x4 mvp = math::mult(projMatrix, viewMatrix);
+            driver::update_cbuffer(buffer.cbuffer, &mvp);
 
-            float4x4 mvp = Math::mult(projMatrix, viewMatrix);
-            Driver::update_cbuffer(buffer.cbuffer, &mvp);
-
-            Driver::bind_shader(buffer.shader_3d);
-            Driver::RscCBuffer cbuffers[] = { buffer.cbuffer };
-            Driver::bind_cbuffers(buffer.shader_3d, cbuffers, 1);
-            Driver::bind_vertex_buffer(buffer.buffer_3d);
-            Driver::draw_vertex_buffer(buffer.buffer_3d);
+            driver::bind_shader(buffer.shader_3d);
+            driver::RscCBuffer cbuffers[] = { buffer.cbuffer };
+            driver::bind_cbuffers(buffer.shader_3d, cbuffers, 1);
+            driver::bind_vertex_buffer(buffer.buffer_3d);
+            driver::draw_vertex_buffer(buffer.buffer_3d);
         }
-        Driver::end_event();
+        driver::end_event();
     }
-    
+
+    void commit2d(Context& buffer) {
+        u32 indexCount = vertexSizeToIndexCount(buffer.vertices_2d_head);
+        driver::IndexedBufferUpdateParams bufferUpdateParams;
+        bufferUpdateParams.vertexData = buffer.vertices_2d;
+        bufferUpdateParams.vertexSize = sizeof(Vertex2D) * buffer.vertices_2d_head;
+        bufferUpdateParams.indexData = buffer.indices_2d;
+        bufferUpdateParams.indexSize = indexCount * sizeof(u32);
+        bufferUpdateParams.indexCount = indexCount;
+        driver::update_indexed_vertex_buffer(buffer.buffer_2d, bufferUpdateParams);
+        buffer.vertices_2d_head = 0;
+    }
     void present2d(Context& buffer, const float4x4& projMatrix) {
 
-        Driver::Marker_t marker;
-        Driver::set_marker_name(marker, "DEBUG 2D");
-        Driver::start_event(marker);
+        driver::Marker_t marker;
+        driver::set_marker_name(marker, "DEBUG 2D");
+        driver::start_event(marker);
         {
-            Renderer::Driver::bind_RS(buffer.rasterizerState);
-            Renderer::Driver::bind_DS(buffer.orthoDepthState);
+            renderer::driver::bind_RS(buffer.rasterizerState);
+            renderer::driver::bind_DS(buffer.orthoDepthState);
 
-            u32 indexCount = vertexSizeToIndexCount(buffer.vertices_2d_head);
-            Driver::IndexedBufferUpdateParams bufferUpdateParams;
-            bufferUpdateParams.vertexData = buffer.vertices_2d;
-            bufferUpdateParams.vertexSize = sizeof(Vertex2D) * buffer.vertices_2d_head;
-            bufferUpdateParams.indexData = buffer.indices_2d;
-            bufferUpdateParams.indexSize = indexCount * sizeof(u32);
-            bufferUpdateParams.indexCount = indexCount;
-            Driver::update_indexed_vertex_buffer(buffer.buffer_2d, bufferUpdateParams);
+            driver::update_cbuffer(buffer.cbuffer, &projMatrix);
 
-            Driver::update_cbuffer(buffer.cbuffer, &projMatrix);
-
-            Driver::bind_shader(buffer.shader_2d);
-            Driver::RscCBuffer cbuffers[] = { buffer.cbuffer };
-            Driver::bind_cbuffers(buffer.shader_2d, cbuffers, 1);
-            Driver::bind_indexed_vertex_buffer(buffer.buffer_2d);
-            Driver::draw_indexed_vertex_buffer(buffer.buffer_2d);
+            driver::bind_shader(buffer.shader_2d);
+            driver::RscCBuffer cbuffers[] = { buffer.cbuffer };
+            driver::bind_cbuffers(buffer.shader_2d, cbuffers, 1);
+            driver::bind_indexed_vertex_buffer(buffer.buffer_2d);
+            driver::draw_indexed_vertex_buffer(buffer.buffer_2d);
         }
-        Driver::end_event();
+        driver::end_event();
+        buffer.vertices_2d_head = 0;
     }
     
 }

@@ -1,7 +1,7 @@
 #ifndef __WASTELADNS_ALLOCATOR_H__
 #define __WASTELADNS_ALLOCATOR_H__
 
-namespace Allocator {
+namespace allocator {
 struct Arena {
     u8* curr;
     u8* end;
@@ -21,7 +21,7 @@ void* alloc_arena(Arena& arena, ptrdiff_t size, ptrdiff_t align) {
     uintptr_t curr_aligned = ((uintptr_t)arena.curr + (align - 1)) & -align;
     if (curr_aligned + size <= (uintptr_t)arena.end) {
         arena.curr = (u8*)(curr_aligned + size);
-        __DEBUGEXP(if (arena.highmark) { *arena.highmark = Math::max(*arena.highmark, (uintptr_t)arena.curr); });
+        __DEBUGEXP(if (arena.highmark) { *arena.highmark = math::max(*arena.highmark, (uintptr_t)arena.curr); });
         return (void*)curr_aligned;
     }
     assert(0);
@@ -110,7 +110,7 @@ template<typename _T>
 void init_pool(Pool<_T>& pool, ptrdiff_t cap, Arena& arena) {
 	typedef typename Pool<_T>::Slot _Slot;
 	pool.cap = cap;
-    pool.data = (_Slot*)Allocator::alloc_arena(arena, sizeof(_Slot) * cap, alignof(_Slot));
+    pool.data = (_Slot*)allocator::alloc_arena(arena, sizeof(_Slot) * cap, alignof(_Slot));
     pool.firstAvailable = pool.data;
 	for (u32 i = 0; i < cap - 1; i++) { pool.data[i].state.next = &(pool.data[i+1]); pool.data[i].alive = 0; }
 	pool.data[cap - 1].state.next = nullptr; pool.data[cap - 1].alive = 0;
@@ -122,8 +122,8 @@ _T&  alloc_pool(Pool<_T>& pool) {
 #if __DEBUG
     if (!pool.firstAvailable) { // can't regrow without messing up the pointers that have already been handed out
         // todo: remove, this breaks everything basically (counts, address to indexes, etc)
-		Platform::debuglog("Pool %s ran out of slots, defaulting to emergency allocator\n", pool.name);
-        return *(_T*)Allocator::alloc_arena(Allocator::emergencyArena, sizeof(_T), alignof(_T));
+		platform::debuglog("Pool %s ran out of slots, defaulting to emergency allocator\n", pool.name);
+        return *(_T*)allocator::alloc_arena(allocator::emergencyArena, sizeof(_T), alignof(_T));
     }
 #endif
 	_T& out = pool.firstAvailable->state.live;

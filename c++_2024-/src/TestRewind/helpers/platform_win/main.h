@@ -1,6 +1,6 @@
 
 #if __DX11
-bool createRenderContext(HWND hWnd, const Platform::State& platform) {
+bool createRenderContext(HWND hWnd, const platform::State& platform) {
     ID3D11Device1* d3ddev;
     ID3D11DeviceContext1* d3dcontext;
     IDXGISwapChain1* swapchain;
@@ -56,16 +56,16 @@ bool createRenderContext(HWND hWnd, const Platform::State& platform) {
     d3dcontext->QueryInterface(__uuidof(pPerf), reinterpret_cast<void**>(&pPerf));
 
     // TODO: Handle more nicely
-    Renderer::Driver::d3ddev = d3ddev;
-    Renderer::Driver::d3dcontext = d3dcontext;
-    Renderer::Driver::swapchain = swapchain;
-    Renderer::Driver::perf = pPerf;
+    renderer::driver::d3ddev = d3ddev;
+    renderer::driver::d3dcontext = d3dcontext;
+    renderer::driver::swapchain = swapchain;
+    renderer::driver::perf = pPerf;
     
     return true;
 }
 
 void swapBuffers() {
-	Renderer::Driver::swapchain->Present(1, 0);
+	renderer::driver::swapchain->Present(1, 0);
 }
 #elif __GL33
 struct LogLevel { enum Enum { None = -1, Debug, Low, Med, High }; };
@@ -110,7 +110,7 @@ void debugMessageCallback(GLenum source, GLenum type, GLuint id, GLenum severity
     case GL_DEBUG_TYPE_POP_GROUP: typeStr = "POP"; logData.indent--, indent--; break;
     }
 
-    Platform::debuglog("%*s=>GL[%s,src:%s,severity:%s,id:%d]: %s\n",
+    platform::debuglog("%*s=>GL[%s,src:%s,severity:%s,id:%d]: %s\n",
         indent * 2, "", typeStr, sourceStr, severityStr, id, message);
 }
 typedef HGLRC(WINAPI* PFNWGLCREATECONTEXTATTRIBSARBPROC)(HDC, HGLRC, const int*);
@@ -135,7 +135,7 @@ PFNWGLGETPIXELFORMATARBPROC wglChoosePixelFormatARB;
 #define WGL_TYPE_RGBA_ARB 0x202B
 
 HDC dc;
-bool createRenderContext(HWND hWnd, const Platform::State& platform) {
+bool createRenderContext(HWND hWnd, const platform::State& platform) {
 
     {   // create a tmp render context / window pair, so we can load wgl extensions
         WNDCLASSA window_class = {};
@@ -200,8 +200,8 @@ bool createRenderContext(HWND hWnd, const Platform::State& platform) {
     if (!wglMakeCurrent(dc, rc)) { return false; }
 
     // initialize OpenGL function pointers
-    Renderer::Driver::loadGLFramework();
-    Renderer::Driver::loadGLExtensions();
+    renderer::driver::loadGLFramework();
+    renderer::driver::loadGLExtensions();
 
 #if __GPU_DEBUG
     if (glDebugMessageCallback) {//GLAD_GL_KHR_debug) {
@@ -235,7 +235,7 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPara
 }
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
-    Platform::State platform = {};
+    platform::State platform = {};
     HWND hWnd;
     {
         WNDCLASSEX wc;
@@ -249,8 +249,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         wc.lpszClassName = "WindowClass";
         RegisterClassEx(&wc);
 
-        Platform::LaunchConfig config;
-        Game::loadLaunchConfig(config);
+        platform::LaunchConfig config;
+        game::loadLaunchConfig(config);
 
         // Adjust window to account for menus
         const DWORD style = WS_OVERLAPPEDWINDOW;
@@ -282,7 +282,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         platform.screen.desiredRatio = platform.screen.width / (f32)platform.screen.height;
         platform.screen.fullscreen = config.fullscreen;
 
-        Allocator::init_arena(platform.memory.scratchArenaRoot, config.scratchArena_size);
+        allocator::init_arena(platform.memory.scratchArenaRoot, config.scratchArena_size);
         __DEBUGEXP(platform.memory.scratchArenaHighmark = (uintptr_t)platform.memory.scratchArenaRoot.curr; platform.memory.scratchArenaRoot.highmark = &platform.memory.scratchArenaHighmark);
     }
 
@@ -295,7 +295,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         return 0;
     }
 
-    ::Input::Gamepad::init_hid_pads_win(hWnd);
+    ::input::gamepad::init_hid_pads_win(hWnd);
 
     u64 start;
     QueryPerformanceCounter((LARGE_INTEGER*)&start);
@@ -303,9 +303,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     platform.time.running = 0.0;
     platform.time.now = platform.time.start = start / (f64)frequency;
 
-    Game::Instance game;
-    Platform::GameConfig config;
-    Game::start(game, config, platform);
+    game::Instance game;
+    platform::GameConfig config;
+    game::start(game, config, platform);
 
     MSG msg = {};
     do {
@@ -314,8 +314,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
             // Input
             {
             for (u32 i = 0; i < platform.input.padCount; i++) { platform.input.pads[i].last_keys = platform.input.pads[i].curr_keys; }
-            memcpy(platform.input.keyboard.last, platform.input.keyboard.current, sizeof(u8)* ::Input::Keyboard::Keys::COUNT);
-            memcpy(platform.input.mouse.last, platform.input.mouse.curr, sizeof(u8) * ::Input::Mouse::Keys::COUNT);
+            memcpy(platform.input.keyboard.last, platform.input.keyboard.current, sizeof(u8)* ::input::keyboard::Keys::COUNT);
+            memcpy(platform.input.mouse.last, platform.input.mouse.curr, sizeof(u8) * ::input::mouse::Keys::COUNT);
             const f32 mouse_prevx = platform.input.mouse.x, mouse_prevy = platform.input.mouse.y;
             platform.input.mouse.dx = platform.input.mouse.dy = platform.input.mouse.scrolldx = platform.input.mouse.scrolldy = 0.f;
 
@@ -330,7 +330,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
                     case WM_KEYUP:
                     case WM_SYSKEYUP: {
                         if (msg.wParam != VK_CONTROL && msg.wParam != VK_PROCESSKEY) {
-                            ::Input::Keyboard::Keys::Enum keycode = (::Input::Keyboard::Keys::Enum)(HIWORD(msg.lParam) & 0x1FF);
+                            ::input::keyboard::Keys::Enum keycode = (::input::keyboard::Keys::Enum)(HIWORD(msg.lParam) & 0x1FF);
 							platform.input.keyboard.current[keycode] = 0;
                         }
                     }
@@ -338,20 +338,20 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
                     case WM_KEYDOWN:
                     case WM_SYSKEYDOWN: {
                         if (msg.wParam != VK_CONTROL && msg.wParam != VK_PROCESSKEY) {
-                            ::Input::Keyboard::Keys::Enum keycode = (::Input::Keyboard::Keys::Enum)(HIWORD(msg.lParam) & 0x1FF);
+                            ::input::keyboard::Keys::Enum keycode = (::input::keyboard::Keys::Enum)(HIWORD(msg.lParam) & 0x1FF);
                             platform.input.keyboard.current[keycode] = 1;
                         }
                     }
                     break;
                     case WM_LBUTTONUP:
                     case WM_RBUTTONUP: {
-                        ::Input::Mouse::Keys::Enum keycode = (::Input::Mouse::Keys::Enum) ((msg.message >> 2) & 0x1);
+                        ::input::mouse::Keys::Enum keycode = (::input::mouse::Keys::Enum) ((msg.message >> 2) & 0x1);
 						platform.input.mouse.curr[keycode] = 0;
                     }
                     break;
                     case WM_LBUTTONDOWN:
                     case WM_RBUTTONDOWN: {
-                        ::Input::Mouse::Keys::Enum keycode = (::Input::Mouse::Keys::Enum) ((msg.message >> 2) & 0x1);
+                        ::input::mouse::Keys::Enum keycode = (::input::mouse::Keys::Enum) ((msg.message >> 2) & 0x1);
                         platform.input.mouse.curr[keycode] = 1;
                     }
                     break;
@@ -374,7 +374,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
                     break;
                     case WM_INPUT: {
                         // arena copy, not by value (there will be an implicit free when the function ends)
-                        ::Input::Gamepad::process_hid_pads_win(platform.memory.scratchArenaRoot, platform.input.pads, platform.input.padCount, COUNT_OF(platform.input.pads), (HRAWINPUT)msg.lParam);
+                        ::input::gamepad::process_hid_pads_win(platform.memory.scratchArenaRoot, platform.input.pads, platform.input.padCount, COUNT_OF(platform.input.pads), (HRAWINPUT)msg.lParam);
                     }
                     break;
                     default: {
@@ -386,7 +386,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
             }
             } // Input
 
-            Game::update(game, config, platform);
+            game::update(game, config, platform);
 
             swapBuffers();
         }

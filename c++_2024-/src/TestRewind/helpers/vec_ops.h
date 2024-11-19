@@ -1,12 +1,7 @@
 #ifndef __WASTELADNS_VEC_OPS_H__
 #define __WASTELADNS_VEC_OPS_H__
 
-#ifndef UNITYBUILD
-#include "vec.h"
-#include "angle.h"
-#endif
-
-namespace Math {
+namespace math {
 
 f32 quaternionDot(const float4& a, const float4& b) { return a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w; }
 float4 quaternionSlerp(const f32 t, const float4& a, const float4& b) {
@@ -14,7 +9,7 @@ float4 quaternionSlerp(const f32 t, const float4& a, const float4& b) {
     f32 ax = a.x, ay = a.y, az = a.z, aw = a.w;
 
     // If negative dot, negate b so the interpolation takes the shorter arc
-    f32 cosOmega = Math::quaternionDot(a, b);
+    f32 cosOmega = math::quaternionDot(a, b);
     if (cosOmega < 0.0f) {
         bx = -b.x; by = -b.y; bz = -b.z; bw = -b.w;
         cosOmega = -cosOmega;
@@ -26,12 +21,12 @@ float4 quaternionSlerp(const f32 t, const float4& a, const float4& b) {
         kb = t;
 	} else {
         // sin^2(omega) + cos^2(omega) = 1, so
-        f32 sinOmega = Math::sqrt(1.0f - cosOmega * cosOmega);
-        f32 omega = Math::atan2(sinOmega, cosOmega);
+        f32 sinOmega = math::sqrt(1.0f - cosOmega * cosOmega);
+        f32 omega = math::atan2(sinOmega, cosOmega);
         f32 oneOverSinOmega = 1.0f / sinOmega;
 
-        ka = Math::sin((1.0f - t) * omega) * oneOverSinOmega;
-        kb = Math::sin(t * omega) * oneOverSinOmega;
+        ka = math::sin((1.0f - t) * omega) * oneOverSinOmega;
+        kb = math::sin(t * omega) * oneOverSinOmega;
     }
 
     return float4(ax * ka + bx * kb
@@ -45,12 +40,12 @@ float4 eulersToQuaterion(const float3& eulers)
     f32 roll = eulers.x;
     f32 pitch = eulers.y;
     f32 yaw = eulers.z;
-    f32 cy = Math::cos(yaw * 0.5f);
-    f32 sy = Math::sin(yaw * 0.5f);
-    f32 cp = Math::cos(pitch * 0.5f);
-    f32 sp = Math::sin(pitch * 0.5f);
-    f32 cr = Math::cos(roll * 0.5f);
-    f32 sr = Math::sin(roll * 0.5f);
+    f32 cy = math::cos(yaw * 0.5f);
+    f32 sy = math::sin(yaw * 0.5f);
+    f32 cp = math::cos(pitch * 0.5f);
+    f32 sp = math::sin(pitch * 0.5f);
+    f32 cr = math::cos(roll * 0.5f);
+    f32 sr = math::sin(roll * 0.5f);
 
     return float4(sr * cp * cy - cr * sp * sy
                 , cr * sp * cy + sr * cp * sy
@@ -61,17 +56,17 @@ float4 eulersToQuaterion(const float3& eulers)
 float3 quaternionToEulers(const float4& q) {
     f32 sinr_cosp = 2.f * (q.w * q.x + q.y * q.z);
     f32 cosr_cosp = 1.f - 2.f * (q.x * q.x + q.y * q.y);
-    f32 roll = Math::atan2(sinr_cosp, cosr_cosp);
+    f32 roll = math::atan2(sinr_cosp, cosr_cosp);
 
     f32 pitch;
     f32 sinp = 2.f * (q.w * q.y - q.z * q.x);
-    if (sinp > 1.f) pitch = Math::halfpi_f;
-    else if (sinp < 1.f) pitch = -Math::halfpi_f;
-    else pitch = Math::asin(sinp);
+    if (sinp > 1.f) pitch = math::halfpi_f;
+    else if (sinp < 1.f) pitch = -math::halfpi_f;
+    else pitch = math::asin(sinp);
 
     f32 siny_cosp = 2.f * (q.w * q.z + q.x * q.y);
     f32 cosy_cosp = 1.f - 2.f * (q.y * q.y + q.z * q.z);
-    f32 yaw = Math::atan2(siny_cosp, cosy_cosp);
+    f32 yaw = math::atan2(siny_cosp, cosy_cosp);
 
     return float3(roll, pitch, yaw);
 }
@@ -129,21 +124,21 @@ float4 rotationMatrixToQuaternion(float3x3 m) {
     }
     else {
         if (a[0] > a[4] && a[0] > a[8]) {
-            f32 s = 2.0f * Math::sqrt(1.0f + a[0] - a[4] - a[8]);
+            f32 s = 2.0f * math::sqrt(1.0f + a[0] - a[4] - a[8]);
             q.w = (a[5] - a[7]) / s;
             q.x = 0.25f * s;
             q.y = (a[3] + a[1]) / s;
             q.z = (a[6] + a[2]) / s;
         }
         else if (a[4] > a[8]) {
-            f32 s = 2.0f * Math::sqrt(1.0f + a[4] - a[0] - a[8]);
+            f32 s = 2.0f * math::sqrt(1.0f + a[4] - a[0] - a[8]);
             q.w = (a[6] - a[2]) / s;
             q.x = (a[3] + a[1]) / s;
             q.y = 0.25f * s;
             q.z = (a[7] + a[5]) / s;
         }
         else {
-            f32 s = 2.0f * Math::sqrt(1.0f + a[8] - a[0] - a[4]);
+            f32 s = 2.0f * math::sqrt(1.0f + a[8] - a[0] - a[4]);
             q.w = (a[1] - a[3]) / s;
             q.x = (a[6] + a[2]) / s;
             q.y = (a[7] + a[5]) / s;

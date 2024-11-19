@@ -1,12 +1,8 @@
 #ifndef __WASTELADNS_RENDERER_GL33_H__
 #define __WASTELADNS_RENDERER_GL33_H__
 
-#ifndef UNITYBUILD
-#include "core.h"
-#endif
-
-namespace Renderer {
-namespace Driver {
+namespace renderer {
+namespace driver {
 
     void create_main_RT(RscMainRenderTarget& rt, const MainRenderTargetParams& params) {
         rt.mask = GL_COLOR_BUFFER_BIT;
@@ -40,7 +36,7 @@ namespace Driver {
             glBindFramebuffer(GL_FRAMEBUFFER, rt.buffer);
             GLuint attachments[COUNT_OF(rt.textures)];
             for (u32 i = 0; i < params.count; i++) {
-                Renderer::Driver::TextureRenderTargetCreateParams texParams;
+                renderer::driver::TextureRenderTargetCreateParams texParams;
                 texParams.width = params.width;
                 texParams.height = params.height;
                 texParams.format = params.textureFormat;
@@ -167,7 +163,7 @@ namespace Driver {
             GLint infoLogLength;
             glGetShaderiv(vs.id, GL_INFO_LOG_LENGTH, &infoLogLength);
             if (infoLogLength > 0) {
-                glGetShaderInfoLog(vs.id, Math::min(infoLogLength, (GLint)(sizeof(result.error)/sizeof(result.error[0]))), nullptr, &result.error[0]);
+                glGetShaderInfoLog(vs.id, math::min(infoLogLength, (GLint)(sizeof(result.error)/sizeof(result.error[0]))), nullptr, &result.error[0]);
             }
         }
 
@@ -191,7 +187,7 @@ namespace Driver {
             GLint infoLogLength;
             glGetShaderiv(ps.id, GL_INFO_LOG_LENGTH, &infoLogLength);
             if (infoLogLength > 0) {
-                glGetShaderInfoLog(ps.id, Math::min(infoLogLength, (GLint)(sizeof(result.error)/sizeof(result.error[0]))), nullptr, &result.error[0]);
+                glGetShaderInfoLog(ps.id, math::min(infoLogLength, (GLint)(sizeof(result.error)/sizeof(result.error[0]))), nullptr, &result.error[0]);
             }
         }
 
@@ -232,7 +228,7 @@ namespace Driver {
             GLint infoLogLength;
             glGetProgramiv(ss.id, GL_INFO_LOG_LENGTH, &infoLogLength);
             if (infoLogLength > 0) {
-                glGetProgramInfoLog(ss.id, Math::min(infoLogLength, (GLint)(sizeof(result.error)/sizeof(result.error[0]))), nullptr, &result.error[0]);
+                glGetProgramInfoLog(ss.id, math::min(infoLogLength, (GLint)(sizeof(result.error)/sizeof(result.error[0]))), nullptr, &result.error[0]);
             }
         }
         
@@ -368,6 +364,7 @@ namespace Driver {
         glBufferData(GL_ELEMENT_ARRAY_BUFFER, params.indexSize, params.indexData, params.memoryUsage);
         glBindVertexArray(0);
         glBindBuffer(GL_ARRAY_BUFFER, 0);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
         
         t.vertexBuffer = vertexBuffer;
         t.indexBuffer = indexBuffer;
@@ -377,6 +374,7 @@ namespace Driver {
         t.indexCount = params.indexCount;
     }
     void update_indexed_vertex_buffer(RscIndexedVertexBuffer& b, const IndexedBufferUpdateParams& params) {
+        glBindVertexArray(0); // make sure we don't accidentally unbind any buffers here
         glBindBuffer(GL_ARRAY_BUFFER, b.vertexBuffer);
         glBufferSubData(GL_ARRAY_BUFFER, 0, params.vertexSize, params.vertexData);
         glBindBuffer(GL_ARRAY_BUFFER, 0);

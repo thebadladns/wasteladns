@@ -1,10 +1,10 @@
 #ifndef __WASTELADNS_INPUT_TYPES_WIN64_H__
 #define __WASTELADNS_INPUT_TYPES_WIN64_H__
 
-namespace Input {
+namespace input {
     
-    namespace Keyboard {
-        namespace Keys { enum Enum : s32 {
+    namespace keyboard {
+        struct Keys { enum Enum : s32 {
               SPACE = 0x039
             , APOSTROPHE = 0x028 /* ' */
             , COMMA = 0x033 /* , */
@@ -127,8 +127,8 @@ namespace Input {
         }; };
     };
 
-    namespace Mouse {
-        namespace Keys { enum Enum : s32 {
+    namespace mouse {
+        struct Keys { enum Enum : s32 {
               BUTTON_LEFT = 0
             , BUTTON_RIGHT
             , BUTTON_MIDDLE

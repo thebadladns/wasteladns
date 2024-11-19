@@ -1,10 +1,10 @@
 #ifndef __WASTELADNS_INPUT_TYPES_MACOS_H__
 #define __WASTELADNS_INPUT_TYPES_MACOS_H__
 
-namespace Input {
+namespace input {
     
-    namespace Keyboard {
-        namespace Keys { enum Enum : s32 {
+    namespace keyboard {
+        struct Keys { enum Enum : s32 {
               SPACE = 0x31
             , APOSTROPHE = 0x27 /* ' */
             , COMMA = 0x2B /* , */
@@ -118,8 +118,8 @@ namespace Input {
             , INVALID = -1
         }; };
     };
-    namespace Mouse {
-        namespace Keys { enum Enum : s32 {
+    namespace mouse {
+        struct Keys { enum Enum : s32 {
               BUTTON_LEFT = 0
             , BUTTON_RIGHT
             , BUTTON_MIDDLE

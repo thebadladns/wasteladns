@@ -1,11 +1,6 @@
 #ifndef __WASTELADNS_VEC_H__
 #define __WASTELADNS_VEC_H__
 
-#ifndef UNITYBUILD
-#include "types.h"
-#include "math.h"
-#endif
-
 #define VEC2_FORMAT(format) "(" format ", " format ")"
 #define float3_FORMAT(format) "(" format ", " format ", " format ")"
 #define float4_FORMAT(format) "(" format ", " format ", " format ", " format ")"
@@ -83,7 +78,7 @@ struct float4x4 {
     };
 };
 
-namespace Math {
+namespace math {
 
 float2 negate(const float2& v) { return float2(-v.x, -v.y); }
 float3 negate(const float3& v) { return float3(-v.x, -v.y, -v.z); }
@@ -97,18 +92,18 @@ float4 scale(const float4& v, const float4& s) { return float4(v.x * s.x, v.y * 
 float2 invScale(const float2& v, const f32 s) { return float2(v.x / s, v.y / s); }
 float3 invScale(const float3& v, const f32 s) { return float3(v.x / s, v.y / s, v.z / s); }
 float4 invScale(const float4& v, const f32 s) { return float4(v.x / s, v.y / s, v.z / s, v.w / s); }
-f32 mag(const float2& v) { return Math::sqrt(v.x * v.x + v.y * v.y); }
-f32 mag(const float3& v) { return Math::sqrt(v.x * v.x + v.y * v.y + v.z * v.z); }
-f32 mag(const float4& v) { return Math::sqrt(v.x * v.x + v.y * v.y + v.z * v.z + v.w * v.w); }
+f32 mag(const float2& v) { return math::sqrt(v.x * v.x + v.y * v.y); }
+f32 mag(const float3& v) { return math::sqrt(v.x * v.x + v.y * v.y + v.z * v.z); }
+f32 mag(const float4& v) { return math::sqrt(v.x * v.x + v.y * v.y + v.z * v.z + v.w * v.w); }
 f32 magSq(const float2& v) { return v.x * v.x + v.y * v.y; }
 f32 magSq(const float3& v) { return v.x * v.x + v.y * v.y + v.z * v.z; }
 f32 magSq(const float4& v) { return v.x * v.x + v.y * v.y + v.z * v.z + v.w * v.w; }
 float2 normalize(const float2& v) { return invScale(v, mag(v)); }
 float3 normalize(const float3& v) { return invScale(v, mag(v)); }
 float4 normalize(const float4& v) { return invScale(v, mag(v)); }
-bool normalizeSafe(float2& v) { const f32 m = mag(v); if (m > Math::eps_f) { v = invScale(v, m); return true; } return false; }
-bool normalizeSafe(float3& v) { const f32 m = mag(v); if (m > Math::eps_f) { v = invScale(v, m); return true; } return false; }
-bool normalizeSafe(float4& v) { const f32 m = mag(v); if (m > Math::eps_f) { v = invScale(v, m); return true; } return false; }
+bool normalizeSafe(float2& v) { const f32 m = mag(v); if (m > math::eps_f) { v = invScale(v, m); return true; } return false; }
+bool normalizeSafe(float3& v) { const f32 m = mag(v); if (m > math::eps_f) { v = invScale(v, m); return true; } return false; }
+bool normalizeSafe(float4& v) { const f32 m = mag(v); if (m > math::eps_f) { v = invScale(v, m); return true; } return false; }
 f32 dot(const float2& a, const float2& b) { return a.x * b.x + a.y * b.y; }
 f32 dot(const float3& a, const float3& b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
 f32 dot(const float4& a, const float4& b) { return a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w; }
@@ -121,15 +116,15 @@ float4 subtract(const float4& a, const float4& b) { return float4(a.x - b.x, a.y
 f32 cross(const float2& a, const float2& b) { return a.x * b.y - a.y * b.x; }
 float3 cross(const float3& a, const float3& b) { return float3(a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x); }
 float4 cross(const float4& a, const float4& b) { return float4(a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x, 0.0); }
-float2 max(const float2& a, const float2& b) { return float2(Math::max(a.x,b.x), Math::max(a.y, b.y)); }
-float3 max(const float3& a, const float3& b) { return float3(Math::max(a.x,b.x), Math::max(a.y,b.y), Math::max(a.z,b.z)); }
-float4 max(const float4& a, const float4& b) { return float4(Math::max(a.x,b.x), Math::max(a.y,b.y), Math::max(a.z,b.z), Math::max(a.w,b.w)); }
-float2 min(const float2& a, const float2& b) { return float2(Math::min(a.x,b.x), Math::min(a.y, b.y)); }
-float3 min(const float3& a, const float3& b) { return float3(Math::min(a.x,b.x), Math::min(a.y,b.y), Math::min(a.z,b.z)); }
-float4 min(const float4& a, const float4& b) { return float4(Math::min(a.x,b.x), Math::min(a.y,b.y), Math::min(a.z,b.z), Math::min(a.w,b.w)); }
-bool isCloseAll(const float2& a, const float2& b, const f32 d) { return Math::abs(a.x - b.x) < d && Math::abs(a.y - b.y) < d; }
-bool isCloseAll(const float3& a, const float3& b, const f32 d) { return Math::abs(a.x - b.x) < d && Math::abs(a.y - b.y) < d && Math::abs(a.z - b.z) < d; }
-bool isCloseAll(const float4& a, const float4& b, const f32 d) { return Math::abs(a.x - b.x) < d && Math::abs(a.y - b.y) < d && Math::abs(a.z - b.z) < d && Math::abs(a.w - b.w) < d; }
+float2 max(const float2& a, const float2& b) { return float2(math::max(a.x,b.x), math::max(a.y, b.y)); }
+float3 max(const float3& a, const float3& b) { return float3(math::max(a.x,b.x), math::max(a.y,b.y), math::max(a.z,b.z)); }
+float4 max(const float4& a, const float4& b) { return float4(math::max(a.x,b.x), math::max(a.y,b.y), math::max(a.z,b.z), math::max(a.w,b.w)); }
+float2 min(const float2& a, const float2& b) { return float2(math::min(a.x,b.x), math::min(a.y, b.y)); }
+float3 min(const float3& a, const float3& b) { return float3(math::min(a.x,b.x), math::min(a.y,b.y), math::min(a.z,b.z)); }
+float4 min(const float4& a, const float4& b) { return float4(math::min(a.x,b.x), math::min(a.y,b.y), math::min(a.z,b.z), math::min(a.w,b.w)); }
+bool isCloseAll(const float2& a, const float2& b, const f32 d) { return math::abs(a.x - b.x) < d && math::abs(a.y - b.y) < d; }
+bool isCloseAll(const float3& a, const float3& b, const f32 d) { return math::abs(a.x - b.x) < d && math::abs(a.y - b.y) < d && math::abs(a.z - b.z) < d; }
+bool isCloseAll(const float4& a, const float4& b, const f32 d) { return math::abs(a.x - b.x) < d && math::abs(a.y - b.y) < d && math::abs(a.z - b.z) < d && math::abs(a.w - b.w) < d; }
 bool isZeroAll(const float2& a) { return a.x == 0.f && a.y == 0.f; }
 bool isZeroAll(const float3& a) { return a.x == 0.f && a.y == 0.f && a.z == 0.f; }
 bool isZeroAll(const float4& a) { return a.x == 0.f && a.y == 0.f && a.z == 0.f && a.w == 0.f; }

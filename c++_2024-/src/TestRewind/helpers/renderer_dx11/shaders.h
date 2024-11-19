@@ -1,8 +1,8 @@
 #ifndef __WASTELADNS_SHADERS_DX11_H__
 #define __WASTELADNS_SHADERS_DX11_H__
 
-namespace Renderer {
-namespace Shaders {
+namespace renderer {
+namespace shaders {
 
 constexpr VS_src vs_color3d_unlit = {
 "vs_color3d_unlit",

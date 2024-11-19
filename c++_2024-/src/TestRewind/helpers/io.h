@@ -1,12 +1,7 @@
 #ifndef __WASTELADNS_IO_GLFW_H__
 #define __WASTELADNS_IO_GLFW_H__
 
-#ifndef UNITYBUILD
-#include <stdio.h>
-#include <stdarg.h>
-#endif
-
-namespace Platform {
+namespace platform {
     const auto format = snprintf;
     const auto format_va = vsnprintf;
 #if __DEBUG
@@ -14,7 +9,7 @@ namespace Platform {
         char text[1024];
         va_list va;
         va_start(va, format);
-        Platform::format_va(text, sizeof(text), format, va);
+        platform::format_va(text, sizeof(text), format, va);
         va_end(va);
 
         consoleLog(text);
@@ -36,6 +31,19 @@ namespace Platform {
 #endif
     const auto fclose = ::fclose;
     const auto fgetc = ::fgetc;
+
+    struct StrBuilder {
+        char str[128];
+        char* curr = str;
+        const char* last = str + sizeof(str);
+        bool full() { return curr >= last; }
+        void append(const char* format, ...) {
+            va_list va;
+            va_start(va, format);
+            curr += platform::format_va(curr, (int)(last - curr), format, va);
+            va_end(va);
+        }
+    };
 }
 
 #endif // __WASTELADNS_IO_GLFW_H__

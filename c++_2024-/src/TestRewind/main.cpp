@@ -19,7 +19,6 @@
 #define UFBXI_FEATURE_TRIANGULATION 1
 #include "lib/fbx/ufbx.c"
 
-#define UNITYBUILD
 #define __GPU_DEBUG 0
 
 #ifdef NDEBUG
@@ -62,8 +61,6 @@ do { \
 #include "helpers/transform.h"
 #include "helpers/color.h"
 #include "helpers/allocator.h"
-#define __WASTELADNS_HASH_DEBUG__
-#include "helpers/hash.h"
 #if __WIN64
 	#include "helpers/platform_win/input_types.h"
 #elif __MACOS
@@ -71,7 +68,6 @@ do { \
 #endif
 #include "helpers/input.h"
 #include "helpers/platform.h"
-#include "helpers/camera.h"
 #include "helpers/easing.h"
 #if __WIN64
 	#include "helpers/platform_win/input.h"

@@ -17,7 +17,7 @@
 
 #define consoleLog(a) printf("%s", a)
 
-namespace Platform {
+namespace platform {
 const char* name = "MAC+GL";
 }
 

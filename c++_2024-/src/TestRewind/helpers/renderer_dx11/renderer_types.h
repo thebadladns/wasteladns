@@ -1,14 +1,14 @@
 #ifndef __WASTELADNS_RENDERER_TYPES_DX11_H__
 #define __WASTELADNS_RENDERER_TYPES_DX11_H__
 
-namespace Renderer {
+namespace renderer {
 
     const auto generate_matrix_ortho = generate_matrix_ortho_z0to1;
     const auto generate_matrix_persp = generate_matrix_persp_z0to1;
     const auto add_oblique_plane_to_persp = add_oblique_plane_to_persp_z0to1;
     const f32 min_z = 0.f;
 
-namespace Driver {
+namespace driver {
 
     struct Type { enum Enum { Float }; }; // unused, compatibility-only
     struct InternalTextureFormat { enum Enum { V4_8 = DXGI_FORMAT_B8G8R8A8_UNORM, V316 = DXGI_FORMAT_R16G16B16A16_FLOAT }; };

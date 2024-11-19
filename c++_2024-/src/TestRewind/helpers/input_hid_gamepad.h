@@ -7,8 +7,8 @@
 #include <hidpi.h>
 #pragma comment(lib, "hid.lib")
 
-namespace Input {
-namespace Gamepad {
+namespace input {
+namespace gamepad {
 struct SliderInfo {
     USAGE usage;
     USAGE usagePage; // todo: do we need to do anything for HID_USAGE_GENERIC_START, or HID_USAGE_PAGE_CONSUMER?
@@ -30,8 +30,8 @@ typedef HANDLE DeviceHandle;
 }
 }
 #elif __MACOS
-namespace Input {
-namespace Gamepad {
+namespace input {
+namespace gamepad {
 struct KeyInfo {
     IOHIDElementRef native;
     u32 usage;
@@ -64,8 +64,8 @@ typedef IOHIDDeviceRef DeviceHandle;
 }
 #endif 
 
-namespace Input {
-namespace Gamepad {
+namespace input {
+namespace gamepad {
 
 struct Type { enum Enum { NES_8BITDO, XBOX360, MAPPINGCOUNT, DUALSHOCK4 = MAPPINGCOUNT, TOTALCOUNT }; }; // no mapping for dualshock4 (special case)
 struct Mapping {
@@ -116,91 +116,89 @@ f32 TranslateRawSliderValue(SliderInfo& sliderInfo, const unsigned long value, c
     const unsigned long size = sliderInfo.max - sliderInfo.min;
     f32 slider = 0.f;
     if (size > 0) slider = (2.f * (value - sliderInfo.min) / size) - 1.f;
-    if (Math::abs(slider) < 0.05f) slider = 0.f;
+    if (math::abs(slider) < 0.05f) slider = 0.f;
     if (type == Sliders::AXIS_Y_LEFT || type == Sliders::AXIS_Y_RIGHT) slider = -slider;
     return slider;
 }
 
-namespace Dualshock4 {
-    void parseDualshock4(State& pad, const u8 reportID, const u8* data) {
-        const u8* rawdata = data;
-        if (reportID == 0x11) { // full-feature input reports add 2 extra bytes to the header
-            rawdata = &(data[2]);
-        }
-
-        struct ControllerData {
-            u8 axis_left_x;
-            u8 axis_left_y;
-            u8 axis_right_x;
-            u8 axis_right_y;
-            u8 axis_dpad : 4;
-            bool button_square : 1;
-            bool button_cross : 1;
-            bool button_circle : 1;
-            bool button_triangle : 1;
-            bool button_left_1 : 1;
-            bool button_right_1 : 1;
-            bool button_left_2 : 1;
-            bool button_right_2 : 1;
-            bool button_share : 1;
-            bool button_options : 1;
-            bool button_left_3 : 1;
-            bool button_right_3 : 1;
-            bool button_ps : 1;
-            bool button_touch : 1;
-            u8 sequence_number : 6;
-            u8 axis_left_2;
-            u8 axis_right_2;
-            // for remaining buttons check https://github.com/chromium/chromium/blob/main/device/gamepad/dualshock4_controller.cc#L44
-        };
-
-        ControllerData& controller = *(ControllerData*)rawdata;
-        u16 keys = 0;
-        if (controller.button_square) keys |= KeyMask::BUTTON_W;
-        if (controller.button_cross) keys |= KeyMask::BUTTON_S;
-        if (controller.button_circle) keys |= KeyMask::BUTTON_E;
-        if (controller.button_triangle) keys |= KeyMask::BUTTON_N;
-        if (controller.button_options) keys |= KeyMask::START;
-        if (controller.button_share) keys |= KeyMask::SELECT;
-        if (controller.button_left_3) keys |= KeyMask::LEFT_THUMB;
-        if (controller.button_right_3) keys |= KeyMask::RIGHT_THUMB;
-        if (controller.button_left_1) keys |= KeyMask::L1;
-        if (controller.button_right_1) keys |= KeyMask::R1;
-        if (controller.button_left_2) keys |= KeyMask::L2;
-        if (controller.button_right_2) keys |= KeyMask::R2;
-        switch (controller.axis_dpad) {
-        case 0: keys |= (KeyMask::DPAD_UP); break;
-        case 1: keys |= (KeyMask::DPAD_UP) | (KeyMask::DPAD_RIGHT); break;
-        case 2: keys |= (KeyMask::DPAD_RIGHT); break;
-        case 3: keys |= (KeyMask::DPAD_RIGHT) | (KeyMask::DPAD_DOWN); break;
-        case 4: keys |= (KeyMask::DPAD_DOWN); break;
-        case 5: keys |= (KeyMask::DPAD_DOWN) | (KeyMask::DPAD_LEFT); break;
-        case 6: keys |= (KeyMask::DPAD_LEFT); break;
-        case 7: keys |= (KeyMask::DPAD_LEFT) | (KeyMask::DPAD_UP); break;
-        }
-        pad.curr_keys = keys;
-
-        auto normalizeAxis = [](u8 v) {
-            f32 rawAxis = (2.0f * v / 255.f) - 1.0f;
-            if (Math::abs(rawAxis) < 0.05f) rawAxis = 0.f;
-            return rawAxis;
-            };
-        pad.sliders[Sliders::AXIS_X_LEFT] = normalizeAxis(controller.axis_left_x);
-        pad.sliders[Sliders::AXIS_Y_LEFT] = -normalizeAxis(controller.axis_left_y);
-        pad.sliders[Sliders::AXIS_X_RIGHT] = normalizeAxis(controller.axis_right_x);
-        pad.sliders[Sliders::AXIS_Y_RIGHT] = -normalizeAxis(controller.axis_right_y);
-        pad.sliders[Sliders::TRIGGER_LEFT] = controller.axis_left_2 / 255.f;
-        pad.sliders[Sliders::TRIGGER_RIGHT] = controller.axis_right_2 / 255.f;
+void parseDualshock4(State& pad, const u8 reportID, const u8* data) {
+    const u8* rawdata = data;
+    if (reportID == 0x11) { // full-feature input reports add 2 extra bytes to the header
+        rawdata = &(data[2]);
     }
+
+    struct ControllerData {
+        u8 axis_left_x;
+        u8 axis_left_y;
+        u8 axis_right_x;
+        u8 axis_right_y;
+        u8 axis_dpad : 4;
+        bool button_square : 1;
+        bool button_cross : 1;
+        bool button_circle : 1;
+        bool button_triangle : 1;
+        bool button_left_1 : 1;
+        bool button_right_1 : 1;
+        bool button_left_2 : 1;
+        bool button_right_2 : 1;
+        bool button_share : 1;
+        bool button_options : 1;
+        bool button_left_3 : 1;
+        bool button_right_3 : 1;
+        bool button_ps : 1;
+        bool button_touch : 1;
+        u8 sequence_number : 6;
+        u8 axis_left_2;
+        u8 axis_right_2;
+        // for remaining buttons check https://github.com/chromium/chromium/blob/main/device/gamepad/dualshock4_controller.cc#L44
+    };
+
+    ControllerData& controller = *(ControllerData*)rawdata;
+    u16 keys = 0;
+    if (controller.button_square) keys |= KeyMask::BUTTON_W;
+    if (controller.button_cross) keys |= KeyMask::BUTTON_S;
+    if (controller.button_circle) keys |= KeyMask::BUTTON_E;
+    if (controller.button_triangle) keys |= KeyMask::BUTTON_N;
+    if (controller.button_options) keys |= KeyMask::START;
+    if (controller.button_share) keys |= KeyMask::SELECT;
+    if (controller.button_left_3) keys |= KeyMask::LEFT_THUMB;
+    if (controller.button_right_3) keys |= KeyMask::RIGHT_THUMB;
+    if (controller.button_left_1) keys |= KeyMask::L1;
+    if (controller.button_right_1) keys |= KeyMask::R1;
+    if (controller.button_left_2) keys |= KeyMask::L2;
+    if (controller.button_right_2) keys |= KeyMask::R2;
+    switch (controller.axis_dpad) {
+    case 0: keys |= (KeyMask::DPAD_UP); break;
+    case 1: keys |= (KeyMask::DPAD_UP) | (KeyMask::DPAD_RIGHT); break;
+    case 2: keys |= (KeyMask::DPAD_RIGHT); break;
+    case 3: keys |= (KeyMask::DPAD_RIGHT) | (KeyMask::DPAD_DOWN); break;
+    case 4: keys |= (KeyMask::DPAD_DOWN); break;
+    case 5: keys |= (KeyMask::DPAD_DOWN) | (KeyMask::DPAD_LEFT); break;
+    case 6: keys |= (KeyMask::DPAD_LEFT); break;
+    case 7: keys |= (KeyMask::DPAD_LEFT) | (KeyMask::DPAD_UP); break;
+    }
+    pad.curr_keys = keys;
+
+    auto normalizeAxis = [](u8 v) {
+        f32 rawAxis = (2.0f * v / 255.f) - 1.0f;
+        if (math::abs(rawAxis) < 0.05f) rawAxis = 0.f;
+        return rawAxis;
+        };
+    pad.sliders[Sliders::AXIS_X_LEFT] = normalizeAxis(controller.axis_left_x);
+    pad.sliders[Sliders::AXIS_Y_LEFT] = -normalizeAxis(controller.axis_left_y);
+    pad.sliders[Sliders::AXIS_X_RIGHT] = normalizeAxis(controller.axis_right_x);
+    pad.sliders[Sliders::AXIS_Y_RIGHT] = -normalizeAxis(controller.axis_right_y);
+    pad.sliders[Sliders::TRIGGER_LEFT] = controller.axis_left_2 / 255.f;
+    pad.sliders[Sliders::TRIGGER_RIGHT] = controller.axis_right_2 / 255.f;
 }
 
 #if __WIN64
-void process_hid_pads_win(Allocator::Arena scratchArena, State* pads, u32& padCount, const u32 maxPadCount, const HRAWINPUT lParam) {
+void process_hid_pads_win(allocator::Arena scratchArena, State* pads, u32& padCount, const u32 maxPadCount, const HRAWINPUT lParam) {
     UINT bufferSize;
     const ptrdiff_t align = 16;
 
     GetRawInputData(lParam, RID_INPUT, NULL, &bufferSize, sizeof(RAWINPUTHEADER));
-    RAWINPUT* input = (RAWINPUT*)Allocator::alloc_arena(scratchArena, bufferSize, align);
+    RAWINPUT* input = (RAWINPUT*)allocator::alloc_arena(scratchArena, bufferSize, align);
     bool gotInput = GetRawInputData(lParam, RID_INPUT, input, &bufferSize, sizeof(RAWINPUTHEADER)) > 0;
     if (!gotInput) return;
 
@@ -231,7 +229,7 @@ void process_hid_pads_win(Allocator::Arena scratchArena, State* pads, u32& padCo
     if (pad.type == Type::DUALSHOCK4) {
         BYTE reportID = input->data.hid.bRawData[0];
         BYTE* rawdata = &input->data.hid.bRawData[1];
-        Dualshock4::parseDualshock4(pad, reportID, rawdata);
+        parseDualshock4(pad, reportID, rawdata);
     }
     else {
         Mapping& mapping = mappings[pad.type];
@@ -243,12 +241,12 @@ void process_hid_pads_win(Allocator::Arena scratchArena, State* pads, u32& padCo
 
             HIDP_CAPS caps;
             HidP_GetCaps(mapping.deviceInfo.preparsedData, &caps);
-            HIDP_BUTTON_CAPS* buttonCaps = (HIDP_BUTTON_CAPS*)Allocator::alloc_arena(scratchArena, caps.NumberInputButtonCaps * sizeof(HIDP_BUTTON_CAPS), align);
+            HIDP_BUTTON_CAPS* buttonCaps = (HIDP_BUTTON_CAPS*)allocator::alloc_arena(scratchArena, caps.NumberInputButtonCaps * sizeof(HIDP_BUTTON_CAPS), align);
             HidP_GetButtonCaps(HidP_Input, buttonCaps, &caps.NumberInputButtonCaps, mapping.deviceInfo.preparsedData);
-            HIDP_VALUE_CAPS* valueCaps = (HIDP_VALUE_CAPS*)Allocator::alloc_arena(scratchArena, caps.NumberInputValueCaps * sizeof(HIDP_VALUE_CAPS), align);
+            HIDP_VALUE_CAPS* valueCaps = (HIDP_VALUE_CAPS*)allocator::alloc_arena(scratchArena, caps.NumberInputValueCaps * sizeof(HIDP_VALUE_CAPS), align);
             HidP_GetValueCaps(HidP_Input, valueCaps, &caps.NumberInputValueCaps, mapping.deviceInfo.preparsedData);
 
-            u32 mapped_key_count = Math::min((u32)(buttonCaps->Range.UsageMax - buttonCaps->Range.UsageMin + 1), (u32)COUNT_OF(mapping.keys_map));
+            u32 mapped_key_count = math::min((u32)(buttonCaps->Range.UsageMax - buttonCaps->Range.UsageMin + 1), (u32)COUNT_OF(mapping.keys_map));
             mapping.deviceInfo.keys_count = mapped_key_count;
             mapping.deviceInfo.keys_usage_min = buttonCaps->Range.UsageMin;
             mapping.deviceInfo.keys_usage_page = buttonCaps->UsagePage;
@@ -269,7 +267,7 @@ void process_hid_pads_win(Allocator::Arena scratchArena, State* pads, u32& padCo
         memset(pad.sliders, 0, sizeof(pad.sliders));
 
         ULONG usageCount = mapping.deviceInfo.keys_count;
-        USAGE* usages = (USAGE*)Allocator::alloc_arena(scratchArena, sizeof(USAGE) * usageCount, align);
+        USAGE* usages = (USAGE*)allocator::alloc_arena(scratchArena, sizeof(USAGE) * usageCount, align);
         HidP_GetUsages(HidP_Input, mapping.deviceInfo.keys_usage_page, 0, usages, &usageCount, mapping.deviceInfo.preparsedData, (PCHAR)input->data.hid.bRawData, input->data.hid.dwSizeHid);
         u16 keys = 0;
         for (ULONG i = 0; i < usageCount; i++) {
@@ -312,14 +310,14 @@ void process_hid_pads_win(Allocator::Arena scratchArena, State* pads, u32& padCo
         if (validpad) {
             padCount++; // acknowledge the current pad
             pad.deviceHandle = (u64)input->header.hDevice;
-            __DEBUGEXP(Platform::strncpy(pad.name, names[pad.type], sizeof(pad.name)));
+            __DEBUGEXP(platform::strncpy(pad.name, names[pad.type], sizeof(pad.name)));
 
             #if __DEBUG
             char name[256];
             u32 deviceNameSize = sizeof(name);
             GetRawInputDeviceInfo(input->header.hDevice, RIDI_DEVICENAME, name, &deviceNameSize);
 
-            Platform::debuglog("Registered new pad %s\n", name);
+            platform::debuglog("Registered new pad %s\n", name);
             #endif
         }
     }
@@ -336,8 +334,8 @@ void init_hid_pads_win(HWND hWnd) {
 
 void process_hid_pads_mac(void* context, IOReturn result, void* sender, IOHIDReportType type, uint32_t reportID, uint8_t* report, CFIndex reportLength) {
 
-    ::Platform::State& ctx = *(::Platform::State*)context;
-    ::Platform::Input& input = ctx.input;
+    ::platform::State& ctx = *(::platform::State*)context;
+    ::platform::Input& input = ctx.input;
 
     IOHIDDeviceRef device = (IOHIDDeviceRef)sender;
 
@@ -490,17 +488,17 @@ void process_hid_pads_mac(void* context, IOReturn result, void* sender, IOHIDRep
         if (validpad) {
             input.padCount++; // acknowledge the current pad
             pad.deviceHandle = (u64)device;
-            __DEBUGEXP(Platform::strncpy(pad.name, names[pad.type], sizeof(pad.name)));
+            __DEBUGEXP(platform::strncpy(pad.name, names[pad.type], sizeof(pad.name)));
 
             #if __DEBUG
             u64 vendorID = [(__bridge NSNumber*)IOHIDDeviceGetProperty(device, CFSTR(kIOHIDVendorIDKey)) unsignedIntegerValue];
             u64 productID = [(__bridge NSNumber*)IOHIDDeviceGetProperty(device, CFSTR(kIOHIDProductIDKey)) unsignedIntegerValue];
-            Platform::debuglog("Registered new pad 0x%lx 0x%lx\n", vendorID, productID);
+            platform::debuglog("Registered new pad 0x%lx 0x%lx\n", vendorID, productID);
             #endif
         }
     }
 }
-void init_hid_pads_mac(Platform::State& platform) {
+void init_hid_pads_mac(platform::State& platform) {
     @autoreleasepool{
         // todo: custom allocators?
         IOHIDManagerRef HIDManager = IOHIDManagerCreate(kCFAllocatorDefault, kIOHIDOptionsTypeNone);

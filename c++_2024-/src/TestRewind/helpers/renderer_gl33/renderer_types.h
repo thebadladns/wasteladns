@@ -1,14 +1,14 @@
 #ifndef __WASTELADNS_RENDERER_TYPES_GL33_H__
 #define __WASTELADNS_RENDERER_TYPES_GL33_H__
 
-namespace Renderer {
+namespace renderer {
 
     const auto generate_matrix_ortho = generate_matrix_ortho_zneg1to1;
     const auto generate_matrix_persp = generate_matrix_persp_zneg1to1;
     const auto add_oblique_plane_to_persp = add_oblique_plane_to_persp_zneg1to1;
     const f32 min_z = -1.f;
 
-namespace Driver {
+namespace driver {
 
     struct Type { enum Enum { Float = GL_FLOAT }; };
     struct InternalTextureFormat { enum Enum { V4_8 = GL_RGB8, V316 = GL_RGB16F }; };

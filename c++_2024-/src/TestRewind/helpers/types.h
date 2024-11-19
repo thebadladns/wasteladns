@@ -1,10 +1,6 @@
 #ifndef __WASTELADNS_TYPES_H__
 #define __WASTELADNS_TYPES_H__
 
-#ifndef UNITYBUILD
-#include "stdint.h"
-#endif
-
 typedef int64_t s64;
 typedef uint64_t u64;
 typedef int32_t s32;

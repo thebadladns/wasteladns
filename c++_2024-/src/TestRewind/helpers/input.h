@@ -1,13 +1,9 @@
 #ifndef __WASTELADNS_INPUT_H__
 #define __WASTELADNS_INPUT_H__
 
-#ifndef UNITYBUILD
-#include "hash.h"
-#endif
-
-namespace Input {
+namespace input {
     
-    namespace Keyboard {
+    namespace keyboard {
         
         struct State {
             bool down(Keys::Enum key) const { return current[key] != 0; }
@@ -20,7 +16,7 @@ namespace Input {
         };
     };
 
-    namespace Gamepad {
+    namespace gamepad {
         struct KeyMask { enum Enum {
               BUTTON_N = 1 << 0
             , BUTTON_S = 1 << 1
@@ -66,10 +62,10 @@ namespace Input {
         bool hasValidInput(State& pad) {
             bool validpad = pad.curr_keys != 0;
             for (u32 slider = 0; slider < Sliders::COUNT; slider++) {
-                if (Math::abs(pad.sliders[slider]) > 2.f) { // TODO: properly ignore bad inputs
+                if (math::abs(pad.sliders[slider]) > 2.f) { // TODO: properly ignore bad inputs
                     validpad = false;
                 }
-                else if (Math::abs(pad.sliders[slider]) > 0.9f) {
+                else if (math::abs(pad.sliders[slider]) > 0.9f) {
                     validpad = validpad || true;
                 }
             }
@@ -77,7 +73,7 @@ namespace Input {
         }
     }
 
-	namespace Mouse {
+	namespace mouse {
     
 		struct State {
 			bool down(Keys::Enum key) const { return curr[key] != 0; }

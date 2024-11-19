@@ -1,9 +1,9 @@
 #ifndef __WASTELADNS_GAMEPLAY_H__
 #define __WASTELADNS_GAMEPLAY_H__
 
-namespace Gameplay
+namespace gameplay
 {
-    namespace Movement
+    namespace movement
     {
         struct Control {
             float2 localInput;
@@ -13,14 +13,14 @@ namespace Gameplay
             f32 speed;
         };
         struct ControlButtons {
-            const ::Input::Keyboard::Keys::Enum up, down, left, right;
+            const ::input::keyboard::Keys::Enum up, down, left, right;
         };
         struct State {
             Transform transform;
             Control control;
             Controller movementController;
         };
-        void process(Control& control, const ::Input::Keyboard::State& kb, const ControlButtons& buttons) {
+        void process(Control& control, const ::input::keyboard::State& kb, const ControlButtons& buttons) {
 
             const float2 prevLocalInput = control.localInput;
 
@@ -60,24 +60,24 @@ namespace Gameplay
                 localInput.y = 0.f;
             }
 
-            f32 mag = Math::mag(localInput);
-            if (mag > Math::eps_f) {
-                localInput = Math::invScale(localInput, mag);
-                mag = Math::min(mag, 1.f);
+            f32 mag = math::mag(localInput);
+            if (mag > math::eps_f) {
+                localInput = math::invScale(localInput, mag);
+                mag = math::min(mag, 1.f);
             }
 
             control.localInput = localInput;
             control.mag = mag;
         }
-        void process(Control& control, const ::Input::Gamepad::State& pad) {
+        void process(Control& control, const ::input::gamepad::State& pad) {
 
             float2 localInput;
-            localInput.x = pad.sliders[::Input::Gamepad::Sliders::AXIS_X_LEFT];
-            localInput.y = pad.sliders[::Input::Gamepad::Sliders::AXIS_Y_LEFT];
-            f32 mag = Math::mag(localInput);
-            if (mag > Math::eps_f) {
-                localInput = Math::invScale(localInput, mag);
-                mag = Math::min(mag, 1.f);
+            localInput.x = pad.sliders[::input::gamepad::Sliders::AXIS_X_LEFT];
+            localInput.y = pad.sliders[::input::gamepad::Sliders::AXIS_Y_LEFT];
+            f32 mag = math::mag(localInput);
+            if (mag > math::eps_f) {
+                localInput = math::invScale(localInput, mag);
+                mag = math::min(mag, 1.f);
             }
             control.localInput = localInput;
             control.mag = mag;
@@ -86,32 +86,32 @@ namespace Gameplay
 
             const float maxspeed = 15.f;
 
-            Transform33 movementTransform = Math::fromUpTowardsFront(transform.up, camera.front);
+            Transform33 movementTransform = math::fromUpTowardsFront(transform.up, camera.front);
             const float3& front = movementTransform.front;
             const float3& right = movementTransform.right;
 
             // Interpolate input angles
             float effectiveLocalInputRad = 0.f;
-            const float camCurrentRad = Math::orientation(camera.front.xy);
-            const float playerCurrentRad = Math::orientation(transform.front.xy);
-            const float camPlayerCurrentRad = Math::subtractShort(playerCurrentRad, camCurrentRad);
-            const float camInputRad = Math::orientation(control.localInput);
-            const float localInputRad = Math::subtractShort(camInputRad, camPlayerCurrentRad);
-            effectiveLocalInputRad = Math::eappr(effectiveLocalInputRad, localInputRad, 0.14f, dt);
-            const float effectiveCamInputRad = Math::wrap(camPlayerCurrentRad + effectiveLocalInputRad);
-            const float2 effectiveLocalInput = Math::direction(effectiveCamInputRad);
+            const float camCurrentRad = math::orientation(camera.front.xy);
+            const float playerCurrentRad = math::orientation(transform.front.xy);
+            const float camPlayerCurrentRad = math::subtractShort(playerCurrentRad, camCurrentRad);
+            const float camInputRad = math::orientation(control.localInput);
+            const float localInputRad = math::subtractShort(camInputRad, camPlayerCurrentRad);
+            effectiveLocalInputRad = math::eappr(effectiveLocalInputRad, localInputRad, 0.14f, dt);
+            const float effectiveCamInputRad = math::wrap(camPlayerCurrentRad + effectiveLocalInputRad);
+            const float2 effectiveLocalInput = math::direction(effectiveCamInputRad);
 
             // Default to idle decceleration
             f32 speedtimehorizon = 0.1f;
             f32 targetspeed = 0.f;
-            if (control.mag > Math::eps_f) {
-                const f32 absLocalInputRad = Math::abs(localInputRad);
-                const f32 minturndeltatomove = Math::pi_f / 2.f;
+            if (control.mag > math::eps_f) {
+                const f32 absLocalInputRad = math::abs(localInputRad);
+                const f32 minturndeltatomove = math::pi_f / 2.f;
                 if (absLocalInputRad < minturndeltatomove) {
                     // Some friction on acceleration based on turn strength
                     targetspeed = maxspeed * control.mag;
-                    f32 turnfrictionfactor = Math::clamp(Math::abs(localInputRad) / minturndeltatomove, 0.f, 1.f);
-                    speedtimehorizon = Math::lerp(turnfrictionfactor, 0.014f, 0.3f);
+                    f32 turnfrictionfactor = math::clamp(math::abs(localInputRad) / minturndeltatomove, 0.f, 1.f);
+                    speedtimehorizon = math::lerp(turnfrictionfactor, 0.014f, 0.3f);
                 }
                 else {
                     // Stop on tight turns
@@ -120,41 +120,41 @@ namespace Gameplay
                 }
             }
             if (speedtimehorizon > 0.f) {
-                controller.speed = Math::eappr(controller.speed, targetspeed, speedtimehorizon, dt);
+                controller.speed = math::eappr(controller.speed, targetspeed, speedtimehorizon, dt);
             }
             else {
                 controller.speed = 0.f;
             }
 
             // Facing update
-            if (control.mag > Math::eps_f) {
+            if (control.mag > math::eps_f) {
                 const float3 cameraRelativeFacingInput(effectiveLocalInput, 0.f);
-                const float3 worldFacingInput = Math::add(Math::scale(front, cameraRelativeFacingInput.y), Math::scale(right, cameraRelativeFacingInput.x));
-                Transform33 t = Math::fromUpTowardsFront(transform.up, worldFacingInput);
+                const float3 worldFacingInput = math::add(math::scale(front, cameraRelativeFacingInput.y), math::scale(right, cameraRelativeFacingInput.x));
+                Transform33 t = math::fromUpTowardsFront(transform.up, worldFacingInput);
                 transform.front = t.front;
                 transform.right = t.right;
                 transform.up = t.up;
             }
 
             // Movement update
-            if (controller.speed > Math::eps_f) {
+            if (controller.speed > math::eps_f) {
                 float3 cameraRelativeMovementInput;
-                if (control.mag > Math::eps_f) {
+                if (control.mag > math::eps_f) {
                     cameraRelativeMovementInput = float3(control.localInput, 0.f);
                 }
                 else {
-                    cameraRelativeMovementInput = float3(Math::direction(camPlayerCurrentRad), 0.f);
+                    cameraRelativeMovementInput = float3(math::direction(camPlayerCurrentRad), 0.f);
                 }
                 const f32 translation = controller.speed * dt;
-                const float3 worldMovementInput = Math::add(Math::scale(front, cameraRelativeMovementInput.y), Math::scale(right, cameraRelativeMovementInput.x));
-                const float3 worldVelocity = Math::scale(worldMovementInput, translation);
+                const float3 worldMovementInput = math::add(math::scale(front, cameraRelativeMovementInput.y), math::scale(right, cameraRelativeMovementInput.x));
+                const float3 worldVelocity = math::scale(worldMovementInput, translation);
                 float3 pos = transform.pos;
-                pos = Math::add(pos, worldVelocity);
+                pos = math::add(pos, worldVelocity);
                 transform.pos = pos;
             }
         }
     }
-    namespace Orbit
+    namespace orbit
     {
         struct State {
             float3 eulers;
@@ -163,42 +163,42 @@ namespace Gameplay
             float scale;
         };
 
-        void process(State& controller, const ::Input::Gamepad::State& pad)
+        void process(State& controller, const ::input::gamepad::State& pad)
         {
             constexpr f32 rotationSpeed = 0.1f;
             constexpr f32 rotationEps = 0.01f;
-            f32 speedx = pad.sliders[::Input::Gamepad::Sliders::AXIS_X_RIGHT] * rotationSpeed;
-            f32 speedy = -pad.sliders[::Input::Gamepad::Sliders::AXIS_Y_RIGHT] * rotationSpeed;
-            if (Math::abs(speedx) > rotationEps || Math::abs(speedy) > rotationEps) {
-                controller.eulers.x = Math::wrap(controller.eulers.x + speedx);
-                controller.eulers.z = Math::clamp(Math::wrap(controller.eulers.z - speedy), -Math::halfpi_f, 0.f); // Positive 0 is below ground
+            f32 speedx = pad.sliders[::input::gamepad::Sliders::AXIS_X_RIGHT] * rotationSpeed;
+            f32 speedy = -pad.sliders[::input::gamepad::Sliders::AXIS_Y_RIGHT] * rotationSpeed;
+            if (math::abs(speedx) > rotationEps || math::abs(speedy) > rotationEps) {
+                controller.eulers.x = math::wrap(controller.eulers.x + speedx);
+                controller.eulers.z = math::clamp(math::wrap(controller.eulers.z - speedy), -math::halfpi_f, 0.f); // Positive 0 is below ground
             }
 
             controller.scale = 1.f;
-            controller.scale -= pad.sliders[::Input::Gamepad::Sliders::TRIGGER_RIGHT];
-            controller.scale += pad.sliders[::Input::Gamepad::Sliders::TRIGGER_LEFT];
-            controller.scale = Math::clamp(controller.scale, 0.3f, 2.f);
+            controller.scale -= pad.sliders[::input::gamepad::Sliders::TRIGGER_RIGHT];
+            controller.scale += pad.sliders[::input::gamepad::Sliders::TRIGGER_LEFT];
+            controller.scale = math::clamp(controller.scale, 0.3f, 2.f);
         }
-        void process(State& controller, const ::Input::Mouse::State& mouse)
+        void process(State& controller, const ::input::mouse::State& mouse)
         {
-            if (mouse.down(::Input::Mouse::Keys::BUTTON_LEFT))
+            if (mouse.down(::input::mouse::Keys::BUTTON_LEFT))
             {
                 constexpr f32 rotationSpeed = 0.01f;
                 constexpr f32 rotationEps = 0.01f;
                 f32 speedx = mouse.dx * rotationSpeed;
                 f32 speedy = mouse.dy * rotationSpeed;
-                if (Math::abs(speedx) > rotationEps || Math::abs(speedy) > rotationEps) {
-                    controller.eulers.x = Math::wrap(controller.eulers.x + speedx);
-                    controller.eulers.z = Math::wrap(controller.eulers.z - speedy);
+                if (math::abs(speedx) > rotationEps || math::abs(speedy) > rotationEps) {
+                    controller.eulers.x = math::wrap(controller.eulers.x + speedx);
+                    controller.eulers.z = math::wrap(controller.eulers.z - speedy);
                 }
             }
-            if (mouse.down(::Input::Mouse::Keys::BUTTON_RIGHT))
+            if (mouse.down(::input::mouse::Keys::BUTTON_RIGHT))
             {
                 constexpr f32 panSpeed = 0.1f;
                 constexpr f32 panEps = 0.01f;
                 f32 speedx = mouse.dx * panSpeed;
                 f32 speedy = mouse.dy * panSpeed;
-                if (Math::abs(speedx) > panEps || Math::abs(speedy) > panEps) {
+                if (math::abs(speedx) > panEps || math::abs(speedy) > panEps) {
                     controller.offset.x -= speedx;
                     controller.offset.z += speedy;
                 }
@@ -207,20 +207,20 @@ namespace Gameplay
             if (mouse.scrolldy != 0) {
                 const f32 scrollSpeed = 0.1f;
                 controller.scale -= mouse.scrolldy * scrollSpeed;
-                controller.scale = Math::clamp(controller.scale, 0.3f, 2.f);
+                controller.scale = math::clamp(controller.scale, 0.3f, 2.f);
             }
         }
         void process(Transform& transform, const State& controller) {
             // orbit around mesh
-            Transform rotationAndScale = Math::fromPositionScaleAndRotationEulers(Math::negate(controller.origin), controller.scale, controller.eulers);
+            Transform rotationAndScale = math::fromPositionScaleAndRotationEulers(math::negate(controller.origin), controller.scale, controller.eulers);
 
             // translate to centroid 
             Transform cameraTranslation;
-            Math::identity4x4(cameraTranslation);
+            math::identity4x4(cameraTranslation);
             cameraTranslation.pos = controller.offset;
 
             transform = {};
-            transform.matrix = Math::mult(rotationAndScale.matrix, cameraTranslation.matrix);
+            transform.matrix = math::mult(rotationAndScale.matrix, cameraTranslation.matrix);
         }
     }
 }

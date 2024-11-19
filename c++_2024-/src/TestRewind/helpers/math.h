@@ -1,11 +1,6 @@
 #ifndef __WASTELADNS_MATH_H__
 #define __WASTELADNS_MATH_H__
 
-#ifndef UNITYBUILD
-#include <math.h>
-#include "types.h"
-#endif
-
 #ifndef FLT_MAX
 #define FLT_MAX 3.402823466e+38F // max value
 #endif
@@ -13,14 +8,14 @@
 #define FLT_MIN 1.175494351e-38F // min positive value
 #endif
 
-namespace Math {
+namespace math {
 const f32 eps_f = 1.19e-07f;
 const f64 eps_d = 2.22e-16;
 const f32 e_f = 2.7182818284590452353602874713527f;
 const f64 e_d = 2.7182818284590452353602874713527;
 }
 
-namespace Math {
+namespace math {
     u8 min(u8 a, u8 b) { return (b < a) ? b : a; }
     s8 min(s8 a, s8 b) { return (b < a) ? b : a; }
     u16 min(u16 a, u16 b) { return (b < a) ? b : a; }
