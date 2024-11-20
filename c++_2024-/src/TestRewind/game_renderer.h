@@ -124,7 +124,7 @@ struct ShaderType { enum Enum {
 const char* shaderNames[] = {
     "FullscreenBlit", "Instanced3D", "Color3D", "Color3DSkinned", "Textured3D", "Textured3DAlphaClip", "Textured3DSkinned", "Textured3DAlphaClipSkinned"
 };
-static_assert(COUNT_OF(shaderNames) == ShaderType::Count, "Make sure there are enough shaderNames strings as there are ShaderType::Enum values");
+static_assert(countof(shaderNames) == ShaderType::Count, "Make sure there are enough shaderNames strings as there are ShaderType::Enum values");
 
 struct DrawMesh {
     ShaderType::Enum type;
@@ -426,7 +426,7 @@ void addNodesToDrawlistSorted(Drawlist& dl, const VisibleNodes& visibleNodes, fl
         for (u32 i = 0; i < visibleNodes.visible_nodes_count; i++) {
             u32 n = visibleNodes.visible_nodes[i];
             DrawNode& node = store.drawNodes.data[n].state.live;
-            const u32 maxMeshCount = COUNT_OF(node.meshHandles);
+            const u32 maxMeshCount = countof(node.meshHandles);
             
             if (includeFilter & DrawlistFilter::Alpha) { if (node.nodeData.groupColor.w == 1.f) { continue; } }
             if (excludeFilter & DrawlistFilter::Alpha) { if (node.nodeData.groupColor.w < 1.f) { continue; } }
@@ -462,7 +462,7 @@ void addNodesToDrawlistSorted(Drawlist& dl, const VisibleNodes& visibleNodes, fl
         for (u32 i = 0; i < visibleNodes.visible_nodes_skinned_count; i++) {
             u32 n = visibleNodes.visible_nodes_skinned[i];
             const DrawNodeSkinned& node = store.drawNodesSkinned.data[n].state.live;
-            const u32 maxMeshCount = COUNT_OF(node.core.meshHandles);
+            const u32 maxMeshCount = countof(node.core.meshHandles);
             
             if (includeFilter & DrawlistFilter::Alpha) { if (node.core.nodeData.groupColor.w == 1.f) { continue; } }
             if (excludeFilter & DrawlistFilter::Alpha) { if (node.core.nodeData.groupColor.w < 1.f) { continue; } }
@@ -500,7 +500,7 @@ void addNodesToDrawlistSorted(Drawlist& dl, const VisibleNodes& visibleNodes, fl
             count++;
             
             const DrawNodeInstanced& node = store.drawNodesInstanced.data[n].state.live;
-            const u32 maxMeshCount = COUNT_OF(node.core.meshHandles);
+            const u32 maxMeshCount = countof(node.core.meshHandles);
             
             if (includeFilter & DrawlistFilter::Alpha) { if (node.core.nodeData.groupColor.w == 1.f) { continue; } }
             if (excludeFilter & DrawlistFilter::Alpha) { if (node.core.nodeData.groupColor.w < 1.f) { continue; } }
@@ -1064,24 +1064,24 @@ void init_pipelines(Store& store, allocator::Arena scratchArena, const platform:
         driver::make_vertexAttribDesc("POSITION", 0, sizeof(float3), driver::BufferAttributeFormat::R32G32B32_FLOAT),
     };
     const driver::VertexAttribDesc attribs_color3d[] = {
-        driver::make_vertexAttribDesc("POSITION", OFFSET_OF(VertexLayout_Color_3D, pos), sizeof(VertexLayout_Color_3D), driver::BufferAttributeFormat::R32G32B32_FLOAT),
-        driver::make_vertexAttribDesc("COLOR", OFFSET_OF(VertexLayout_Color_3D, color), sizeof(VertexLayout_Color_3D), driver::BufferAttributeFormat::R8G8B8A8_UNORM)
+        driver::make_vertexAttribDesc("POSITION", offsetof(VertexLayout_Color_3D, pos), sizeof(VertexLayout_Color_3D), driver::BufferAttributeFormat::R32G32B32_FLOAT),
+        driver::make_vertexAttribDesc("COLOR", offsetof(VertexLayout_Color_3D, color), sizeof(VertexLayout_Color_3D), driver::BufferAttributeFormat::R8G8B8A8_UNORM)
     };
     const driver::VertexAttribDesc attribs_color3d_skinned[] = {
-        driver::make_vertexAttribDesc("POSITION", OFFSET_OF(VertexLayout_Color_Skinned_3D, pos), sizeof(VertexLayout_Color_Skinned_3D), driver::BufferAttributeFormat::R32G32B32_FLOAT),
-        driver::make_vertexAttribDesc("COLOR", OFFSET_OF(VertexLayout_Color_Skinned_3D, color), sizeof(VertexLayout_Color_Skinned_3D), driver::BufferAttributeFormat::R8G8B8A8_UNORM),
-        driver::make_vertexAttribDesc("JOINTINDICES", OFFSET_OF(VertexLayout_Color_Skinned_3D, joint_indices), sizeof(VertexLayout_Color_Skinned_3D), driver::BufferAttributeFormat::R8G8B8A8_SINT),
-        driver::make_vertexAttribDesc("JOINTWEIGHTS", OFFSET_OF(VertexLayout_Color_Skinned_3D, joint_weights), sizeof(VertexLayout_Color_Skinned_3D), driver::BufferAttributeFormat::R8G8B8A8_UNORM)
+        driver::make_vertexAttribDesc("POSITION", offsetof(VertexLayout_Color_Skinned_3D, pos), sizeof(VertexLayout_Color_Skinned_3D), driver::BufferAttributeFormat::R32G32B32_FLOAT),
+        driver::make_vertexAttribDesc("COLOR", offsetof(VertexLayout_Color_Skinned_3D, color), sizeof(VertexLayout_Color_Skinned_3D), driver::BufferAttributeFormat::R8G8B8A8_UNORM),
+        driver::make_vertexAttribDesc("JOINTINDICES", offsetof(VertexLayout_Color_Skinned_3D, joint_indices), sizeof(VertexLayout_Color_Skinned_3D), driver::BufferAttributeFormat::R8G8B8A8_SINT),
+        driver::make_vertexAttribDesc("JOINTWEIGHTS", offsetof(VertexLayout_Color_Skinned_3D, joint_weights), sizeof(VertexLayout_Color_Skinned_3D), driver::BufferAttributeFormat::R8G8B8A8_UNORM)
     };
     const driver::VertexAttribDesc attribs_textured3d[] = {
-        driver::make_vertexAttribDesc("POSITION", OFFSET_OF(VertexLayout_Textured_3D, pos), sizeof(VertexLayout_Textured_3D), driver::BufferAttributeFormat::R32G32B32_FLOAT),
-        driver::make_vertexAttribDesc("TEXCOORD", OFFSET_OF(VertexLayout_Textured_3D, uv), sizeof(VertexLayout_Textured_3D), driver::BufferAttributeFormat::R32G32_FLOAT)
+        driver::make_vertexAttribDesc("POSITION", offsetof(VertexLayout_Textured_3D, pos), sizeof(VertexLayout_Textured_3D), driver::BufferAttributeFormat::R32G32B32_FLOAT),
+        driver::make_vertexAttribDesc("TEXCOORD", offsetof(VertexLayout_Textured_3D, uv), sizeof(VertexLayout_Textured_3D), driver::BufferAttributeFormat::R32G32_FLOAT)
     };
     const driver::VertexAttribDesc attribs_textured3d_skinned[] = {
-        driver::make_vertexAttribDesc("POSITION", OFFSET_OF(VertexLayout_Textured_Skinned_3D, pos), sizeof(VertexLayout_Textured_Skinned_3D), driver::BufferAttributeFormat::R32G32B32_FLOAT),
-        driver::make_vertexAttribDesc("TEXCOORD", OFFSET_OF(VertexLayout_Textured_Skinned_3D, uv), sizeof(VertexLayout_Textured_Skinned_3D), driver::BufferAttributeFormat::R32G32_FLOAT),
-        driver::make_vertexAttribDesc("JOINTINDICES", OFFSET_OF(VertexLayout_Textured_Skinned_3D, joint_indices), sizeof(VertexLayout_Textured_Skinned_3D), driver::BufferAttributeFormat::R8G8B8A8_SINT),
-        driver::make_vertexAttribDesc("JOINTWEIGHTS", OFFSET_OF(VertexLayout_Textured_Skinned_3D, joint_weights), sizeof(VertexLayout_Textured_Skinned_3D), driver::BufferAttributeFormat::R8G8B8A8_UNORM)
+        driver::make_vertexAttribDesc("POSITION", offsetof(VertexLayout_Textured_Skinned_3D, pos), sizeof(VertexLayout_Textured_Skinned_3D), driver::BufferAttributeFormat::R32G32B32_FLOAT),
+        driver::make_vertexAttribDesc("TEXCOORD", offsetof(VertexLayout_Textured_Skinned_3D, uv), sizeof(VertexLayout_Textured_Skinned_3D), driver::BufferAttributeFormat::R32G32_FLOAT),
+        driver::make_vertexAttribDesc("JOINTINDICES", offsetof(VertexLayout_Textured_Skinned_3D, joint_indices), sizeof(VertexLayout_Textured_Skinned_3D), driver::BufferAttributeFormat::R8G8B8A8_SINT),
+        driver::make_vertexAttribDesc("JOINTWEIGHTS", offsetof(VertexLayout_Textured_Skinned_3D, joint_weights), sizeof(VertexLayout_Textured_Skinned_3D), driver::BufferAttributeFormat::R8G8B8A8_UNORM)
     };
 
     // cbuffer bindings
@@ -1117,9 +1117,9 @@ void init_pipelines(Store& store, allocator::Arena scratchArena, const platform:
     {
         renderer::ShaderDesc desc = {};
         desc.vertexAttrs = attribs_textured3d;
-        desc.vertexAttr_count = COUNT_OF(attribs_textured3d);
+        desc.vertexAttr_count = countof(attribs_textured3d);
         desc.textureBindings = textureBindings_fullscreenblit;
-        desc.textureBinding_count = COUNT_OF(textureBindings_fullscreenblit);
+        desc.textureBinding_count = countof(textureBindings_fullscreenblit);
         desc.bufferBindings = nullptr;
         desc.bufferBinding_count = 0;
         // reuse 3d shaders
@@ -1132,11 +1132,11 @@ void init_pipelines(Store& store, allocator::Arena scratchArena, const platform:
     {
         renderer::ShaderDesc desc = {};
         desc.vertexAttrs = attribs_3d;
-        desc.vertexAttr_count = COUNT_OF(attribs_3d);
+        desc.vertexAttr_count = countof(attribs_3d);
         desc.textureBindings = nullptr;
         desc.textureBinding_count = 0;
         desc.bufferBindings = bufferBindings_instanced_base;
-        desc.bufferBinding_count = COUNT_OF(bufferBindings_instanced_base);
+        desc.bufferBinding_count = countof(bufferBindings_instanced_base);
         desc.vs_name = shaders::vs_3d_instanced_base.name;
         desc.vs_src = shaders::vs_3d_instanced_base.src;
         desc.ps_name = shaders::ps_color3d_unlit.name;
@@ -1146,11 +1146,11 @@ void init_pipelines(Store& store, allocator::Arena scratchArena, const platform:
     {
         renderer::ShaderDesc desc = {};
         desc.vertexAttrs = attribs_color3d;
-        desc.vertexAttr_count = COUNT_OF(attribs_color3d);
+        desc.vertexAttr_count = countof(attribs_color3d);
         desc.textureBindings = nullptr;
         desc.textureBinding_count = 0;
         desc.bufferBindings = bufferBindings_untextured_base;
-        desc.bufferBinding_count = COUNT_OF(bufferBindings_untextured_base);
+        desc.bufferBinding_count = countof(bufferBindings_untextured_base);
         desc.vs_name = shaders::vs_color3d_base.name;
         desc.vs_src = shaders::vs_color3d_base.src;
         desc.ps_name = shaders::ps_color3d_unlit.name;
@@ -1160,11 +1160,11 @@ void init_pipelines(Store& store, allocator::Arena scratchArena, const platform:
     {
         renderer::ShaderDesc desc = {};
         desc.vertexAttrs = attribs_color3d_skinned;
-        desc.vertexAttr_count = COUNT_OF(attribs_color3d_skinned);
+        desc.vertexAttr_count = countof(attribs_color3d_skinned);
         desc.textureBindings = nullptr;
         desc.textureBinding_count = 0;
         desc.bufferBindings = bufferBindings_skinned_untextured_base;
-        desc.bufferBinding_count = COUNT_OF(bufferBindings_skinned_untextured_base);
+        desc.bufferBinding_count = countof(bufferBindings_skinned_untextured_base);
         desc.vs_name = shaders::vs_color3d_skinned_base.name;
         desc.vs_src = shaders::vs_color3d_skinned_base.src;
         desc.ps_name = shaders::ps_color3d_unlit.name;
@@ -1174,11 +1174,11 @@ void init_pipelines(Store& store, allocator::Arena scratchArena, const platform:
     {
         renderer::ShaderDesc desc = {};
         desc.vertexAttrs = attribs_textured3d;
-        desc.vertexAttr_count = COUNT_OF(attribs_textured3d);
+        desc.vertexAttr_count = countof(attribs_textured3d);
         desc.textureBindings = textureBindings_base;
-        desc.textureBinding_count = COUNT_OF(textureBindings_base);
+        desc.textureBinding_count = countof(textureBindings_base);
         desc.bufferBindings = bufferBindings_textured_base;
-        desc.bufferBinding_count = COUNT_OF(bufferBindings_textured_base);
+        desc.bufferBinding_count = countof(bufferBindings_textured_base);
         desc.vs_name = shaders::vs_textured3d_base.name;
         desc.vs_src = shaders::vs_textured3d_base.src;
         desc.ps_name = shaders::ps_textured3d_base.name;
@@ -1188,11 +1188,11 @@ void init_pipelines(Store& store, allocator::Arena scratchArena, const platform:
     {
         renderer::ShaderDesc desc = {};
         desc.vertexAttrs = attribs_textured3d;
-        desc.vertexAttr_count = COUNT_OF(attribs_textured3d);
+        desc.vertexAttr_count = countof(attribs_textured3d);
         desc.textureBindings = textureBindings_base;
-        desc.textureBinding_count = COUNT_OF(textureBindings_base);
+        desc.textureBinding_count = countof(textureBindings_base);
         desc.bufferBindings = bufferBindings_textured_base;
-        desc.bufferBinding_count = COUNT_OF(bufferBindings_textured_base);
+        desc.bufferBinding_count = countof(bufferBindings_textured_base);
         desc.vs_name = shaders::vs_textured3d_base.name;
         desc.vs_src = shaders::vs_textured3d_base.src;
         desc.ps_name = shaders::ps_textured3dalphaclip_base.name;
@@ -1202,11 +1202,11 @@ void init_pipelines(Store& store, allocator::Arena scratchArena, const platform:
     {
         renderer::ShaderDesc desc = {};
         desc.vertexAttrs = attribs_textured3d_skinned;
-        desc.vertexAttr_count = COUNT_OF(attribs_textured3d_skinned);
+        desc.vertexAttr_count = countof(attribs_textured3d_skinned);
         desc.textureBindings = textureBindings_base;
-        desc.textureBinding_count = COUNT_OF(textureBindings_base);
+        desc.textureBinding_count = countof(textureBindings_base);
         desc.bufferBindings = bufferBindings_skinned_textured_base;
-        desc.bufferBinding_count = COUNT_OF(bufferBindings_skinned_textured_base);
+        desc.bufferBinding_count = countof(bufferBindings_skinned_textured_base);
         desc.vs_name = shaders::vs_textured3d_skinned_base.name;
         desc.vs_src = shaders::vs_textured3d_skinned_base.src;
         desc.ps_name = shaders::ps_textured3d_base.name;
@@ -1216,11 +1216,11 @@ void init_pipelines(Store& store, allocator::Arena scratchArena, const platform:
     {
         renderer::ShaderDesc desc = {};
         desc.vertexAttrs = attribs_textured3d_skinned;
-        desc.vertexAttr_count = COUNT_OF(attribs_textured3d_skinned);
+        desc.vertexAttr_count = countof(attribs_textured3d_skinned);
         desc.textureBindings = textureBindings_base;
-        desc.textureBinding_count = COUNT_OF(textureBindings_base);
+        desc.textureBinding_count = countof(textureBindings_base);
         desc.bufferBindings = bufferBindings_skinned_textured_base;
-        desc.bufferBinding_count = COUNT_OF(bufferBindings_skinned_textured_base);
+        desc.bufferBinding_count = countof(bufferBindings_skinned_textured_base);
         desc.vs_name = shaders::vs_textured3d_skinned_base.name;
         desc.vs_src = shaders::vs_textured3d_skinned_base.src;
         desc.ps_name = shaders::ps_textured3dalphaclip_base.name;
@@ -1243,19 +1243,19 @@ void init_pipelines(Store& store, allocator::Arena scratchArena, const platform:
 
     fbx::PipelineAssetContext ctx = {};
     ctx.vertexAttrs[DrawlistStreams::Color3D] = attribs_color3d;
-    ctx.attr_count[DrawlistStreams::Color3D] = COUNT_OF(attribs_color3d);
+    ctx.attr_count[DrawlistStreams::Color3D] = countof(attribs_color3d);
     ctx.vertexAttrs[DrawlistStreams::Color3DSkinned] = attribs_color3d_skinned;
-    ctx.attr_count[DrawlistStreams::Color3DSkinned] = COUNT_OF(attribs_color3d_skinned);
+    ctx.attr_count[DrawlistStreams::Color3DSkinned] = countof(attribs_color3d_skinned);
     ctx.vertexAttrs[DrawlistStreams::Textured3D] = attribs_textured3d;
-    ctx.attr_count[DrawlistStreams::Textured3D] = COUNT_OF(attribs_textured3d);
+    ctx.attr_count[DrawlistStreams::Textured3D] = countof(attribs_textured3d);
     ctx.vertexAttrs[DrawlistStreams::Textured3DAlphaClip] = attribs_textured3d;
-    ctx.attr_count[DrawlistStreams::Textured3DAlphaClip] = COUNT_OF(attribs_textured3d);
+    ctx.attr_count[DrawlistStreams::Textured3DAlphaClip] = countof(attribs_textured3d);
     ctx.vertexAttrs[DrawlistStreams::Textured3DSkinned] = attribs_textured3d_skinned;
-    ctx.attr_count[DrawlistStreams::Textured3DSkinned] = COUNT_OF(attribs_textured3d_skinned);
+    ctx.attr_count[DrawlistStreams::Textured3DSkinned] = countof(attribs_textured3d_skinned);
     ctx.vertexAttrs[DrawlistStreams::Textured3DAlphaClipSkinned] = attribs_textured3d_skinned;
-    ctx.attr_count[DrawlistStreams::Textured3DAlphaClipSkinned] = COUNT_OF(attribs_textured3d_skinned);
+    ctx.attr_count[DrawlistStreams::Textured3DAlphaClipSkinned] = countof(attribs_textured3d_skinned);
 
-    for (u32 asset_idx = 0; asset_idx < COUNT_OF(assets); asset_idx++) {
+    for (u32 asset_idx = 0; asset_idx < countof(assets); asset_idx++) {
         const AssetData& asset = assets[asset_idx];
 
         for (u32 asset_rep = 0; asset_rep < asset.count; asset_rep++) {
@@ -1328,8 +1328,8 @@ void init_pipelines(Store& store, allocator::Arena scratchArena, const platform:
         bufferParams.indexType = renderer::driver::BufferItemType::U16;
         bufferParams.type = renderer::driver::BufferTopologyType::Triangles;
         driver::VertexAttribDesc attribs[] = {
-            driver::make_vertexAttribDesc("POSITION", OFFSET_OF(VertexLayout_Color_3D, pos), sizeof(VertexLayout_Color_3D), driver::BufferAttributeFormat::R32G32B32_FLOAT),
-            driver::make_vertexAttribDesc("COLOR", OFFSET_OF(VertexLayout_Color_3D, color), sizeof(VertexLayout_Color_3D), driver::BufferAttributeFormat::R8G8B8A8_UNORM)
+            driver::make_vertexAttribDesc("POSITION", offsetof(VertexLayout_Color_3D, pos), sizeof(VertexLayout_Color_3D), driver::BufferAttributeFormat::R32G32B32_FLOAT),
+            driver::make_vertexAttribDesc("COLOR", offsetof(VertexLayout_Color_3D, color), sizeof(VertexLayout_Color_3D), driver::BufferAttributeFormat::R8G8B8A8_UNORM)
         };
 
         u32 c = Color32(0.2f, 0.344f, 0.59f, 1.f).ABGR();
@@ -1340,42 +1340,42 @@ void init_pipelines(Store& store, allocator::Arena scratchArena, const platform:
             u16 i[] = { 0, 1, 2, 2, 3, 0 };
             bufferParams.vertexData = v;
             bufferParams.indexData = i;
-            renderer::driver::create_indexed_vertex_buffer(store.sky.buffers[0], bufferParams, attribs, COUNT_OF(attribs));
+            renderer::driver::create_indexed_vertex_buffer(store.sky.buffers[0], bufferParams, attribs, countof(attribs));
         }
         {
             VertexLayout_Color_3D v[] = { { { w, -w, -h }, c }, { { -w, -w, -h }, c }, { { -w, -w, h }, c }, { { w, -w, h }, c } };
             u16 i[] = { 2, 1, 0, 0, 3, 2 };
             bufferParams.vertexData = v;
             bufferParams.indexData = i;
-            renderer::driver::create_indexed_vertex_buffer(store.sky.buffers[1], bufferParams, attribs, COUNT_OF(attribs));
+            renderer::driver::create_indexed_vertex_buffer(store.sky.buffers[1], bufferParams, attribs, countof(attribs));
         }
         {
             VertexLayout_Color_3D v[] = { { { w, w, -h }, c }, { { w, -w, -h }, c }, { { w, -w, h }, c }, { { w, w, h }, c } };
             u16 i[] = { 2, 1, 0, 0, 3, 2 };
             bufferParams.vertexData = v;
             bufferParams.indexData = i;
-            renderer::driver::create_indexed_vertex_buffer(store.sky.buffers[2], bufferParams, attribs, COUNT_OF(attribs));
+            renderer::driver::create_indexed_vertex_buffer(store.sky.buffers[2], bufferParams, attribs, countof(attribs));
         }
         {
             VertexLayout_Color_3D v[] = { { { -w, w, -h }, c }, { { -w, -w, -h }, c }, { { -w, -w, h }, c }, { { -w, w, h }, c } };
             u16 i[] = { 0, 1, 2, 0, 2, 3 };
             bufferParams.vertexData = v;
             bufferParams.indexData = i;
-            renderer::driver::create_indexed_vertex_buffer(store.sky.buffers[3], bufferParams, attribs, COUNT_OF(attribs));
+            renderer::driver::create_indexed_vertex_buffer(store.sky.buffers[3], bufferParams, attribs, countof(attribs));
         }
         {
             VertexLayout_Color_3D v[] = { { { -w, w, h }, c }, { { -w, -w, h }, c }, { { w, -w, h }, c }, { { w, w, h }, c } };
             u16 i[] = { 0, 1, 2, 0, 2, 3 };
             bufferParams.vertexData = v;
             bufferParams.indexData = i;
-            renderer::driver::create_indexed_vertex_buffer(store.sky.buffers[4], bufferParams, attribs, COUNT_OF(attribs));
+            renderer::driver::create_indexed_vertex_buffer(store.sky.buffers[4], bufferParams, attribs, countof(attribs));
         }
         {
             VertexLayout_Color_3D v[] = { { { -w, w, -h/4 }, c }, { { -w, -w, -h/4 }, c }, { { w, -w, -h/4 }, c }, { { w, w, -h/4 }, c } };
             u16 i[] = { 2, 1, 0, 0, 3, 2 };
             bufferParams.vertexData = v;
             bufferParams.indexData = i;
-            renderer::driver::create_indexed_vertex_buffer(store.sky.buffers[5], bufferParams, attribs, COUNT_OF(attribs));
+            renderer::driver::create_indexed_vertex_buffer(store.sky.buffers[5], bufferParams, attribs, countof(attribs));
         }
     }
 
@@ -1395,7 +1395,7 @@ void init_pipelines(Store& store, allocator::Arena scratchArena, const platform:
         driver::create_cbuffer(store.cbuffers[store.cbuffer_count++], { sizeof(NodeData) });
         node.cbuffer_instances = store.cbuffer_count;
         driver::create_cbuffer(store.cbuffers[store.cbuffer_count++], { sizeof(Matrices64) });
-        for (u32 m = 0; m < COUNT_OF(node.instanceMatrices.data); m++) {
+        for (u32 m = 0; m < countof(node.instanceMatrices.data); m++) {
             float4x4& matrix = node.instanceMatrices.data[m];
             math::identity4x4(*(Transform*)&(matrix));
         }
@@ -1415,18 +1415,18 @@ void init_pipelines(Store& store, allocator::Arena scratchArena, const platform:
         bufferParams.vertexData = v;
         bufferParams.indexData = i;
         bufferParams.vertexSize = sizeof(v);
-        bufferParams.vertexCount = COUNT_OF(v);
+        bufferParams.vertexCount = countof(v);
         bufferParams.indexSize = sizeof(i);
-        bufferParams.indexCount = COUNT_OF(i);
+        bufferParams.indexCount = countof(i);
         bufferParams.memoryUsage = renderer::driver::BufferMemoryUsage::GPU;
         bufferParams.accessType = renderer::driver::BufferAccessType::GPU;
         bufferParams.indexType = renderer::driver::BufferItemType::U16;
         bufferParams.type = renderer::driver::BufferTopologyType::Triangles;
         driver::VertexAttribDesc attribs[] = {
-            driver::make_vertexAttribDesc("POSITION", OFFSET_OF(VertexLayout_Color_3D, pos), sizeof(VertexLayout_Color_3D), driver::BufferAttributeFormat::R32G32B32_FLOAT),
-            driver::make_vertexAttribDesc("COLOR", OFFSET_OF(VertexLayout_Color_3D, color), sizeof(VertexLayout_Color_3D), driver::BufferAttributeFormat::R8G8B8A8_UNORM)
+            driver::make_vertexAttribDesc("POSITION", offsetof(VertexLayout_Color_3D, pos), sizeof(VertexLayout_Color_3D), driver::BufferAttributeFormat::R32G32B32_FLOAT),
+            driver::make_vertexAttribDesc("COLOR", offsetof(VertexLayout_Color_3D, color), sizeof(VertexLayout_Color_3D), driver::BufferAttributeFormat::R8G8B8A8_UNORM)
         };
-        renderer::driver::create_indexed_vertex_buffer(mesh.vertexBuffer, bufferParams, attribs, COUNT_OF(attribs));
+        renderer::driver::create_indexed_vertex_buffer(mesh.vertexBuffer, bufferParams, attribs, countof(attribs));
         DrawNode& node = allocator::alloc_pool(store.drawNodes);
         node = {};
         node.meshHandles[0] = handle_from_drawMesh(store, mesh);
@@ -1452,18 +1452,18 @@ void init_pipelines(Store& store, allocator::Arena scratchArena, const platform:
         bufferParams.vertexData = v;
         bufferParams.indexData = i;
         bufferParams.vertexSize = sizeof(v);
-        bufferParams.vertexCount = COUNT_OF(v);
+        bufferParams.vertexCount = countof(v);
         bufferParams.indexSize = sizeof(i);
-        bufferParams.indexCount = COUNT_OF(i);
+        bufferParams.indexCount = countof(i);
         bufferParams.memoryUsage = renderer::driver::BufferMemoryUsage::GPU;
         bufferParams.accessType = renderer::driver::BufferAccessType::GPU;
         bufferParams.indexType = renderer::driver::BufferItemType::U16;
         bufferParams.type = renderer::driver::BufferTopologyType::Triangles;
         driver::VertexAttribDesc attribs[] = {
-            driver::make_vertexAttribDesc("POSITION", OFFSET_OF(VertexLayout_Color_3D, pos), sizeof(VertexLayout_Color_3D), driver::BufferAttributeFormat::R32G32B32_FLOAT),
-            driver::make_vertexAttribDesc("COLOR", OFFSET_OF(VertexLayout_Color_3D, color), sizeof(VertexLayout_Color_3D), driver::BufferAttributeFormat::R8G8B8A8_UNORM)
+            driver::make_vertexAttribDesc("POSITION", offsetof(VertexLayout_Color_3D, pos), sizeof(VertexLayout_Color_3D), driver::BufferAttributeFormat::R32G32B32_FLOAT),
+            driver::make_vertexAttribDesc("COLOR", offsetof(VertexLayout_Color_3D, color), sizeof(VertexLayout_Color_3D), driver::BufferAttributeFormat::R8G8B8A8_UNORM)
         };
-        renderer::driver::create_indexed_vertex_buffer(mesh.vertexBuffer, bufferParams, attribs, COUNT_OF(attribs));
+        renderer::driver::create_indexed_vertex_buffer(mesh.vertexBuffer, bufferParams, attribs, countof(attribs));
        /* {
             DrawNode& node = allocator::alloc_pool(store.drawNodes);
             node = {};

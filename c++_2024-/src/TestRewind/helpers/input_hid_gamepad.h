@@ -246,11 +246,11 @@ void process_hid_pads_win(allocator::Arena scratchArena, State* pads, u32& padCo
             HIDP_VALUE_CAPS* valueCaps = (HIDP_VALUE_CAPS*)allocator::alloc_arena(scratchArena, caps.NumberInputValueCaps * sizeof(HIDP_VALUE_CAPS), align);
             HidP_GetValueCaps(HidP_Input, valueCaps, &caps.NumberInputValueCaps, mapping.deviceInfo.preparsedData);
 
-            u32 mapped_key_count = math::min((u32)(buttonCaps->Range.UsageMax - buttonCaps->Range.UsageMin + 1), (u32)COUNT_OF(mapping.keys_map));
+            u32 mapped_key_count = math::min((u32)(buttonCaps->Range.UsageMax - buttonCaps->Range.UsageMin + 1), (u32)countof(mapping.keys_map));
             mapping.deviceInfo.keys_count = mapped_key_count;
             mapping.deviceInfo.keys_usage_min = buttonCaps->Range.UsageMin;
             mapping.deviceInfo.keys_usage_page = buttonCaps->UsagePage;
-            const USHORT sliderInfoMaxCount = COUNT_OF(mapping.deviceInfo.sliders_info);
+            const USHORT sliderInfoMaxCount = countof(mapping.deviceInfo.sliders_info);
             for (ULONG i = 0; i < caps.NumberInputValueCaps; i++) {
                 USAGE usage = valueCaps[i].Range.UsageMin;
                 if (usage < HID_USAGE_GENERIC_X || usage > HID_USAGE_GENERIC_HATSWITCH) continue;
@@ -279,7 +279,7 @@ void process_hid_pads_win(allocator::Arena scratchArena, State* pads, u32& padCo
             keys |= keyMask;
         }
 
-        const USHORT mappedCapCount = (USHORT)COUNT_OF(mapping.sliders_map);
+        const USHORT mappedCapCount = (USHORT)countof(mapping.sliders_map);
         const USHORT valueCount = mapping.deviceInfo.sliders_count;
         for (USHORT i = 0; i < valueCount; i++) {
             SliderInfo& sliderInfo = mapping.deviceInfo.sliders_info[i];
@@ -288,7 +288,7 @@ void process_hid_pads_win(allocator::Arena scratchArena, State* pads, u32& padCo
             if (usage == HID_USAGE_GENERIC_HATSWITCH) {
                 ULONG value;
                 HidP_GetUsageValue(HidP_Input, usagePage, 0, usage, &value, mapping.deviceInfo.preparsedData, (PCHAR)input->data.hid.bRawData, input->data.hid.dwSizeHid);
-                if (value >= COUNT_OF(mapping.dpad_map)) continue;
+                if (value >= countof(mapping.dpad_map)) continue;
                 keys |= mapping.dpad_map[value];
             }
             else {
@@ -347,7 +347,7 @@ void process_hid_pads_mac(void* context, IOReturn result, void* sender, IOHIDRep
         }
     }
 
-    if (padToUpdate >= COUNT_OF(input.pads)) return;
+    if (padToUpdate >= countof(input.pads)) return;
     State& pad = input.pads[padToUpdate];
 
     // this will be a new pad, check the type
@@ -393,7 +393,7 @@ void process_hid_pads_mac(void* context, IOReturn result, void* sender, IOHIDRep
                         case kHIDUsage_GD_Slider:
                         case kHIDUsage_GD_Dial:
                         case kHIDUsage_GD_Wheel: {
-                            if (mapping.deviceInfo.sliders_count >= COUNT_OF(mapping.deviceInfo.sliders_info)) break;
+                            if (mapping.deviceInfo.sliders_count >= countof(mapping.deviceInfo.sliders_info)) break;
                             SliderInfo& sliderInfo = mapping.deviceInfo.sliders_info[mapping.deviceInfo.sliders_count++];
                             sliderInfo.native = native;
                             sliderInfo.usage = usage;
@@ -418,7 +418,7 @@ void process_hid_pads_mac(void* context, IOReturn result, void* sender, IOHIDRep
                         case kHIDUsage_GD_SystemMainMenu:
                         case kHIDUsage_GD_Select:
                         case kHIDUsage_GD_Start: {
-                            if (mapping.deviceInfo.keys_count >= COUNT_OF(mapping.deviceInfo.keys_info)) break;
+                            if (mapping.deviceInfo.keys_count >= countof(mapping.deviceInfo.keys_info)) break;
                             KeyInfo& keyInfo = mapping.deviceInfo.keys_info[mapping.deviceInfo.keys_count++];
                             keyInfo.native = native;
                             keyInfo.usage = usage;
@@ -430,7 +430,7 @@ void process_hid_pads_mac(void* context, IOReturn result, void* sender, IOHIDRep
                     }
                 }
                 else if (page == kHIDPage_Button /* || page == kHIDPage_Consumer */) { // todo: see https://github.com/libsdl-org/SDL/issues/1973
-                    if (mapping.deviceInfo.keys_count >= COUNT_OF(mapping.deviceInfo.keys_info)) continue;
+                    if (mapping.deviceInfo.keys_count >= countof(mapping.deviceInfo.keys_info)) continue;
                     KeyInfo& keyInfo = mapping.deviceInfo.keys_info[mapping.deviceInfo.keys_count++];
                     keyInfo.native = native;
                     keyInfo.usage = usage;
@@ -445,7 +445,7 @@ void process_hid_pads_mac(void* context, IOReturn result, void* sender, IOHIDRep
         memset(pad.sliders, 0, sizeof(pad.sliders));
         // Buttons
         u16 keys = 0;
-        const u32 mappedKeysCount = (u32)COUNT_OF(mapping.keys_map);
+        const u32 mappedKeysCount = (u32)countof(mapping.keys_map);
         for (u32 i = 0; i < mapping.deviceInfo.keys_count; i++) {
             KeyInfo& keysInfo = mapping.deviceInfo.keys_info[i];
             IOHIDValueRef valueRef;
@@ -463,7 +463,7 @@ void process_hid_pads_mac(void* context, IOReturn result, void* sender, IOHIDRep
         IOHIDValueRef valueRef;
         if (IOHIDDeviceGetValue(device, mapping.deviceInfo.hat_info.native, &valueRef) == kIOReturnSuccess) {
             u64 value = IOHIDValueGetIntegerValue(valueRef) - mapping.deviceInfo.hat_info.min;
-            if (value < COUNT_OF(mapping.dpad_map)) {
+            if (value < countof(mapping.dpad_map)) {
                 keys |= mapping.dpad_map[value];
             }
         }

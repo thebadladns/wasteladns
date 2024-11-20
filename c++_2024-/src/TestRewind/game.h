@@ -560,7 +560,7 @@ namespace game
                         driver::bind_DS(store.depthStateOff);
                         driver::bind_shader(store.shaders[ShaderType::Color3D]);
                         driver::bind_blend_state(store.blendStateBlendOff);
-                        for (u32 i = 0; i < COUNT_OF(store.sky.buffers); i++) {
+                        for (u32 i = 0; i < countof(store.sky.buffers); i++) {
                             driver::bind_indexed_vertex_buffer(store.sky.buffers[i]);
                             driver::RscCBuffer buffers[] = { scene_cbuffer, store.sky.cbuffer };
                             driver::bind_cbuffers(store.shaders[ShaderType::Color3D], buffers, 2);
@@ -638,7 +638,6 @@ namespace game
                                     const DrawNodeSkinned& node = store.drawNodesSkinned.data[n].state.live;
                                     im::obb(imCtx, node.core.nodeData.worldMatrix, node.core.min, node.core.max, bbColor);
                                 }
-
                                 const Color32 color(0.25f, 0.8f, 0.15f, 0.7f);
                                 im::frustum(imCtx, matrix, color);
                             }
@@ -695,7 +694,7 @@ namespace game
                         dl.keys = (Key*)allocator::alloc_arena(scratchArena, maxDrawCallsThisFrame * sizeof(Key), alignof(Key));
 
                         DrawNode& node = get_draw_node_core(store, store.mirror.drawHandle);
-                        const u32 maxMeshCount = COUNT_OF(node.meshHandles);
+                        const u32 maxMeshCount = countof(node.meshHandles);
                         for (u32 m = 0; m < maxMeshCount; m++) {
                             if (node.meshHandles[m] == 0) { continue; }
                             u32 dl_index = dl.count[DrawlistBuckets::Base]++;
@@ -736,7 +735,7 @@ namespace game
                             driver::bind_DS(store.depthStateMirrorReflectionsDepthReadOnly);
                             driver::bind_shader(store.shaders[ShaderType::Color3D]);
                             driver::bind_blend_state(store.blendStateBlendOff);
-                            for (u32 i = 0; i < COUNT_OF(store.sky.buffers); i++) {
+                            for (u32 i = 0; i < countof(store.sky.buffers); i++) {
                                 driver::bind_indexed_vertex_buffer(store.sky.buffers[i]);
                                 driver::RscCBuffer buffers[] = { scene_cbuffer, store.sky.cbuffer };
                                 driver::bind_cbuffers(store.shaders[ShaderType::Color3D], buffers, 2);
@@ -823,7 +822,7 @@ namespace game
                         dl.keys = (Key*)allocator::alloc_arena(scratchArena, maxDrawCallsThisFrame * sizeof(Key), alignof(Key));
 
                         DrawNode& node = get_draw_node_core(store, store.mirror.drawHandle);
-                        const u32 maxMeshCount = COUNT_OF(node.meshHandles);
+                        const u32 maxMeshCount = countof(node.meshHandles);
                         for (u32 m = 0; m < maxMeshCount; m++) {
                             if (node.meshHandles[m] == 0) { continue; }
                             u32 dl_index = dl.count[DrawlistBuckets::Base]++;
@@ -922,17 +921,23 @@ namespace game
                     textParamsLeft.pos.y -= lineheight;
                    
                     {
-                        constexpr ::input::keyboard::Keys::Enum keys[] = { input::TOGGLE_FRUSTUM_NEAR, input::TOGGLE_FRUSTUM_FAR, input::TOGGLE_FRUSTUM_LEFT, input::TOGGLE_FRUSTUM_RIGHT, input::TOGGLE_FRUSTUM_BOTTOM, input::TOGGLE_FRUSTUM_TOP };
+                        if (platform.input.keyboard.pressed(input::TOGGLE_FRUSTUM_CUT)) { textParamsLeft.color = activeCol; }
+                        else { textParamsLeft.color = defaultCol; }
                         platform::StrBuilder frustumStr;
-                        frustumStr.append("%sFrustum planes applied: ", debug::force_cut_frustum ? "[forced cut] " : "");
-                        for (s32 i = 0; i < COUNT_OF(debug::frustum_planes_off) && !frustumStr.full(); i++) {
+                        constexpr ::input::keyboard::Keys::Enum keys[] = { input::TOGGLE_FRUSTUM_NEAR, input::TOGGLE_FRUSTUM_FAR, input::TOGGLE_FRUSTUM_LEFT, input::TOGGLE_FRUSTUM_RIGHT, input::TOGGLE_FRUSTUM_BOTTOM, input::TOGGLE_FRUSTUM_TOP };
+                        frustumStr.append("%sFrustum planes: ", debug::force_cut_frustum ? "[forced cut] " : "");
+                        for (s32 i = 0; i < countof(debug::frustum_planes_off) && !frustumStr.full(); i++) {
                             if (!debug::frustum_planes_off[i]) { frustumStr.append("%s ", debug::frustum_planes_names[i]); }
                             if (platform.input.keyboard.pressed(::input::keyboard::Keys::Enum(keys[i]))) {
+                                textParamsLeft.color = activeCol;
                                 platform::format(debug::eventLabel.text, sizeof(debug::eventLabel.text), debug::frustum_planes_off[i] ? "%s frustum plane off" : "%s frustum plane on", debug::frustum_planes_names[i]);
                                 debug::eventLabel.time = platform.time.now;
                             }
                         };
+                        renderer::im::text2d(imCtx, textParamsLeft, "[0] to force frustum cut, [1-6] to toggle frustum planes");
+                        textParamsLeft.pos.y -= lineheight;
                         renderer::im::text2d(imCtx, textParamsLeft, frustumStr.str);
+                        textParamsLeft.color = defaultCol;
                         textParamsLeft.pos.y -= lineheight;
                     }
 
@@ -955,8 +960,6 @@ namespace game
                             renderer::im::text2d(imCtx, textParamsLeft, "Camera eulers: " float3_FORMAT("% .3f"), float3_PARAMS(eulers_deg));
                             textParamsLeft.pos.y -= lineheight;
                         }
-                        renderer::im::text2d(imCtx, textParamsLeft, "mouse wheel to scale");
-                        textParamsLeft.pos.y -= lineheight;
                         for (u32 i = 0; i < platform.input.padCount; i++)
                         {
                             const ::input::gamepad::State& pad = platform.input.pads[i];
@@ -1012,15 +1015,11 @@ namespace game
                             textCfg.pos.y -= lineheight;
                             textCfg.color = defaultCol;
 
-                            renderer::im::box_2d(im
-                                , float2(textCfg.pos.x, textCfg.pos.y - barheight)
-                                , float2(textCfg.pos.x + barwidth, textCfg.pos.y)
-                                , baseCol);
+                            renderer::im::box_2d(im, float2(textCfg.pos.x, textCfg.pos.y - barheight)
+                                                   , float2(textCfg.pos.x + barwidth, textCfg.pos.y), baseCol);
                             if (arenaHighmarkBytes) {
-                                renderer::im::box_2d(im
-                                                          , float2(textCfg.pos.x, textCfg.pos.y - barheight)
-                                                          , float2(textCfg.pos.x + arenaHighmark_barwidth, textCfg.pos.y)
-                                                          , highmarkCol);
+                                renderer::im::box_2d(im, float2(textCfg.pos.x, textCfg.pos.y - barheight)
+                                                       , float2(textCfg.pos.x + arenaHighmark_barwidth, textCfg.pos.y), highmarkCol);
                             }
                             textCfg.pos.y -= barheight + 5.f * textscale;
                         };
@@ -1094,6 +1093,9 @@ namespace game
                                 , float2(textParamsCenter.pos.x + i2d_barstart, textParamsCenter.pos.y - barheight)
                                 , float2(textParamsCenter.pos.x + i2d_barstart + i2d_barwidth, textParamsCenter.pos.y)
                                 , used2didxCol);
+
+                            textParamsCenter.pos.y -= barheight + 5.f * textscale;
+
                         }
                     }
 
@@ -1106,9 +1108,8 @@ namespace game
                             u8 oldScale = textParamsCenter.scale;
                             textParamsCenter.color = Color32(1.0f, 0.2f, 0.1f, 1.f - t);
                             textParamsCenter.scale *= 2;
-                            textParamsCenter.pos.y = math::min(textParamsCenter.pos.y, 180.f);
                             renderer::im::text2d(imCtx, textParamsCenter, debug::eventLabel.text);
-                            textParamsCenter.pos.y = -lineheight;
+                            textParamsCenter.pos.y -= textParamsCenter.scale * 12.f;
                             textParamsCenter.color = defaultCol;
                             textParamsCenter.scale = oldScale;
                         }

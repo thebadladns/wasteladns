@@ -600,8 +600,8 @@ namespace driver {
     }
     void set_marker_name(Marker_t& wide, const char* ansi) {
         size_t converted;
-		mbstowcs_s(&converted, wide, ansi, COUNT_OF(wide));
-        //MultiByteToWideChar(CP_UTF8, 0, ansi, -1, wide, COUNT_OF(wide)); via <Stringapiset.h> (Wall time: 11ms)
+		mbstowcs_s(&converted, wide, ansi, countof(wide));
+        //MultiByteToWideChar(CP_UTF8, 0, ansi, -1, wide, countof(wide)); via <Stringapiset.h> (Wall time: 11ms)
     }
     void set_marker(Marker_t data) {
         perf->SetMarker(data);

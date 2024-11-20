@@ -488,16 +488,16 @@ namespace im
             // 2d
             {
                 const driver::VertexAttribDesc attribs_color2d[] = {
-                    driver::make_vertexAttribDesc("POSITION", OFFSET_OF(Vertex2D, pos), sizeof(Vertex2D), driver::BufferAttributeFormat::R32G32_FLOAT),
-                    driver::make_vertexAttribDesc("COLOR", OFFSET_OF(Vertex2D, color), sizeof(Vertex2D), driver::BufferAttributeFormat::R8G8B8A8_UNORM)
+                    driver::make_vertexAttribDesc("POSITION", offsetof(Vertex2D, pos), sizeof(Vertex2D), driver::BufferAttributeFormat::R32G32_FLOAT),
+                    driver::make_vertexAttribDesc("COLOR", offsetof(Vertex2D, color), sizeof(Vertex2D), driver::BufferAttributeFormat::R8G8B8A8_UNORM)
                 };
                 renderer::ShaderDesc desc = {};
                 desc.vertexAttrs = attribs_color2d;
-                desc.vertexAttr_count = COUNT_OF(attribs_color2d);
+                desc.vertexAttr_count = countof(attribs_color2d);
                 desc.textureBindings = nullptr;
                 desc.textureBinding_count = 0;
                 desc.bufferBindings = bufferBindings_MVP;
-                desc.bufferBinding_count = COUNT_OF(bufferBindings_MVP);
+                desc.bufferBinding_count = countof(bufferBindings_MVP);
                 // reuse 3d shaders
                 desc.vs_name = shaders::vs_color3d_unlit.name;
                 desc.vs_src = shaders::vs_color3d_unlit.src;
@@ -516,21 +516,21 @@ namespace im
                 bufferParams.indexType = renderer::driver::BufferItemType::U32;
                 bufferParams.type = renderer::driver::BufferTopologyType::Triangles;
                 bufferParams.indexCount = 0;
-                driver::create_indexed_vertex_buffer(buffer.buffer_2d, bufferParams, attribs_color2d, COUNT_OF(attribs_color2d));
+                driver::create_indexed_vertex_buffer(buffer.buffer_2d, bufferParams, attribs_color2d, countof(attribs_color2d));
             }
             // 3d
             {
                 const driver::VertexAttribDesc attribs_color3d[] = {
-                    driver::make_vertexAttribDesc("POSITION", OFFSET_OF(Vertex3D, pos), sizeof(Vertex3D), driver::BufferAttributeFormat::R32G32B32_FLOAT),
-                    driver::make_vertexAttribDesc("COLOR", OFFSET_OF(Vertex3D, color), sizeof(Vertex3D), driver::BufferAttributeFormat::R8G8B8A8_UNORM)
+                    driver::make_vertexAttribDesc("POSITION", offsetof(Vertex3D, pos), sizeof(Vertex3D), driver::BufferAttributeFormat::R32G32B32_FLOAT),
+                    driver::make_vertexAttribDesc("COLOR", offsetof(Vertex3D, color), sizeof(Vertex3D), driver::BufferAttributeFormat::R8G8B8A8_UNORM)
                 };
                 renderer::ShaderDesc desc = {};
                 desc.vertexAttrs = attribs_color3d;
-                desc.vertexAttr_count = COUNT_OF(attribs_color3d);
+                desc.vertexAttr_count = countof(attribs_color3d);
                 desc.textureBindings = nullptr;
                 desc.textureBinding_count = 0;
                 desc.bufferBindings = bufferBindings_MVP;
-                desc.bufferBinding_count = COUNT_OF(bufferBindings_MVP);
+                desc.bufferBinding_count = countof(bufferBindings_MVP);
                 desc.vs_name = shaders::vs_color3d_unlit.name;
                 desc.vs_src = shaders::vs_color3d_unlit.src;
                 desc.ps_name = shaders::ps_color3d_unlit.name;
@@ -544,7 +544,7 @@ namespace im
                 bufferParams.memoryUsage = renderer::driver::BufferMemoryUsage::CPU;
                 bufferParams.accessType = renderer::driver::BufferAccessType::CPU;
                 bufferParams.type = renderer::driver::BufferTopologyType::Lines;
-                driver::create_vertex_buffer(buffer.buffer_3d, bufferParams, attribs_color3d, COUNT_OF(attribs_color3d));
+                driver::create_vertex_buffer(buffer.buffer_3d, bufferParams, attribs_color3d, countof(attribs_color3d));
             }
         }
         

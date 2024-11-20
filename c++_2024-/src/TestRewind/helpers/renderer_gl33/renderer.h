@@ -34,7 +34,7 @@ namespace driver {
 
         {
             glBindFramebuffer(GL_FRAMEBUFFER, rt.buffer);
-            GLuint attachments[COUNT_OF(rt.textures)];
+            GLuint attachments[countof(rt.textures)];
             for (u32 i = 0; i < params.count; i++) {
                 renderer::driver::TextureRenderTargetCreateParams texParams;
                 texParams.width = params.width;

@@ -417,9 +417,9 @@ void create_indexed_vertex_buffer_from_untextured_cube(renderer::driver::RscInde
     bufferParams.vertexData = cube.vertices;
     bufferParams.indexData = cube.indices;
     bufferParams.vertexSize = sizeof(cube.vertices);
-    bufferParams.vertexCount = COUNT_OF(cube.vertices);
+    bufferParams.vertexCount = countof(cube.vertices);
     bufferParams.indexSize = sizeof(cube.indices);
-    bufferParams.indexCount = COUNT_OF(cube.indices);
+    bufferParams.indexCount = countof(cube.indices);
     bufferParams.memoryUsage = renderer::driver::BufferMemoryUsage::GPU;
     bufferParams.accessType = renderer::driver::BufferAccessType::GPU;
     bufferParams.indexType = renderer::driver::BufferItemType::U16;
@@ -427,7 +427,7 @@ void create_indexed_vertex_buffer_from_untextured_cube(renderer::driver::RscInde
     driver::VertexAttribDesc attribs[] = {
         driver::make_vertexAttribDesc("POSITION", 0, sizeof(float3), driver::BufferAttributeFormat::R32G32B32_FLOAT)
     };
-    renderer::driver::create_indexed_vertex_buffer(buffer, bufferParams, attribs, COUNT_OF(attribs));
+    renderer::driver::create_indexed_vertex_buffer(buffer, bufferParams, attribs, countof(attribs));
 }
 void create_indexed_vertex_buffer_from_colored_cube(renderer::driver::RscIndexedVertexBuffer& buffer, const CubeCreateParams& params) {
     renderer::ColoredCube cube;
@@ -436,18 +436,18 @@ void create_indexed_vertex_buffer_from_colored_cube(renderer::driver::RscIndexed
     bufferParams.vertexData = cube.vertices;
     bufferParams.indexData = cube.indices;
     bufferParams.vertexSize = sizeof(cube.vertices);
-    bufferParams.vertexCount = COUNT_OF(cube.vertices);
+    bufferParams.vertexCount = countof(cube.vertices);
     bufferParams.indexSize = sizeof(cube.indices);
-    bufferParams.indexCount = COUNT_OF(cube.indices);
+    bufferParams.indexCount = countof(cube.indices);
     bufferParams.memoryUsage = renderer::driver::BufferMemoryUsage::GPU;
     bufferParams.accessType = renderer::driver::BufferAccessType::GPU;
     bufferParams.indexType = renderer::driver::BufferItemType::U16;
     bufferParams.type = renderer::driver::BufferTopologyType::Triangles;
     driver::VertexAttribDesc attribs[] = {
-        driver::make_vertexAttribDesc("POSITION", OFFSET_OF(ColoredCube::Vertex, pos), sizeof(ColoredCube::Vertex), driver::BufferAttributeFormat::R32G32B32_FLOAT),
-        driver::make_vertexAttribDesc("COLOR", OFFSET_OF(ColoredCube::Vertex, color), sizeof(ColoredCube::Vertex), driver::BufferAttributeFormat::R8G8B8A8_UNORM)
+        driver::make_vertexAttribDesc("POSITION", offsetof(ColoredCube::Vertex, pos), sizeof(ColoredCube::Vertex), driver::BufferAttributeFormat::R32G32B32_FLOAT),
+        driver::make_vertexAttribDesc("COLOR", offsetof(ColoredCube::Vertex, color), sizeof(ColoredCube::Vertex), driver::BufferAttributeFormat::R8G8B8A8_UNORM)
     };
-    renderer::driver::create_indexed_vertex_buffer(buffer, bufferParams, attribs, COUNT_OF(attribs));
+    renderer::driver::create_indexed_vertex_buffer(buffer, bufferParams, attribs, countof(attribs));
 }
 struct ShaderDesc {
     const driver::VertexAttribDesc* vertexAttrs;

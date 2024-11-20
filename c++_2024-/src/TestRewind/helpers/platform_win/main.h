@@ -374,7 +374,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
                     break;
                     case WM_INPUT: {
                         // arena copy, not by value (there will be an implicit free when the function ends)
-                        ::input::gamepad::process_hid_pads_win(platform.memory.scratchArenaRoot, platform.input.pads, platform.input.padCount, COUNT_OF(platform.input.pads), (HRAWINPUT)msg.lParam);
+                        ::input::gamepad::process_hid_pads_win(platform.memory.scratchArenaRoot, platform.input.pads, platform.input.padCount, countof(platform.input.pads), (HRAWINPUT)msg.lParam);
                     }
                     break;
                     default: {
