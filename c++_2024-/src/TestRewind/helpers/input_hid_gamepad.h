@@ -363,7 +363,7 @@ void process_hid_pads_mac(void* context, IOReturn result, void* sender, IOHIDRep
     // handle Dualshock4 separately, since it doesn't always specify HID gamepad usages in the report
     // see https://chromium-review.googlesource.com/c/chromium/src/+/1478406
     if (pad.type == Type::DUALSHOCK4) {
-        Dualshock4::parseDualshock4(pad, report[0], &(report[1]));
+        parseDualshock4(pad, report[0], &(report[1]));
     }
     else {
         Mapping& mapping = mappings[pad.type];

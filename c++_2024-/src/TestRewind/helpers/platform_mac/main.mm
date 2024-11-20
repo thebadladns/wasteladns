@@ -31,7 +31,7 @@
 int main(int , char** ) {
     @autoreleasepool {
         
-        Platform::State platform = {};
+        platform::State platform = {};
 
         [NSApplication sharedApplication];
         AppDelegate* appDelegate = [[AppDelegate alloc] init];
@@ -51,8 +51,8 @@ int main(int , char** ) {
         f32 windowScale = 1.f;
         NSOpenGLContext* openGLContext;
         {
-            Platform::LaunchConfig config;
-            Game::loadLaunchConfig(config);
+            platform::LaunchConfig config;
+            game::loadLaunchConfig(config);
             NSString* nstitle = [NSString stringWithUTF8String:config.title];
             
             // Menu
@@ -100,7 +100,7 @@ int main(int , char** ) {
             [openGLContext setView:contentView];
             [openGLContext makeCurrentContext];
             
-            Renderer::Driver::loadGLExtensions();
+            renderer::driver::loadGLExtensions();
             
             [(NSWindow*)window center];
             [window orderFrontRegardless];
@@ -118,7 +118,7 @@ int main(int , char** ) {
             platform.screen.fullscreen = config.fullscreen;
             __DEBUGEXP(platform.screen.text_scale = windowScale);
 
-            Allocator::init_arena(platform.memory.scratchArenaRoot, config.scratchArena_size); // 1MB
+            allocator::init_arena(platform.memory.scratchArenaRoot, config.scratchArena_size); // 1MB
             __DEBUGEXP(platform.memory.scratchArenaHighmark = (uintptr_t)platform.memory.scratchArenaRoot.curr; platform.memory.scratchArenaRoot.highmark = &platform.memory.scratchArenaHighmark);
         }
         
@@ -130,7 +130,7 @@ int main(int , char** ) {
             platform.input.mouse.y = actualWindowHeight-pos.y;
         }
         // gamepad
-        ::Input::Gamepad::init_hid_pads_mac(platform);
+        ::input::gamepad::init_hid_pads_mac(platform);
         
         mach_timebase_info_data_t ticks_to_nanos;
         mach_timebase_info(&ticks_to_nanos);
@@ -139,9 +139,9 @@ int main(int , char** ) {
         platform.time.running = 0.0;
         platform.time.now = platform.time.start = mach_absolute_time() / frequency;
         
-        Game::Instance game;
-        Platform::GameConfig config;
-        Game::start(game, config, platform);
+        game::Instance game;
+        platform::GameConfig config;
+        game::start(game, config, platform);
         
         do
         {
@@ -150,8 +150,8 @@ int main(int , char** ) {
                     // Input
                     {
                     for (u32 i = 0; i < platform.input.padCount; i++) { platform.input.pads[i].last_keys = platform.input.pads[i].curr_keys; }
-                    memcpy(platform.input.keyboard.last, platform.input.keyboard.current, sizeof(u8)* ::Input::Keyboard::Keys::COUNT);
-                    memcpy(platform.input.mouse.last, platform.input.mouse.curr, sizeof(u8) * ::Input::Mouse::Keys::COUNT);
+                    memcpy(platform.input.keyboard.last, platform.input.keyboard.current, sizeof(u8)* ::input::keyboard::Keys::COUNT);
+                    memcpy(platform.input.mouse.last, platform.input.mouse.curr, sizeof(u8) * ::input::mouse::Keys::COUNT);
                     const f32 mouse_prevx = platform.input.mouse.x, mouse_prevy = platform.input.mouse.y;
                     platform.input.mouse.dx = platform.input.mouse.dy = platform.input.mouse.scrolldx = platform.input.mouse.scrolldy = 0.f;
                         
@@ -166,12 +166,12 @@ int main(int , char** ) {
                         switch (eventType) {
                             case NSEventTypeKeyUp: {
                                 if ([event modifierFlags] & hotkeyMask) { break; } // Handle events like cmd+q etc
-                                platform.input.keyboard.current[(::Input::Keyboard::Keys::Enum)[event keyCode]] = 0;
+                                platform.input.keyboard.current[(::input::keyboard::Keys::Enum)[event keyCode]] = 0;
                                 event_passthrough = false; // disable key error sound
                             } break;
                             case NSEventTypeKeyDown: {
                                 if ([event modifierFlags] & hotkeyMask) { break; } // Handle events like cmd+q etc
-                                platform.input.keyboard.current[(::Input::Keyboard::Keys::Enum)[event keyCode]] = 1;
+                                platform.input.keyboard.current[(::input::keyboard::Keys::Enum)[event keyCode]] = 1;
                                 event_passthrough = false; // disable key error sound
                             } break;
                             case NSEventTypeMouseMoved:
@@ -187,12 +187,12 @@ int main(int , char** ) {
                             } break;
                             case NSEventTypeLeftMouseDown:
                             case NSEventTypeRightMouseDown: {
-                                ::Input::Mouse::Keys::Enum keycode = (::Input::Mouse::Keys::Enum)((eventType >> 1) & 0x1);
+                                ::input::mouse::Keys::Enum keycode = (::input::mouse::Keys::Enum)((eventType >> 1) & 0x1);
                                 platform.input.mouse.curr[keycode] = 1;
                             } break;
                             case NSEventTypeLeftMouseUp:
                             case NSEventTypeRightMouseUp: {
-                                ::Input::Mouse::Keys::Enum keycode = (::Input::Mouse::Keys::Enum)((eventType >> 2) & 0x1);
+                                ::input::mouse::Keys::Enum keycode = (::input::mouse::Keys::Enum)((eventType >> 2) & 0x1);
                                 platform.input.mouse.curr[keycode] = 0;
                             } break;
                                     
@@ -213,7 +213,7 @@ int main(int , char** ) {
                     } // Input
                     
                     [openGLContext makeCurrentContext];
-                    Game::update(game, config, platform);
+                    game::update(game, config, platform);
                     [openGLContext flushBuffer];
                 }
                 

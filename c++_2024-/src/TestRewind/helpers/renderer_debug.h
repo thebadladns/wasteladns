@@ -9,6 +9,8 @@ namespace debug {
     bool frustum_planes_off[6] = {};
     bool force_cut_frustum = false;
     const char* frustum_planes_names[] = { "near", "far", "left", "right", "bottom", "top" };
+    u32 vertices_3d_head_last_frame = 0;
+    u32 vertices_2d_head_last_frame = 0;
 }
 
 namespace renderer
@@ -562,6 +564,7 @@ namespace im
         bufferUpdateParams.vertexSize = sizeof(Vertex3D) * buffer.vertices_3d_head;
         bufferUpdateParams.vertexCount = buffer.vertices_3d_head;
         driver::update_vertex_buffer(buffer.buffer_3d, bufferUpdateParams);
+        debug::vertices_3d_head_last_frame = buffer.vertices_3d_head;
         buffer.vertices_3d_head = 0;
     }
     void present3d(Context& buffer, const float4x4& projMatrix, const float4x4& viewMatrix) {
@@ -593,6 +596,7 @@ namespace im
         bufferUpdateParams.indexSize = indexCount * sizeof(u32);
         bufferUpdateParams.indexCount = indexCount;
         driver::update_indexed_vertex_buffer(buffer.buffer_2d, bufferUpdateParams);
+        debug::vertices_2d_head_last_frame = buffer.vertices_2d_head;
         buffer.vertices_2d_head = 0;
     }
     void present2d(Context& buffer, const float4x4& projMatrix) {

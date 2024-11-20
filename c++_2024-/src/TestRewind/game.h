@@ -1054,9 +1054,9 @@ namespace game
 
                             const ptrdiff_t memory_size = (ptrdiff_t)game.memory.imDebugArena.curr - (ptrdiff_t)im.vertices_3d;
                             const ptrdiff_t vertices_3d_start = (ptrdiff_t)im.vertices_3d - (ptrdiff_t)im.vertices_3d;
-                            const ptrdiff_t vertices_3d_size = (ptrdiff_t)im.vertices_3d_head * sizeof(im::Vertex3D);
+                            const ptrdiff_t vertices_3d_size = (ptrdiff_t)debug::vertices_3d_head_last_frame * sizeof(im::Vertex3D);
                             const ptrdiff_t vertices_2d_start = (ptrdiff_t)im.vertices_2d - (ptrdiff_t)im.vertices_3d;
-                            const ptrdiff_t vertices_2d_size = (ptrdiff_t)im.vertices_2d_head * sizeof(im::Vertex2D);
+                            const ptrdiff_t vertices_2d_size = (ptrdiff_t)debug::vertices_2d_head_last_frame * sizeof(im::Vertex2D);
                             const ptrdiff_t indices_2d_start = (ptrdiff_t)im.indices_2d - (ptrdiff_t)im.vertices_3d;
                             const ptrdiff_t indices_2d_size = (ptrdiff_t)(im.vertices_2d_head * 3 / 2) * sizeof(u32);
                             const f32 v3d_barstart = barwidth * vertices_3d_start / (f32)memory_size;
