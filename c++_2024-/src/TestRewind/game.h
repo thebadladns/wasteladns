@@ -28,25 +28,6 @@ EventText eventLabel = {};
 }
 #endif
 
-namespace physics {
-
-struct Ball {
-    float3 pos;
-    f32 radius;
-    float3 vel;
-    f32 mass;
-};
-
-struct Scene {
-    float3 gravity;
-    f32 dt;
-    float2 bounds;
-    f32 restitution;
-    Ball balls[8];
-};
-
-}
-
 namespace game
 {
     struct Time {
@@ -198,7 +179,8 @@ namespace game
         {
             // meshes in the scene
             game.renderMgr.store = {};
-            renderer::init_pipelines(game.renderMgr.store, platform.memory.scratchArenaRoot, platform.screen);
+            game.physicsScene = {};
+            renderer::init_scene(game.renderMgr.store, game.physicsScene, platform.memory.scratchArenaRoot, platform.screen);
             __DEBUGEXP(renderer::im::init(game.renderMgr.imCtx, game.memory.imDebugArena));
         }
 
@@ -219,25 +201,6 @@ namespace game
             mgr.orbitCamera.eulers = float3(45.f * math::d2r32, 0.f, -25.f * math::d2r32);
             mgr.orbitCamera.scale = 1.f;
             mgr.orbitCamera.origin = float3(0.f, 0.f, 0.f);
-        }
-        
-        game.physicsScene = {};
-        {
-            const f32 w = 30.f;
-            const f32 h = 30.f;
-            const f32 maxspeed = 20.f;
-            physics::Scene& scene = game.physicsScene;
-            scene.dt = 1 / 60.f;
-            scene.bounds = float2(w, h);
-            scene.restitution = 1.f;
-            const u32 numBalls = countof(scene.balls);
-            for (u32 i = 0; i < numBalls; i++) {
-                physics::Ball& ball = scene.balls[i];
-                ball.radius = math::rand() * 3.f;//0.05f * math::rand() * 0.1f;
-                ball.mass = math::pi32 * ball.radius * ball.radius;
-                ball.pos = float3(w * (-1.f + 2.f * math::rand()), h * (-1.f + 2.f * math::rand()), 0.f );
-                ball.vel = float3(maxspeed * (-1.f + 2.f * math::rand()), maxspeed * (-1.f + 2.f * math::rand()), 0.f );
-            }
         }
 
 #if WRITE_SHADERCACHE
@@ -472,17 +435,16 @@ namespace game
                             b1.vel.y = -b1.vel.y;
                         }
                     }
+                    // update draw positions
                     renderer::Matrices64* instance_matrices;
                     u32* instance_count;
                     renderer::get_draw_instanced_data(instance_matrices, instance_count, game.renderMgr.store, game.renderMgr.store.ballInstancesDrawHandle);
                     for (u32 i = 0; i < *instance_count; i++) {
-                        Transform t;
-                        math::identity4x4(t);
-                        t.pos = scene.balls[i].pos;
-                        t.matrix.col0.x = scene.balls[i].radius;
-                        t.matrix.col1.y = scene.balls[i].radius;
-                        t.matrix.col2.z = scene.balls[i].radius;
-                        instance_matrices->data[i] = t.matrix;
+                        float4x4& m = instance_matrices->data[i];
+                        m.col3.xyz = scene.balls[i].pos;
+                        m.col0.x = scene.balls[i].radius;
+                        m.col1.y = scene.balls[i].radius;
+                        m.col2.z = scene.balls[i].radius;
                     }
                 }
 
@@ -575,15 +537,17 @@ namespace game
                                 o.col0.w = 0.f;                 o.col1.w = 0.f;                 o.col2.w = 0.f;                     o.col3.w = 1.f;
                                 return o;
                             };
-                            
-                            float4 plane { store.mirror.normal.x, store.mirror.normal.y, store.mirror.normal.z, -math::dot(store.mirror.pos, store.mirror.normal) };
-                            float4x4 reflect = reflectionMatrix(plane);
+                            renderer::DrawNode& drawNode = renderer::get_draw_node_core(store, store.mirror.drawHandle);
+                            float3 normalWS = math::mult(drawNode.nodeData.worldMatrix, float4(store.mirror.normal, 0.f)).xyz;
+                            float3 posWS = drawNode.nodeData.worldMatrix.col3.xyz;
+                            float4 planeWS(normalWS.x, normalWS.y, normalWS.z, -math::dot(posWS, normalWS));
+                            float4x4 reflect = reflectionMatrix(planeWS);
                             mirrorViewMatrix = math::mult(viewMatrix, reflect);
                             mirrorProjectionMatrix = mgr.perspProjection.matrix;
                             __DEBUGEXP(if (captureCameras) { debug::capturedCameras[debug::DebugCameraStage::SceneMirror] = math::mult(mirrorProjectionMatrix, mirrorViewMatrix); });
-                            float3 normalCameraSpace = math::mult(mirrorViewMatrix, float4(store.mirror.normal, 0.f)).xyz;
-                            float3 posCameraSpace = math::mult(mirrorViewMatrix, float4(store.mirror.pos, 1.f)).xyz;
-                            float4 pCameraSpace{ normalCameraSpace.x, normalCameraSpace.y, normalCameraSpace.z, -math::dot(posCameraSpace, normalCameraSpace) };
+                            float3 normalCameraSpace = math::mult(mirrorViewMatrix, float4(normalWS, 0.f)).xyz;
+                            float3 posCameraSpace = math::mult(mirrorViewMatrix, float4(posWS, 1.f)).xyz;
+                            float4 pCameraSpace(normalCameraSpace.x, normalCameraSpace.y, normalCameraSpace.z, -math::dot(posCameraSpace, normalCameraSpace));
                             add_oblique_plane_to_persp(mirrorProjectionMatrix, pCameraSpace);
                             mirrorVPMatrix = math::mult(mirrorProjectionMatrix, mirrorViewMatrix);
                             __DEBUGEXP(if (captureCameras) { debug::capturedCameras[debug::DebugCameraStage::SceneMirrorClipped] = mirrorVPMatrix; });

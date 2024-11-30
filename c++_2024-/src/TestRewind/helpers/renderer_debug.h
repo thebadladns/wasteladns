@@ -309,8 +309,8 @@ namespace im
 
                 // Sort points on the x axis, then on the y axis, using insertion since we have a few amount of points
                 auto comp = [](const u32 ax, const u32 ay, const float3 a, const float3 b) -> bool {
-                    const float eps = 0.0001f;
-                    const float dx = a.v[ax] - b.v[ax];
+                    const f32 eps = 0.0001f;
+                    const f32 dx = a.v[ax] - b.v[ax];
                     return dx > eps || (dx > -eps && a.v[ay] > b.v[ay]);
                     };
                 for (s32 i = 1; i < (s32)cutface.count; i++) {

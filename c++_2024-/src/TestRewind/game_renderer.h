@@ -32,6 +32,24 @@ void qsort(Key* keys, s32 low, s32 high) {
     };
 };
 
+namespace physics {
+
+    struct Ball {
+        float3 pos;
+        f32 radius;
+        float3 vel;
+        f32 mass;
+    };
+
+    struct Scene {
+        float3 gravity;
+        f32 dt;
+        float2 bounds;
+        f32 restitution;
+        Ball balls[8];
+    };
+}
+
 namespace renderer {
 
 struct VertexLayout_Color_Skinned_3D {
@@ -189,7 +207,6 @@ void draw_drawlist(Drawlist& dl, Drawlist_Context& ctx, const Drawlist_Overrides
 }
 struct Store {
     struct Mirror { // todo: make this not so temp
-        float3 pos;
         float3 normal;
         u32 drawHandle;
     };
@@ -958,8 +975,7 @@ namespace fbx {
     }
 }
 
-
-void init_pipelines(Store& store, allocator::Arena scratchArena, const platform::Screen& screen) {
+void init_scene(Store& store, physics::Scene& physicsScene, allocator::Arena scratchArena, const platform::Screen& screen) {
 
     allocator::init_arena(store.persistentArena, 1024 * 1024); // 1MB
     const u32 meshPoolSize = 2048;
@@ -1386,7 +1402,9 @@ void init_pipelines(Store& store, allocator::Arena scratchArena, const platform:
         renderer::DrawMesh& mesh = allocator::alloc_pool(store.meshes);
         mesh = {};
         mesh.type = ShaderType::Instanced3D;
-        renderer::create_indexed_vertex_buffer_from_untextured_cube(mesh.vertexBuffer, { 1.f, 1.f, 1.f });
+        renderer::UntexturedCube cube;
+        renderer::create_cube_coords((uintptr_t)cube.vertices, sizeof(cube.vertices[0]), cube.indices, float3(1.f, 1.f, 1.f), float3(0.f, 0.f, 0.f));
+        renderer::create_indexed_vertex_buffer_from_untextured_mesh(mesh.vertexBuffer, cube.vertices, countof(cube.vertices), cube.indices, countof(cube.indices));
         DrawNodeInstanced& node = allocator::alloc_pool(store.drawNodesInstanced);
         node = {};
 		node.core.meshHandles[0] = handle_from_drawMesh(store, mesh);
@@ -1402,29 +1420,6 @@ void init_pipelines(Store& store, allocator::Arena scratchArena, const platform:
             math::identity4x4(*(Transform*)&(matrix));
         }
         store.particlesDrawHandle = handle_from_node(store, node);
-    }
-    
-    // todo: remove hack
-    {
-        renderer::DrawMesh& mesh = allocator::alloc_pool(store.meshes);
-        mesh = {};
-        mesh.type = ShaderType::Instanced3D;
-        renderer::create_indexed_vertex_buffer_from_untextured_sphere(mesh.vertexBuffer, { 1.f });
-        DrawNodeInstanced& node = allocator::alloc_pool(store.drawNodesInstanced);
-        node = {};
-        node.core.meshHandles[0] = handle_from_drawMesh(store, mesh);
-        math::identity4x4(*(Transform*)&(node.core.nodeData.worldMatrix));
-        node.core.nodeData.groupColor = Color32(0.9f, 0.2f, 0.8f, 1.f).RGBAv4();
-        node.instanceCount = 8;  // haaaaack
-        node.core.cbuffer_node = store.cbuffer_count;
-        driver::create_cbuffer(store.cbuffers[store.cbuffer_count++], { sizeof(NodeData) });
-        node.cbuffer_instances = store.cbuffer_count;
-        driver::create_cbuffer(store.cbuffers[store.cbuffer_count++], { sizeof(Matrices64) });
-        for (u32 m = 0; m < countof(node.instanceMatrices.data); m++) {
-            float4x4& matrix = node.instanceMatrices.data[m];
-            math::identity4x4(*(Transform*)&(matrix));
-        }
-        store.ballInstancesDrawHandle = handle_from_node(store, node);
     }
 
     // ground
@@ -1469,7 +1464,7 @@ void init_pipelines(Store& store, allocator::Arena scratchArena, const platform:
         renderer::DrawMesh& mesh = allocator::alloc_pool(store.meshes);
         mesh = {};
         mesh.type = ShaderType::Color3D;
-        f32 w = 8.f, h = 5.f;
+        f32 w = 20.f, h = 10.f;
         u32 c = Color32(1.f, 1.f, 1.f, 1.f).ABGR();
         VertexLayout_Color_3D v[] = { { { w, 0.f, -h }, c }, { { -w, 0.f, -h }, c }, { { -w, 0.f, h }, c }, { { w, 0.f, h }, c } };
         u16 i[] = { 2, 1, 0, 0, 3, 2 };
@@ -1489,23 +1484,13 @@ void init_pipelines(Store& store, allocator::Arena scratchArena, const platform:
             driver::make_vertexAttribDesc("COLOR", offsetof(VertexLayout_Color_3D, color), sizeof(VertexLayout_Color_3D), driver::BufferAttributeFormat::R8G8B8A8_UNORM)
         };
         renderer::driver::create_indexed_vertex_buffer(mesh.vertexBuffer, bufferParams, attribs, countof(attribs));
-       /* {
-            DrawNode& node = allocator::alloc_pool(store.drawNodes);
-            node = {};
-            node.meshHandles[0] = handle_from_drawMesh(store, mesh);
-            math::identity4x4(*(Transform*)&(node.nodeData.worldMatrix));
-            node.nodeData.groupColor = Color32(0.31f, 0.19f, 1.f, 0.62f).RGBAv4();
-            node.cbuffer_node = store.cbuffer_count;
-            driver::create_cbuffer(store.cbuffers[store.cbuffer_count++], { sizeof(NodeData) });
-        }*/
         {
             DrawNode& node = allocator::alloc_pool(store.drawNodes);
             node = {};
             node.meshHandles[0] = handle_from_drawMesh(store, mesh);
-            math::identity4x4(*(Transform*)&(node.nodeData.worldMatrix));
-            node.nodeData.worldMatrix.col3.xyz = float3(-5.f, -8.f, 5.f);
+            Transform t = math::fromPositionScaleAndRotationEulers(float3(0.f, -30.f, 20.f), 1.f, float3(-180.f * math::d2r32, 0.f, -10.f * math::d2r32));
+            node.nodeData.worldMatrix = t.matrix;
             node.nodeData.groupColor = Color32(0.01f, 0.19f, 0.3f, 0.32f).RGBAv4();
-            //node.nodeData.groupColor = Color32(0.31f, 0.79f, 0.4f, 0.52f).RGBAv4();
             node.cbuffer_node = store.cbuffer_count;
             node.max = float3(w, 0.f, h);
             node.min = float3(-w, 0.f, -h); // todo: improooove
@@ -1513,19 +1498,56 @@ void init_pipelines(Store& store, allocator::Arena scratchArena, const platform:
             store.mirror = {};
             store.mirror.drawHandle = handle_from_node(store, node);
             store.mirror.normal = float3(0.f, 1.f, 0.f);
-            store.mirror.pos = node.nodeData.worldMatrix.col3.xyz;
         }
-        /*{
-            DrawNode& node = allocator::alloc_pool(store.drawNodes);
-            node = {};
-            node.meshHandles[0] = handle_from_drawMesh(store, mesh);
-            math::identity4x4(*(Transform*)&(node.nodeData.worldMatrix));
-            node.nodeData.worldMatrix.col3.xyz = float3(0.f, -14.f, 0.f);
-            node.nodeData.groupColor = Color32(0.01f, 0.19f, 0.3f, 0.32f).RGBAv4();
-            node.cbuffer_node = store.cbuffer_count;
-            driver::create_cbuffer(store.cbuffers[store.cbuffer_count++], { sizeof(NodeData) });
-        }*/
     }
+
+    // physics
+    {
+        struct BallAssets {
+            float3 position;
+            float radius;
+            float3 velocity;
+            float mass;
+        };
+        BallAssets ballAssets[8];
+        const u32 numballs = countof(ballAssets);
+        const f32 w = 30.f;
+        const f32 h = 30.f;
+        const f32 maxspeed = 20.f;
+        physicsScene.dt = 1 / 60.f;
+        physicsScene.bounds = float2(w, h);
+        physicsScene.restitution = 1.f;
+        for (u32 i = 0; i < numballs; i++) {
+            physics::Ball& ball = physicsScene.balls[i];
+            ball.radius = math::rand() * 3.f;
+            ball.mass = math::pi32 * ball.radius * ball.radius;
+            ball.pos = float3(w * (-1.f + 2.f * math::rand()), h * (-1.f + 2.f * math::rand()), 0.f);
+            ball.vel = float3(maxspeed * (-1.f + 2.f * math::rand()), maxspeed * (-1.f + 2.f * math::rand()), 0.f);
+        }
+        renderer::DrawMesh& mesh = allocator::alloc_pool(store.meshes);
+        mesh = {};
+        mesh.type = ShaderType::Instanced3D;
+
+        renderer::UntexturedSphere sphere;
+        renderer::create_untextured_sphere_coords(sphere, 1.f);
+        renderer::create_indexed_vertex_buffer_from_untextured_mesh(mesh.vertexBuffer, sphere.vertices, countof(sphere.vertices), sphere.indices, countof(sphere.indices));
+        DrawNodeInstanced& node = allocator::alloc_pool(store.drawNodesInstanced);
+        node = {};
+        node.core.meshHandles[0] = handle_from_drawMesh(store, mesh);
+        math::identity4x4(*(Transform*)&(node.core.nodeData.worldMatrix));
+        node.core.nodeData.groupColor = Color32(0.9f, 0.2f, 0.8f, 1.f).RGBAv4();
+        node.instanceCount = numballs;
+        node.core.cbuffer_node = store.cbuffer_count;
+        driver::create_cbuffer(store.cbuffers[store.cbuffer_count++], { sizeof(NodeData) });
+        node.cbuffer_instances = store.cbuffer_count;
+        driver::create_cbuffer(store.cbuffers[store.cbuffer_count++], { sizeof(Matrices64) });
+        for (u32 m = 0; m < countof(node.instanceMatrices.data); m++) {
+            float4x4& matrix = node.instanceMatrices.data[m];
+            math::identity4x4(*(Transform*)&(matrix));
+        }
+        store.ballInstancesDrawHandle = handle_from_node(store, node);
+    }
+
 }
 }
 

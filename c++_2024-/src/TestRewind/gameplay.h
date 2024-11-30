@@ -84,21 +84,21 @@ namespace gameplay
         }
         void process_cameraRelative(Transform& transform, Controller& controller, const Control& control, const Transform& camera, const f32 dt) {
 
-            const float maxspeed = 15.f;
+            const f32 maxspeed = 15.f;
 
             Transform33 movementTransform = math::fromUpTowardsFront(transform.up, camera.front);
             const float3& front = movementTransform.front;
             const float3& right = movementTransform.right;
 
             // Interpolate input angles
-            float effectiveLocalInputRad = 0.f;
-            const float camCurrentRad = math::orientation(camera.front.xy);
-            const float playerCurrentRad = math::orientation(transform.front.xy);
-            const float camPlayerCurrentRad = math::subtractShort(playerCurrentRad, camCurrentRad);
-            const float camInputRad = math::orientation(control.localInput);
-            const float localInputRad = math::subtractShort(camInputRad, camPlayerCurrentRad);
+            f32 effectiveLocalInputRad = 0.f;
+            const f32 camCurrentRad = math::orientation(camera.front.xy);
+            const f32 playerCurrentRad = math::orientation(transform.front.xy);
+            const f32 camPlayerCurrentRad = math::subtractShort(playerCurrentRad, camCurrentRad);
+            const f32 camInputRad = math::orientation(control.localInput);
+            const f32 localInputRad = math::subtractShort(camInputRad, camPlayerCurrentRad);
             effectiveLocalInputRad = math::eappr(effectiveLocalInputRad, localInputRad, 0.14f, dt);
-            const float effectiveCamInputRad = math::wrap(camPlayerCurrentRad + effectiveLocalInputRad);
+            const f32 effectiveCamInputRad = math::wrap(camPlayerCurrentRad + effectiveLocalInputRad);
             const float2 effectiveLocalInput = math::direction(effectiveCamInputRad);
 
             // Default to idle decceleration
@@ -160,7 +160,7 @@ namespace gameplay
             float3 eulers;
             float3 offset;
             float3 origin;
-            float scale;
+            f32 scale;
         };
 
         void process(State& controller, const ::input::gamepad::State& pad)
