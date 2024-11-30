@@ -60,8 +60,8 @@ float3 quaternionToEulers(const float4& q) {
 
     f32 pitch;
     f32 sinp = 2.f * (q.w * q.y - q.z * q.x);
-    if (sinp > 1.f) pitch = math::halfpi_f;
-    else if (sinp < 1.f) pitch = -math::halfpi_f;
+    if (sinp > 1.f) pitch = math::halfpi32;
+    else if (sinp < 1.f) pitch = -math::halfpi32;
     else pitch = math::asin(sinp);
 
     f32 siny_cosp = 2.f * (q.w * q.z + q.x * q.y);

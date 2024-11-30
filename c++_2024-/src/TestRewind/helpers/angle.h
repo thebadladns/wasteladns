@@ -3,16 +3,16 @@
 
 namespace math {
     
-const f32 pi_f = 3.1415927410125732421875f;
-const f64 pi_d = 3.14159265358979311599796346854;
-const f32 twopi_f = 6.283185482025146484375f;
-const f64 twopi_d = 6.28318530717958623199592693709;
-const f32 halfpi_f = 1.57079637050628662109375f;
-const f64 halfpi_d = 1.57079632679489655799898173427;
-const f32 r2d_f = 180.f / pi_f;
-const f64 r2d_d = 180.0 / pi_d;
-const f32 d2r_f = pi_f / 180.f;
-const f64 d2r_d = pi_d / 180.0;
+const f32 pi32 = 3.1415927410125732421875f;
+const f64 pi64 = 3.14159265358979311599796346854;
+const f32 twopi32 = 6.283185482025146484375f;
+const f64 twopi64 = 6.28318530717958623199592693709;
+const f32 halfpi32 = 1.57079637050628662109375f;
+const f64 halfpi64 = 1.57079632679489655799898173427;
+const f32 r2d32 = 180.f / pi32;
+const f64 r2d64 = 180.0 / pi64;
+const f32 d2r32 = pi32 / 180.f;
+const f64 d2r64 = pi64 / 180.0;
 
 f32 sin(const f32 v) { return ::sinf(v); }
 f64 sin(const f64 v) { return ::sin(v); }
@@ -29,14 +29,14 @@ f64 mod(const f64 a, const f64 b) { return ::fmod(a, b); }
 float2 direction(f32 headingRad) { return float2(sin(headingRad), cos(headingRad)); }
 f32 orientation(const float2& v) { return atan2(v.x, v.y); }
 f32 wrap(f32 rad) { // TODO: understand this
-    rad = mod(rad + pi_f, twopi_f);
-    if (rad < 0.f) { rad += twopi_f; }
-    return rad - pi_f;
+    rad = mod(rad + pi32, twopi32);
+    if (rad < 0.f) { rad += twopi32; }
+    return rad - pi32;
 }
 f64 wrap(f64 rad) { // TODO: understand this
-    rad = mod(rad + pi_d, twopi_d);
-    if (rad < 0.f) { rad += twopi_d; }
-    return rad - pi_d;
+    rad = mod(rad + pi64, twopi64);
+    if (rad < 0.f) { rad += twopi64; }
+    return rad - pi64;
 }
 f32 subtractShort(f32 toRad, f32 fromRad) { return wrap(toRad - fromRad); }
 f64 subtractShort(f64 toRad, f64 fromRad) { return wrap(toRad - fromRad); }

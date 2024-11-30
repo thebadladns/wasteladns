@@ -61,7 +61,7 @@ namespace gameplay
             }
 
             f32 mag = math::mag(localInput);
-            if (mag > math::eps_f) {
+            if (mag > math::eps32) {
                 localInput = math::invScale(localInput, mag);
                 mag = math::min(mag, 1.f);
             }
@@ -75,7 +75,7 @@ namespace gameplay
             localInput.x = pad.sliders[::input::gamepad::Sliders::AXIS_X_LEFT];
             localInput.y = pad.sliders[::input::gamepad::Sliders::AXIS_Y_LEFT];
             f32 mag = math::mag(localInput);
-            if (mag > math::eps_f) {
+            if (mag > math::eps32) {
                 localInput = math::invScale(localInput, mag);
                 mag = math::min(mag, 1.f);
             }
@@ -104,9 +104,9 @@ namespace gameplay
             // Default to idle decceleration
             f32 speedtimehorizon = 0.1f;
             f32 targetspeed = 0.f;
-            if (control.mag > math::eps_f) {
+            if (control.mag > math::eps32) {
                 const f32 absLocalInputRad = math::abs(localInputRad);
-                const f32 minturndeltatomove = math::pi_f / 2.f;
+                const f32 minturndeltatomove = math::pi32 / 2.f;
                 if (absLocalInputRad < minturndeltatomove) {
                     // Some friction on acceleration based on turn strength
                     targetspeed = maxspeed * control.mag;
@@ -127,7 +127,7 @@ namespace gameplay
             }
 
             // Facing update
-            if (control.mag > math::eps_f) {
+            if (control.mag > math::eps32) {
                 const float3 cameraRelativeFacingInput(effectiveLocalInput, 0.f);
                 const float3 worldFacingInput = math::add(math::scale(front, cameraRelativeFacingInput.y), math::scale(right, cameraRelativeFacingInput.x));
                 Transform33 t = math::fromUpTowardsFront(transform.up, worldFacingInput);
@@ -137,9 +137,9 @@ namespace gameplay
             }
 
             // Movement update
-            if (controller.speed > math::eps_f) {
+            if (controller.speed > math::eps32) {
                 float3 cameraRelativeMovementInput;
-                if (control.mag > math::eps_f) {
+                if (control.mag > math::eps32) {
                     cameraRelativeMovementInput = float3(control.localInput, 0.f);
                 }
                 else {
@@ -171,7 +171,7 @@ namespace gameplay
             f32 speedy = -pad.sliders[::input::gamepad::Sliders::AXIS_Y_RIGHT] * rotationSpeed;
             if (math::abs(speedx) > rotationEps || math::abs(speedy) > rotationEps) {
                 controller.eulers.x = math::wrap(controller.eulers.x + speedx);
-                controller.eulers.z = math::clamp(math::wrap(controller.eulers.z - speedy), -math::halfpi_f, 0.f); // Positive 0 is below ground
+                controller.eulers.z = math::clamp(math::wrap(controller.eulers.z - speedy), -math::halfpi32, 0.f); // Positive 0 is below ground
             }
 
             controller.scale = 1.f;

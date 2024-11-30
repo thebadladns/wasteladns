@@ -9,13 +9,15 @@
 #endif
 
 namespace math {
-const f32 eps_f = 1.19e-07f;
-const f64 eps_d = 2.22e-16;
-const f32 e_f = 2.7182818284590452353602874713527f;
-const f64 e_d = 2.7182818284590452353602874713527;
+const f32 eps32 = 1.19e-07f;
+const f64 eps64 = 2.22e-16;
+const f32 e32 = 2.7182818284590452353602874713527f;
+const f64 e64 = 2.7182818284590452353602874713527;
 }
 
 namespace math {
+
+    f32 rand() { return ::rand() / (f32) RAND_MAX; }
     u8 min(u8 a, u8 b) { return (b < a) ? b : a; }
     s8 min(s8 a, s8 b) { return (b < a) ? b : a; }
     u16 min(u16 a, u16 b) { return (b < a) ? b : a; }
@@ -69,7 +71,7 @@ namespace math {
             case 2: return 1.f + x + x * x * 0.f;
             case 3: return 1.f + x + x * x * 0.5f + x * x * x / 6.f;
             case 4: return 1.f + x + x * x * 0.5f + x * x * x / 6.f + x * x * x * x / 24.f;
-            default: return powf(e_f, x);
+            default: return powf(e32, x);
         }
     }
     f32 bias(f32 a) { return (a + 1.f) * 0.5f; }

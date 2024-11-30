@@ -219,6 +219,8 @@ struct Store {
     u32 playerDrawNodeHandle;
     u32 playerAnimatedNodeHandle;
     u32 particlesDrawHandle;
+    u32 ballInstancesDrawHandle;
+    
 };
 
 u32 handle_from_node(Store& store, DrawNode& node) {
@@ -1400,6 +1402,29 @@ void init_pipelines(Store& store, allocator::Arena scratchArena, const platform:
             math::identity4x4(*(Transform*)&(matrix));
         }
         store.particlesDrawHandle = handle_from_node(store, node);
+    }
+    
+    // todo: remove hack
+    {
+        renderer::DrawMesh& mesh = allocator::alloc_pool(store.meshes);
+        mesh = {};
+        mesh.type = ShaderType::Instanced3D;
+        renderer::create_indexed_vertex_buffer_from_untextured_sphere(mesh.vertexBuffer, { 1.f });
+        DrawNodeInstanced& node = allocator::alloc_pool(store.drawNodesInstanced);
+        node = {};
+        node.core.meshHandles[0] = handle_from_drawMesh(store, mesh);
+        math::identity4x4(*(Transform*)&(node.core.nodeData.worldMatrix));
+        node.core.nodeData.groupColor = Color32(0.9f, 0.2f, 0.8f, 1.f).RGBAv4();
+        node.instanceCount = 8;  // haaaaack
+        node.core.cbuffer_node = store.cbuffer_count;
+        driver::create_cbuffer(store.cbuffers[store.cbuffer_count++], { sizeof(NodeData) });
+        node.cbuffer_instances = store.cbuffer_count;
+        driver::create_cbuffer(store.cbuffers[store.cbuffer_count++], { sizeof(Matrices64) });
+        for (u32 m = 0; m < countof(node.instanceMatrices.data); m++) {
+            float4x4& matrix = node.instanceMatrices.data[m];
+            math::identity4x4(*(Transform*)&(matrix));
+        }
+        store.ballInstancesDrawHandle = handle_from_node(store, node);
     }
 
     // ground

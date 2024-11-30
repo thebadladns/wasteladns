@@ -198,7 +198,7 @@ namespace im
         for (float4& p : planes) { p = math::invScale(p, math::mag(p.xyz)); } // normalize so we can do thickness adjustments
 
         // If the near and far planes are parallel, project the intersection points in clipspace back into world view
-        if (!debug::force_cut_frustum && math::abs(math::dot(planes[0].xyz, planes[1].xyz) + 1.f) < math::eps_f) {
+        if (!debug::force_cut_frustum && math::abs(math::dot(planes[0].xyz, planes[1].xyz) + 1.f) < math::eps32) {
             float4x4 inverse = projectionMat;
             math::inverse(inverse);
             const float3 aabb_min(-1.f, -1.f, renderer::min_z);
@@ -359,7 +359,7 @@ namespace im
         float3 vertices[kVertexCount];
         for (u8 i = 0; i < kVertexCount; i++) {
             
-            const f32 angle = i * 2.f * math::pi_f / (f32) kVertexCount;
+            const f32 angle = i * 2.f * math::pi32 / (f32) kVertexCount;
             const float3 vertexDirLocal = math::add(math::scale(m.right, math::cos(angle)), math::scale(m.front, math::sin(angle)));
             
             vertices[i] = math::add(center, math::scale(vertexDirLocal, radius));
@@ -375,7 +375,7 @@ namespace im
         const float3 right = math::rightAxis();
         for (u8 i = 0; i < kSectionCount; i++) {
             
-            const f32 angle = i * math::pi_f / (f32) kSectionCount;
+            const f32 angle = i * math::pi32 / (f32) kSectionCount;
             const f32 s = math::sin(angle);
             const f32 c = math::cos(angle);
             

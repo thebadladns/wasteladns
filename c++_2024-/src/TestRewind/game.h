@@ -4,7 +4,7 @@
 #include "gameplay.h"
 #include "shaders.h"
 #include "game_renderer.h"
-;
+
 const u32 numCubes = 4;
 
 #if __DEBUG
@@ -27,6 +27,25 @@ float4x4 capturedCameras[DebugCameraStage::Count] = {};
 EventText eventLabel = {};
 }
 #endif
+
+namespace physics {
+
+struct Ball {
+    float3 pos;
+    f32 radius;
+    float3 vel;
+    f32 mass;
+};
+
+struct Scene {
+    float3 gravity;
+    f32 dt;
+    float2 bounds;
+    f32 restitution;
+    Ball balls[8];
+};
+
+}
 
 namespace game
 {
@@ -96,6 +115,7 @@ namespace game
         Time time;
         CameraManager cameraMgr;
         RenderManager renderMgr;
+        physics::Scene physicsScene;
         gameplay::movement::State player;
         Memory memory;
     };
@@ -196,9 +216,28 @@ namespace game
             mgr.activeCam = &cam;
 
             mgr.orbitCamera.offset = float3(0.f, -100.f, 0.f);
-            mgr.orbitCamera.eulers = float3(45.f * math::d2r_f, 0.f, -25.f * math::d2r_f);
+            mgr.orbitCamera.eulers = float3(45.f * math::d2r32, 0.f, -25.f * math::d2r32);
             mgr.orbitCamera.scale = 1.f;
             mgr.orbitCamera.origin = float3(0.f, 0.f, 0.f);
+        }
+        
+        game.physicsScene = {};
+        {
+            const f32 w = 30.f;
+            const f32 h = 30.f;
+            const f32 maxspeed = 20.f;
+            physics::Scene& scene = game.physicsScene;
+            scene.dt = 1 / 60.f;
+            scene.bounds = float2(w, h);
+            scene.restitution = 1.f;
+            const u32 numBalls = countof(scene.balls);
+            for (u32 i = 0; i < numBalls; i++) {
+                physics::Ball& ball = scene.balls[i];
+                ball.radius = math::rand() * 3.f;//0.05f * math::rand() * 0.1f;
+                ball.mass = math::pi32 * ball.radius * ball.radius;
+                ball.pos = float3(w * (-1.f + 2.f * math::rand()), h * (-1.f + 2.f * math::rand()), 0.f );
+                ball.vel = float3(maxspeed * (-1.f + 2.f * math::rand()), maxspeed * (-1.f + 2.f * math::rand()), 0.f );
+            }
         }
 
 #if WRITE_SHADERCACHE
@@ -381,6 +420,68 @@ namespace game
                         t.matrix.col1 = math::scale(t.matrix.col1, scale);
                         t.matrix.col2 = math::scale(t.matrix.col2, scale);
 
+                        instance_matrices->data[i] = t.matrix;
+                    }
+                }
+                
+                // physics update
+                {
+                    physics::Scene& scene = game.physicsScene;
+                    const u32 numballs = countof(scene.balls);
+                    for (u32 i = 0; i < numballs; i++) {
+                        physics::Ball& b1 = scene.balls[i];
+                        
+                        b1.vel = math::add(b1.vel, math::scale(scene.gravity, scene.dt));
+                        b1.pos = math::add(b1.pos, math::scale(b1.vel, scene.dt));
+                        
+                        for (u32 j = i + 1; j < numballs; j++) {
+                            physics::Ball& b2 = scene.balls[j];
+                            
+                            float3 collisionDir = math::subtract(b2.pos, b1.pos);
+                            f32 dist = math::mag(collisionDir);
+                            if (dist < math::eps32 || dist > b1.radius + b2.radius) continue;
+                            
+                            collisionDir = math::invScale(collisionDir, dist);
+                            f32 correction = (b1.radius + b2.radius - dist) / 2.f;
+                            b1.pos = math::add(b1.pos, math::scale(collisionDir, -correction));
+                            b2.pos = math::add(b2.pos, math::scale(collisionDir, correction));
+                            f32 v1 = math::dot(b1.vel, collisionDir);
+                            f32 v2 = math::dot(b2.vel, collisionDir);
+                            f32 m1 = b1.mass;
+                            f32 m2 = b2.mass;
+                            f32 nextv1 = (m1 * v1 + m2 * v2 - m2 * (v1 - v2) * scene.restitution) / (m1 + m2);
+                            f32 nextv2 = (m1 * v1 + m2 * v2 - m1 * (v2 - v1) * scene.restitution) / (m1 + m2);
+                            b1.vel = math::add(b1.vel, math::scale(collisionDir, nextv1 - v1));
+                            b2.vel = math::add(b2.vel, math::scale(collisionDir, nextv2 - v2));
+                        }
+                        
+                        if ((b1.pos.x + b1.radius) > scene.bounds.x) {
+                            b1.pos.x = scene.bounds.x - b1.radius;
+                            b1.vel.x = -b1.vel.x;
+                        }
+                        if ((b1.pos.x - b1.radius) < -scene.bounds.x) {
+                            b1.pos.x = -scene.bounds.x + b1.radius;
+                            b1.vel.x = -b1.vel.x;
+                        }
+                        if ((b1.pos.y + b1.radius) > scene.bounds.y) {
+                            b1.pos.y = scene.bounds.y - b1.radius;
+                            b1.vel.y = -b1.vel.y;
+                        }
+                        if ((b1.pos.y - b1.radius) < -scene.bounds.y) {
+                            b1.pos.y = -scene.bounds.y + b1.radius;
+                            b1.vel.y = -b1.vel.y;
+                        }
+                    }
+                    renderer::Matrices64* instance_matrices;
+                    u32* instance_count;
+                    renderer::get_draw_instanced_data(instance_matrices, instance_count, game.renderMgr.store, game.renderMgr.store.ballInstancesDrawHandle);
+                    for (u32 i = 0; i < *instance_count; i++) {
+                        Transform t;
+                        math::identity4x4(t);
+                        t.pos = scene.balls[i].pos;
+                        t.matrix.col0.x = scene.balls[i].radius;
+                        t.matrix.col1.y = scene.balls[i].radius;
+                        t.matrix.col2.z = scene.balls[i].radius;
                         instance_matrices->data[i] = t.matrix;
                     }
                 }
@@ -608,15 +709,15 @@ namespace game
                         const f32 spacing = 1.f / (f32)steps;
                         for (int i = 1; i <= steps; i++) {
                             im::segment(imCtx,
-                                math::add(pos, float3(spacing * i, 0.f, -thickness))
+                                  math::add(pos, float3(spacing * i, 0.f, -thickness))
                                 , math::add(pos, float3(spacing * i, 0.f, thickness))
                                 , axisX);
                             im::segment(imCtx,
-                                math::add(pos, float3(0.f, spacing * i, -thickness))
+                                  math::add(pos, float3(0.f, spacing * i, -thickness))
                                 , math::add(pos, float3(0.f, spacing * i, thickness))
                                 , axisY);
                             im::segment(imCtx,
-                                math::add(pos, float3(-thickness, thickness, spacing * i))
+                                  math::add(pos, float3(-thickness, thickness, spacing * i))
                                 , math::add(pos, float3(thickness, -thickness, spacing * i))
                                 , axisZ);
                         }
@@ -956,7 +1057,7 @@ namespace game
                         textParamsLeft.pos.y -= lineheight;
                         textParamsLeft.color = defaultCol;
                         {
-                            float3 eulers_deg = math::scale(game.cameraMgr.orbitCamera.eulers, math::r2d_f);
+                            float3 eulers_deg = math::scale(game.cameraMgr.orbitCamera.eulers, math::r2d32);
                             renderer::im::text2d(imCtx, textParamsLeft, "Camera eulers: " float3_FORMAT("% .3f"), float3_PARAMS(eulers_deg));
                             textParamsLeft.pos.y -= lineheight;
                         }

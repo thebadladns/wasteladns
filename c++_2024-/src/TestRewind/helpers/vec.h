@@ -101,9 +101,9 @@ f32 magSq(const float4& v) { return v.x * v.x + v.y * v.y + v.z * v.z + v.w * v.
 float2 normalize(const float2& v) { return invScale(v, mag(v)); }
 float3 normalize(const float3& v) { return invScale(v, mag(v)); }
 float4 normalize(const float4& v) { return invScale(v, mag(v)); }
-bool normalizeSafe(float2& v) { const f32 m = mag(v); if (m > math::eps_f) { v = invScale(v, m); return true; } return false; }
-bool normalizeSafe(float3& v) { const f32 m = mag(v); if (m > math::eps_f) { v = invScale(v, m); return true; } return false; }
-bool normalizeSafe(float4& v) { const f32 m = mag(v); if (m > math::eps_f) { v = invScale(v, m); return true; } return false; }
+bool normalizeSafe(float2& v) { const f32 m = mag(v); if (m > math::eps32) { v = invScale(v, m); return true; } return false; }
+bool normalizeSafe(float3& v) { const f32 m = mag(v); if (m > math::eps32) { v = invScale(v, m); return true; } return false; }
+bool normalizeSafe(float4& v) { const f32 m = mag(v); if (m > math::eps32) { v = invScale(v, m); return true; } return false; }
 f32 dot(const float2& a, const float2& b) { return a.x * b.x + a.y * b.y; }
 f32 dot(const float3& a, const float3& b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
 f32 dot(const float4& a, const float4& b) { return a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w; }

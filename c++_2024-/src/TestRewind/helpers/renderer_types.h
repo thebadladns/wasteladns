@@ -89,6 +89,10 @@ namespace renderer {
         float3 vertices[24];
         u16 indices[36];
     };
+    struct UntexturedSphere {
+        float3 vertices[42];
+        u16 indices[240];
+    };
 }
 
 #endif // __WASTELADNS_RENDERER_TYPES_H__

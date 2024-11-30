@@ -28,7 +28,7 @@ void generate_matrix_ortho_z0to1(float4x4& matrix, const WindowProjection::Confi
 
 // Expects right-handed view matrix, z-coordinate point towards the viewer
 void generate_matrix_persp_zneg1to1(float4x4& matrixRHwithYup, const PerspProjection::Config& config) {
-    const f32 h = 1.f / math::tan(config.fov * 0.5f * math::d2r_f);
+    const f32 h = 1.f / math::tan(config.fov * 0.5f * math::d2r32);
     const f32 w = h / config.aspect;
     
     // maps each xyz axis to [-1,1], not reversed-z (left handed, y points up z moves away from the viewer)
@@ -70,7 +70,7 @@ void add_oblique_plane_to_persp_zneg1to1(float4x4& projectionMatrix, const float
     projectionMatrix.m[14] = c.w;
 }
 void generate_matrix_persp_z0to1(float4x4& matrixRHwithYup, const PerspProjection::Config& config) {
-    const f32 h = 1.f / math::tan(config.fov * 0.5f * math::d2r_f);
+    const f32 h = 1.f / math::tan(config.fov * 0.5f * math::d2r32);
     const f32 w = h / config.aspect;
     // maps each xyz axis to [0,1], not reversed-z (left handed, y points up z moves away from the viewer)
     f32(&matrixCM)[16] = matrixRHwithYup.m;
@@ -99,7 +99,7 @@ void add_oblique_plane_to_persp_z0to1(float4x4& projectionMatrix, const float4& 
     // Again, M4 is always (0,0,-1,0), so a = -Qz / dot(C,Q). With the projection P and inverse P_inv matrices in renderer::generate_matrix_persp_z0to1,
     // Q = P_inv * Q_proj = (sign(C.x)/w,sign(C.y)/h,-1,1/f), which is Q = (sign(C.x)/P[0],sign(C.y)/P[5],-1.f,(1 + P[10]) / P[14])
     // This makes a = 1 / dot(C,Q), which combined with M3 = a*C, gives us this
-
+    
     float4 q;
     q.x = math::sign(planeCameraSpace.x) / projectionMatrix.m[0];
     q.y = math::sign(planeCameraSpace.y) / projectionMatrix.m[5];
@@ -115,30 +115,30 @@ void add_oblique_plane_to_persp_z0to1(float4x4& projectionMatrix, const float4& 
 void generate_MV_matrix(float4x4& modelview, const Transform& t) {
     
     const float4x4 mRHwithYUp = math::toEyeSpace(t);
-
+    
     // Simplified inverse
     // https://www.gamedev.net/forums/topic/647149-d3dxmatrixlookatlh-internally/?tab=comments#comment-5089654
-
+    
     const f32 tx = -math::dot(mRHwithYUp.col3, mRHwithYUp.col0);
     const f32 ty = -math::dot(mRHwithYUp.col3, mRHwithYUp.col1);
     const f32 tz = -math::dot(mRHwithYUp.col3, mRHwithYUp.col2);
-
+    
     modelview.m[0] = mRHwithYUp.col0.x;
     modelview.m[4] = mRHwithYUp.col0.y;
     modelview.m[8] = mRHwithYUp.col0.z;
-
+    
     modelview.m[1] = mRHwithYUp.col1.x;
     modelview.m[5] = mRHwithYUp.col1.y;
     modelview.m[9] = mRHwithYUp.col1.z;
-
+    
     modelview.m[2] = mRHwithYUp.col2.x;
     modelview.m[6] = mRHwithYUp.col2.y;
     modelview.m[10] = mRHwithYUp.col2.z;
-
+    
     modelview.m[12] = tx;
     modelview.m[13] = ty;
     modelview.m[14] = tz;
-
+    
     modelview.m[3] = mRHwithYUp.col0.w;
     modelview.m[7] = mRHwithYUp.col1.w;;
     modelview.m[11] = mRHwithYUp.col2.w;
@@ -168,7 +168,7 @@ struct CubeCreateParams {
     float3 offset;
 };
 void create_colored_cube_coords(ColoredCube& cube, const CubeCreateParams& params) {
-
+    
     f32 pos_w = params.width + params.offset.x;
     f32 pos_h = params.height + params.offset.y;
     f32 pos_d = params.depth + params.offset.z;
@@ -177,29 +177,29 @@ void create_colored_cube_coords(ColoredCube& cube, const CubeCreateParams& param
     f32 neg_d = -params.depth + params.offset.z;
     u32 c = Color32(1.f, 1.f, 1.f, 1.f).ABGR();
     ColoredCube::Vertex* v = cube.vertices;
-
+    
     v[0] = { { pos_w, pos_d, neg_h }, c }; v[1] = { { neg_w, pos_d, neg_h }, c }; v[2] = { { neg_w, pos_d, pos_h }, c }; v[3] = { { pos_w, pos_d, pos_h }, c };     // +y quad
     v[4] = { { neg_w, neg_d, neg_h }, c }; v[5] = { { pos_w, neg_d, neg_h }, c }; v[6] = { { pos_w, neg_d, pos_h }, c }; v[7] = { { neg_w, neg_d, pos_h }, c };     // -y quad
-
+    
     v[8] = { { pos_w, neg_d, neg_h}, c };   v[9] = { { pos_w, pos_d, neg_h }, c };  v[10] = { { pos_w, pos_d, pos_h }, c }; v[11] = { { pos_w, neg_d, pos_h }, c }; // +x quad
     v[12] = { { neg_w, pos_d, neg_h }, c }; v[13] = { { neg_w, neg_d, neg_h }, c }; v[14] = { { neg_w, neg_d, pos_h }, c }; v[15] = { { neg_w, pos_d, pos_h }, c }; // -x quad
-
+    
     v[16] = { { neg_w, neg_d, pos_h }, c }; v[17] = { { pos_w, neg_d, pos_h }, c }; v[18] = { { pos_w, pos_d, pos_h }, c }; v[19] = { { neg_w, pos_d, pos_h }, c }; // +z quad
     v[20] = { { pos_w, pos_d, neg_h }, c }; v[21] = { { pos_w, neg_d, neg_h }, c }; v[22] = { { neg_w, neg_d, neg_h }, c }; v[23] = { { neg_w, pos_d, neg_h }, c }; // -z quad
-
+    
     u16* i = cube.indices;
-
+    
     i[0] = 2; i[1] = 1; i[2] = 0; i[3] = 2; i[4] = 0; i[5] = 3;             // +y tris
     i[6] = 6; i[7] = 5; i[8] = 4; i[9] = 6; i[10] = 4; i[11] = 7;           // -y tris
-
+    
     i[12] = 10; i[13] = 9; i[14] = 8; i[15] = 10; i[16] = 8; i[17] = 11;    // +x tris
     i[18] = 14; i[19] = 13; i[20] = 12; i[21] = 14; i[22] = 12; i[23] = 15; // -x tris
-
+    
     i[24] = 18; i[25] = 17; i[26] = 16; i[27] = 18; i[28] = 16; i[29] = 19; // +z tris
     i[30] = 22; i[31] = 21; i[32] = 20; i[33] = 22; i[34] = 20; i[35] = 23; // -z tris
 }
 void create_untextured_cube_coords(UntexturedCube& c, const CubeCreateParams& params) {
-
+    
     f32 pos_w = params.width + params.offset.x;
     f32 pos_h = params.height + params.offset.y;
     f32 pos_d = params.depth + params.offset.z;
@@ -207,28 +207,161 @@ void create_untextured_cube_coords(UntexturedCube& c, const CubeCreateParams& pa
     f32 neg_h = -params.height + params.offset.y;
     f32 neg_d = -params.depth + params.offset.z;
     float3* v = c.vertices;
-
+    
     v[0] = { pos_w, pos_d, neg_h }; v[1] = { neg_w, pos_d, neg_h }; v[2] = { neg_w, pos_d, pos_h }; v[3] = { pos_w, pos_d, pos_h };     // +y quad
     v[4] = { neg_w, neg_d, neg_h }; v[5] = { pos_w, neg_d, neg_h }; v[6] = { pos_w, neg_d, pos_h }; v[7] = { neg_w, neg_d, pos_h };     // -y quad
-
+    
     v[8] = { pos_w, neg_d, neg_h}; v[9] = { pos_w, pos_d, neg_h }; v[10] = { pos_w, pos_d, pos_h }; v[11] = { pos_w, neg_d, pos_h };    // +x quad
     v[12] = { neg_w, pos_d, neg_h }; v[13] = { neg_w, neg_d, neg_h }; v[14] = { neg_w, neg_d, pos_h }; v[15] = { neg_w, pos_d, pos_h }; // -x quad
-
+    
     v[16] = { neg_w, neg_d, pos_h }; v[17] = { pos_w, neg_d, pos_h }; v[18] = { pos_w, pos_d, pos_h }; v[19] = { neg_w, pos_d, pos_h }; // +z quad
     v[20] = { pos_w, pos_d, neg_h }; v[21] = { pos_w, neg_d, neg_h }; v[22] = { neg_w, neg_d, neg_h }; v[23] = { neg_w, pos_d, neg_h }; // -z quad
-
+    
     u16* i = c.indices;
-
+    
     i[0] = 2; i[1] = 1; i[2] = 0; i[3] = 2; i[4] = 0; i[5] = 3;             // +y tris
     i[6] = 6; i[7] = 5; i[8] = 4; i[9] = 6; i[10] = 4; i[11] = 7;           // -y tris
-
+    
     i[12] = 10; i[13] = 9; i[14] = 8; i[15] = 10; i[16] = 8; i[17] = 11;    // +x tris
     i[18] = 14; i[19] = 13; i[20] = 12; i[21] = 14; i[22] = 12; i[23] = 15; // -x tris
-
+    
     i[24] = 18; i[25] = 17; i[26] = 16; i[27] = 18; i[28] = 16; i[29] = 19; // +z tris
     i[30] = 22; i[31] = 21; i[32] = 20; i[33] = 22; i[34] = 20; i[35] = 23; // -z tris
 }
+
+struct SphereCreateParams {
+    f32 radius;
 };
+void create_untextured_sphere_coords(UntexturedSphere& s, const SphereCreateParams& params) {
+    s.vertices[0] = float3(0.0000f, -1.0000f, 0.0000f);
+    s.vertices[1] = float3(0.7227f, -0.4453f, -0.5254f);
+    s.vertices[2] = float3(-0.2754f, -0.4453f, -0.8496f);
+    s.vertices[3] = float3(-0.8926f, -0.4453f, 0.0000f);
+    s.vertices[4] = float3(-0.2754f, -0.4453f, 0.8496f);
+    s.vertices[5] = float3(0.7227f, -0.4453f, 0.5254f);
+    s.vertices[6] = float3(0.2754f, 0.4453f, -0.8496f);
+    s.vertices[7] = float3(-0.7227f, 0.4453f, -0.5254f);
+    s.vertices[8] = float3(-0.7227f, 0.4453f, 0.5254f);
+    s.vertices[9] = float3(0.2754f, 0.4453f, 0.8496f);
+    s.vertices[10] = float3(0.8926f, 0.4453f, 0.0000f);
+    s.vertices[11] = float3(0.0000f, 1.0000f, 0.0000f);
+    s.vertices[12] = float3(-0.1621f, -0.8496f, -0.4980f);
+    s.vertices[13] = float3(0.4238f, -0.8496f, -0.3086f);
+    s.vertices[14] = float3(0.2617f, -0.5254f, -0.8086f);
+    s.vertices[15] = float3(0.8496f, -0.5254f, 0.0000f);
+    s.vertices[16] = float3(0.4238f, -0.8496f, 0.3086f);
+    s.vertices[17] = float3(-0.5254f, -0.8496f, 0.0000f);
+    s.vertices[18] = float3(-0.6875f, -0.5254f, -0.4980f);
+    s.vertices[19] = float3(-0.1621f, -0.8496f, 0.4980f);
+    s.vertices[20] = float3(-0.6875f, -0.5254f, 0.4980f);
+    s.vertices[21] = float3(0.2617f, -0.5254f, 0.8086f);
+    s.vertices[22] = float3(0.9492f, 0.0000f, -0.3086f);
+    s.vertices[23] = float3(0.9492f, 0.0000f, 0.3086f);
+    s.vertices[24] = float3(0.0000f, 0.0000f, -1.0000f);
+    s.vertices[25] = float3(0.5859f, 0.0000f, -0.8086f);
+    s.vertices[26] = float3(-0.9492f, 0.0000f, -0.3086f);
+    s.vertices[27] = float3(-0.5859f, 0.0000f, -0.8086f);
+    s.vertices[28] = float3(-0.5859f, 0.0000f, 0.8086f);
+    s.vertices[29] = float3(-0.9492f, 0.0000f, 0.3086f);
+    s.vertices[30] = float3(0.5859f, 0.0000f, 0.8086f);
+    s.vertices[31] = float3(0.0000f, 0.0000f, 1.0000f);
+    s.vertices[32] = float3(0.6875f, 0.5254f, -0.4980f);
+    s.vertices[33] = float3(-0.2617f, 0.5254f, -0.8086f);
+    s.vertices[34] = float3(-0.8496f, 0.5254f, 0.0000f);
+    s.vertices[35] = float3(-0.2617f, 0.5254f, 0.8086f);
+    s.vertices[36] = float3(0.6875f, 0.5254f, 0.4980f);
+    s.vertices[37] = float3(0.1621f, 0.8496f, -0.4980f);
+    s.vertices[38] = float3(0.5254f, 0.8496f, 0.0000f);
+    s.vertices[39] = float3(-0.4238f, 0.8496f, -0.3086f);
+    s.vertices[40] = float3(-0.4238f, 0.8496f, 0.3086f);
+    s.vertices[41] = float3(0.1621f, 0.8496f, 0.4980f);
+    for (u32 i = 0; i < 42; i++) {
+        s.vertices[i] = math::scale(s.vertices[i], params.radius);
+    }
+    
+    u16* i = s.indices;
+    i[ 0 ] =  0 ; i[ 1 ] =  13 ; i[ 2 ] =  12 ;
+    i[ 3 ] =  1 ; i[ 4 ] =  13 ; i[ 5 ] =  15 ;
+    i[ 6 ] =  0 ; i[ 7 ] =  12 ; i[ 8 ] =  17 ;
+    i[ 9 ] =  0 ; i[ 10 ] =  17 ; i[ 11 ] =  19 ;
+    i[ 12 ] =  0 ; i[ 13 ] =  19 ; i[ 14 ] =  16 ;
+    i[ 15 ] =  1 ; i[ 16 ] =  15 ; i[ 17 ] =  22 ;
+    i[ 18 ] =  2 ; i[ 19 ] =  14 ; i[ 20 ] =  24 ;
+    i[ 21 ] =  3 ; i[ 22 ] =  18 ; i[ 23 ] =  26 ;
+    i[ 24 ] =  4 ; i[ 25 ] =  20 ; i[ 26 ] =  28 ;
+    i[ 27 ] =  5 ; i[ 28 ] =  21 ; i[ 29 ] =  30 ;
+    i[ 30 ] =  1 ; i[ 31 ] =  22 ; i[ 32 ] =  25 ;
+    i[ 33 ] =  2 ; i[ 34 ] =  24 ; i[ 35 ] =  27 ;
+    i[ 36 ] =  3 ; i[ 37 ] =  26 ; i[ 38 ] =  29 ;
+    i[ 39 ] =  4 ; i[ 40 ] =  28 ; i[ 41 ] =  31 ;
+    i[ 42 ] =  5 ; i[ 43 ] =  30 ; i[ 44 ] =  23 ;
+    i[ 45 ] =  6 ; i[ 46 ] =  32 ; i[ 47 ] =  37 ;
+    i[ 48 ] =  7 ; i[ 49 ] =  33 ; i[ 50 ] =  39 ;
+    i[ 51 ] =  8 ; i[ 52 ] =  34 ; i[ 53 ] =  40 ;
+    i[ 54 ] =  9 ; i[ 55 ] =  35 ; i[ 56 ] =  41 ;
+    i[ 57 ] =  10 ; i[ 58 ] =  36 ; i[ 59 ] =  38 ;
+    i[ 60 ] =  38 ; i[ 61 ] =  41 ; i[ 62 ] =  11 ;
+    i[ 63 ] =  38 ; i[ 64 ] =  36 ; i[ 65 ] =  41 ;
+    i[ 66 ] =  36 ; i[ 67 ] =  9 ; i[ 68 ] =  41 ;
+    i[ 69 ] =  41 ; i[ 70 ] =  40 ; i[ 71 ] =  11 ;
+    i[ 72 ] =  41 ; i[ 73 ] =  35 ; i[ 74 ] =  40 ;
+    i[ 75 ] =  35 ; i[ 76 ] =  8 ; i[ 77 ] =  40 ;
+    i[ 78 ] =  40 ; i[ 79 ] =  39 ; i[ 80 ] =  11 ;
+    i[ 81 ] =  40 ; i[ 82 ] =  34 ; i[ 83 ] =  39 ;
+    i[ 84 ] =  34 ; i[ 85 ] =  7 ; i[ 86 ] =  39 ;
+    i[ 87 ] =  39 ; i[ 88 ] =  37 ; i[ 89 ] =  11 ;
+    i[ 90 ] =  39 ; i[ 91 ] =  33 ; i[ 92 ] =  37 ;
+    i[ 93 ] =  33 ; i[ 94 ] =  6 ; i[ 95 ] =  37 ;
+    i[ 96 ] =  37 ; i[ 97 ] =  38 ; i[ 98 ] =  11 ;
+    i[ 99 ] =  37 ; i[ 100 ] =  32 ; i[ 101 ] =  38 ;
+    i[ 102 ] =  32 ; i[ 103 ] =  10 ; i[ 104 ] =  38 ;
+    i[ 105 ] =  23 ; i[ 106 ] =  36 ; i[ 107 ] =  10 ;
+    i[ 108 ] =  23 ; i[ 109 ] =  30 ; i[ 110 ] =  36 ;
+    i[ 111 ] =  30 ; i[ 112 ] =  9 ; i[ 113 ] =  36 ;
+    i[ 114 ] =  31 ; i[ 115 ] =  35 ; i[ 116 ] =  9 ;
+    i[ 117 ] =  31 ; i[ 118 ] =  28 ; i[ 119 ] =  35 ;
+    i[ 120 ] =  28 ; i[ 121 ] =  8 ; i[ 122 ] =  35 ;
+    i[ 123 ] =  29 ; i[ 124 ] =  34 ; i[ 125 ] =  8 ;
+    i[ 126 ] =  29 ; i[ 127 ] =  26 ; i[ 128 ] =  34 ;
+    i[ 129 ] =  26 ; i[ 130 ] =  7 ; i[ 131 ] =  34 ;
+    i[ 132 ] =  27 ; i[ 133 ] =  33 ; i[ 134 ] =  7 ;
+    i[ 135 ] =  27 ; i[ 136 ] =  24 ; i[ 137 ] =  33 ;
+    i[ 138 ] =  24 ; i[ 139 ] =  6 ; i[ 140 ] =  33 ;
+    i[ 141 ] =  25 ; i[ 142 ] =  32 ; i[ 143 ] =  6 ;
+    i[ 144 ] =  25 ; i[ 145 ] =  22 ; i[ 146 ] =  32 ;
+    i[ 147 ] =  22 ; i[ 148 ] =  10 ; i[ 149 ] =  32 ;
+    i[ 150 ] =  30 ; i[ 151 ] =  31 ; i[ 152 ] =  9 ;
+    i[ 153 ] =  30 ; i[ 154 ] =  21 ; i[ 155 ] =  31 ;
+    i[ 156 ] =  21 ; i[ 157 ] =  4 ; i[ 158 ] =  31 ;
+    i[ 159 ] =  28 ; i[ 160 ] =  29 ; i[ 161 ] =  8 ;
+    i[ 162 ] =  28 ; i[ 163 ] =  20 ; i[ 164 ] =  29 ;
+    i[ 165 ] =  20 ; i[ 166 ] =  3 ; i[ 167 ] =  29 ;
+    i[ 168 ] =  26 ; i[ 169 ] =  27 ; i[ 170 ] =  7 ;
+    i[ 171 ] =  26 ; i[ 172 ] =  18 ; i[ 173 ] =  27 ;
+    i[ 174 ] =  18 ; i[ 175 ] =  2 ; i[ 176 ] =  27 ;
+    i[ 177 ] =  24 ; i[ 178 ] =  25 ; i[ 179 ] =  6 ;
+    i[ 180 ] =  24 ; i[ 181 ] =  14 ; i[ 182 ] =  25 ;
+    i[ 183 ] =  14 ; i[ 184 ] =  1 ; i[ 185 ] =  25 ;
+    i[ 186 ] =  22 ; i[ 187 ] =  23 ; i[ 188 ] =  10 ;
+    i[ 189 ] =  22 ; i[ 190 ] =  15 ; i[ 191 ] =  23 ;
+    i[ 192 ] =  15 ; i[ 193 ] =  5 ; i[ 194 ] =  23 ;
+    i[ 195 ] =  16 ; i[ 196 ] =  21 ; i[ 197 ] =  5 ;
+    i[ 198 ] =  16 ; i[ 199 ] =  19 ; i[ 200 ] =  21 ;
+    i[ 201 ] =  19 ; i[ 202 ] =  4 ; i[ 203 ] =  21 ;
+    i[ 204 ] =  19 ; i[ 205 ] =  20 ; i[ 206 ] =  4 ;
+    i[ 207 ] =  19 ; i[ 208 ] =  17 ; i[ 209 ] =  20 ;
+    i[ 210 ] =  17 ; i[ 211 ] =  3 ; i[ 212 ] =  20 ;
+    i[ 213 ] =  17 ; i[ 214 ] =  18 ; i[ 215 ] =  3 ;
+    i[ 216 ] =  17 ; i[ 217 ] =  12 ; i[ 218 ] =  18 ;
+    i[ 219 ] =  12 ; i[ 220 ] =  2 ; i[ 221 ] =  18 ;
+    i[ 222 ] =  15 ; i[ 223 ] =  16 ; i[ 224 ] =  5 ;
+    i[ 225 ] =  15 ; i[ 226 ] =  13 ; i[ 227 ] =  16 ;
+    i[ 228 ] =  13 ; i[ 229 ] =  0 ; i[ 230 ] =  16 ;
+    i[ 231 ] =  12 ; i[ 232 ] =  14 ; i[ 233 ] =  2 ;
+    i[ 234 ] =  12 ; i[ 235 ] =  13 ; i[ 236 ] =  14 ;
+    i[ 237 ] =  13 ; i[ 238 ] =  1 ; i[ 239 ] =  14 ;
+}
+}
 
 namespace renderer {
 
@@ -420,6 +553,25 @@ void create_indexed_vertex_buffer_from_untextured_cube(renderer::driver::RscInde
     bufferParams.vertexCount = countof(cube.vertices);
     bufferParams.indexSize = sizeof(cube.indices);
     bufferParams.indexCount = countof(cube.indices);
+    bufferParams.memoryUsage = renderer::driver::BufferMemoryUsage::GPU;
+    bufferParams.accessType = renderer::driver::BufferAccessType::GPU;
+    bufferParams.indexType = renderer::driver::BufferItemType::U16;
+    bufferParams.type = renderer::driver::BufferTopologyType::Triangles;
+    driver::VertexAttribDesc attribs[] = {
+        driver::make_vertexAttribDesc("POSITION", 0, sizeof(float3), driver::BufferAttributeFormat::R32G32B32_FLOAT)
+    };
+    renderer::driver::create_indexed_vertex_buffer(buffer, bufferParams, attribs, countof(attribs));
+}
+void create_indexed_vertex_buffer_from_untextured_sphere(renderer::driver::RscIndexedVertexBuffer& buffer, const SphereCreateParams& params) {
+    renderer::UntexturedSphere sphere;
+    renderer::create_untextured_sphere_coords(sphere, params);
+    renderer::driver::IndexedVertexBufferDesc bufferParams;
+    bufferParams.vertexData = sphere.vertices;
+    bufferParams.indexData = sphere.indices;
+    bufferParams.vertexSize = sizeof(sphere.vertices);
+    bufferParams.vertexCount = countof(sphere.vertices);
+    bufferParams.indexSize = sizeof(sphere.indices);
+    bufferParams.indexCount = countof(sphere.indices);
     bufferParams.memoryUsage = renderer::driver::BufferMemoryUsage::GPU;
     bufferParams.accessType = renderer::driver::BufferAccessType::GPU;
     bufferParams.indexType = renderer::driver::BufferItemType::U16;
