@@ -55,6 +55,7 @@ namespace renderer {
         struct RscBlendState;
         struct RscRasterizerState;
         struct RscDepthStencilState;
+        struct ShaderCache;
         struct RscVertexShader;
         struct RscPixelShader;
         struct RscShaderSet;

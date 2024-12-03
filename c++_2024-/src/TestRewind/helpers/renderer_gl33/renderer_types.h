@@ -43,7 +43,8 @@ namespace driver {
         u32 width, height;
         u32 count;
     };
-
+    
+    struct ShaderCache {};
     struct RscVertexShader { GLuint id; };
     struct RscPixelShader { GLuint id; };
     struct RscShaderSet { GLuint id; };

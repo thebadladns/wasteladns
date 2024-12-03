@@ -88,7 +88,7 @@ void generate_matrix_persp_z0to1(float4x4& matrixRHwithYup, const PerspProjectio
     //matrixCM[14] = -1.f;
     //matrixCM[15] = 1.f / config.near;
 }
-void add_oblique_plane_to_persp_z0to1(float4x4& projectionMatrix, const float4& planeCameraSpace) { // todo: investigate issues with this
+void add_oblique_plane_to_persp_z0to1(float4x4& projectionMatrix, const float4& planeCameraSpace) {
     // adapted to work with z [0,1] from https://terathon.com/lengyel/Lengyel-Oblique.pdf
     // The near plane is (0, 0, 1, 0), so it can be expressed in the basis of the projection matrix as near = M3 (third row).
     // We want the near plane to be equal to a clip plane C, new_M3 = a*C. The original far plane is (0,0,-1,1), or with the basis above, F = M4 - M3
@@ -367,6 +367,7 @@ namespace driver {
     void set_VP(const ViewportParams&);
 
     struct TextureFromFileParams {
+        allocator::Arena& arena;
         const char* path;
     };
     void create_texture_from_file(RscTexture& t, const TextureFromFileParams& params);
@@ -380,11 +381,14 @@ namespace driver {
     void create_texture_empty(RscTexture& t, const TextureRenderTargetCreateParams& params);
     void bind_textures(const RscTexture* textures, const u32 count);
 
+    void load_shader_cache(ShaderCache& shaderCache, const char* path, allocator::Arena* arena, const u32 maxShaders);
+    void write_shader_cache(ShaderCache& shaderCache);
     struct ShaderResult {
         char error[128];
         bool compiled;
     };
     struct VertexShaderRuntimeCompileParams {
+        ShaderCache* shader_cache;
         const char* shader_str;
         const VertexAttribDesc* attribs;
         u32 shader_length;
@@ -392,6 +396,7 @@ namespace driver {
     };
     ShaderResult create_shader_vs(RscVertexShader&, const VertexShaderRuntimeCompileParams&);
     struct PixelShaderRuntimeCompileParams {
+        ShaderCache* shader_cache;
         const char* shader_str;
         u32 shader_length;
     };
@@ -539,10 +544,12 @@ void create_indexed_vertex_buffer_from_colored_mesh(renderer::driver::RscIndexed
     };
     renderer::driver::create_indexed_vertex_buffer(buffer, bufferParams, attribs, countof(attribs));
 }
+
 struct ShaderDesc {
+    driver::ShaderCache* shader_cache;
     const driver::VertexAttribDesc* vertexAttrs;
-    const renderer::driver::CBufferBindingDesc* bufferBindings;
-    const renderer::driver::TextureBindingDesc* textureBindings;
+    const driver::CBufferBindingDesc* bufferBindings;
+    const driver::TextureBindingDesc* textureBindings;
     const char* vs_name;
     const char* ps_name;
     const char* vs_src;
@@ -557,12 +564,12 @@ void compile_shader(driver::RscShaderSet& shader, const ShaderDesc& desc) {
     renderer::driver::RscPixelShader ps;
     renderer::driver::ShaderResult pixelResult;
     renderer::driver::ShaderResult vertexResult;
-    vertexResult = renderer::driver::create_shader_vs(vs, { desc.vs_src, desc.vertexAttrs, (u32)strlen(desc.vs_src), desc.vertexAttr_count });
+    vertexResult = renderer::driver::create_shader_vs(vs, { desc.shader_cache, desc.vs_src, desc.vertexAttrs, (u32)strlen(desc.vs_src), desc.vertexAttr_count });
     if (!vertexResult.compiled) {
         platform::debuglog("%s: %s\n", desc.vs_name, vertexResult.error);
         return;
     }
-    pixelResult = renderer::driver::create_shader_ps(ps, { desc.ps_src, (u32)strlen(desc.ps_src) });
+    pixelResult = renderer::driver::create_shader_ps(ps, { desc.shader_cache, desc.ps_src, (u32)strlen(desc.ps_src) });
     if (!pixelResult.compiled) {
         platform::debuglog("%s: %s\n", desc.ps_name, pixelResult.error);
         return;
@@ -572,6 +579,7 @@ void compile_shader(driver::RscShaderSet& shader, const ShaderDesc& desc) {
         platform::debuglog("Linking %s & %s: %s\n", desc.vs_name, desc.ps_name, result.error);
     }
 }
+
 } // Renderer
 
 #endif // __WASTELADNS_RENDERER_H__

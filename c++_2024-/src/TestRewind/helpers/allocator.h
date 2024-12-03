@@ -8,12 +8,10 @@ struct Arena {
     __DEBUGDEF(uintptr_t* highmark;) // pointer to track overall allocations of scoped copies
 };
 
-__DEBUGDEF(Arena emergencyArena;) // to prevent crashes
-
-void init_arena(Arena& arena, size_t capacity) {
-    arena.curr = (u8*)malloc(capacity);
+void init_arena(Arena& arena, u8* mem, size_t capacity) {
+    arena.curr = mem;
     arena.end = arena.curr + capacity;
-    __DEBUGEXP(arena.highmark = nullptr);
+    __DEBUGDEF(arena.highmark = nullptr;)
 }
 
 void* alloc_arena(Arena& arena, ptrdiff_t size, ptrdiff_t align) {
@@ -21,11 +19,22 @@ void* alloc_arena(Arena& arena, ptrdiff_t size, ptrdiff_t align) {
     uintptr_t curr_aligned = ((uintptr_t)arena.curr + (align - 1)) & -align;
     if (curr_aligned + size <= (uintptr_t)arena.end) {
         arena.curr = (u8*)(curr_aligned + size);
-        __DEBUGEXP(if (arena.highmark) { *arena.highmark = math::max(*arena.highmark, (uintptr_t)arena.curr); });
+        __DEBUGDEF(if (arena.highmark) { *arena.highmark = math::max(*arena.highmark, (uintptr_t)arena.curr); };)
         return (void*)curr_aligned;
     }
     assert(0);
     return 0;
+}
+
+void* realloc_arena(Arena& arena, void* oldptr, ptrdiff_t oldsize, ptrdiff_t newsize, ptrdiff_t align) {
+    void* oldbuff = (void*)((uintptr_t)arena.curr - oldsize);
+    if (oldbuff == oldptr) {
+        return alloc_arena(arena, newsize - oldsize, align);
+    } else {
+        void* data = alloc_arena(arena, newsize, align);
+        if (oldsize) memcpy(data, oldptr, oldsize);
+        return data;
+    }
 }
 
 void free_arena(Arena& arena, void* ptr, ptrdiff_t size) {
@@ -119,14 +128,8 @@ void init_pool(Pool<_T>& pool, ptrdiff_t cap, Arena& arena) {
 
 template<typename _T>
 _T&  alloc_pool(Pool<_T>& pool) {
-#if __DEBUG
-    if (!pool.firstAvailable) { // can't regrow without messing up the pointers that have already been handed out
-        // todo: remove, this breaks everything basically (counts, address to indexes, etc)
-		platform::debuglog("Pool %s ran out of slots, defaulting to emergency allocator\n", pool.name);
-        return *(_T*)allocator::alloc_arena(allocator::emergencyArena, sizeof(_T), alignof(_T));
-    }
-#endif
-	_T& out = pool.firstAvailable->state.live;
+    assert(pool.firstAvailable); // can't regrow without messing up the pointers that have already been handed out
+    _T& out = pool.firstAvailable->state.live;
     pool.firstAvailable->alive = 1;
     pool.firstAvailable = pool.firstAvailable->state.next;
 	pool.count++;

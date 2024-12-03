@@ -1,5 +1,6 @@
 // C libs
 #include <math.h>
+#include <stdlib.h> // rand, mbstowcs_s
 #include <cstring>
 #include "stdint.h"
 #include <assert.h>
@@ -11,28 +12,15 @@
 //#include <cxxabi.h>
 //#include "debug/types.h"
 
-#define STB_IMAGE_IMPLEMENTATION
-#include "lib/stb/stb_image.h"
-
-#define UFBX_REAL_IS_FLOAT
-#define UFBX_MINIMAL
-#define UFBXI_FEATURE_TRIANGULATION 1
-#include "lib/fbx/ufbx.c"
-
 #define __GPU_DEBUG 0
 
 #ifdef NDEBUG
 #define __DEBUG 0
-#define __DEBUGDEF(a)
-#define __DEBUGEXP(a)
+#define __DEBUGDEF(...)
 #else
 #define __DEBUG 1
 #define __WASTELADNS_DEBUG_TEXT__
-#define __DEBUGDEF(a) a
-#define __DEBUGEXP(a) \
-do { \
-  a; \
-} while (0)
+#define __DEBUGDEF(...) __VA_ARGS__
 #endif
 
 #define WRITE_SHADERCACHE 0
@@ -46,21 +34,47 @@ do { \
 	#endif
 #endif
 
+#define USE_DEBUG_MEMORY __DEBUG
+
 #if __WIN64
 	#include "helpers/platform_win/core.h"
 #elif __MACOS
 	#include "helpers/platform_mac/core.h"
 #endif
 #include "helpers/types.h"
-#include "helpers/io.h"
 #include "helpers/math.h"
+#include "helpers/allocator.h"
+
+allocator::Arena* Allocator_stb_arena = nullptr;
+struct Allocator_stb {
+	static void* malloc(size_t size) {
+		return allocator::alloc_arena(*Allocator_stb_arena, size, 16);
+	}
+	static void* realloc(void* oldptr, size_t oldsize, size_t newsize) {
+		return allocator::realloc_arena(*Allocator_stb_arena, oldptr, oldsize, newsize, 16);
+	}
+	static void free(void* ptr) {}
+};
+#define STBI_MALLOC(sz)           Allocator_stb::malloc(sz)
+#define STBI_REALLOC(p,newsz)     Allocator_stb::realloc(p,0,newsz)
+#define STBI_FREE(p)              Allocator_stb::free(p)
+#define STBI_REALLOC_SIZED(p,oldsz,newsz) Allocator_stb::realloc(p,oldsz,newsz)
+#define STB_IMAGE_IMPLEMENTATION
+#include "lib/stb/stb_image.h"
+
+#define UFBX_REAL_IS_FLOAT
+#define UFBX_MINIMAL
+#define UFBXI_FEATURE_TRIANGULATION 1
+#include "lib/fbx/ufbx.c"
+
+
+#include "helpers/io.h"
 #include "helpers/easing.h"
 #include "helpers/vec.h"
 #include "helpers/angle.h"
 #include "helpers/vec_ops.h"
 #include "helpers/transform.h"
 #include "helpers/color.h"
-#include "helpers/allocator.h"
 #if __WIN64
 	#include "helpers/platform_win/input_types.h"
 #elif __MACOS
@@ -91,7 +105,6 @@ do { \
 #if __DEBUG
 	#include "helpers/renderer_debug.h"
 #endif
-#include "helpers/animation.h"
 
 #include "game.h"
 #if __WIN64

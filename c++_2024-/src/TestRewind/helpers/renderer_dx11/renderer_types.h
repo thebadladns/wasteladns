@@ -51,6 +51,13 @@ namespace driver {
         u32 count;
     };
 
+    struct ShaderCache {
+        struct ByteCode { u8* data; u64 size; };
+        allocator::Arena* arena;
+        const char* path;
+        ByteCode* shaderBytecode;
+        u64 shaderBytecodeCount;
+    };
     struct RscVertexShader {
         ID3D11VertexShader* impl;
         ID3D11InputLayout* inputLayout_impl;

@@ -8,6 +8,7 @@
 namespace debug {
     bool frustum_planes_off[6] = {};
     bool force_cut_frustum = false;
+    bool pauseSceneRender = false;
     const char* frustum_planes_names[] = { "near", "far", "left", "right", "bottom", "top" };
     u32 vertices_3d_head_last_frame = 0;
     u32 vertices_2d_head_last_frame = 0;
@@ -26,14 +27,14 @@ namespace im
         u32 color;
     };
 
-    const u32 max_3d_vertices = 1 << 14;
+    const u32 max_3d_vertices = 1 << 17;
     const u32 max_2d_vertices = 1 << 14;
     // 2d vertices are stored in quads: per 4 vertex quad, we store 6 indexes (2 tris) = 6 / 4 = 3 / 2
     inline u32 vertexSizeToIndexCount(const u32 count) { return 3 * count / 2; }
-    const size_t arena_size =
-          max_3d_vertices * sizeof(Vertex3D)
-        + max_2d_vertices * sizeof(Vertex2D)
-        + vertexSizeToIndexCount(max_2d_vertices) * sizeof(u32);
+    const size_t arena_size =                                   // 2.28MB
+          max_3d_vertices * sizeof(Vertex3D)                    // 2MB
+        + max_2d_vertices * sizeof(Vertex2D)                    // 192KB
+        + vertexSizeToIndexCount(max_2d_vertices) * sizeof(u32);// 96KB
     
     struct Context {
 

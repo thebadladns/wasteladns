@@ -145,8 +145,10 @@ namespace driver {
     }
 
     void create_texture_from_file(RscTexture& t, const TextureFromFileParams& params) {
+        Allocator_stb_arena = &params.arena;
         s32 w, h, channels;
         u8* data = stbi_load(params.path, &w, &h, &channels, 4);
+        Allocator_stb_arena = nullptr;
         if (data) {
             DXGI_FORMAT format = DXGI_FORMAT_R8G8B8A8_UNORM;
             u32 typeSize = 4;
@@ -287,20 +289,48 @@ namespace driver {
         d3dcontext->PSSetSamplers(0, count, samplers);
     }
 
-    struct ShaderBytecode {
-        u8* data;
-        u64 size;
+    void load_shader_cache(ShaderCache& shaderCache, const char* path, allocator::Arena* arena, u32 maxShaders) {
+        shaderCache.arena = arena;
+        shaderCache.path = path;
+        #if WRITE_SHADERCACHE
+        shaderCache.shaderBytecode = (ShaderCache::ByteCode*)allocator::alloc_arena(*shaderCache.arena, sizeof(ShaderCache::ByteCode) * maxShaders, alignof(ShaderCache::ByteCode));
+        #elif READ_SHADERCACHE
+        FILE* f;
+        if (platform::fopen(&f, path, "rb") == 0) {
+            u64 count;
+            fread(&count, sizeof(u64), 1, f);
+            shaderCache.shaderBytecode = (ShaderCache::ByteCode*)allocator::alloc_arena(*shaderCache.arena, sizeof(ShaderCache::ByteCode) * count, alignof(ShaderCache::ByteCode));
+            for (u64 i = 0; i < count; i++) {
+                u64 size;
+                fread(&size, sizeof(u64), 1, f);
+                renderer::driver::ShaderCache::ByteCode& byteCode = shaderCache.shaderBytecode[i];
+                byteCode.data = (u8*)allocator::alloc_arena(*shaderCache.arena, sizeof(u8) * size, alignof(u8));
+                byteCode.size = size;
+                fread(byteCode.data, sizeof(u8), size, f);
+            }
+            platform::fclose(f);
+        }
+        #endif
     };
-    struct ShaderCache {
-        ShaderBytecode* shaderBytecode;
-        u64 shaderBytecodeCount;
+    void save_shader_to_cache(ShaderCache& shaderCache, void* ptr, size_t size) {
+        ShaderCache::ByteCode& byteCode = shaderCache.shaderBytecode[shaderCache.shaderBytecodeCount++];
+        byteCode.data = (u8*)allocator::alloc_arena(*shaderCache.arena, sizeof(u8) * size, alignof(u8));
+        byteCode.size = size;
+        memcpy(byteCode.data, ptr, size);
     };
-#if WRITE_SHADERCACHE
-    static ShaderCache shaderCache{ (ShaderBytecode*)malloc(sizeof(ShaderBytecode) * 64), 0 };
-#endif
-#if READ_SHADERCACHE
-    static ShaderCache shaderCache{ nullptr, 0 };
-#endif
+    void write_shader_cache(ShaderCache& shaderCache) {
+        #if WRITE_SHADERCACHE
+        FILE* f;
+        if (platform::fopen(&f, shaderCache.path, "wb") == 0) {
+            fwrite(&shaderCache.shaderBytecodeCount, sizeof(u64), 1, f);
+            for (size_t i = 0; i < shaderCache.shaderBytecodeCount; i++) {
+                fwrite(&shaderCache.shaderBytecode[i].size, sizeof(u64), 1, f);
+                fwrite(shaderCache.shaderBytecode[i].data, sizeof(u8), shaderCache.shaderBytecode[i].size, f);
+            }
+            platform::fclose(f);
+        }
+        #endif
+    }
     ShaderResult create_shader_vs(RscVertexShader& vs, const VertexShaderRuntimeCompileParams& params) {
 #if WRITE_SHADERCACHE
         ID3DBlob* pShaderBlob = nullptr;
@@ -315,7 +345,7 @@ namespace driver {
             , &pShaderBlob, &pErrorBlob
         );
         void* error = pErrorBlob ? pErrorBlob->GetBufferPointer() : nullptr;
-#elif READ_SHADERCACHE // todo: fix again
+#elif READ_SHADERCACHE
         HRESULT hr = S_OK;
         void* error = nullptr;
 #endif
@@ -324,14 +354,11 @@ namespace driver {
         result.compiled = !FAILED(hr);
         if (result.compiled) {
 #if WRITE_SHADERCACHE
-            ShaderBytecode& byteCode = shaderCache.shaderBytecode[shaderCache.shaderBytecodeCount++];
-            byteCode.data = (u8*)malloc(pShaderBlob->GetBufferSize());
-            byteCode.size = pShaderBlob->GetBufferSize();
-            memcpy(byteCode.data, pShaderBlob->GetBufferPointer(), pShaderBlob->GetBufferSize());
-            void* shaderBufferPointer = byteCode.data;
-            size_t shaderBufferSize = byteCode.size;
+            if (params.shader_cache) { save_shader_to_cache(*params.shader_cache, pShaderBlob->GetBufferPointer(), pShaderBlob->GetBufferSize()); }
+            void* shaderBufferPointer = pShaderBlob->GetBufferPointer();
+            size_t shaderBufferSize = pShaderBlob->GetBufferSize();
 #elif READ_SHADERCACHE
-            renderer::driver::ShaderBytecode& byteCode = renderer::driver::shaderCache.shaderBytecode[renderer::driver::shaderCache.shaderBytecodeCount++];
+            ShaderCache::ByteCode& byteCode = params.shader_cache->shaderBytecode[params.shader_cache->shaderBytecodeCount++];
             void* shaderBufferPointer = byteCode.data;
             size_t shaderBufferSize = byteCode.size;
 #endif
@@ -371,14 +398,11 @@ namespace driver {
         result.compiled = !FAILED(hr);
         if (result.compiled) {
 #if WRITE_SHADERCACHE
-            ShaderBytecode& byteCode = shaderCache.shaderBytecode[shaderCache.shaderBytecodeCount++];
-            byteCode.data = (u8*)malloc(pShaderBlob->GetBufferSize());
-            byteCode.size = pShaderBlob->GetBufferSize();
-            memcpy(byteCode.data, pShaderBlob->GetBufferPointer(), pShaderBlob->GetBufferSize());
-            void* shaderBufferPointer = byteCode.data;
-            size_t shaderBufferSize = byteCode.size;
+            if (params.shader_cache) { save_shader_to_cache(*params.shader_cache, pShaderBlob->GetBufferPointer(), pShaderBlob->GetBufferSize()); }
+            void* shaderBufferPointer = pShaderBlob->GetBufferPointer();
+            size_t shaderBufferSize = pShaderBlob->GetBufferSize();
 #elif READ_SHADERCACHE
-            renderer::driver::ShaderBytecode& byteCode = renderer::driver::shaderCache.shaderBytecode[renderer::driver::shaderCache.shaderBytecodeCount++];
+            ShaderCache::ByteCode& byteCode = params.shader_cache->shaderBytecode[params.shader_cache->shaderBytecodeCount++];
             void* shaderBufferPointer = byteCode.data;
             size_t shaderBufferSize = byteCode.size;
 #endif
@@ -613,5 +637,6 @@ namespace driver {
         perf->EndEvent();
     }
 }
+
 }
 #endif // __WASTELADNS_RENDERER_DX11_H__

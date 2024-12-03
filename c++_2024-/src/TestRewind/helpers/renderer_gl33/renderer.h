@@ -86,8 +86,10 @@ namespace driver {
     }
     
     void create_texture_from_file(RscTexture& t, const TextureFromFileParams& params) {
+        Allocator_stb_arena = &params.arena;
         s32 w, h, channels;
         u8* data = stbi_load(params.path, &w, &h, &channels, 4);
+        Allocator_stb_arena = nullptr;
         if (data) {
             GLenum format = GL_RGBA;
             GLenum type = GL_UNSIGNED_BYTE;
@@ -144,7 +146,9 @@ namespace driver {
     void bind_shader_samplers(RscShaderSet& ss, const char** params, const u32 count) {
 
     }
-    
+
+    void load_shader_cache(ShaderCache&, const char*, allocator::Arena*, const u32) {}
+    void write_shader_cache(ShaderCache&) {}
     ShaderResult create_shader_vs(RscVertexShader& vs, const VertexShaderRuntimeCompileParams& params) {
         GLuint vertexShader;
         

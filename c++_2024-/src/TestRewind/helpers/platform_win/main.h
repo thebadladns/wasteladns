@@ -282,8 +282,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         platform.screen.desiredRatio = platform.screen.width / (f32)platform.screen.height;
         platform.screen.fullscreen = config.fullscreen;
 
-        allocator::init_arena(platform.memory.scratchArenaRoot, config.scratchArena_size);
-        __DEBUGEXP(platform.memory.scratchArenaHighmark = (uintptr_t)platform.memory.scratchArenaRoot.curr; platform.memory.scratchArenaRoot.highmark = &platform.memory.scratchArenaHighmark);
+        platform.memory.curr = (u8*)malloc(config.arena_size);
+        platform.memory.cap = platform.memory.curr + config.arena_size;
     }
 
     u64 frequency;
@@ -373,8 +373,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
                     }
                     break;
                     case WM_INPUT: {
-                        // arena copy, not by value (there will be an implicit free when the function ends)
-                        ::input::gamepad::process_hid_pads_win(platform.memory.scratchArenaRoot, platform.input.pads, platform.input.padCount, countof(platform.input.pads), (HRAWINPUT)msg.lParam);
+                        u8 mem[2048]; // local arena
+                        allocator::Arena scratchArena = {};
+                        allocator::init_arena(scratchArena, mem, sizeof(mem));
+                        ::input::gamepad::process_hid_pads_win(scratchArena, platform.input.pads, platform.input.padCount, countof(platform.input.pads), (HRAWINPUT)msg.lParam);
                     }
                     break;
                     default: {

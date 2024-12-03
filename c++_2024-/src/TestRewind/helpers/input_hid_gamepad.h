@@ -310,13 +310,12 @@ void process_hid_pads_win(allocator::Arena scratchArena, State* pads, u32& padCo
         if (validpad) {
             padCount++; // acknowledge the current pad
             pad.deviceHandle = (u64)input->header.hDevice;
-            __DEBUGEXP(platform::strncpy(pad.name, names[pad.type], sizeof(pad.name)));
 
             #if __DEBUG
+            platform::strncpy(pad.name, names[pad.type], sizeof(pad.name));
             char name[256];
             u32 deviceNameSize = sizeof(name);
             GetRawInputDeviceInfo(input->header.hDevice, RIDI_DEVICENAME, name, &deviceNameSize);
-
             platform::debuglog("Registered new pad %s\n", name);
             #endif
         }
@@ -488,9 +487,9 @@ void process_hid_pads_mac(void* context, IOReturn result, void* sender, IOHIDRep
         if (validpad) {
             input.padCount++; // acknowledge the current pad
             pad.deviceHandle = (u64)device;
-            __DEBUGEXP(platform::strncpy(pad.name, names[pad.type], sizeof(pad.name)));
 
             #if __DEBUG
+            platform::strncpy(pad.name, names[pad.type], sizeof(pad.name));
             u64 vendorID = [(__bridge NSNumber*)IOHIDDeviceGetProperty(device, CFSTR(kIOHIDVendorIDKey)) unsignedIntegerValue];
             u64 productID = [(__bridge NSNumber*)IOHIDDeviceGetProperty(device, CFSTR(kIOHIDProductIDKey)) unsignedIntegerValue];
             platform::debuglog("Registered new pad 0x%lx 0x%lx\n", vendorID, productID);

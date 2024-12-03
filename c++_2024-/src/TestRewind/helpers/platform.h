@@ -5,7 +5,7 @@ namespace platform
 {
     struct LaunchConfig {
         const char* title;
-        u64 scratchArena_size;
+        size_t arena_size;
         u32 window_width;
         u32 window_height;
         u32 game_width;
@@ -42,8 +42,8 @@ namespace platform
     };
     
     struct Memory {
-        allocator::Arena scratchArenaRoot;
-        __DEBUGDEF(uintptr_t scratchArenaHighmark;)
+        u8* curr;
+        u8* cap;
     };
 
     struct State {

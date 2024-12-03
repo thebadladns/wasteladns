@@ -116,10 +116,10 @@ int main(int , char** ) {
             platform.screen.height = config.game_height;
             platform.screen.desiredRatio = platform.screen.width / (f32)platform.screen.height;
             platform.screen.fullscreen = config.fullscreen;
-            __DEBUGEXP(platform.screen.text_scale = windowScale);
-
-            allocator::init_arena(platform.memory.scratchArenaRoot, config.scratchArena_size); // 1MB
-            __DEBUGEXP(platform.memory.scratchArenaHighmark = (uintptr_t)platform.memory.scratchArenaRoot.curr; platform.memory.scratchArenaRoot.highmark = &platform.memory.scratchArenaHighmark);
+            __DEBUGDEF(platform.screen.text_scale = windowScale);
+            
+            platform.memory.curr = (u8*)malloc(config.arena_size);
+            platform.memory.cap = platform.memory.curr + config.arena_size;
         }
         
         const int hotkeyMask = NSEventModifierFlagCommand | NSEventModifierFlagOption | NSEventModifierFlagControl | NSEventModifierFlagCapsLock;

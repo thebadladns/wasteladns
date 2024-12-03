@@ -174,9 +174,9 @@ namespace gameplay
                 controller.eulers.z = math::clamp(math::wrap(controller.eulers.z - speedy), -math::halfpi32, 0.f); // Positive 0 is below ground
             }
 
-            controller.scale = 1.f;
-            controller.scale -= pad.sliders[::input::gamepad::Sliders::TRIGGER_RIGHT];
-            controller.scale += pad.sliders[::input::gamepad::Sliders::TRIGGER_LEFT];
+            const f32 scrollSpeed = 0.1f;
+            controller.scale -= scrollSpeed * pad.sliders[::input::gamepad::Sliders::TRIGGER_RIGHT];
+            controller.scale += scrollSpeed * pad.sliders[::input::gamepad::Sliders::TRIGGER_LEFT];
             controller.scale = math::clamp(controller.scale, 0.3f, 2.f);
         }
         void process(State& controller, const ::input::mouse::State& mouse)
