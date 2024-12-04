@@ -92,6 +92,9 @@ float4 scale(const float4& v, const float4& s) { return float4(v.x * s.x, v.y * 
 float2 invScale(const float2& v, const f32 s) { return float2(v.x / s, v.y / s); }
 float3 invScale(const float3& v, const f32 s) { return float3(v.x / s, v.y / s, v.z / s); }
 float4 invScale(const float4& v, const f32 s) { return float4(v.x / s, v.y / s, v.z / s, v.w / s); }
+float2 invScale(const float2& v, const float2& s) { return float2(v.x / s.x, v.y / s.y); }
+float3 invScale(const float3& v, const float3& s) { return float3(v.x / s.x, v.y / s.y, v.z / s.z); }
+float4 invScale(const float4& v, const float4& s) { return float4(v.x / s.x, v.y / s.y, v.z / s.z, v.w / s.w); }
 f32 mag(const float2& v) { return math::sqrt(v.x * v.x + v.y * v.y); }
 f32 mag(const float3& v) { return math::sqrt(v.x * v.x + v.y * v.y + v.z * v.z); }
 f32 mag(const float4& v) { return math::sqrt(v.x * v.x + v.y * v.y + v.z * v.z + v.w * v.w); }

@@ -47,6 +47,17 @@ EventText eventLabel = {};
 }
 #endif
 
+float3 screenPosToWorldPos(const f32 x, const f32 y, const u32 w, const u32 h, const renderer::PerspProjection::Config& persp, const Camera& camera) {
+    // screen space to NDC space
+    const float2 screen((f32)w, (f32)h);
+    const float2 pos_NDC = math::add(math::invScale(math::scale(math::add(float2(x,y), float2(0.5f, 0.5f)), float2(2.f, -2.f)), screen), float2(-1.f, 1.f));
+    // to eye space (using projection matrix inverse)
+    float3 pos_ES = renderer::ndcPosToEyePos(pos_NDC, persp);
+     //to world space
+    const float3 pos_WS = math::eyePosToWorldPos(pos_ES, camera.transform);
+    return pos_WS;
+}
+
 namespace game
 {
     struct Time {
@@ -539,6 +550,18 @@ namespace game
                                 , axisZ);
                         }
 
+                        float3 mousepos_WS = screenPosToWorldPos(platform.input.mouse.x, platform.input.mouse.y, platform.screen.window_width, platform.screen.window_height, game.scene.renderScene.perspProjection.config, game.scene.camera);
+                        const Color32 mouseColor(0.7f, 0.85f, 0.25f, 0.7f);
+                        im::sphere(imCtx, mousepos_WS, 0.5f, mouseColor);
+                        im::openSegment(imCtx, game.scene.camera.transform.pos, math::subtract(mousepos_WS, game.scene.camera.transform.pos), mouseColor);
+
+                        static float3 mousepossaved_WS = {};
+                        static float3 camerapossaved_WS = {};
+                        if (captureCameras) { mousepossaved_WS = mousepos_WS; camerapossaved_WS = game.scene.camera.transform.pos; }
+                        const Color32 mouseRayColor(0.8f, 0.15f, 0.25f, 0.7f);
+                        im::sphere(imCtx, mousepossaved_WS, 0.5f, mouseRayColor);
+                        im::openSegment(imCtx, camerapossaved_WS, math::subtract(mousepossaved_WS, camerapossaved_WS), mouseRayColor);
+
                         if (debug::debug3Dmode == debug::Debug3DView::All || debug::debug3Dmode == debug::Debug3DView::Culling) {
                             const Color32 bbColor(0.8f, 0.15f, 0.25f, 0.7f);
                             allocator::Arena scratchArena = game.memory.scratchArenaRoot; // explicit copy
@@ -722,7 +745,6 @@ namespace game
                             renderer::driver::update_cbuffer(scene_cbuffer, &cbufferPerScene);
                         }
 
-                        driver::bind_DS(scene.depthStateOn); // todo: this is a hack so opengl can clear depth
                         driver::clear_RT(scene.gameRT, driver::RenderTargetClearFlags::Depth); // todo: could we just clear the mirror?
 
                         driver::bind_DS(scene.depthStateMirrorReflectionsDepthReadOnly);
@@ -877,6 +899,10 @@ namespace game
                     if (debug::overlaymode == debug::OverlayMode::All || debug::overlaymode == debug::OverlayMode::HelpOnly) {
                         textParamsLeft.color = platform.input.mouse.down(::input::mouse::Keys::BUTTON_LEFT) ? activeCol : defaultCol;
                         renderer::im::text2d(imCtx, textParamsLeft, "Mouse (%.3f,%.3f)", platform.input.mouse.x, platform.input.mouse.y);
+                        textParamsLeft.pos.y -= lineheight;
+                        textParamsLeft.color = defaultCol;
+                        const float3 mousepos_WS = screenPosToWorldPos(platform.input.mouse.x, platform.input.mouse.y, platform.screen.window_width, platform.screen.window_height, game.scene.renderScene.perspProjection.config, game.scene.camera);
+                        renderer::im::text2d(imCtx, textParamsLeft, "Mouse 3D (%.3f,%.3f,%.3f)", mousepos_WS.x, mousepos_WS.y, mousepos_WS.z);
                         textParamsLeft.pos.y -= lineheight;
                         textParamsLeft.color = platform.input.mouse.down(::input::mouse::Keys::BUTTON_LEFT) ? activeCol : defaultCol;
                         renderer::im::text2d(imCtx, textParamsLeft, "   left click and drag to orbit");

@@ -144,6 +144,12 @@ void generate_MV_matrix(float4x4& modelview, const Transform& t) {
     modelview.m[11] = mRHwithYUp.col2.w;
     modelview.m[15] = mRHwithYUp.col3.w;
 }
+float3 ndcPosToEyePos(const float2 posNDC, const renderer::PerspProjection::Config& persp) {
+    const f32 tanfov = math::tan(persp.fov * 0.5f * math::d2r32);
+    float4 mousepos_ES(posNDC.x * persp.aspect * tanfov, posNDC.y * tanfov, -1.f, 1.f / persp.near);
+    mousepos_ES = math::invScale(mousepos_ES, mousepos_ES.w);
+    return mousepos_ES.xyz;
+}
 
 void calculate_tangents(float3& t, float3& b, const float3& vbl, const float3& vtr, const float3& vtl) {
     const float2 bl = { 0.f, 0.f }, tr = { 1.f, 1.f }, tl = { 0.f, 1.f };

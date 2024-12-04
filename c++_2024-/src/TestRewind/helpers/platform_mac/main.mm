@@ -126,8 +126,8 @@ int main(int , char** ) {
         const f32 actualWindowHeight = [[window contentView] frame].size.height;
         {   // init mouse pos so we don't get a big delta movement on the first click
             NSPoint pos = [window  mouseLocationOutsideOfEventStream];
-            platform.input.mouse.x = pos.x;
-            platform.input.mouse.y = actualWindowHeight-pos.y;
+            platform.input.mouse.x = pos.x * windowScale;
+            platform.input.mouse.y = (actualWindowHeight-pos.y) * windowScale;
         }
         // gamepad
         ::input::gamepad::init_hid_pads_mac(platform);
@@ -180,8 +180,8 @@ int main(int , char** ) {
                             case NSEventTypeOtherMouseDragged: {
                                 // todo: won't work when hiding cursor
                                 NSPoint pos = [event locationInWindow];
-                                platform.input.mouse.x = pos.x;
-                                platform.input.mouse.y = actualWindowHeight-pos.y;
+                                platform.input.mouse.x = pos.x * windowScale;
+                                platform.input.mouse.y = (actualWindowHeight-pos.y) * windowScale;
                                 platform.input.mouse.dx = platform.input.mouse.x - mouse_prevx;
                                 platform.input.mouse.dy = platform.input.mouse.y - mouse_prevy;
                             } break;

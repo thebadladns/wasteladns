@@ -57,9 +57,11 @@ namespace driver {
         glBindFramebuffer(GL_FRAMEBUFFER, rt.buffer);
     }
     void clear_RT(const RscRenderTarget& rt, u32 flags) {
+        if (flags & RenderTargetClearFlags::Depth) { glEnable(GL_DEPTH_TEST), glDepthMask(DepthWriteMask::All); } // todo: restore??
         glClear(flags);
     }
     void clear_RT(const RscRenderTarget& rt, u32 flags, Color32 color) {
+        if (flags & RenderTargetClearFlags::Depth) { glEnable(GL_DEPTH_TEST), glDepthMask(DepthWriteMask::All); } // todo: restore??
         glClearColor(RGBA_PARAMS(color));
         glClear(flags | GL_COLOR_BUFFER_BIT);
     }
