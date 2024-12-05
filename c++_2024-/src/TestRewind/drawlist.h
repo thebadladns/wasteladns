@@ -201,8 +201,8 @@ struct Scene {
     renderer::driver::RscMainRenderTarget windowRT;
     renderer::driver::RscRenderTarget gameRT;
     Mirror mirror;
-    renderer::WindowProjection windowProjection;
-    renderer::PerspProjection perspProjection;
+    camera::WindowProjection windowProjection;
+    camera::PerspProjection perspProjection;
     Sky sky;
     u32 cbuffer_scene;
 };

@@ -3,38 +3,10 @@
 
 namespace renderer {
 
-    struct WindowProjection {
-        struct Config {
-            f32 left;
-            f32 right;
-            f32 top;
-            f32 bottom;
-            f32 near;
-            f32 far;
-        };
-        Config config;
-        float4x4 matrix;
-    };
-    struct PerspProjection {
-        struct Config {
-            f32 fov;
-            f32 aspect;
-            f32 near;
-            f32 far;
-        };
-        Config config;
-        float4x4 matrix;
-    };
     //void generate_matrix_ortho(float4x4& matrix, const WindowProjection::Config& config);
     //void generate_matrix_persp(float4x4& matrixRHwithYup, const PerspProjection::Config& config);
     //void add_oblique_plane_to_persp(float4x4& projectionMatrix, const float4& planeCameraSpace);
     //const f32 min_z;
-    void generate_matrix_ortho_zneg1to1(float4x4& matrix, const WindowProjection::Config& config);
-    void generate_matrix_ortho_z0to1(float4x4& matrix, const WindowProjection::Config& config);
-    void generate_matrix_persp_zneg1to1(float4x4& matrixRHwithYup, const PerspProjection::Config& config);
-    void generate_matrix_persp_z0to1(float4x4& matrixRHwithYup, const PerspProjection::Config& config);
-    void add_oblique_plane_to_persp_zneg1to1(float4x4& projectionMatrix, const float4& planeCameraSpace);
-    void add_oblique_plane_to_persp_z0to1(float4x4& projectionMatrix, const float4& planeCameraSpace);
 
     namespace shaders {
         struct VS_src {

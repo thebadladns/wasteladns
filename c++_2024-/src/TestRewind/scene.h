@@ -6,7 +6,7 @@ namespace game {
 struct Player {
 };
 struct Scene {
-    Camera camera;
+    camera::Camera camera;
     renderer::Scene renderScene;
     physics::Scene physicsScene;
     animation::Scene animScene;
@@ -501,7 +501,7 @@ void init_scene(game::Scene& scene, SceneMemory& memory, const platform::Screen&
     allocator::init_pool(renderScene.drawNodes, drawNodePoolSize, persistentArena); __DEBUGDEF(renderScene.drawNodes.name = "draw nodes";)
     allocator::init_pool(animScene.nodes, animatedNodesSize, persistentArena); __DEBUGDEF(animScene.nodes.name = "anim nodes";)
 
-    renderer::WindowProjection::Config& ortho = renderScene.windowProjection.config;
+    camera::WindowProjection::Config& ortho = renderScene.windowProjection.config;
     ortho.right = screen.window_width * 0.5f;
     ortho.top = screen.window_height * 0.5f;
     ortho.left = -ortho.right;
@@ -511,7 +511,7 @@ void init_scene(game::Scene& scene, SceneMemory& memory, const platform::Screen&
     renderer::generate_matrix_ortho(renderScene.windowProjection.matrix, ortho);
 
     // Todo: consider whether precision needs special handling
-    renderer::PerspProjection::Config& frustum = renderScene.perspProjection.config;
+    camera::PerspProjection::Config& frustum = renderScene.perspProjection.config;
     frustum.fov = 45.f;
     frustum.aspect = screen.width / (f32)screen.height;
     frustum.near = 1.f;

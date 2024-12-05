@@ -47,17 +47,6 @@ EventText eventLabel = {};
 }
 #endif
 
-float3 screenPosToWorldPos(const f32 x, const f32 y, const u32 w, const u32 h, const renderer::PerspProjection::Config& persp, const Camera& camera) {
-    // screen space to NDC space
-    const float2 screen((f32)w, (f32)h);
-    const float2 pos_NDC = math::add(math::invScale(math::scale(math::add(float2(x,y), float2(0.5f, 0.5f)), float2(2.f, -2.f)), screen), float2(-1.f, 1.f));
-    // to eye space (using projection matrix inverse)
-    float3 pos_ES = renderer::ndcPosToEyePos(pos_NDC, persp);
-     //to world space
-    const float3 pos_WS = math::eyePosToWorldPos(pos_ES, camera.transform);
-    return pos_WS;
-}
-
 namespace game
 {
     struct Time {
@@ -343,9 +332,11 @@ namespace game
             {
                 gameplay::orbit::process(game.scene.orbitCamera, platform.input.pads[0]);
                 gameplay::orbit::process(game.scene.orbitCamera, platform.input.mouse);
+
                 gameplay::orbit::process(game.scene.camera.transform, game.scene.orbitCamera);
-                // send camera data to render manager
-                renderer::generate_MV_matrix(game.scene.camera.viewMatrix, game.scene.camera.transform);
+
+                // compute the camera render matrix
+                camera::generate_matrix_view(game.scene.camera.viewMatrix, game.scene.camera.transform);
             }
         }
 
@@ -550,14 +541,13 @@ namespace game
                                 , axisZ);
                         }
 
-                        float3 mousepos_WS = screenPosToWorldPos(platform.input.mouse.x, platform.input.mouse.y, platform.screen.window_width, platform.screen.window_height, game.scene.renderScene.perspProjection.config, game.scene.camera);
-                        const Color32 mouseColor(0.7f, 0.85f, 0.25f, 0.7f);
-                        im::sphere(imCtx, mousepos_WS, 0.5f, mouseColor);
-                        im::openSegment(imCtx, game.scene.camera.transform.pos, math::subtract(mousepos_WS, game.scene.camera.transform.pos), mouseColor);
-
+                        // temp
                         static float3 mousepossaved_WS = {};
                         static float3 camerapossaved_WS = {};
-                        if (captureCameras) { mousepossaved_WS = mousepos_WS; camerapossaved_WS = game.scene.camera.transform.pos; }
+                        if (captureCameras) {
+                            mousepossaved_WS = camera::screenPosToWorldPos(platform.input.mouse.x, platform.input.mouse.y, platform.screen.window_width, platform.screen.window_height, game.scene.renderScene.perspProjection.config, game.scene.camera.viewMatrix);;
+                            camerapossaved_WS = game.scene.camera.transform.pos;
+                        }
                         const Color32 mouseRayColor(0.8f, 0.15f, 0.25f, 0.7f);
                         im::sphere(imCtx, mousepossaved_WS, 0.5f, mouseRayColor);
                         im::openSegment(imCtx, camerapossaved_WS, math::subtract(mousepossaved_WS, camerapossaved_WS), mouseRayColor);
@@ -659,12 +649,16 @@ namespace game
 
                     driver::set_marker_name(marker, "REFLECTION SCENE"); driver::start_event(marker);
                     {
+                        float3 mirrorCamPos(-math::dot(mirrorViewMatrix.col3, mirrorViewMatrix.col0),
+                                            -math::dot(mirrorViewMatrix.col3, mirrorViewMatrix.col1),
+                                            -math::dot(mirrorViewMatrix.col3, mirrorViewMatrix.col2));
+
                         driver::RscCBuffer& scene_cbuffer = scene.cbuffers.data[scene.cbuffer_scene].state.live;
                         {
                             renderer::SceneData cbufferPerSceneMirrored = cbufferPerScene;
                             cbufferPerSceneMirrored.projectionMatrix = mirrorProjectionMatrix;
                             cbufferPerSceneMirrored.viewMatrix = mirrorViewMatrix;
-                            cbufferPerSceneMirrored.viewPos = mirrorViewMatrix.col3.xyz;
+                            cbufferPerSceneMirrored.viewPos = mirrorCamPos;
                             renderer::driver::update_cbuffer(scene_cbuffer, &cbufferPerSceneMirrored);
                         }
 
@@ -694,7 +688,7 @@ namespace game
                             u32 maxDrawCallsThisFrame = (mirrorVisibleNodes.visible_nodes_count + mirrorVisibleNodes.visible_nodes_skinned_count + (u32)scene.drawNodesInstanced.count) * DrawlistStreams::Count;
                             dl.items = (DrawCall_Item*)allocator::alloc_arena(scratchArena, maxDrawCallsThisFrame * sizeof(DrawCall_Item), alignof(DrawCall_Item));
                             dl.keys = (SortKey*)allocator::alloc_arena(scratchArena, maxDrawCallsThisFrame * sizeof(SortKey), alignof(SortKey));
-                            addNodesToDrawlistSorted(dl, mirrorVisibleNodes, mirrorViewMatrix.col3.xyz, scene, 0, renderer::DrawlistFilter::Alpha, renderer::SortParams::Type::Default);
+                            addNodesToDrawlistSorted(dl, mirrorVisibleNodes, mirrorCamPos, scene, 0, renderer::DrawlistFilter::Alpha, renderer::SortParams::Type::Default);
                             Drawlist_Context ctx = {};
                             Drawlist_Overrides overrides = {};
                             ctx.cbuffers[overrides.forced_cbuffer_count++] = scene_cbuffer;
@@ -721,7 +715,7 @@ namespace game
                             u32 maxDrawCallsThisFrame = (mirrorVisibleNodes.visible_nodes_count + mirrorVisibleNodes.visible_nodes_skinned_count + (u32)scene.drawNodesInstanced.count) * DrawlistStreams::Count;
                             dl.items = (DrawCall_Item*)allocator::alloc_arena(scratchArena, maxDrawCallsThisFrame * sizeof(DrawCall_Item), alignof(DrawCall_Item));
                             dl.keys = (SortKey*)allocator::alloc_arena(scratchArena, maxDrawCallsThisFrame * sizeof(SortKey), alignof(SortKey));
-                            addNodesToDrawlistSorted(dl, mirrorVisibleNodes, mirrorViewMatrix.col3.xyz, scene, renderer::DrawlistFilter::Alpha, 0, renderer::SortParams::Type::BackToFront);
+                            addNodesToDrawlistSorted(dl, mirrorVisibleNodes, mirrorCamPos, scene, renderer::DrawlistFilter::Alpha, 0, renderer::SortParams::Type::BackToFront);
                             Drawlist_Context ctx = {};
                             Drawlist_Overrides overrides = {};
                             overrides.forced_blendState = true;
@@ -901,7 +895,7 @@ namespace game
                         renderer::im::text2d(imCtx, textParamsLeft, "Mouse (%.3f,%.3f)", platform.input.mouse.x, platform.input.mouse.y);
                         textParamsLeft.pos.y -= lineheight;
                         textParamsLeft.color = defaultCol;
-                        const float3 mousepos_WS = screenPosToWorldPos(platform.input.mouse.x, platform.input.mouse.y, platform.screen.window_width, platform.screen.window_height, game.scene.renderScene.perspProjection.config, game.scene.camera);
+                        const float3 mousepos_WS = camera::screenPosToWorldPos(platform.input.mouse.x, platform.input.mouse.y, platform.screen.window_width, platform.screen.window_height, game.scene.renderScene.perspProjection.config, game.scene.camera.viewMatrix);
                         renderer::im::text2d(imCtx, textParamsLeft, "Mouse 3D (%.3f,%.3f,%.3f)", mousepos_WS.x, mousepos_WS.y, mousepos_WS.z);
                         textParamsLeft.pos.y -= lineheight;
                         textParamsLeft.color = platform.input.mouse.down(::input::mouse::Keys::BUTTON_LEFT) ? activeCol : defaultCol;

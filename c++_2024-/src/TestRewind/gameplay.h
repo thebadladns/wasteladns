@@ -211,16 +211,18 @@ namespace gameplay
             }
         }
         void process(Transform& transform, const State& controller) {
-            // orbit around mesh
-            Transform rotationAndScale = math::fromPositionScaleAndRotationEulers(math::negate(controller.origin), controller.scale, controller.eulers);
+            // todo: move to camera namespace?
 
-            // translate to centroid 
-            Transform cameraTranslation;
-            math::identity4x4(cameraTranslation);
-            cameraTranslation.pos = controller.offset;
+            // orbit around mesh (do not scale, we want the camera's axes to remain normalized in eye space)
+            transform = math::fromPositionScaleAndRotationEulers(math::negate(controller.origin), 1.f, controller.eulers);
 
-            transform = {};
-            transform.matrix = math::mult(rotationAndScale.matrix, cameraTranslation.matrix);
+            // translate to centroid (apply scale here)
+            const float3 localTranslation = math::scale(controller.offset, controller.scale);
+            transform.pos = float3(
+                math::dot(float3(transform.matrix.col0.x, transform.matrix.col1.x, transform.matrix.col2.x), localTranslation),
+                math::dot(float3(transform.matrix.col0.y, transform.matrix.col1.y, transform.matrix.col2.y), localTranslation),
+                math::dot(float3(transform.matrix.col0.z, transform.matrix.col1.z, transform.matrix.col2.z), localTranslation)
+            );
         }
     }
 }
