@@ -1027,7 +1027,7 @@ void init_scene(game::Scene& scene, SceneMemory& memory, const platform::Screen&
             renderer::DrawNode& node = allocator::alloc_pool(renderScene.drawNodes);
             node = {};
             node.meshHandles[0] = handle_from_drawMesh(renderScene, mesh);
-            Transform t = math::fromPositionScaleAndRotationEulers(float3(0.f, -30.f, 20.f), 1.f, float3(-180.f * math::d2r32, 0.f, -10.f * math::d2r32));
+            Transform t = math::fromOffsetAndOrbit(float3(0.f, -30.f, 20.f), float3(-10.f * math::d2r32, 0.f, -180.f * math::d2r32));
             node.nodeData.worldMatrix = t.matrix;
             node.nodeData.groupColor = Color32(0.01f, 0.19f, 0.3f, 0.32f).RGBAv4();
             node.max = float3(w, 0.f, h);
@@ -1092,7 +1092,7 @@ void init_scene(game::Scene& scene, SceneMemory& memory, const platform::Screen&
 
     // camera
     scene.orbitCamera.offset = float3(0.f, -100.f, 0.f);
-    scene.orbitCamera.eulers = float3(45.f * math::d2r32, 0.f, -25.f * math::d2r32);
+    scene.orbitCamera.eulers = float3(-25.f * math::d2r32, 0.f, 45.f * math::d2r32);
     scene.orbitCamera.scale = 1.f;
     scene.orbitCamera.origin = float3(0.f, 0.f, 0.f);
 

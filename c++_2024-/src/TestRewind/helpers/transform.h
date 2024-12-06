@@ -98,29 +98,22 @@ void fromFront(Transform& t, const float3& front) {
 
 namespace math {
     
-Transform fromPositionScaleAndRotationEulers(const float3& position, f32 scale, const float3& rotationEulers) {
-       
-    Transform t;
-    float4 toRotation = math::eulersToQuaterion(rotationEulers);
-    float3x3 rotation = math::quaternionToRotationMatrix(toRotation);
-    t.matrix.col0.v[0] = scale * rotation.col0.v[0];
-    t.matrix.col0.v[1] = scale * rotation.col0.v[1];
-    t.matrix.col0.v[2] = scale * rotation.col0.v[2];
-    t.matrix.col1.v[0] = scale * rotation.col1.v[0];
-    t.matrix.col1.v[1] = scale * rotation.col1.v[1];
-    t.matrix.col1.v[2] = scale * rotation.col1.v[2];
-    t.matrix.col2.v[0] = scale * rotation.col2.v[0];
-    t.matrix.col2.v[1] = scale * rotation.col2.v[1];
-    t.matrix.col2.v[2] = scale * rotation.col2.v[2];
-    t.matrix.col3.v[0] = position.v[0];
-    t.matrix.col3.v[1] = position.v[1];
-    t.matrix.col3.v[2] = position.v[2];
-    t.matrix.col0.v[3] = 0.f;
-    t.matrix.col1.v[3] = 0.f;
-    t.matrix.col2.v[3] = 0.f;
-    t.matrix.col3.v[3] = 1.f;
+Transform fromOffsetAndOrbit(const float3 offset, const float3 eulers) {
+    
+    Transform transform;
+    float3x3 rotation = math::eulersToRotationMatrix(eulers);
+    transform.matrix.col0.xyz = rotation.col0;
+    transform.matrix.col1.xyz = rotation.col1;
+    transform.matrix.col2.xyz = rotation.col2;
+    transform.pos = float3(
+        math::dot(float3(transform.matrix.col0.x, transform.matrix.col1.x, transform.matrix.col2.x), offset),
+        math::dot(float3(transform.matrix.col0.y, transform.matrix.col1.y, transform.matrix.col2.y), offset),
+        math::dot(float3(transform.matrix.col0.z, transform.matrix.col1.z, transform.matrix.col2.z), offset)
+    );
+    transform.matrix.col0.w = transform.matrix.col1.w = transform.matrix.col2.w = 0.f;
+    transform.matrix.col3.w = 1.f;
 
-    return t;
+    return transform;
 }
 
 void identity3x3(Transform& t) {

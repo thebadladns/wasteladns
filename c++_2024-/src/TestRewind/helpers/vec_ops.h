@@ -37,8 +37,8 @@ float4 quaternionSlerp(const f32 t, const float4& a, const float4& b) {
 
 float4 eulersToQuaterion(const float3& eulers)
 {
-    f32 roll = eulers.x;
-    f32 pitch = eulers.y;
+    f32 pitch = eulers.x;
+    f32 roll = eulers.y;
     f32 yaw = eulers.z;
     f32 cy = math::cos(yaw * 0.5f);
     f32 sy = math::sin(yaw * 0.5f);
@@ -47,9 +47,9 @@ float4 eulersToQuaterion(const float3& eulers)
     f32 cr = math::cos(roll * 0.5f);
     f32 sr = math::sin(roll * 0.5f);
 
-    return float4(sr * cp * cy - cr * sp * sy
+    return float4(cr * cp * sy - sr * sp * cy   // check math agian
+                , -sr * cp * cy + cr * sp * sy
                 , cr * sp * cy + sr * cp * sy
-                , cr * cp * sy - sr * sp * cy
                 , cr * cp * cy + sr * sp * sy);
 }
 
@@ -69,6 +69,35 @@ float3 quaternionToEulers(const float4& q) {
     f32 yaw = math::atan2(siny_cosp, cosy_cosp);
 
     return float3(roll, pitch, yaw);
+}
+
+float3x3 eulersToRotationMatrix(const float3& eulers) {
+    float3x3 m;
+    const f32 cx = math::cos(eulers.x);
+    const f32 cy = math::cos(eulers.y);
+    const f32 cz = -math::cos(eulers.z); // todo: check math
+    const f32 sx = math::sin(eulers.x);
+    const f32 sy = math::sin(eulers.y);
+    const f32 sz = math::sin(eulers.z);
+    // todo: combine multiplies
+    //f32 cc = cx * cz;
+    //f32 cs = cx * sz;
+    //f32 sc = sx * cz;
+    //f32 ss = sx * sz;
+    
+    m.col0.x = cy * cz;
+    m.col0.y = cy * sz;
+    m.col0.z = -sy;
+
+    m.col1.x = sx * sy * cz - cx * sz;
+    m.col1.y = sx * sy * sz + cx * cz;
+    m.col1.z = sx * cy;
+
+    m.col2.x = cx * sy * cz + sx * sz;
+    m.col2.y = cx * sy * sz - sx * cz;
+    m.col2.z = cx * cy;
+
+    return m;
 }
 
 float3x3 quaternionToRotationMatrix(float4& q) {

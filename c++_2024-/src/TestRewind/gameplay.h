@@ -188,8 +188,8 @@ namespace gameplay
                 f32 speedx = mouse.dx * rotationSpeed;
                 f32 speedy = mouse.dy * rotationSpeed;
                 if (math::abs(speedx) > rotationEps || math::abs(speedy) > rotationEps) {
-                    controller.eulers.x = math::wrap(controller.eulers.x + speedx);
-                    controller.eulers.z = math::wrap(controller.eulers.z - speedy);
+                    controller.eulers.x = math::wrap(controller.eulers.x - speedy);
+                    controller.eulers.z = math::wrap(controller.eulers.z + speedx);
                 }
             }
             if (mouse.down(::input::mouse::Keys::BUTTON_RIGHT))
@@ -211,18 +211,8 @@ namespace gameplay
             }
         }
         void process(Transform& transform, const State& controller) {
-            // todo: move to camera namespace?
-
-            // orbit around mesh (do not scale, we want the camera's axes to remain normalized in eye space)
-            transform = math::fromPositionScaleAndRotationEulers(math::negate(controller.origin), 1.f, controller.eulers);
-
-            // translate to centroid (apply scale here)
             const float3 localTranslation = math::scale(controller.offset, controller.scale);
-            transform.pos = float3(
-                math::dot(float3(transform.matrix.col0.x, transform.matrix.col1.x, transform.matrix.col2.x), localTranslation),
-                math::dot(float3(transform.matrix.col0.y, transform.matrix.col1.y, transform.matrix.col2.y), localTranslation),
-                math::dot(float3(transform.matrix.col0.z, transform.matrix.col1.z, transform.matrix.col2.z), localTranslation)
-            );
+            transform = math::fromOffsetAndOrbit(localTranslation, controller.eulers);
         }
     }
 }
