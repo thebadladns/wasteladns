@@ -168,6 +168,13 @@ float3x3 scale(const float3x3& m, const f32 s) {
     o.col2 = scale(m.col2, s);
     return o;
 }
+float3x3 transpose(const float3x3& m) {
+    float3x3 o;
+    o.col0 = { m.col0.x, m.col1.x, m.col2.x };
+    o.col1 = { m.col0.y, m.col1.y, m.col2.y };
+    o.col2 = { m.col0.z, m.col1.z, m.col2.z };
+    return o;
+}
 float4x4 mult(const float4x4& a, const float4x4& b) {
     float4 a_r0 ( a.m[0], a.m[4], a.m[8], a.m[12] );
     float4 a_r1 ( a.m[1], a.m[5], a.m[9], a.m[13] );

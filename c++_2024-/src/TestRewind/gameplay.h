@@ -170,8 +170,8 @@ namespace gameplay
             f32 speedx = pad.sliders[::input::gamepad::Sliders::AXIS_X_RIGHT] * rotationSpeed;
             f32 speedy = -pad.sliders[::input::gamepad::Sliders::AXIS_Y_RIGHT] * rotationSpeed;
             if (math::abs(speedx) > rotationEps || math::abs(speedy) > rotationEps) {
-                controller.eulers.x = math::wrap(controller.eulers.x + speedx);
-                controller.eulers.z = math::clamp(math::wrap(controller.eulers.z - speedy), -math::halfpi32, 0.f); // Positive 0 is below ground
+                controller.eulers.x = math::clamp(math::wrap(controller.eulers.x - speedy), -math::halfpi32, 0.f); // Positive 0 is below ground
+                controller.eulers.z = math::wrap(controller.eulers.z - speedx);
             }
 
             const f32 scrollSpeed = 0.1f;
@@ -189,7 +189,7 @@ namespace gameplay
                 f32 speedy = mouse.dy * rotationSpeed;
                 if (math::abs(speedx) > rotationEps || math::abs(speedy) > rotationEps) {
                     controller.eulers.x = math::wrap(controller.eulers.x - speedy);
-                    controller.eulers.z = math::wrap(controller.eulers.z + speedx);
+                    controller.eulers.z = math::wrap(controller.eulers.z - speedx);
                 }
             }
             if (mouse.down(::input::mouse::Keys::BUTTON_RIGHT))
@@ -211,8 +211,9 @@ namespace gameplay
             }
         }
         void process(Transform& transform, const State& controller) {
+            // negated eulers, since the camera points into the offset, not out
             const float3 localTranslation = math::scale(controller.offset, controller.scale);
-            transform = math::fromOffsetAndOrbit(localTranslation, controller.eulers);
+            transform = math::fromOffsetAndOrbit(localTranslation, math::negate(controller.eulers));
         }
     }
 }

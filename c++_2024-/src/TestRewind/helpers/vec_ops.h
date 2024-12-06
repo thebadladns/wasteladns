@@ -40,17 +40,17 @@ float4 eulersToQuaterion(const float3& eulers)
     f32 pitch = eulers.x;
     f32 roll = eulers.y;
     f32 yaw = eulers.z;
-    f32 cy = math::cos(yaw * 0.5f);
     f32 sy = math::sin(yaw * 0.5f);
+    f32 cy = math::cos(yaw * 0.5f);
     f32 cp = math::cos(pitch * 0.5f);
     f32 sp = math::sin(pitch * 0.5f);
     f32 cr = math::cos(roll * 0.5f);
     f32 sr = math::sin(roll * 0.5f);
 
-    return float4(cr * cp * sy - sr * sp * cy   // check math agian
-                , -sr * cp * cy + cr * sp * sy
-                , cr * sp * cy + sr * cp * sy
-                , cr * cp * cy + sr * sp * sy);
+    return float4(-cr * cp * cy + sr * sp * sy   // check math again
+                , -sr * cp * sy + cr * sp * cy
+                , -cr * sp * sy - sr * cp * cy
+                , cr * cp * sy + sr * sp * cy);
 }
 
 float3 quaternionToEulers(const float4& q) {
@@ -75,26 +75,26 @@ float3x3 eulersToRotationMatrix(const float3& eulers) {
     float3x3 m;
     const f32 cx = math::cos(eulers.x);
     const f32 cy = math::cos(eulers.y);
-    const f32 cz = -math::cos(eulers.z); // todo: check math
+    const f32 cz = math::cos(eulers.z);
     const f32 sx = math::sin(eulers.x);
     const f32 sy = math::sin(eulers.y);
     const f32 sz = math::sin(eulers.z);
     // todo: combine multiplies
-    //f32 cc = cx * cz;
-    //f32 cs = cx * sz;
-    //f32 sc = sx * cz;
-    //f32 ss = sx * sz;
+    //const f32 cc = cx * cz;
+    //const f32 cs = cx * sz;
+    //const f32 sc = sx * cz;
+    //const f32 ss = sx * sz;
     
     m.col0.x = cy * cz;
-    m.col0.y = cy * sz;
-    m.col0.z = -sy;
+    m.col0.y = - cy * sz;
+    m.col0.z = sy;
 
-    m.col1.x = sx * sy * cz - cx * sz;
-    m.col1.y = sx * sy * sz + cx * cz;
-    m.col1.z = sx * cy;
+    m.col1.x = sx * sy * cz + cx * sz;
+    m.col1.y = cx * cz - sx * sy * sz;
+    m.col1.z = - sx * cy;
 
-    m.col2.x = cx * sy * cz + sx * sz;
-    m.col2.y = cx * sy * sz - sx * cz;
+    m.col2.x = sx * sz - cx * sy * cz;
+    m.col2.y = cx * sy * sz + sx * cz;
     m.col2.z = cx * cy;
 
     return m;
