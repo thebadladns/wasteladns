@@ -799,15 +799,15 @@ namespace game
                         char text[256];
                         f64 time;
                     };
-                    renderer::im::TextParams textParamsLeft, textParamsRight, textParamsCenter;
+                    renderer::im::Text2DParams textParamsLeft, textParamsRight, textParamsCenter;
                     textParamsLeft.scale = (u8)platform.screen.text_scale;
-                    textParamsLeft.pos = float3(game.scene.renderScene.windowProjection.config.left + 10.f * textscale, game.scene.renderScene.windowProjection.config.top - 10.f * textscale, -50);
+                    textParamsLeft.pos = float2(game.scene.renderScene.windowProjection.config.left + 10.f * textscale, game.scene.renderScene.windowProjection.config.top - 10.f * textscale);
                     textParamsLeft.color = defaultCol;
                     textParamsRight.scale = (u8)platform.screen.text_scale;
-                    textParamsRight.pos = float3(game.scene.renderScene.windowProjection.config.right - 60.f * textscale, game.scene.renderScene.windowProjection.config.top - 10.f * textscale, -50);
+                    textParamsRight.pos = float2(game.scene.renderScene.windowProjection.config.right - 60.f * textscale, game.scene.renderScene.windowProjection.config.top - 10.f * textscale);
                     textParamsRight.color = defaultCol;
                     textParamsCenter.scale = (u8)platform.screen.text_scale;
-                    textParamsCenter.pos = float3(0.f, game.scene.renderScene.windowProjection.config.top - 10.f * textscale, -50);
+                    textParamsCenter.pos = float2(0.f, game.scene.renderScene.windowProjection.config.top - 10.f * textscale);
                     textParamsCenter.color = defaultCol;
 
                     const char* overlaynames[] = { "All", "Help Only", "Arenas only", "None" };
@@ -956,7 +956,7 @@ namespace game
 
                     if (debug::overlaymode == debug::OverlayMode::All || debug::overlaymode == debug::OverlayMode::ArenaOnly)
                     {
-                        auto renderArena = [](renderer::im::Context& im, renderer::im::TextParams& textCfg, u8* arenaEnd, u8* arenaStart, uintptr_t arenaHighmark, const char* arenaName, const Color32 defaultCol, const Color32 baseCol, const Color32 highmarkCol, const f32 lineheight, const f32 textscale) {
+                        auto renderArena = [](renderer::im::Context& im, renderer::im::Text2DParams& textCfg, u8* arenaEnd, u8* arenaStart, uintptr_t arenaHighmark, const char* arenaName, const Color32 defaultCol, const Color32 baseCol, const Color32 highmarkCol, const f32 lineheight, const f32 textscale) {
                             const f32 barwidth = 150.f * textscale;
                             const f32 barheight = 10.f * textscale;
 

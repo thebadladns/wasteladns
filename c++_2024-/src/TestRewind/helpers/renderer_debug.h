@@ -58,17 +58,6 @@ namespace im
         u32 shader;
     };
     
-    struct TextParams {
-        TextParams()
-        : color(1.f, 1.f, 1.f, 1.f)
-        , scale(1)
-        {}
-        
-        float3 pos;
-        Color32 color;
-        u8 scale;
-    };
-    
     void segment(Context& buffer, const float3& v1, const float3& v2, const Color32 color) {
 
         // Too many vertex pushed during immediate mode
@@ -369,7 +358,7 @@ namespace im
     }
     void sphere(Context& buffer, const float3& center, const f32 radius, const Color32 color) {
         
-        static constexpr u32 kSectionCount = 2;
+        const u8 kSectionCount = 2;
         const Color32 colorVariation(0.25f, 0.25f, 0.25f, 0.f);
         const float3 up = math::upAxis();
         const float3 front = math::frontAxis();
@@ -418,7 +407,13 @@ namespace im
         bottomRigth.color = color.ABGR();
     }
 #ifdef __WASTELADNS_DEBUG_TEXT__
-    void text2d_va(Context& buffer, const TextParams& params, const char* format, va_list argList) {
+    struct Text2DParams {
+        Text2DParams() : color(1.f, 1.f, 1.f, 1.f), scale(1) {}
+        float2 pos;
+        Color32 color;
+        u8 scale;
+    };
+    void text2d_va(Context& buffer, const Text2DParams& params, const char* format, va_list argList) {
         
         char text[256];
         platform::format_va(text, sizeof(text), format, argList);
@@ -453,15 +448,15 @@ namespace im
         }
     }
 
-    void text2d(Context& buffer, const TextParams& params, const char* format, ...) {
+    void text2d(Context& buffer, const Text2DParams& params, const char* format, ...) {
         va_list va;
         va_start(va, format);
         text2d_va(buffer, params, format, va);
         va_end(va);
     }
     
-    void text2d(Context& buffer, const float3& pos, const char* format, ...) {
-        TextParams params;
+    void text2d(Context& buffer, const float2& pos, const char* format, ...) {
+        Text2DParams params;
         params.pos = pos;
         params.scale = 1;
 
