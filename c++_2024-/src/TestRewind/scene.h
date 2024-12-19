@@ -10,8 +10,8 @@ struct Scene {
     renderer::Scene renderScene;
     physics::Scene physicsScene;
     animation::Scene animScene;
-    gameplay::movement::State player;
-    gameplay::orbit::State orbitCamera;
+    game::MovementController player;
+    game::OrbitInput orbitCamera;
     u32 playerDrawNodeHandle;
     u32 playerAnimatedNodeHandle;
     u32 ballInstancesDrawHandle;

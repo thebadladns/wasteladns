@@ -57,6 +57,8 @@ namespace math {
     ptrdiff_t clamp(ptrdiff_t x, ptrdiff_t a, ptrdiff_t b) { return min(max(x, a), b); }
 #endif
 
+    f32 ceil(f32 a) { return ::ceilf(a); }
+    f64 ceil(f64 a) { return ::ceil(a); }
     f32 sqrt(f32 a) { return ::sqrtf(a); }
     f64 sqrt(f64 a) { return ::sqrt(a); }
     f32 square(f32 a) { return a * a; }
@@ -86,5 +88,37 @@ namespace math {
     f64 lerp(f64 t, f64 a, f64 b) { return a + (b - a) * t; }
 
 }
+
+// tmp
+typedef s64 (*CompFunc)(const void*, const void*);
+void swap(void* __restrict a, void* __restrict b, size_t size) {
+	const ptrdiff_t inc = 4096;
+	for (ptrdiff_t p = 0; p < (ptrdiff_t)size; p += inc) {
+		char tmp[inc];
+		ptrdiff_t s = math::min((ptrdiff_t)size - p, inc);
+		memcpy(tmp, (u8*)a + p, s);
+		memcpy((u8*)a + p, (u8*)b + p, s);
+		memcpy((u8*)b + p, tmp, s);
+    }
+}
+void qsort(void* __restrict elems, s32 low, s32 high, size_t stride, CompFunc cmp) {
+    if (low < high) {
+		void* p = (void*)((u8*)elems + stride * low);
+		s32 i = low;
+		s32 j = high;
+		while (i < j) {
+			while (cmp((void*)((u8*)elems + stride * i), p) <= 0 && i <= high - 1) { i++; }
+			while (cmp((void*)((u8*)elems + stride * j), p) > 0 && j >= low + 1) { j--; }
+			if (i < j) {
+				swap((void*)((u8*)elems + stride * i), (void*)((u8*)elems + stride * j), stride);
+			}
+		}
+		swap((void*)((u8*)elems + stride * low), (void*)((u8*)elems + stride * j), stride);
+		s32 pi = j;
+
+        qsort(elems, low, pi - 1, stride, cmp);
+        qsort(elems, pi + 1, high, stride, cmp);
+    };
+};
     
 #endif // __WASTELADNS_MATH_H__

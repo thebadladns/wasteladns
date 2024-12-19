@@ -209,16 +209,16 @@ namespace game
 
             // player movement update
             {
-                gameplay::movement::Control controlpad = game.scene.player.control, controlkeyboard = game.scene.player.control;
-                gameplay::movement::process(controlpad, keyboard, { input::UP, input::DOWN, input::LEFT, input::RIGHT });
-                gameplay::movement::process(controlkeyboard, platform.input.pads[0]);
+                game::MovementInput controlpad = game.scene.player.control, controlkeyboard = game.scene.player.control;
+                game::movementInputFromKeys(controlpad, keyboard, { input::UP, input::DOWN, input::LEFT, input::RIGHT });
+                game::movementInputFromPad(controlkeyboard, platform.input.pads[0]);
                 game.scene.player.control.localInput = math::add(controlpad.localInput, controlkeyboard.localInput);
                 game.scene.player.control.mag = math::mag(game.scene.player.control.localInput);
                 if (game.scene.player.control.mag > math::eps32) {
                     game.scene.player.control.localInput = math::invScale(game.scene.player.control.localInput, game.scene.player.control.mag);
                     game.scene.player.control.mag = math::min(game.scene.player.control.mag, 1.f);
                 }
-                gameplay::movement::process_cameraRelative(game.scene.player.transform, game.scene.player.movementController, game.scene.player.control, game.scene.camera.transform, dt);
+                game::updateMovement_cameraRelative(game.scene.player.transform, game.scene.player.state, game.scene.player.control, game.scene.camera.transform, dt);
 
                 // update player render
                 renderer::NodeData& nodeData = renderer::get_draw_node_core(game.scene.renderScene, game.scene.playerDrawNodeHandle).nodeData;
@@ -248,8 +248,8 @@ namespace game
                     const f32 idleScale = 2.f;
                     f32 particle_scaley = 0.f, particle_scalez = 0.f, particle_offsetz = -0.5f, particle_offsety = 0.f;
                     f32 particle_totalscale = 0.7f;
-                    if (game.scene.player.movementController.speed > jerkyRunSpeedStart) {
-						const f32 run_t = (game.scene.player.movementController.speed - jerkyRunSpeedStart) / (maxSpeed - jerkyRunSpeedStart);
+                    if (game.scene.player.state.speed > jerkyRunSpeedStart) {
+						const f32 run_t = (game.scene.player.state.speed - jerkyRunSpeedStart) / (maxSpeed - jerkyRunSpeedStart);
                         const f32 scale = 1.f + math::lerp(run_t, jerkyRunMinScale, jerkyRunMaxScale);
                         particle_scaley = math::lerp(run_t, jerkyRunParticleMinScaley, jerkyRunParticleMaxScaley);
                         particle_scalez = math::lerp(run_t, jerkyRunParticleMinScalez, jerkyRunParticleMaxScalez);
@@ -259,8 +259,8 @@ namespace game
                             animatedData.state.animIndex = 1;
                             animatedData.state.time = 0.f;
                         }
-                    } else if (game.scene.player.movementController.speed > 0.2f) {
-                        const f32 run_t = (game.scene.player.movementController.speed - runSpeedStart) / (jerkyRunSpeedStart - runSpeedStart);
+                    } else if (game.scene.player.state.speed > 0.2f) {
+                        const f32 run_t = (game.scene.player.state.speed - runSpeedStart) / (jerkyRunSpeedStart - runSpeedStart);
                         const f32 scale = 1.f + math::lerp(run_t, runMinScale, runMaxScale);
                         particle_scaley = math::lerp(run_t, runParticleMinScaley, runParticleMaxScaley);
                         particle_scalez = math::lerp(run_t, runParticleMinScalez, runParticleMaxScalez);
@@ -330,10 +330,9 @@ namespace game
 
             // camera update
             {
-                gameplay::orbit::process(game.scene.orbitCamera, platform.input.pads[0]);
-                gameplay::orbit::process(game.scene.orbitCamera, platform.input.mouse);
-
-                gameplay::orbit::process(game.scene.camera.transform, game.scene.orbitCamera);
+                game::orbitInputFromPad(game.scene.orbitCamera, platform.input.pads[0]);
+                game::orbitInputFromMouse(game.scene.orbitCamera, platform.input.mouse);
+                game::updateOrbit(game.scene.camera.transform, game.scene.orbitCamera);
 
                 // compute the camera render matrix
                 camera::generate_matrix_view(game.scene.camera.viewMatrix, game.scene.camera.transform);
@@ -626,8 +625,7 @@ namespace game
                         dl.keys = (SortKey*)allocator::alloc_arena(scratchArena, maxDrawCallsThisFrame * sizeof(SortKey), alignof(SortKey));
 
                         DrawNode& node = get_draw_node_core(scene, scene.mirror.drawHandle);
-                        const u32 maxMeshCount = countof(node.meshHandles);
-                        for (u32 m = 0; m < maxMeshCount; m++) {
+                        for (u32 m = 0; m < countof(node.meshHandles); m++) {
                             if (node.meshHandles[m] == 0) { continue; }
                             u32 dl_index = dl.count[DrawlistBuckets::Base]++;
                             DrawCall_Item& item = dl.items[dl_index];
@@ -757,8 +755,7 @@ namespace game
                         dl.keys = (SortKey*)allocator::alloc_arena(scratchArena, maxDrawCallsThisFrame * sizeof(SortKey), alignof(SortKey));
 
                         DrawNode& node = get_draw_node_core(scene, scene.mirror.drawHandle);
-                        const u32 maxMeshCount = countof(node.meshHandles);
-                        for (u32 m = 0; m < maxMeshCount; m++) {
+                        for (u32 m = 0; m < countof(node.meshHandles); m++) {
                             if (node.meshHandles[m] == 0) { continue; }
                             u32 dl_index = dl.count[DrawlistBuckets::Base]++;
                             DrawCall_Item& item = dl.items[dl_index];

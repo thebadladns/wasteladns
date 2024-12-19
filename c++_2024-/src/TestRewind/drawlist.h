@@ -335,13 +335,19 @@ int partition(SortKey* keys, s32 low, s32 high) {
     keys[j] = temp;
     return j;
 };
-void qsort(SortKey* keys, s32 low, s32 high) {
+void qsort_s64(SortKey* keys, s32 low, s32 high) {
     if (low < high) {
         int pi = partition(keys, low, high);
-        qsort(keys, low, pi - 1);
-        qsort(keys, pi + 1, high);
+        qsort_s64(keys, low, pi - 1);
+        qsort_s64(keys, pi + 1, high);
     };
 };
+
+// testing only
+void qsort_key(SortKey* keys, s32 low, s32 high) {
+    qsort(keys, 0, high, sizeof(SortKey), [](const void* a, const void* b) { return (s64)((*(const SortKey*)a).v - (*(const SortKey*)b).v); });
+};
+
 
 struct VisibleNodes {
     u32* visible_nodes;
@@ -452,7 +458,6 @@ void addNodesToDrawlistSorted(Drawlist& dl, const VisibleNodes& visibleNodes, fl
         for (u32 i = 0; i < visibleNodes.visible_nodes_count; i++) {
             u32 n = visibleNodes.visible_nodes[i];
             DrawNode& node = scene.drawNodes.data[n].state.live;
-            const u32 maxMeshCount = countof(node.meshHandles);
             
             if (includeFilter & DrawlistFilter::Alpha) { if (node.nodeData.groupColor.w == 1.f) { continue; } }
             if (excludeFilter & DrawlistFilter::Alpha) { if (node.nodeData.groupColor.w < 1.f) { continue; } }
@@ -462,7 +467,7 @@ void addNodesToDrawlistSorted(Drawlist& dl, const VisibleNodes& visibleNodes, fl
             f32 distSq = math::magSq(math::subtract(node.nodeData.worldMatrix.col3.xyz, cameraPos));
             makeSortKeyDistParams(sortParams, distSq);
             
-            for (u32 m = 0; m < maxMeshCount; m++) {
+            for (u32 m = 0; m < countof(node.meshHandles); m++) {
                 if (node.meshHandles[m] == 0) { continue; }
                 u32 dl_index = dl.count[DrawlistBuckets::Base]++;
                 DrawCall_Item& item = dl.items[dl_index];
@@ -488,7 +493,6 @@ void addNodesToDrawlistSorted(Drawlist& dl, const VisibleNodes& visibleNodes, fl
         for (u32 i = 0; i < visibleNodes.visible_nodes_skinned_count; i++) {
             u32 n = visibleNodes.visible_nodes_skinned[i];
             const DrawNodeSkinned& node = scene.drawNodesSkinned.data[n].state.live;
-            const u32 maxMeshCount = countof(node.core.meshHandles);
             
             if (includeFilter & DrawlistFilter::Alpha) { if (node.core.nodeData.groupColor.w == 1.f) { continue; } }
             if (excludeFilter & DrawlistFilter::Alpha) { if (node.core.nodeData.groupColor.w < 1.f) { continue; } }
@@ -496,7 +500,7 @@ void addNodesToDrawlistSorted(Drawlist& dl, const VisibleNodes& visibleNodes, fl
             f32 distSq = math::magSq(math::subtract(node.core.nodeData.worldMatrix.col3.xyz, cameraPos));
             makeSortKeyDistParams(sortParams, distSq);
             
-            for (u32 m = 0; m < maxMeshCount; m++) {
+            for (u32 m = 0; m < countof(node.core.meshHandles); m++) {
                 if (node.core.meshHandles[m] == 0) { continue; }
                 u32 dl_index = dl.count[DrawlistBuckets::Base]++;
                 DrawCall_Item& item = dl.items[dl_index];
@@ -526,12 +530,11 @@ void addNodesToDrawlistSorted(Drawlist& dl, const VisibleNodes& visibleNodes, fl
             count++;
             
             const DrawNodeInstanced& node = scene.drawNodesInstanced.data[n].state.live;
-            const u32 maxMeshCount = countof(node.core.meshHandles);
             
             if (includeFilter & DrawlistFilter::Alpha) { if (node.core.nodeData.groupColor.w == 1.f) { continue; } }
             if (excludeFilter & DrawlistFilter::Alpha) { if (node.core.nodeData.groupColor.w < 1.f) { continue; } }
             
-            for (u32 m = 0; m < maxMeshCount; m++) {
+            for (u32 m = 0; m < countof(node.core.meshHandles); m++) {
                 if (node.core.meshHandles[m] == 0) { continue; }
                 u32 dl_index = dl.count[DrawlistBuckets::Instanced]++ + dl.count[DrawlistBuckets::Base];
                 DrawCall_Item& item = dl.items[dl_index];
@@ -554,8 +557,8 @@ void addNodesToDrawlistSorted(Drawlist& dl, const VisibleNodes& visibleNodes, fl
     }
 
     // sort
-    qsort(dl.keys, 0, dl.count[DrawlistBuckets::Base] - 1);
-    qsort(dl.keys, dl.count[DrawlistBuckets::Base], dl.count[DrawlistBuckets::Base] + dl.count[DrawlistBuckets::Instanced] - 1);
+    qsort_s64(dl.keys, 0, dl.count[DrawlistBuckets::Base] - 1);
+    qsort_s64(dl.keys, dl.count[DrawlistBuckets::Base], dl.count[DrawlistBuckets::Base] + dl.count[DrawlistBuckets::Instanced] - 1);
 }
 }
 
