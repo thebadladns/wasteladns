@@ -34,27 +34,21 @@ void movementInputFromKeys(MovementInput& control, const ::input::keyboard::Stat
     const bool downr = kb.down(buttons.right), downl = kb.down(buttons.left);
     if (controlChange.x != 0.f && currentControl.x != controlChange.x) {
         localInput.x = controlChange.x;
-    }
-    else if (downr && (currentControl.x > 0.f || !downl)) {
+    } else if (downr && (currentControl.x > 0.f || !downl)) {
         localInput.x = 1.f;
-    }
-    else if (downl && (currentControl.x < 0.f || !downr)) {
+    } else if (downl && (currentControl.x < 0.f || !downr)) {
         localInput.x = -1.f;
-    }
-    else {
+    } else {
         localInput.x = 0.f;
     }
     const bool downu = kb.down(buttons.up), downd = kb.down(buttons.down);
     if (controlChange.y != 0.f && currentControl.y != controlChange.y) {
         localInput.y = controlChange.y;
-    }
-    else if (downu && (currentControl.y > 0.f || !downd)) {
+    } else if (downu && (currentControl.y > 0.f || !downd)) {
         localInput.y = 1.f;
-    }
-    else if (downd && (currentControl.y < 0.f || !downu)) {
+    } else if (downd && (currentControl.y < 0.f || !downu)) {
         localInput.y = -1.f;
-    }
-    else {
+    } else {
         localInput.y = 0.f;
     }
 
@@ -110,8 +104,7 @@ void updateMovement_cameraRelative(Transform& transform, MovementState& controll
             targetspeed = maxspeed * control.mag;
             f32 turnfrictionfactor = math::clamp(math::abs(localInputRad) / minturndeltatomove, 0.f, 1.f);
             speedtimehorizon = math::lerp(turnfrictionfactor, 0.014f, 0.3f);
-        }
-        else {
+        } else {
             // Stop on tight turns
             speedtimehorizon = -1.f;
             targetspeed = 0.f;
@@ -119,8 +112,7 @@ void updateMovement_cameraRelative(Transform& transform, MovementState& controll
     }
     if (speedtimehorizon > 0.f) {
         controller.speed = math::eappr(controller.speed, targetspeed, speedtimehorizon, dt);
-    }
-    else {
+    } else {
         controller.speed = 0.f;
     }
 
@@ -139,8 +131,7 @@ void updateMovement_cameraRelative(Transform& transform, MovementState& controll
         float3 cameraRelativeMovementInput;
         if (control.mag > math::eps32) {
             cameraRelativeMovementInput = float3(control.localInput, 0.f);
-        }
-        else {
+        } else {
             cameraRelativeMovementInput = float3(math::direction(camPlayerCurrentRad), 0.f);
         }
         const f32 translation = controller.speed * dt;

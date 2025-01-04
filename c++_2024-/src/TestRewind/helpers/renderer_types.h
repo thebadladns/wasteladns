@@ -6,6 +6,7 @@ namespace renderer {
     //void generate_matrix_ortho(float4x4& matrix, const WindowProjection::Config& config);
     //void generate_matrix_persp(float4x4& matrixRHwithYup, const PerspProjection::Config& config);
     //void add_oblique_plane_to_persp(float4x4& projectionMatrix, const float4& planeCameraSpace);
+    //void extract_frustum_planes_from_vp(float4* planes, const float4x4& vpMatrix);
     //const f32 min_z;
 
     namespace shaders {

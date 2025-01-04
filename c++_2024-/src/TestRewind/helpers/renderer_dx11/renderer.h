@@ -493,12 +493,13 @@ namespace driver {
         depthStencilStateDesc.BackFace.StencilFailOp = (D3D11_STENCIL_OP)params.stencil_failOp;
         depthStencilStateDesc.BackFace.StencilDepthFailOp = (D3D11_STENCIL_OP)params.stencil_depthFailOp;
         depthStencilStateDesc.BackFace.StencilPassOp = (D3D11_STENCIL_OP)params.stencil_passOp;
+        depthStencilStateDesc.BackFace.StencilFunc = (D3D11_COMPARISON_FUNC)params.stencil_func;
         depthStencilStateDesc.BackFace.StencilFunc = (D3D11_COMPARISON_FUNC) params.stencil_func;
         d3ddev->CreateDepthStencilState(&depthStencilStateDesc, &depthStencilState);
         ds.impl = depthStencilState;
     }
-    void bind_DS(const RscDepthStencilState& ds) {
-        d3dcontext->OMSetDepthStencilState(ds.impl, 1);
+    void bind_DS(const RscDepthStencilState& ds, const u32 stencilRef = 0) {
+        d3dcontext->OMSetDepthStencilState(ds.impl, stencilRef);
     }
     
     void create_vertex_buffer(RscVertexBuffer& t, const VertexBufferDesc& params, const VertexAttribDesc*, const u32) {

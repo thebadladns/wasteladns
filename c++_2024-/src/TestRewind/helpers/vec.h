@@ -101,9 +101,12 @@ f32 mag(const float4& v) { return math::sqrt(v.x * v.x + v.y * v.y + v.z * v.z +
 f32 magSq(const float2& v) { return v.x * v.x + v.y * v.y; }
 f32 magSq(const float3& v) { return v.x * v.x + v.y * v.y + v.z * v.z; }
 f32 magSq(const float4& v) { return v.x * v.x + v.y * v.y + v.z * v.z + v.w * v.w; }
-float2 normalize(const float2& v) { return invScale(v, mag(v)); }
-float3 normalize(const float3& v) { return invScale(v, mag(v)); }
-float4 normalize(const float4& v) { return invScale(v, mag(v)); }
+f32 invMag(const float2& v) { return math::rsqrt(v.x * v.x + v.y * v.y); }
+f32 invMag(const float3& v) { return math::rsqrt(v.x * v.x + v.y * v.y + v.z * v.z); }
+f32 invMag(const float4& v) { return math::rsqrt(v.x * v.x + v.y * v.y + v.z * v.z + v.w * v.w); }
+float2 normalize(const float2& v) { return scale(v, invMag(v)); }
+float3 normalize(const float3& v) { return scale(v, invMag(v)); }
+float4 normalize(const float4& v) { return scale(v, invMag(v)); }
 bool normalizeSafe(float2& v) { const f32 m = mag(v); if (m > math::eps32) { v = invScale(v, m); return true; } return false; }
 bool normalizeSafe(float3& v) { const f32 m = mag(v); if (m > math::eps32) { v = invScale(v, m); return true; } return false; }
 bool normalizeSafe(float4& v) { const f32 m = mag(v); if (m > math::eps32) { v = invScale(v, m); return true; } return false; }

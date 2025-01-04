@@ -295,9 +295,8 @@ namespace driver {
         ds.stencil_depthFailOp = (GLenum)params.stencil_depthFailOp;
         ds.stencil_passOp = (GLenum)params.stencil_passOp;
         ds.stencil_func = (GLenum)params.stencil_func;
-
     }
-    void bind_DS(const RscDepthStencilState& ds) {
+    void bind_DS(const RscDepthStencilState& ds, const u32 stencilRef = 0) {
         if (ds.depth_enable) {
             glEnable(GL_DEPTH_TEST);
             glDepthFunc(ds.depth_func);
@@ -308,7 +307,7 @@ namespace driver {
 
         if (ds.stencil_enable) {
             glEnable(GL_STENCIL_TEST);
-            glStencilFunc(ds.stencil_func, 1, ds.stencil_readmask); // todo: check
+            glStencilFunc(ds.stencil_func, stencilRef, ds.stencil_readmask);
             glStencilOp(ds.stencil_failOp, ds.stencil_depthFailOp, ds.stencil_passOp);
             glStencilMask(ds.stencil_writemask);
         } else {

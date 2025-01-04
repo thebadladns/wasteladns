@@ -32,8 +32,22 @@ void main()
 )"
 };
 
-constexpr VS_src vs_fullscreen_bufferless_blit = {
-"fullscreen_bufferless_blit",
+constexpr VS_src vs_fullscreen_bufferless_clear_blit = {
+"vs_fullscreen_bufferless_clear_blit",
+R"(
+#version 330
+#extension GL_ARB_separate_shader_objects : require
+
+void main()
+{
+    float x = -1.0 + float((gl_VertexID & 1) << 2);
+    float y = 1.0 - float((gl_VertexID & 2) << 1);
+    gl_Position = vec4(x, y, 1.0, 1.0); // clear depth
+}
+)"
+};
+constexpr VS_src vs_fullscreen_bufferless_textured_blit = {
+"vs_fullscreen_bufferless_textured_blit",
 R"(
 #version 330
 #extension GL_ARB_separate_shader_objects : require
@@ -66,7 +80,23 @@ void main()
 }
 )"
 };
+constexpr PS_src ps_fullscreen_blit_white = {
+"ps_fullscreen_blit_white",
+R"(
+#version 330
+#extension GL_ARB_separate_shader_objects : require
 
+uniform sampler2D texSrc;
+
+layout(location = 0) in vec2 varying_TEXCOORD;
+layout(location = 0) out vec4 out_var_SV_TARGET;
+
+void main()
+{
+    out_var_SV_TARGET = vec4(1.0);
+}
+)"
+};
 constexpr PS_src ps_fullscreen_blit_textured = {
 "ps_fullscreen_blit_textured",
 R"(

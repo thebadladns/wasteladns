@@ -305,7 +305,7 @@ namespace driver {
         u8 stencil_writemask;
     };
     void create_DS(RscDepthStencilState&, const DepthStencilStateParams&);
-    void bind_DS(const RscDepthStencilState& ds);
+    void bind_DS(const RscDepthStencilState&, const u32);
 
     struct VertexBufferDesc {
         void* vertexData;
@@ -354,7 +354,6 @@ namespace driver {
 
     struct CBufferCreateParams {
         u32 byteWidth;
-        u32 bindingIndex;
     };
     void create_cbuffer(RscCBuffer& cb, const CBufferCreateParams& params);
     void update_cbuffer(RscCBuffer& cb, const void* data);

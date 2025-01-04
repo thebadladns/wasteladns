@@ -1,4 +1,11 @@
 #######
+# Win64
+#######
+
+# shorcuts 
+*.lnk
+
+#######
 # MacOS
 #######
 
@@ -15,14 +22,6 @@ CMakeScripts
 cmake_install.cmake
 cmake_uninstall.cmake
 compile_commands.json
-
-#######
-# GLFW
-#######
-
-glfw3.pc
-glfw3ConfigVersion.cmake
-glfw_config.h
 
 #####
 # C++
@@ -134,3 +133,5 @@ xcuserdata/
 [._]s[a-w][a-z]
 # temporary
 *~
+# ctags
+tags

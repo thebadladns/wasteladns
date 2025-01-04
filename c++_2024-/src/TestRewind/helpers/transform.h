@@ -269,7 +269,44 @@ void add_oblique_plane_to_persp_z0to1(float4x4& projectionMatrix, const float4& 
     projectionMatrix.m[10] = c.z;
     projectionMatrix.m[14] = c.w;
 }
-
+void extract_frustum_planes_from_vp_zneg1to1(float4* planes, const float4x4& vpMatrix) {
+    // using Gribb-Hartmann's method:
+    // https://www8.cs.umu.se/kurser/5DV051/HT12/lab/plane_extraction.pdf
+    // note that this uses the normalize plane equation ax + by + cz + w = 0
+    float4x4 transpose = math::transpose(vpMatrix);
+    planes[0] = math::add(transpose.col3, transpose.col2);      // near
+    planes[1] = math::subtract(transpose.col3, transpose.col2); // far
+    planes[2] = math::add(transpose.col3, transpose.col0);      // left
+    planes[3] = math::subtract(transpose.col3, transpose.col0); // right
+    planes[4] = math::add(transpose.col3, transpose.col1);      // bottom
+    planes[5] = math::subtract(transpose.col3, transpose.col1); // top
+    // normalize (maybe we should only do this on demand)
+    planes[0] = math::invScale(planes[0], math::mag(planes[0].xyz));
+    planes[1] = math::invScale(planes[1], math::mag(planes[1].xyz));
+    planes[2] = math::invScale(planes[2], math::mag(planes[2].xyz));
+    planes[3] = math::invScale(planes[3], math::mag(planes[3].xyz));
+    planes[4] = math::invScale(planes[4], math::mag(planes[4].xyz));
+    planes[5] = math::invScale(planes[5], math::mag(planes[5].xyz));
+}
+void extract_frustum_planes_from_vp_z0to1(float4* planes, const float4x4& vpMatrix) {
+    // using Gribb-Hartmann's method:
+    // https://www8.cs.umu.se/kurser/5DV051/HT12/lab/plane_extraction.pdf
+    // note that this uses the normalize plane equation ax + by + cz + w = 0
+    float4x4 transpose = math::transpose(vpMatrix);
+    planes[0] = transpose.col2;                                 // near
+    planes[1] = math::subtract(transpose.col3, transpose.col2); // far
+    planes[2] = math::add(transpose.col3, transpose.col0);      // left
+    planes[3] = math::subtract(transpose.col3, transpose.col0); // right
+    planes[4] = math::add(transpose.col3, transpose.col1);      // bottom
+    planes[5] = math::subtract(transpose.col3, transpose.col1); // top
+    // normalize (maybe we should only do this on demand)
+    planes[0] = math::invScale(planes[0], math::mag(planes[0].xyz));
+    planes[1] = math::invScale(planes[1], math::mag(planes[1].xyz));
+    planes[2] = math::invScale(planes[2], math::mag(planes[2].xyz));
+    planes[3] = math::invScale(planes[3], math::mag(planes[3].xyz));
+    planes[4] = math::invScale(planes[4], math::mag(planes[4].xyz));
+    planes[5] = math::invScale(planes[5], math::mag(planes[5].xyz));
+}
 
 void generate_matrix_view(float4x4& viewMatrix, const Transform& tRHwithZup) {
 

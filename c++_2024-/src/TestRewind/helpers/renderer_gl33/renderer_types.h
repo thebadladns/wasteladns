@@ -6,6 +6,7 @@ namespace renderer {
     const auto generate_matrix_ortho = camera::generate_matrix_ortho_zneg1to1;
     const auto generate_matrix_persp = camera::generate_matrix_persp_zneg1to1;
     const auto add_oblique_plane_to_persp = camera::add_oblique_plane_to_persp_zneg1to1;
+    const auto extract_frustum_planes_from_vp = camera::extract_frustum_planes_from_vp_zneg1to1;
     const f32 min_z = -1.f;
 
 namespace driver {
@@ -13,10 +14,15 @@ namespace driver {
     struct Type { enum Enum { Float = GL_FLOAT }; };
     struct InternalTextureFormat { enum Enum { V4_8 = GL_RGB8, V316 = GL_RGB16F }; };
     struct TextureFormat { enum Enum { V4_8 = GL_RGB, V4_16 = GL_RGB }; };
-    struct RenderTargetClearFlags { enum Enum { Stencil = GL_STENCIL_BUFFER_BIT, Depth = GL_DEPTH_BUFFER_BIT, Color = GL_COLOR_BUFFER_BIT }; };
-    struct RenderTargetWriteMask { enum Enum { All = 1, None = 0 }; };
-    struct RasterizerFillMode { enum Enum { Fill = GL_FILL, Line = GL_LINE }; };
-    struct RasterizerCullMode { enum Enum { CullFront = GL_FRONT, CullBack = GL_BACK, CullNone = 0 }; };
+    struct RenderTargetClearFlags { enum Enum {
+        Stencil = GL_STENCIL_BUFFER_BIT, Depth = GL_DEPTH_BUFFER_BIT,
+        Color = GL_COLOR_BUFFER_BIT }; };
+    struct RenderTargetWriteMask { enum Enum {
+        All = 1, None = 0 }; };
+    struct RasterizerFillMode { enum Enum {
+        Fill = GL_FILL, Line = GL_LINE }; };
+    struct RasterizerCullMode { enum Enum {
+        CullFront = GL_FRONT, CullBack = GL_BACK, CullNone = 0 }; };
     struct CompFunc { enum Enum {
         Never = GL_NEVER, Always = GL_ALWAYS,
         Less = GL_LESS, LessEqual = GL_LEQUAL,

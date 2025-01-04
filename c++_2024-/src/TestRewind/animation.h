@@ -30,7 +30,7 @@ struct State {
     f32 scale;
 };
 typedef u32 Handle;
-struct NodeConstants { enum Enum { HandleBits = 32, HandleMask = 0xffffffff, MaxNodes = HandleMask - 1 }; }; // handle=0 reserved for 0 initialization
+struct NodeMeta { enum Enum { HandleBits = 32, HandleMask = 0xffffffff, MaxNodes = HandleMask - 1 }; }; // handle=0 reserved for 0 initialization
 struct Node {
     Skeleton skeleton; // constant mesh_to_joint matrices, as well as posed joint_to_parent matrices
     Clip* clips;

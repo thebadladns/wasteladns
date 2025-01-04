@@ -32,17 +32,18 @@ namespace platform {
     const auto fclose = ::fclose;
     const auto fgetc = ::fgetc;
 
+    void append(char*& curr, const char* last, const char* format, ...) {
+        va_list va;
+        va_start(va, format);
+        curr += platform::format_va(curr, (int)(last - curr), format, va);
+        va_end(va);
+    }
     struct StrBuilder {
-        char str[128];
+        char* str;
+        u32 bytes;
         char* curr = str;
-        const char* last = str + sizeof(str);
+        const char* last = str + bytes;
         bool full() { return curr >= last; }
-        void append(const char* format, ...) {
-            va_list va;
-            va_start(va, format);
-            curr += platform::format_va(curr, (int)(last - curr), format, va);
-            va_end(va);
-        }
     };
 }
 

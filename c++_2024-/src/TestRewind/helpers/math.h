@@ -61,6 +61,8 @@ namespace math {
     f64 ceil(f64 a) { return ::ceil(a); }
     f32 sqrt(f32 a) { return ::sqrtf(a); }
     f64 sqrt(f64 a) { return ::sqrt(a); }
+    f32 rsqrt(f32 a) { return 1.f / ::sqrtf(a); }   // todo: ensure this
+    f64 rsqrt(f64 a) { return 1.0 / ::sqrt(a); }    // calls _mm_rsqrt_ss
     f32 square(f32 a) { return a * a; }
     f64 square(f64 a) { return a * a; }
     f32 abs(f32 a) { return ::fabsf(a); }
