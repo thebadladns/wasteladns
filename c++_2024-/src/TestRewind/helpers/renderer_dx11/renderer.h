@@ -332,90 +332,109 @@ namespace driver {
         #endif
     }
     ShaderResult create_shader_vs(RscVertexShader& vs, const VertexShaderRuntimeCompileParams& params) {
-#if WRITE_SHADERCACHE
-        ID3DBlob* pShaderBlob = nullptr;
-        ID3DBlob* pErrorBlob = nullptr;
-        HRESULT hr = D3DCompile(
-              params.shader_str, params.shader_length, "VS"
-            , nullptr // defines
-            , D3D_COMPILE_STANDARD_FILE_INCLUDE
-            , "VS"
-            , "vs_5_0"
-            , D3DCOMPILE_ENABLE_STRICTNESS | D3DCOMPILE_DEBUG, 0
-            , &pShaderBlob, &pErrorBlob
-        );
-        void* error = pErrorBlob ? pErrorBlob->GetBufferPointer() : nullptr;
-#elif READ_SHADERCACHE
-        HRESULT hr = S_OK;
-        void* error = nullptr;
-#endif
-
+        bool readcache = false, writecache = false;
+        #if WRITE_SHADERCACHE
+        writecache = params.shader_cache; readcache = false;
+        #elif READ_SHADERCACHE
+        writecache = false; readcache = params.shader_cache;
+        #endif
+        HRESULT hr;
+        ID3DBlob* pShaderBlob;
+        ID3DBlob* pErrorBlob;
+        void* error;
+        if (!readcache) {
+            pErrorBlob = nullptr;
+            hr = D3DCompile(
+                  params.shader_str, params.shader_length, "VS"
+                , nullptr // defines
+                , D3D_COMPILE_STANDARD_FILE_INCLUDE
+                , "VS"
+                , "vs_5_0"
+                , D3DCOMPILE_ENABLE_STRICTNESS | D3DCOMPILE_DEBUG, 0
+                , &pShaderBlob, &pErrorBlob
+            );
+            error = pErrorBlob ? pErrorBlob->GetBufferPointer() : nullptr;
+        } else {
+            hr = S_OK;
+            error = nullptr;
+        }
         ShaderResult result;
         result.compiled = !FAILED(hr);
         if (result.compiled) {
-#if WRITE_SHADERCACHE
-            if (params.shader_cache) { save_shader_to_cache(*params.shader_cache, pShaderBlob->GetBufferPointer(), pShaderBlob->GetBufferSize()); }
-            void* shaderBufferPointer = pShaderBlob->GetBufferPointer();
-            size_t shaderBufferSize = pShaderBlob->GetBufferSize();
-#elif READ_SHADERCACHE
-            ShaderCache::ByteCode& byteCode = params.shader_cache->shaderBytecode[params.shader_cache->shaderBytecodeCount++];
-            void* shaderBufferPointer = byteCode.data;
-            size_t shaderBufferSize = byteCode.size;
-#endif
-
+            void* shaderBufferPointer;
+            size_t shaderBufferSize;
+            if (readcache) {
+                ShaderCache::ByteCode& byteCode = params.shader_cache->shaderBytecode[params.shader_cache->shaderBytecodeCount++];
+                shaderBufferPointer = byteCode.data;
+                shaderBufferSize = byteCode.size;
+            } else {
+                shaderBufferPointer = pShaderBlob->GetBufferPointer();
+                shaderBufferSize = pShaderBlob->GetBufferSize();
+                if (writecache) { save_shader_to_cache(*params.shader_cache, shaderBufferPointer, shaderBufferSize); }
+            }
             d3ddev->CreateVertexShader(shaderBufferPointer, shaderBufferSize, nullptr, &vs.impl);
-            d3ddev->CreateInputLayout(params.attribs, params.attrib_count, shaderBufferPointer, shaderBufferSize, &vs.inputLayout_impl);
+            d3ddev->CreateInputLayout(
+                params.attribs, params.attrib_count, shaderBufferPointer, shaderBufferSize,
+                &vs.inputLayout_impl);
         } else {
             platform::format(result.error, 128, "%.128s", error ? (char*)error : "Unknown shader error");
         }
-
-#if WRITE_SHADERCHACHE
-        if (pShaderBlob) pShaderBlob->Release();
-        if (pErrorBlob) pErrorBlob->Release();
-#endif
+        if (!readcache) {
+            if (pShaderBlob) pShaderBlob->Release();
+            if (pErrorBlob) pErrorBlob->Release();
+        }
 
         return result;
     }
     ShaderResult create_shader_ps(RscPixelShader& ps, const PixelShaderRuntimeCompileParams& params) {
-#if WRITE_SHADERCACHE
-        ID3DBlob* pShaderBlob = nullptr;
-        ID3DBlob* pErrorBlob = nullptr;
-        HRESULT hr = D3DCompile(
-              params.shader_str, params.shader_length, "PS"
-            , nullptr // defines
-            , D3D_COMPILE_STANDARD_FILE_INCLUDE
-            , "PS"
-            , "ps_5_0"
-            , D3DCOMPILE_ENABLE_STRICTNESS | D3DCOMPILE_DEBUG, 0
-            , &pShaderBlob, &pErrorBlob
-        );
-        void* error = pErrorBlob ? pErrorBlob->GetBufferPointer() : nullptr;
-#elif READ_SHADERCACHE
-        HRESULT hr = S_OK;
-        void* error = nullptr;
-#endif
+        bool readcache = false, writecache = false;
+        #if WRITE_SHADERCACHE
+        writecache = params.shader_cache; readcache = false;
+        #elif READ_SHADERCACHE
+        writecache = false; readcache = params.shader_cache;
+        #endif
+        HRESULT hr;
+        ID3DBlob* pShaderBlob;
+        ID3DBlob* pErrorBlob;
+        void* error;
+        if (!readcache) {
+            pErrorBlob = nullptr;
+            hr = D3DCompile(
+                  params.shader_str, params.shader_length, "PS"
+                , nullptr // defines
+                , D3D_COMPILE_STANDARD_FILE_INCLUDE
+                , "PS"
+                , "ps_5_0"
+                , D3DCOMPILE_ENABLE_STRICTNESS | D3DCOMPILE_DEBUG, 0
+                , &pShaderBlob, &pErrorBlob
+            );
+            error = pErrorBlob ? pErrorBlob->GetBufferPointer() : nullptr;
+        } else {
+            hr = S_OK;
+            error = nullptr;
+        }
         ShaderResult result;
         result.compiled = !FAILED(hr);
         if (result.compiled) {
-#if WRITE_SHADERCACHE
-            if (params.shader_cache) { save_shader_to_cache(*params.shader_cache, pShaderBlob->GetBufferPointer(), pShaderBlob->GetBufferSize()); }
-            void* shaderBufferPointer = pShaderBlob->GetBufferPointer();
-            size_t shaderBufferSize = pShaderBlob->GetBufferSize();
-#elif READ_SHADERCACHE
-            ShaderCache::ByteCode& byteCode = params.shader_cache->shaderBytecode[params.shader_cache->shaderBytecodeCount++];
-            void* shaderBufferPointer = byteCode.data;
-            size_t shaderBufferSize = byteCode.size;
-#endif
-
+            void* shaderBufferPointer;
+            size_t shaderBufferSize;
+            if (readcache) {
+                ShaderCache::ByteCode& byteCode = params.shader_cache->shaderBytecode[params.shader_cache->shaderBytecodeCount++];
+                shaderBufferPointer = byteCode.data;
+                shaderBufferSize = byteCode.size;
+            } else {
+                shaderBufferPointer = pShaderBlob->GetBufferPointer();
+                shaderBufferSize = pShaderBlob->GetBufferSize();
+                if (writecache) { save_shader_to_cache(*params.shader_cache, shaderBufferPointer, shaderBufferSize); }
+            }
             d3ddev->CreatePixelShader(shaderBufferPointer, shaderBufferSize, nullptr, &ps.impl);
         } else {
             platform::format(result.error, 128, "%.128s", error ? (char*)error : "Unknown shader error");
         }
-
-#if WRITE_SHADERCHACHE
-        if (pShaderBlob) pShaderBlob->Release();
-        if (pErrorBlob) pErrorBlob->Release();
-#endif
+        if (!readcache) {
+            if (pShaderBlob) pShaderBlob->Release();
+            if (pErrorBlob) pErrorBlob->Release();
+        }
 
         return result;
     }

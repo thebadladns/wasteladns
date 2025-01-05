@@ -65,19 +65,11 @@ struct DrawCall_Item {
     u32 drawcount;
 };
 
-//#if USE_DEBUG_MEMORY
-//typedef u64 SortKeyValue;
-//typedef u32 DrawNodeHandle;
-//struct DrawNodeMeta { enum Enum : u64 {
-//    HandleBits = 64, HandleMask = 0xffffffffffffffff, MaxNodes = HandleMask - 1
-//}; };
-//#else 
 typedef u64 SortKeyValue;
 typedef u32 DrawNodeHandle;
 struct DrawNodeMeta { enum Enum : u32 {
     HandleBits = 32, HandleMask = 0xffffffff, MaxNodes = HandleMask - 1
 }; };
-//#endif
 typedef u32 InstancedNodeHandle;
 
 struct SortKey { SortKeyValue v; s32 idx; };

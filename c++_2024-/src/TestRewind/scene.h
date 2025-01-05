@@ -531,7 +531,8 @@ void load_with_materials(renderer::DrawNode& nodeToAdd, animation::Node& animate
         renderer::driver::create_cbuffer(cbuffercore, { sizeof(renderer::NodeData) });
 
         if (animatedNode.skeleton.jointCount) {
-            renderer::driver::RscCBuffer& cbufferskinning = allocator::alloc_pool(renderScene.cbuffers);
+            renderer::driver::RscCBuffer& cbufferskinning =
+                allocator::alloc_pool(renderScene.cbuffers);
             nodeToAdd.cbuffer_ext = handle_from_cbuffer(renderScene, cbufferskinning);
             renderer::driver::create_cbuffer(cbufferskinning,
                 { (u32) sizeof(float4x4) * animatedNode.skeleton.jointCount });
@@ -539,7 +540,8 @@ void load_with_materials(renderer::DrawNode& nodeToAdd, animation::Node& animate
         const renderer::ShaderTechniques::Enum shaderTechniques[renderer::DrawlistStreams::Count] = {
             renderer::ShaderTechniques::Color3D, renderer::ShaderTechniques::Color3DSkinned,
             renderer::ShaderTechniques::Textured3D, renderer::ShaderTechniques::Textured3DAlphaClip,
-            renderer::ShaderTechniques::Textured3DSkinned, renderer::ShaderTechniques::Textured3DAlphaClipSkinned
+            renderer::ShaderTechniques::Textured3DSkinned,
+            renderer::ShaderTechniques::Textured3DAlphaClipSkinned
         };
 		for (u32 i = 0; i < renderer::DrawlistStreams::Count; i++) {
 			DstStreams& stream = materialVertexBuffer[i];
@@ -560,8 +562,14 @@ void load_with_materials(renderer::DrawNode& nodeToAdd, animation::Node& animate
                 renderer::DrawMesh& mesh = allocator::alloc_pool(renderScene.meshes);
                 mesh = {};
                 mesh.shaderTechnique = shaderTechnique;
-                renderer::driver::create_indexed_vertex_buffer(mesh.vertexBuffer, desc, pipelineContext.vertexAttrs[i], pipelineContext.attr_count[i]);
-                if (stream.user) { renderer::driver::create_texture_from_file(mesh.texture, { pipelineContext.scratchArena, ((ufbx_texture*)stream.user)->filename.data }); }
+                renderer::driver::create_indexed_vertex_buffer(
+                    mesh.vertexBuffer, desc, pipelineContext.vertexAttrs[i],
+                    pipelineContext.attr_count[i]);
+                if (stream.user) {
+                    const char* texturefile = ((ufbx_texture*)stream.user)->filename.data;
+                    renderer::driver::create_texture_from_file(
+                        mesh.texture, { pipelineContext.scratchArena, texturefile });
+                }
                 nodeToAdd.meshHandles[i] = handle_from_drawMesh(renderScene, mesh);
 			}
 		}
@@ -569,19 +577,26 @@ void load_with_materials(renderer::DrawNode& nodeToAdd, animation::Node& animate
 }
 }
 
+struct Camera {
+    float4x4 viewMatrix;
+    float4x4 projectionMatrix;
+    float4x4 vpMatrix;
+    float3 pos;
+};
+
 struct CameraNode {
     float4x4 viewMatrix;
-    float4x4 vpMatrix;
     float4x4 projectionMatrix;
     renderer::Frustum frustum;
     float3 pos;
     u32 siblingIndex;
     u32 id;
-    u32 depth; //todo??
+    u32 depth;
     renderer::MeshHandle meshHandle;
     char str[256];
 };
 struct GatherMirrorTreeContext {
+    enum { MAX_CAMERA_DEPTH = 8 };
     allocator::Arena& frameArena;
     allocator::Buffer<CameraNode>& cameraTree;
     const renderer::Mirrors& mirrors;
@@ -592,7 +607,9 @@ u32 gatherMirrorTreeRecursive(GatherMirrorTreeContext& ctx, u32 index, const Cam
         if (parent.id == i) { continue; }
         // extract mirror quad from transform
         const Transform& mirror_t = ctx.mirrors.transforms[i];
-        float3 quad[8];
+        enum { MAX_MIRROR_QUAD_VERTICES = 8 };
+        static_assert(MAX_MIRROR_QUAD_VERTICES <= countof(parent.frustum.planes) + 2, "check");
+        float3 quad[MAX_MIRROR_QUAD_VERTICES];
         u32 quad_count = 4;
         quad[0] = math::add(
             mirror_t.matrix.col3.xyz, math::add(mirror_t.matrix.col0.xyz, mirror_t.matrix.col2.xyz));
@@ -606,14 +623,18 @@ u32 gatherMirrorTreeRecursive(GatherMirrorTreeContext& ctx, u32 index, const Cam
             mirror_t.matrix.col3.xyz,
             math::add(math::negate(mirror_t.matrix.col0.xyz), mirror_t.matrix.col2.xyz));
 
-        // ignore backfacing mirrors
+        // cull backfacing mirrors
         float3 normalWS = mirror_t.matrix.col1.xyz;
         if (math::dot(normalWS, math::subtract(parent.pos, quad[0])) < 0.f) { continue; }
 
-        // cull quad by each frustum plane
-        float3 quad_copy[8];
+        // cull quad by each frustum plane via Sutherland–Hodgman
+        float3 quad_copy[MAX_MIRROR_QUAD_VERTICES];
         u32 quad_copy_count;
-        for (u32 p = 0; p < parent.frustum.count && quad_count > 2 && quad_count < countof(quad); p++) {
+        for (u32 p = 0; p < parent.frustum.count
+            // if we haven't culled the quad, or the previous cut didn't introduce too many cuts, 
+            // keep iterating over the culling planes
+            && quad_count > 2 && quad_count < countof(quad);
+            p++) {
             const float4 plane = parent.frustum.planes[p];
             // copy our quad, so that we can iterate over the original data
             memcpy(quad_copy, quad, quad_count * sizeof(float3));
@@ -660,6 +681,7 @@ u32 gatherMirrorTreeRecursive(GatherMirrorTreeContext& ctx, u32 index, const Cam
                 va_d = vb_d;
             }
         }
+        // quad fully culled
         if (quad_count < 3) continue;
 
 
@@ -691,16 +713,16 @@ u32 gatherMirrorTreeRecursive(GatherMirrorTreeContext& ctx, u32 index, const Cam
         float3 posES = math::mult(curr.viewMatrix, float4(posWS, 1.f)).xyz;
         float4 planeES(normalES.x, normalES.y, normalES.z, -math::dot(posES, normalES));
         renderer::add_oblique_plane_to_persp(curr.projectionMatrix, planeES);
-        curr.vpMatrix = math::mult(curr.projectionMatrix, curr.viewMatrix);
         // camera position from inverse orthogonal transform
         curr.pos = float3(-math::dot(curr.viewMatrix.col3, curr.viewMatrix.col0),
                           -math::dot(curr.viewMatrix.col3, curr.viewMatrix.col1),
                           -math::dot(curr.viewMatrix.col3, curr.viewMatrix.col2));
 
-        // frustum planes: near and far come from the projection matrix
-        // the rest come from the poly
         {
-            float4x4 transpose = math::transpose(curr.vpMatrix);
+            // frustum planes: near and far come from the projection matrix
+            // the rest come from the poly
+            float4x4 vpMatrix = math::mult(curr.projectionMatrix, curr.viewMatrix);
+            float4x4 transpose = math::transpose(vpMatrix);
             curr.frustum.planes[0] =
                 math::add(math::scale(transpose.col3, -renderer::min_z), transpose.col2);   // near
             curr.frustum.planes[1] = math::subtract(transpose.col3, transpose.col2);        // far
@@ -723,7 +745,7 @@ u32 gatherMirrorTreeRecursive(GatherMirrorTreeContext& ctx, u32 index, const Cam
         }
 
         // recurse if there is room for one more mirror
-        if (curr.depth + 1 < 8) {
+        if (curr.depth + 1 < GatherMirrorTreeContext::MAX_CAMERA_DEPTH) {
             index = gatherMirrorTreeRecursive(ctx, index, curr);
         }
         curr.meshHandle = ctx.mirrors.meshHandles[i];
@@ -796,7 +818,6 @@ void renderBaseScene(allocator::Arena& scratchArenaRoot, game::Scene& gameScene,
         driver::end_event();
         #if __DEBUG
         {
-            driver::bind_DS(scene.depthStateOn);
             im::present3d(camera.projectionMatrix, camera.viewMatrix);
         }
         #endif
@@ -887,7 +908,6 @@ void renderMirrorTreeRecursive(
         driver::bind_RS(scene.rasterizerStateFillFrontfaces);
         driver::bind_shader(scene.shaders[renderer::ShaderTechniques::FullscreenBlitClearWhite]);
         driver::draw_fullscreen();
-        //driver::clear_RT(scene.gameRT, driver::RenderTargetClearFlags::Depth); // todo: can we get away without doing this for all the depth buffer?
         driver::bind_RS(*rasterizerStateMirror);
     }
     driver::end_event();
@@ -945,7 +965,6 @@ void renderMirrorTreeRecursive(
 
         #if __DEBUG
         {
-            //renderer::driver::bind_DS(scene.depthStateMirrorReflections);
             im::present3d(camera.projectionMatrix, camera.viewMatrix);
         }
         #endif
@@ -1027,12 +1046,7 @@ struct SceneMemory {
 };
 void init_scene(game::Scene& scene, SceneMemory& memory, const platform::Screen& screen) {
 
-    renderer::driver::ShaderCache shader_cache = {};
-    renderer::driver::load_shader_cache(shader_cache, "shaderCache.bin",
-                                        &memory.scratchArena, renderer::ShaderTechniques::Count);
-
     allocator::Arena& persistentArena = memory.persistentArena;
-    allocator::Arena& scratchArena = memory.scratchArena;
 
     renderer::Scene& renderScene = scene.renderScene;
     physics::Scene& physicsScene = scene.physicsScene;
@@ -1313,150 +1327,161 @@ void init_scene(game::Scene& scene, SceneMemory& memory, const platform::Screen&
 
     // shaders
     {
-        renderer::ShaderDesc desc = {};
-        desc.vertexAttrs = attribs_3d;
-        desc.vertexAttr_count = countof(attribs_3d);
-        desc.textureBindings = nullptr;
-        desc.textureBinding_count = 0;
-        desc.bufferBindings = nullptr;
-        desc.bufferBinding_count = 0;
-        // reuse 3d shaders
-        desc.vs_name = renderer::shaders::vs_fullscreen_bufferless_clear_blit.name;
-        desc.vs_src = renderer::shaders::vs_fullscreen_bufferless_clear_blit.src;
-        desc.ps_name = renderer::shaders::ps_fullscreen_blit_white.name;
-        desc.ps_src = renderer::shaders::ps_fullscreen_blit_white.src;
-        desc.shader_cache = &shader_cache;
-        renderer::compile_shader(
-            renderScene.shaders[renderer::ShaderTechniques::FullscreenBlitClearWhite], desc);
+        allocator::Arena scratchArena = memory.scratchArena; // explicit copy
+        // Initialize cache with room for a VS and PS shader of each technique
+        renderer::driver::ShaderCache shader_cache = {};
+        renderer::driver::load_shader_cache(
+            shader_cache, "shaderCache.bin", &scratchArena,
+            renderer::ShaderTechniques::Count * 2);
+        {
+            renderer::ShaderDesc desc = {};
+            desc.vertexAttrs = attribs_3d;
+            desc.vertexAttr_count = countof(attribs_3d);
+            desc.textureBindings = nullptr;
+            desc.textureBinding_count = 0;
+            desc.bufferBindings = nullptr;
+            desc.bufferBinding_count = 0;
+            // reuse 3d shaders
+            desc.vs_name = renderer::shaders::vs_fullscreen_bufferless_clear_blit.name;
+            desc.vs_src = renderer::shaders::vs_fullscreen_bufferless_clear_blit.src;
+            desc.ps_name = renderer::shaders::ps_fullscreen_blit_white.name;
+            desc.ps_src = renderer::shaders::ps_fullscreen_blit_white.src;
+            desc.shader_cache = &shader_cache;
+            renderer::compile_shader(
+                renderScene.shaders[renderer::ShaderTechniques::FullscreenBlitClearWhite], desc);
+        }
+        {
+            renderer::ShaderDesc desc = {};
+            desc.vertexAttrs = attribs_textured3d;
+            desc.vertexAttr_count = countof(attribs_textured3d);
+            desc.textureBindings = textureBindings_fullscreenblit;
+            desc.textureBinding_count = countof(textureBindings_fullscreenblit);
+            desc.bufferBindings = nullptr;
+            desc.bufferBinding_count = 0;
+            // reuse 3d shaders
+            desc.vs_name = renderer::shaders::vs_fullscreen_bufferless_textured_blit.name;
+            desc.vs_src = renderer::shaders::vs_fullscreen_bufferless_textured_blit.src;
+            desc.ps_name = renderer::shaders::ps_fullscreen_blit_textured.name;
+            desc.ps_src = renderer::shaders::ps_fullscreen_blit_textured.src;
+            desc.shader_cache = &shader_cache;
+            renderer::compile_shader(
+                    renderScene.shaders[renderer::ShaderTechniques::FullscreenBlitTextured], desc);
+        }
+        {
+            renderer::ShaderDesc desc = {};
+            desc.vertexAttrs = attribs_3d;
+            desc.vertexAttr_count = countof(attribs_3d);
+            desc.textureBindings = nullptr;
+            desc.textureBinding_count = 0;
+            desc.bufferBindings = bufferBindings_instanced_base;
+            desc.bufferBinding_count = countof(bufferBindings_instanced_base);
+            desc.vs_name = renderer::shaders::vs_3d_instanced_base.name;
+            desc.vs_src = renderer::shaders::vs_3d_instanced_base.src;
+            desc.ps_name = renderer::shaders::ps_color3d_unlit.name;
+            desc.ps_src = renderer::shaders::ps_color3d_unlit.src;
+            desc.shader_cache = &shader_cache;
+            renderer::compile_shader(
+                    renderScene.shaders[renderer::ShaderTechniques::Instanced3D], desc);
+        }
+        {
+            renderer::ShaderDesc desc = {};
+            desc.vertexAttrs = attribs_color3d;
+            desc.vertexAttr_count = countof(attribs_color3d);
+            desc.textureBindings = nullptr;
+            desc.textureBinding_count = 0;
+            desc.bufferBindings = bufferBindings_untextured_base;
+            desc.bufferBinding_count = countof(bufferBindings_untextured_base);
+            desc.vs_name = renderer::shaders::vs_color3d_base.name;
+            desc.vs_src = renderer::shaders::vs_color3d_base.src;
+            desc.ps_name = renderer::shaders::ps_color3d_unlit.name;
+            desc.ps_src = renderer::shaders::ps_color3d_unlit.src;
+            desc.shader_cache = &shader_cache;
+            renderer::compile_shader(renderScene.shaders[renderer::ShaderTechniques::Color3D], desc);
+        }
+        {
+            renderer::ShaderDesc desc = {};
+            desc.vertexAttrs = attribs_color3d_skinned;
+            desc.vertexAttr_count = countof(attribs_color3d_skinned);
+            desc.textureBindings = nullptr;
+            desc.textureBinding_count = 0;
+            desc.bufferBindings = bufferBindings_skinned_untextured_base;
+            desc.bufferBinding_count = countof(bufferBindings_skinned_untextured_base);
+            desc.vs_name = renderer::shaders::vs_color3d_skinned_base.name;
+            desc.vs_src = renderer::shaders::vs_color3d_skinned_base.src;
+            desc.ps_name = renderer::shaders::ps_color3d_unlit.name;
+            desc.ps_src = renderer::shaders::ps_color3d_unlit.src;
+            desc.shader_cache = &shader_cache;
+            renderer::compile_shader(
+                    renderScene.shaders[renderer::ShaderTechniques::Color3DSkinned], desc);
+        }
+        {
+            renderer::ShaderDesc desc = {};
+            desc.vertexAttrs = attribs_textured3d;
+            desc.vertexAttr_count = countof(attribs_textured3d);
+            desc.textureBindings = textureBindings_base;
+            desc.textureBinding_count = countof(textureBindings_base);
+            desc.bufferBindings = bufferBindings_textured_base;
+            desc.bufferBinding_count = countof(bufferBindings_textured_base);
+            desc.vs_name = renderer::shaders::vs_textured3d_base.name;
+            desc.vs_src = renderer::shaders::vs_textured3d_base.src;
+            desc.ps_name = renderer::shaders::ps_textured3d_base.name;
+            desc.ps_src = renderer::shaders::ps_textured3d_base.src;
+            desc.shader_cache = &shader_cache;
+            renderer::compile_shader(
+                    renderScene.shaders[renderer::ShaderTechniques::Textured3D], desc);
+        }
+        {
+            renderer::ShaderDesc desc = {};
+            desc.vertexAttrs = attribs_textured3d;
+            desc.vertexAttr_count = countof(attribs_textured3d);
+            desc.textureBindings = textureBindings_base;
+            desc.textureBinding_count = countof(textureBindings_base);
+            desc.bufferBindings = bufferBindings_textured_base;
+            desc.bufferBinding_count = countof(bufferBindings_textured_base);
+            desc.vs_name = renderer::shaders::vs_textured3d_base.name;
+            desc.vs_src = renderer::shaders::vs_textured3d_base.src;
+            desc.ps_name = renderer::shaders::ps_textured3dalphaclip_base.name;
+            desc.ps_src = renderer::shaders::ps_textured3dalphaclip_base.src;
+            desc.shader_cache = &shader_cache;
+            renderer::compile_shader(
+                    renderScene.shaders[renderer::ShaderTechniques::Textured3DAlphaClip], desc);
+        }
+        {
+            renderer::ShaderDesc desc = {};
+            desc.vertexAttrs = attribs_textured3d_skinned;
+            desc.vertexAttr_count = countof(attribs_textured3d_skinned);
+            desc.textureBindings = textureBindings_base;
+            desc.textureBinding_count = countof(textureBindings_base);
+            desc.bufferBindings = bufferBindings_skinned_textured_base;
+            desc.bufferBinding_count = countof(bufferBindings_skinned_textured_base);
+            desc.vs_name = renderer::shaders::vs_textured3d_skinned_base.name;
+            desc.vs_src = renderer::shaders::vs_textured3d_skinned_base.src;
+            desc.ps_name = renderer::shaders::ps_textured3d_base.name;
+            desc.ps_src = renderer::shaders::ps_textured3d_base.src;
+            desc.shader_cache = &shader_cache;
+            renderer::compile_shader(
+                    renderScene.shaders[renderer::ShaderTechniques::Textured3DSkinned], desc);
+        }
+        {
+            renderer::ShaderDesc desc = {};
+            desc.vertexAttrs = attribs_textured3d_skinned;
+            desc.vertexAttr_count = countof(attribs_textured3d_skinned);
+            desc.textureBindings = textureBindings_base;
+            desc.textureBinding_count = countof(textureBindings_base);
+            desc.bufferBindings = bufferBindings_skinned_textured_base;
+            desc.bufferBinding_count = countof(bufferBindings_skinned_textured_base);
+            desc.vs_name = renderer::shaders::vs_textured3d_skinned_base.name;
+            desc.vs_src = renderer::shaders::vs_textured3d_skinned_base.src;
+            desc.ps_name = renderer::shaders::ps_textured3dalphaclip_base.name;
+            desc.ps_src = renderer::shaders::ps_textured3dalphaclip_base.src;
+            desc.shader_cache = &shader_cache;
+            renderer::compile_shader(
+                    renderScene.shaders[renderer::ShaderTechniques::Textured3DAlphaClipSkinned], desc);
+        }
+        renderer::driver::write_shader_cache(shader_cache);
     }
-    {
-        renderer::ShaderDesc desc = {};
-        desc.vertexAttrs = attribs_textured3d;
-        desc.vertexAttr_count = countof(attribs_textured3d);
-        desc.textureBindings = textureBindings_fullscreenblit;
-        desc.textureBinding_count = countof(textureBindings_fullscreenblit);
-        desc.bufferBindings = nullptr;
-        desc.bufferBinding_count = 0;
-        // reuse 3d shaders
-        desc.vs_name = renderer::shaders::vs_fullscreen_bufferless_textured_blit.name;
-        desc.vs_src = renderer::shaders::vs_fullscreen_bufferless_textured_blit.src;
-        desc.ps_name = renderer::shaders::ps_fullscreen_blit_textured.name;
-        desc.ps_src = renderer::shaders::ps_fullscreen_blit_textured.src;
-        desc.shader_cache = &shader_cache;
-        renderer::compile_shader(
-                renderScene.shaders[renderer::ShaderTechniques::FullscreenBlitTextured], desc);
-    }
-    {
-        renderer::ShaderDesc desc = {};
-        desc.vertexAttrs = attribs_3d;
-        desc.vertexAttr_count = countof(attribs_3d);
-        desc.textureBindings = nullptr;
-        desc.textureBinding_count = 0;
-        desc.bufferBindings = bufferBindings_instanced_base;
-        desc.bufferBinding_count = countof(bufferBindings_instanced_base);
-        desc.vs_name = renderer::shaders::vs_3d_instanced_base.name;
-        desc.vs_src = renderer::shaders::vs_3d_instanced_base.src;
-        desc.ps_name = renderer::shaders::ps_color3d_unlit.name;
-        desc.ps_src = renderer::shaders::ps_color3d_unlit.src;
-        desc.shader_cache = &shader_cache;
-        renderer::compile_shader(
-                renderScene.shaders[renderer::ShaderTechniques::Instanced3D], desc);
-    }
-    {
-        renderer::ShaderDesc desc = {};
-        desc.vertexAttrs = attribs_color3d;
-        desc.vertexAttr_count = countof(attribs_color3d);
-        desc.textureBindings = nullptr;
-        desc.textureBinding_count = 0;
-        desc.bufferBindings = bufferBindings_untextured_base;
-        desc.bufferBinding_count = countof(bufferBindings_untextured_base);
-        desc.vs_name = renderer::shaders::vs_color3d_base.name;
-        desc.vs_src = renderer::shaders::vs_color3d_base.src;
-        desc.ps_name = renderer::shaders::ps_color3d_unlit.name;
-        desc.ps_src = renderer::shaders::ps_color3d_unlit.src;
-        desc.shader_cache = &shader_cache;
-        renderer::compile_shader(renderScene.shaders[renderer::ShaderTechniques::Color3D], desc);
-    }
-    {
-        renderer::ShaderDesc desc = {};
-        desc.vertexAttrs = attribs_color3d_skinned;
-        desc.vertexAttr_count = countof(attribs_color3d_skinned);
-        desc.textureBindings = nullptr;
-        desc.textureBinding_count = 0;
-        desc.bufferBindings = bufferBindings_skinned_untextured_base;
-        desc.bufferBinding_count = countof(bufferBindings_skinned_untextured_base);
-        desc.vs_name = renderer::shaders::vs_color3d_skinned_base.name;
-        desc.vs_src = renderer::shaders::vs_color3d_skinned_base.src;
-        desc.ps_name = renderer::shaders::ps_color3d_unlit.name;
-        desc.ps_src = renderer::shaders::ps_color3d_unlit.src;
-        desc.shader_cache = &shader_cache;
-        renderer::compile_shader(
-                renderScene.shaders[renderer::ShaderTechniques::Color3DSkinned], desc);
-    }
-    {
-        renderer::ShaderDesc desc = {};
-        desc.vertexAttrs = attribs_textured3d;
-        desc.vertexAttr_count = countof(attribs_textured3d);
-        desc.textureBindings = textureBindings_base;
-        desc.textureBinding_count = countof(textureBindings_base);
-        desc.bufferBindings = bufferBindings_textured_base;
-        desc.bufferBinding_count = countof(bufferBindings_textured_base);
-        desc.vs_name = renderer::shaders::vs_textured3d_base.name;
-        desc.vs_src = renderer::shaders::vs_textured3d_base.src;
-        desc.ps_name = renderer::shaders::ps_textured3d_base.name;
-        desc.ps_src = renderer::shaders::ps_textured3d_base.src;
-        desc.shader_cache = &shader_cache;
-        renderer::compile_shader(
-                renderScene.shaders[renderer::ShaderTechniques::Textured3D], desc);
-    }
-    {
-        renderer::ShaderDesc desc = {};
-        desc.vertexAttrs = attribs_textured3d;
-        desc.vertexAttr_count = countof(attribs_textured3d);
-        desc.textureBindings = textureBindings_base;
-        desc.textureBinding_count = countof(textureBindings_base);
-        desc.bufferBindings = bufferBindings_textured_base;
-        desc.bufferBinding_count = countof(bufferBindings_textured_base);
-        desc.vs_name = renderer::shaders::vs_textured3d_base.name;
-        desc.vs_src = renderer::shaders::vs_textured3d_base.src;
-        desc.ps_name = renderer::shaders::ps_textured3dalphaclip_base.name;
-        desc.ps_src = renderer::shaders::ps_textured3dalphaclip_base.src;
-        desc.shader_cache = &shader_cache;
-        renderer::compile_shader(
-                renderScene.shaders[renderer::ShaderTechniques::Textured3DAlphaClip], desc);
-    }
-    {
-        renderer::ShaderDesc desc = {};
-        desc.vertexAttrs = attribs_textured3d_skinned;
-        desc.vertexAttr_count = countof(attribs_textured3d_skinned);
-        desc.textureBindings = textureBindings_base;
-        desc.textureBinding_count = countof(textureBindings_base);
-        desc.bufferBindings = bufferBindings_skinned_textured_base;
-        desc.bufferBinding_count = countof(bufferBindings_skinned_textured_base);
-        desc.vs_name = renderer::shaders::vs_textured3d_skinned_base.name;
-        desc.vs_src = renderer::shaders::vs_textured3d_skinned_base.src;
-        desc.ps_name = renderer::shaders::ps_textured3d_base.name;
-        desc.ps_src = renderer::shaders::ps_textured3d_base.src;
-        desc.shader_cache = &shader_cache;
-        renderer::compile_shader(
-                renderScene.shaders[renderer::ShaderTechniques::Textured3DSkinned], desc);
-    }
-    {
-        renderer::ShaderDesc desc = {};
-        desc.vertexAttrs = attribs_textured3d_skinned;
-        desc.vertexAttr_count = countof(attribs_textured3d_skinned);
-        desc.textureBindings = textureBindings_base;
-        desc.textureBinding_count = countof(textureBindings_base);
-        desc.bufferBindings = bufferBindings_skinned_textured_base;
-        desc.bufferBinding_count = countof(bufferBindings_skinned_textured_base);
-        desc.vs_name = renderer::shaders::vs_textured3d_skinned_base.name;
-        desc.vs_src = renderer::shaders::vs_textured3d_skinned_base.src;
-        desc.ps_name = renderer::shaders::ps_textured3dalphaclip_base.name;
-        desc.ps_src = renderer::shaders::ps_textured3dalphaclip_base.src;
-        desc.shader_cache = &shader_cache;
-        renderer::compile_shader(
-                renderScene.shaders[renderer::ShaderTechniques::Textured3DAlphaClipSkinned], desc);
-    }
+
+    allocator::Arena scratchArena = memory.scratchArena; // explicit copy
 
     struct AssetData {
         const char* path;

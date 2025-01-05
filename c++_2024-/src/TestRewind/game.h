@@ -24,10 +24,7 @@ struct CameraNode;
 namespace debug {
 struct OverlayMode { enum Enum { All, HelpOnly, ArenaOnly, None, Count }; };
 struct Debug3DView { enum Enum { Culling, All, None, Count }; };
-struct EventText {
-    char text[256];
-    f64 time;
-};
+struct EventText { char text[256]; f64 time; };
 
 f64 frameHistory[60];
 f64 frameAvg = 0;
@@ -131,19 +128,33 @@ void start(Instance& game, platform::GameConfig& config, platform::State& platfo
     config.nextFrame = platform.time.now;
 
     {
-        allocator::init_arena(game.memory.persistentArena, platform.memory.curr,
-                persistentArenaSize); platform.memory.curr += persistentArenaSize;
+        allocator::init_arena(
+            game.memory.persistentArena, platform.memory.curr, persistentArenaSize);
+        platform.memory.curr += persistentArenaSize;
         __DEBUGDEF(game.memory.persistentArenaBuffer = game.memory.persistentArena.curr;)
-        allocator::init_arena(game.memory.scratchArenaRoot, platform.memory.curr, scratchArenaSize); platform.memory.curr += scratchArenaSize;
-        __DEBUGDEF(game.memory.scratchArenaHighmark = (uintptr_t)game.memory.scratchArenaRoot.curr; game.memory.scratchArenaRoot.highmark = &game.memory.scratchArenaHighmark;)
-        allocator::init_arena(game.memory.frameArena, platform.memory.curr, frameArenaSize); platform.memory.curr += frameArenaSize;
+        allocator::init_arena(game.memory.scratchArenaRoot, platform.memory.curr, scratchArenaSize);
+        platform.memory.curr += scratchArenaSize;
+        __DEBUGDEF(game.memory.scratchArenaHighmark =
+                (uintptr_t)game.memory.scratchArenaRoot.curr;
+            game.memory.scratchArenaRoot.highmark = &game.memory.scratchArenaHighmark;)
+        allocator::init_arena(
+            game.memory.frameArena, platform.memory.curr, frameArenaSize);
+        platform.memory.curr += frameArenaSize;
         game.memory.frameArenaBuffer = game.memory.frameArena.curr;
-        __DEBUGDEF(game.memory.frameArenaHighmark = (uintptr_t)game.memory.frameArena.curr; game.memory.frameArena.highmark = &game.memory.frameArenaHighmark;)
-        __DEBUGDEF(allocator::init_arena(game.memory.debugArena, platform.memory.curr, renderer::im::arena_size); platform.memory.curr += renderer::im::arena_size;)
+        __DEBUGDEF(game.memory.frameArenaHighmark =
+                (uintptr_t)game.memory.frameArena.curr;
+            game.memory.frameArena.highmark = &game.memory.frameArenaHighmark;)
+        __DEBUGDEF(allocator::init_arena(
+                game.memory.debugArena, platform.memory.curr, renderer::im::arena_size);
+            platform.memory.curr += renderer::im::arena_size;)
     }
     {
         game.scene = {};
-        SceneMemory arenas = { game.memory.persistentArena, game.memory.scratchArenaRoot __DEBUGDEF(, game.memory.debugArena) };
+        SceneMemory arenas = {
+            game.memory.persistentArena,
+            game.memory.scratchArenaRoot
+            __DEBUGDEF(, game.memory.debugArena)
+        };
         init_scene(game.scene, arenas, platform.screen);
     }
 }
@@ -163,7 +174,8 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
         #if __DEBUG
         {
             f64 frameAvg = 0.;
-            constexpr u64 frameHistoryCount = (sizeof(debug::frameHistory) / sizeof(debug::frameHistory[0]));
+            constexpr u64 frameHistoryCount =
+                (sizeof(debug::frameHistory) / sizeof(debug::frameHistory[0]));
             debug::frameHistory[debug::frameHistoryIdx] = raw_dt;
             debug::frameHistoryIdx = (debug::frameHistoryIdx + 1) % frameHistoryCount;
             for (f64 dt : debug::frameHistory) {
@@ -193,7 +205,6 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
                     if (debug::debugCameraStage == 0) { debug::debugCameraStage = debug::capturedCameras[0].siblingIndex - 1; }
                     else { debug::debugCameraStage--; }
                 } else {
-
                     if (debug::debugCameraStage == debug::capturedCameras[0].siblingIndex - 1) { debug::debugCameraStage = 0; }
                     else { debug::debugCameraStage++; }
                 }
@@ -364,16 +375,11 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
         using namespace renderer;
 
         CameraNode* cameraTree = nullptr;
-        CameraNode mainCamera = {};
+        Camera mainCamera = {};
         mainCamera.viewMatrix = game.scene.camera.viewMatrix;
         mainCamera.projectionMatrix = scene.perspProjection.matrix;
-        mainCamera.vpMatrix =
-            math::mult(
-                scene.perspProjection.matrix, game.scene.camera.viewMatrix);
+        mainCamera.vpMatrix = math::mult(scene.perspProjection.matrix, game.scene.camera.viewMatrix);
         mainCamera.pos = game.scene.camera.transform.pos;
-        renderer::extract_frustum_planes_from_vp(
-                mainCamera.frustum.planes, mainCamera.vpMatrix);
-        mainCamera.frustum.count = 6;
 
         {
             {
@@ -392,21 +398,30 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
                 allocator::Arena scratchArena = game.memory.scratchArenaRoot;
 
                 // gather mirrors
+                u32 numCameras = 0;
                 {
                     allocator::Buffer<CameraNode> cameraTreeBuffer;
-                    cameraTreeBuffer.data = &mainCamera;
+                    CameraNode mainCameraRoot = {};
+                    // Initialize main camera in our camera tree format
+                    mainCameraRoot.viewMatrix = mainCamera.viewMatrix;
+                    mainCameraRoot.projectionMatrix = mainCamera.projectionMatrix;
+                    mainCameraRoot.pos = mainCamera.pos;
+                    mainCameraRoot.id = 0xffffffff;
+                    mainCameraRoot.depth = 0;
+                    platform::format(mainCameraRoot.str, sizeof(mainCameraRoot.str), "_");
+                    renderer::extract_frustum_planes_from_vp(
+                        mainCameraRoot.frustum.planes, mainCamera.vpMatrix);
+                    mainCameraRoot.frustum.count = 6;
+                    // the buffer will copy this data into it's allocated region as
+                    // it starts adding more cameras
+                    cameraTreeBuffer.data = &mainCameraRoot;
                     cameraTreeBuffer.cap = cameraTreeBuffer.len = 1;
                     GatherMirrorTreeContext gatherTreeContext =
-                        { game.memory.frameArena, cameraTreeBuffer, scene.mirrors };
-                    mainCamera.depth = 0;
-                    mainCamera.id = 0xffffffff;
-                    platform::format(mainCamera.str, sizeof(mainCamera.str), "_");
-                    mainCamera.siblingIndex =
-                        gatherMirrorTreeRecursive(gatherTreeContext, 1, mainCamera);
+                    { game.memory.frameArena, cameraTreeBuffer, scene.mirrors };
+                    numCameras = gatherMirrorTreeRecursive(gatherTreeContext, 1, mainCameraRoot);
                     cameraTree = cameraTreeBuffer.data;
-                    cameraTree[0] = mainCamera; // todo: improve
+                    cameraTree[0].siblingIndex = numCameras;
                 }
-                const u32 numCameras = mainCamera.siblingIndex;
 
                 #if __DEBUG
                 if (captureCameras) {
@@ -435,7 +450,7 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
                 renderer::CullEntries cullEntries = {};
                 allocCullEntries(scratchArena, cullEntries, scene);
                 renderer::computeVisibilityCS(
-                    visibleNodesTree[0], isEachNodeVisible, cameraTree[0].vpMatrix, scene);
+                    visibleNodesTree[0], isEachNodeVisible, mainCamera.vpMatrix, scene);
                 for (u32 i = 1; i < numCameras; i++) {
                     renderer::computeVisibilityWS(
                         game.memory.frameArena, visibleNodesTree[i], isEachNodeVisible,
@@ -470,9 +485,11 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
                 }
             }
 
+            // render main camera
             renderBaseScene(
                     game.memory.scratchArenaRoot,
                     game.scene, cameraTree[0], visibleNodesTree[0]);
+            // render camera tree
             if (cameraTree[0].siblingIndex > 1) {
                 RenderMirrorContext renderMirrorContext = {
                     game.memory.scratchArenaRoot, game.scene, cameraTree,
@@ -531,7 +548,6 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
                 camerapossaved_WS, math::subtract(mousepossaved_WS, camerapossaved_WS),
                 mouseRayColor);
 
-            // TODOOOOO
             if (debug::debug3Dmode == debug::Debug3DView::All
              || debug::debug3Dmode == debug::Debug3DView::Culling) {
                 const Color32 bbColor(0.8f, 0.15f, 0.25f, 0.7f);
@@ -552,10 +568,11 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
                                 scratchArena,
                                 scene.drawNodes.count * sizeof(u32), alignof(u32));
                         visibleNodesDebug.visible_nodes_count = 0;
+                        float4x4 vpMatrix = math::mult(cameraNode.projectionMatrix, cameraNode.viewMatrix);
                         renderer::computeVisibilityCS(
-                            visibleNodesDebug, isEachNodeVisible, cameraNode.vpMatrix, scene);
+                            visibleNodesDebug, isEachNodeVisible, vpMatrix, scene);
                         const Color32 color(0.25f, 0.8f, 0.15f, 0.7f);
-                        im::frustum(cameraNode.vpMatrix, color);
+                        im::frustum(vpMatrix, color);
                     } else {
                         renderer::CullEntries cullEntries = {};
                         allocCullEntries(scratchArena, cullEntries, scene);
@@ -563,10 +580,7 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
                             scratchArena, visibleNodesDebug, isEachNodeVisible,
                             cameraNode.frustum, cullEntries);
                         const Color32 color(0.25f, 0.8f, 0.15f, 0.7f);
-                        im::frustum(cameraNode.frustum.planes, color);
-                        //for (u32 i = 0; i < 6; i++) {
-                        //    im::plane(cameraNode.frustum.planes[i], color);
-                        //}
+                        im::frustum(cameraNode.frustum.planes, cameraNode.frustum.count, color);
                     }
                     for (u32 i = 0; i < visibleNodesDebug.visible_nodes_count; i++) {
                         u32 n = visibleNodesDebug.visible_nodes[i];

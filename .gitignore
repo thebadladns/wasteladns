@@ -23,6 +23,13 @@ cmake_install.cmake
 cmake_uninstall.cmake
 compile_commands.json
 
+#######
+# GLFW
+#######
+glfw3.pc
+glfw3ConfigVersion.cmake
+glfw_config.h
+
 #####
 # C++
 #####

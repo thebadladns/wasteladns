@@ -174,14 +174,19 @@ void obb(const float4x4& mat, const float3 aabb_min, const float3 aabb_max, Colo
     segment(leftFarBottom_NDC, rightFarBottom_NDC, color);
 }
 
-void frustum(const float4* planes, Color32 color) {
+void frustum(const float4* planes, const u32 plane_count, Color32 color) {
     // We'll generate a large cube and clip it via Sutherland–Hodgman
     // (this code uses a variation where we add a new face for each clip plane,
     // to prevent holes in our polyhedron
     // note that if we were to store vertices in a shared array, and edges / faces referenced them,
-    // we'd only have to clip edges once (as opposed to once per face), and sorting faces would probably be easier,
-    // since we'd already have the vertex as pairs inside edges, and we'd just have to sort them by their common points
-        
+    // we'd only have to clip edges once (as opposed to once per face),
+    // and sorting faces would probably be easier, since we'd already have the vertex as pairs
+    // inside edges, and we'd just have to sort them by their common points
+       
+    // upper limit so we can allocate on the stack (good enough for now)
+    enum { MAX_NUM_PLANES = 16 };
+    assert(plane_count < MAX_NUM_PLANES);
+
     // Build large cube around near plane (not too big, or we'll get floating point errors)
     const f32 size = 100000.f;
     float3 pts_in[8];
@@ -198,7 +203,7 @@ void frustum(const float4* planes, Color32 color) {
         p = math::add(p, pointOnNearPlane);
     }
     struct Face { float3 pts[32]; u32 count; };
-    Face pts_out[12] = {};
+    Face pts_out[MAX_NUM_PLANES + 6] = {}; // TODO: check this math as needed
     pts_out[0] = { { pts_in[1], pts_in[0], pts_in[4], pts_in[5] }, 4 }; // left
     pts_out[1] = { { pts_in[3], pts_in[2], pts_in[6], pts_in[7] }, 4 }; // right
     pts_out[2] = { { pts_in[1], pts_in[5], pts_in[7], pts_in[3] }, 4 }; // top
@@ -208,7 +213,7 @@ void frustum(const float4* planes, Color32 color) {
     u32 num_faces = 6;
 
     // Cut our cube by each culling plane
-    for (u32 plane_id = 0; plane_id < 6; plane_id++) {
+    for (u32 plane_id = 0; plane_id < plane_count; plane_id++) {
         if (debug::frustum_planes_off[plane_id]) continue;
 
         float4 plane = planes[plane_id];
@@ -343,7 +348,7 @@ void frustum(const float4x4& projectionMat, Color32 color) {
         obb(inverse, aabb_min, aabb_max, color);
         return;
     }
-    else { frustum(planes, color); }
+    else { frustum(planes, 6, color); }
 }
 void circle(const float3& center, const float3& normal, const f32 radius, const Color32 color) {
     Transform33 m = math::fromUp(normal);
