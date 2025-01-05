@@ -149,12 +149,21 @@ int main(int , char** ) {
                 if (platform.time.now >= config.nextFrame) {
                     // Input
                     {
+                    // propagate last state
                     for (u32 i = 0; i < platform.input.padCount; i++) { platform.input.pads[i].last_keys = platform.input.pads[i].curr_keys; }
                     memcpy(platform.input.keyboard.last, platform.input.keyboard.current, sizeof(u8)* ::input::keyboard::Keys::COUNT);
                     memcpy(platform.input.mouse.last, platform.input.mouse.curr, sizeof(u8) * ::input::mouse::Keys::COUNT);
                     const f32 mouse_prevx = platform.input.mouse.x, mouse_prevy = platform.input.mouse.y;
                     platform.input.mouse.dx = platform.input.mouse.dy = platform.input.mouse.scrolldx = platform.input.mouse.scrolldy = 0.f;
-                        
+                    // gather current state
+                    NSUInteger modifierFlags = NSEvent.modifierFlags; // calls NSEventTypeFlagsChanged
+                    platform.input.keyboard.current[::input::keyboard::Keys::LEFT_SHIFT] =
+                        platform.input.keyboard.current[::input::keyboard::Keys::RIGHT_SHIFT] = (modifierFlags & NSEventModifierFlagShift) != 0;
+                    platform.input.keyboard.current[::input::keyboard::Keys::LEFT_ALT] =
+                        platform.input.keyboard.current[::input::keyboard::Keys::RIGHT_SHIFT] = (modifierFlags & NSEventModifierFlagOption) != 0;
+                    platform.input.keyboard.current[::input::keyboard::Keys::LEFT_CONTROL] =
+                        platform.input.keyboard.current[::input::keyboard::Keys::RIGHT_CONTROL] = (modifierFlags & NSEventModifierFlagControl) != 0;
+                    // consume events
                     NSEvent *event = nil;
                     do {
                         event = [NSApp nextEventMatchingMask:NSEventMaskAny

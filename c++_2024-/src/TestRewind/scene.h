@@ -596,7 +596,7 @@ struct CameraNode {
     char str[256];
 };
 struct GatherMirrorTreeContext {
-    enum { MAX_CAMERA_DEPTH = 8 };
+    enum { MAX_CAMERA_DEPTH = 4 };
     allocator::Arena& frameArena;
     allocator::Buffer<CameraNode>& cameraTree;
     const renderer::Mirrors& mirrors;
