@@ -3,13 +3,18 @@
 
 namespace game {
 
-struct Player {
+struct Mirrors { // todo: figure out delete, unhack sizes
+    struct Poly { float3 v[4]; u32 numPts; };
+    Poly* polys; // xy from 0.f to 1.f describe the mirror quad, z is the normal
+    renderer::MeshHandle* meshHandles;
+    u32 count;
 };
 struct Scene {
     camera::Camera camera;
     renderer::Scene renderScene;
     physics::Scene physicsScene;
     animation::Scene animScene;
+    Mirrors mirrors;
     game::MovementController player;
     game::OrbitInput orbitCamera;
     u32 playerDrawNodeHandle;
@@ -17,6 +22,102 @@ struct Scene {
     u32 ballInstancesDrawHandle;
     u32 particlesDrawHandle; // todo: improve this
 };
+}
+
+namespace obj {
+
+void load_with_vertex_colors_as_mirrors(
+    game::Scene& scene, allocator::Arena scratchArena, const char* path) {
+
+    renderer::Scene& renderScene = scene.renderScene;
+    allocator::Buffer<renderer::VertexLayout_Color_3D> vertices = {};
+    allocator::Buffer<u16> indices = {};
+
+    FILE* f;
+    if (platform::fopen(&f, path, "r") == 0) {
+        char c;
+        do {
+            c = platform::fgetc(f);
+            if (c == 'v') {
+                renderer::VertexLayout_Color_3D& v = allocator::push(vertices, scratchArena);
+                f32 x, y, z, r, g, b;
+                s32 n = platform::fscanf(f, "%f%f%f%f%f%f", &x, &y, &z, &r, &g, &b);
+                if (n == 6) {
+                    const float scale = 1.f;//0.75f;
+                    v.pos.x = scale * x; v.pos.y = scale * y; v.pos.z = scale * z;
+                    v.color = Color32(r, g, b, 0.32f).ABGR();
+                }
+            }
+            else if (c == 'f') {
+
+                int a, b, c;
+                s32 n = platform::fscanf(f, "%d%d%d", &a, &b, &c);
+                if (n == 3) {
+
+                    const u32 mirrorId = scene.mirrors.count++;
+                    game::Mirrors::Poly& p = scene.mirrors.polys[mirrorId];
+                    p.numPts = 3;
+                    p.v[0] = vertices.data[a - 1].pos;
+                    p.v[1] = vertices.data[b - 1].pos;
+                    p.v[2] = vertices.data[c - 1].pos;
+                    allocator::push(indices, scratchArena) = c - 1;
+                    allocator::push(indices, scratchArena) = b - 1;
+                    allocator::push(indices, scratchArena) = a - 1;
+
+                    int d;
+                    n = platform::fscanf(f, "%d", &d);
+                    if (n > 0) {
+                        // read four values: divide quad in two triangles
+                        p.v[3] = vertices.data[d - 1].pos;
+                        p.numPts = 4;
+                        allocator::push(indices, scratchArena) = d - 1;
+                        allocator::push(indices, scratchArena) = c - 1;
+                        allocator::push(indices, scratchArena) = a - 1;
+                    }
+                }
+            }
+        } while (c > 0);
+        platform::fclose(f);
+
+        // create the global vertex buffer for all the mirrors
+        renderer::driver::VertexAttribDesc attribs[] = {
+        renderer::driver::make_vertexAttribDesc(
+            "POSITION", offsetof(renderer::VertexLayout_Color_3D, pos),
+            sizeof(renderer::VertexLayout_Color_3D),
+            renderer::driver::BufferAttributeFormat::R32G32B32_FLOAT),
+        renderer::driver::make_vertexAttribDesc(
+            "COLOR", offsetof(renderer::VertexLayout_Color_3D, color),
+            sizeof(renderer::VertexLayout_Color_3D),
+            renderer::driver::BufferAttributeFormat::R8G8B8A8_UNORM)
+        };
+        renderer::driver::IndexedVertexBufferDesc bufferParams;
+        bufferParams.vertexData = vertices.data;
+        bufferParams.indexData = indices.data;
+        bufferParams.vertexSize = (u32) (sizeof(renderer::VertexLayout_Color_3D) * vertices.len);
+        bufferParams.vertexCount = (u32) vertices.len;
+        bufferParams.indexSize = (u32)(sizeof(u16)* indices.len);
+        bufferParams.indexCount = (u32) indices.len;
+        bufferParams.memoryUsage = renderer::driver::BufferMemoryUsage::GPU;
+        bufferParams.accessType = renderer::driver::BufferAccessType::GPU;
+        bufferParams.indexType = renderer::driver::BufferItemType::U16;
+        bufferParams.type = renderer::driver::BufferTopologyType::Triangles;
+        renderer::driver::RscIndexedVertexBuffer b = {};
+        renderer::driver::create_indexed_vertex_buffer(b, bufferParams, attribs, countof(attribs));
+
+        // make each mirror point to a section of the vertex buffer
+        u32 index = 0;
+        for (u32 i = 0; i < scene.mirrors.count; i++) {
+            renderer::DrawMesh& mesh = allocator::alloc_pool(renderScene.meshes);
+            mesh = {};
+            mesh.shaderTechnique = renderer::ShaderTechniques::Color3D;
+            mesh.vertexBuffer = b; // copy buffer
+            mesh.vertexBuffer.indexOffset = index;
+            mesh.vertexBuffer.indexCount = scene.mirrors.polys[i].numPts == 3 ? 3 : 6;
+            scene.mirrors.meshHandles[i] = handle_from_drawMesh(renderScene, mesh);
+            index += mesh.vertexBuffer.indexCount;
+        }
+    }
+}
 }
 
 namespace fbx {
@@ -584,50 +685,47 @@ struct Camera {
     float3 pos;
 };
 
-struct CameraNode {
+struct CameraNode { // Node in camera tree (stored as depth-first)
     float4x4 viewMatrix;
     float4x4 projectionMatrix;
+    float4x4 vpMatrix;
     renderer::Frustum frustum;
     float3 pos;
-    u32 siblingIndex;
+    u32 depth;          // depth of this node in the tree (0 == root)
+    u32 siblingIndex;   // next sibling index in the tree
     u32 id;
-    u32 depth;
     renderer::MeshHandle meshHandle;
-    char str[256];
+    char str[256];      // used in non-debug for GPU markers
 };
 struct GatherMirrorTreeContext {
+    #if __DEBUG 
     enum { MAX_CAMERA_DEPTH = 4 };
+    #else
+    enum { MAX_CAMERA_DEPTH = 5 };
+    #endif
     allocator::Arena& frameArena;
     allocator::Buffer<CameraNode>& cameraTree;
-    const renderer::Mirrors& mirrors;
+    const game::Mirrors& mirrors;
 };
 u32 gatherMirrorTreeRecursive(GatherMirrorTreeContext& ctx, u32 index, const CameraNode& parent) {
+    
     for (u32 i = 0; i < ctx.mirrors.count; i++) {
         // do not self-reflect
         if (parent.id == i) { continue; }
-        // extract mirror quad from transform
-        const Transform& mirror_t = ctx.mirrors.transforms[i];
+        // copy mirror quad (we'll modify it during culling)
         enum { MAX_MIRROR_QUAD_VERTICES = 8 };
         static_assert(MAX_MIRROR_QUAD_VERTICES <= countof(parent.frustum.planes) + 2, "check");
         float3 quad[MAX_MIRROR_QUAD_VERTICES];
-        u32 quad_count = 4;
-        quad[0] = math::add(
-            mirror_t.matrix.col3.xyz, math::add(mirror_t.matrix.col0.xyz, mirror_t.matrix.col2.xyz));
-        quad[1] = math::add(
-            mirror_t.matrix.col3.xyz,
-            math::add(mirror_t.matrix.col0.xyz, math::negate(mirror_t.matrix.col2.xyz)));
-        quad[2] = math::add(
-            mirror_t.matrix.col3.xyz,
-            math::add(math::negate(mirror_t.matrix.col0.xyz), math::negate(mirror_t.matrix.col2.xyz)));
-        quad[3] = math::add(
-            mirror_t.matrix.col3.xyz,
-            math::add(math::negate(mirror_t.matrix.col0.xyz), mirror_t.matrix.col2.xyz));
-
+        u32 quad_count = ctx.mirrors.polys[i].numPts;
+        memcpy(quad, ctx.mirrors.polys[i].v, sizeof(float3) * ctx.mirrors.polys[i].numPts);
         // cull backfacing mirrors
-        float3 normalWS = mirror_t.matrix.col1.xyz;
+        float3 normalWS = math::normalize(
+            math::cross(math::subtract(quad[1], quad[0]), math::subtract(quad[2], quad[1])));
         if (math::dot(normalWS, math::subtract(parent.pos, quad[0])) < 0.f) { continue; }
 
-        // cull quad by each frustum plane via Sutherland–Hodgman
+        // cull quad by each frustum plane via Sutherland-Hodgman
+        // todo: degenerate polys can end up with more than 1 extra vertex per plane
+        // (if they happen to be concave), we should catch that here somehow
         float3 quad_copy[MAX_MIRROR_QUAD_VERTICES];
         u32 quad_copy_count;
         for (u32 p = 0; p < parent.frustum.count
@@ -651,7 +749,7 @@ u32 gatherMirrorTreeRecursive(GatherMirrorTreeContext& ctx, u32 index, const Cam
                 if (vb_d > eps) { 
                     // current vertex in positive zone,
                     // will be add to poly
-                    if (va_d < -eps) { 
+                    if (va_d < -eps) {
                         // edge entering the positive zone,
                         // add intersection point first
                         float3 ab = math::subtract(vb, va);
@@ -703,7 +801,7 @@ u32 gatherMirrorTreeRecursive(GatherMirrorTreeContext& ctx, u32 index, const Cam
             return o;
         };
         // World Space (WS) values
-        float3 posWS = mirror_t.matrix.col3.xyz;
+        float3 posWS = quad[0];
         float4 planeWS(normalWS.x, normalWS.y, normalWS.z, -math::dot(posWS, normalWS));
         float4x4 reflect = reflectionMatrix(planeWS);
         curr.viewMatrix = math::mult(parent.viewMatrix, reflect);
@@ -713,6 +811,7 @@ u32 gatherMirrorTreeRecursive(GatherMirrorTreeContext& ctx, u32 index, const Cam
         float3 posES = math::mult(curr.viewMatrix, float4(posWS, 1.f)).xyz;
         float4 planeES(normalES.x, normalES.y, normalES.z, -math::dot(posES, normalES));
         renderer::add_oblique_plane_to_persp(curr.projectionMatrix, planeES);
+        curr.vpMatrix = math::mult(curr.projectionMatrix, curr.viewMatrix);
         // camera position from inverse orthogonal transform
         curr.pos = float3(-math::dot(curr.viewMatrix.col3, curr.viewMatrix.col0),
                           -math::dot(curr.viewMatrix.col3, curr.viewMatrix.col1),
@@ -721,8 +820,7 @@ u32 gatherMirrorTreeRecursive(GatherMirrorTreeContext& ctx, u32 index, const Cam
         {
             // frustum planes: near and far come from the projection matrix
             // the rest come from the poly
-            float4x4 vpMatrix = math::mult(curr.projectionMatrix, curr.viewMatrix);
-            float4x4 transpose = math::transpose(vpMatrix);
+            float4x4 transpose = math::transpose(curr.vpMatrix);
             curr.frustum.planes[0] =
                 math::add(math::scale(transpose.col3, -renderer::min_z), transpose.col2);   // near
             curr.frustum.planes[1] = math::subtract(transpose.col3, transpose.col2);        // far
@@ -754,130 +852,119 @@ u32 gatherMirrorTreeRecursive(GatherMirrorTreeContext& ctx, u32 index, const Cam
     return index;
 }
 
-void renderBaseScene(allocator::Arena& scratchArenaRoot, game::Scene& gameScene,
-                     const CameraNode& camera, const renderer::VisibleNodes& visibleNodes) {
+struct RenderSceneContext {
+    const CameraNode& camera;
+    const renderer::VisibleNodes& visibleNodes;
+    game::Scene& gameScene;
+    renderer::driver::RscDepthStencilState& ds_always;
+    renderer::driver::RscDepthStencilState& ds_opaque;
+    renderer::driver::RscDepthStencilState& ds_alpha;
+    renderer::driver::RscRasterizerState& rs;
+    allocator::Arena scratchArena;
+};
+void renderBaseScene(RenderSceneContext& sceneCtx) {
 
     using namespace renderer;
-    Scene& scene = gameScene.renderScene;
+    Scene& scene = sceneCtx.gameScene.renderScene;
+    driver::Marker_t marker;
 
     driver::RscCBuffer& scene_cbuffer = cbuffer_from_handle(scene, scene.cbuffer_scene);
     SceneData cbufferPerScene;
     {
-        cbufferPerScene.projectionMatrix = camera.projectionMatrix;
-        cbufferPerScene.viewMatrix = camera.viewMatrix;
-        cbufferPerScene.viewPos = camera.pos;
-        cbufferPerScene.lightPos = float3(3.f, 8.f, 15.f);
+        cbufferPerScene.vpMatrix = 
+            math::mult(sceneCtx.camera.projectionMatrix, sceneCtx.camera.viewMatrix);
         driver::update_cbuffer(scene_cbuffer, &cbufferPerScene);
     }
 
-    driver::Marker_t marker;
-    driver::set_marker_name(marker, "BASE SCENE"); driver::start_event(marker);
+    driver::set_marker_name(marker, "SKY"); driver::start_event(marker);
     {
-        driver::bind_RT(scene.gameRT);
-        Color32 skycolor(0.2f, 0.344f, 0.59f, 1.f);
-        driver::clear_RT(scene.gameRT,
-              driver::RenderTargetClearFlags::Color
-            | driver::RenderTargetClearFlags::Depth
-            | driver::RenderTargetClearFlags::Stencil, skycolor);
+        driver::RscCBuffer& clearColor_cbuffer =
+            cbuffer_from_handle(scene, scene.cbuffer_clearColor);
+        renderer::driver::bind_blend_state(scene.blendStateBlendOff);
+        driver::bind_DS(sceneCtx.ds_always, sceneCtx.camera.depth);
         driver::bind_RS(scene.rasterizerStateFillFrontfaces);
-        driver::set_marker_name(marker, "SKY"); driver::start_event(marker); // todo: quad?
-        {
-            driver::bind_DS(scene.depthStateOff);
-            driver::bind_shader(scene.shaders[ShaderTechniques::Color3D]);
-            driver::bind_blend_state(scene.blendStateBlendOff);
-            for (u32 i = 0; i < countof(scene.sky.buffers); i++) {
-                driver::bind_indexed_vertex_buffer(scene.sky.buffers[i]);
-                driver::RscCBuffer buffers[] = { scene_cbuffer, scene.sky.cbuffer };
-                driver::bind_cbuffers(scene.shaders[ShaderTechniques::Color3D], buffers, 2);
-                driver::draw_indexed_vertex_buffer(scene.sky.buffers[i]);
-            }
-        }
-        driver::end_event();
-        driver::set_marker_name(marker, "OPAQUE"); driver::start_event(marker);
-        {
-            driver::bind_DS(scene.depthStateOn);
-            allocator::Arena scratchArena = scratchArenaRoot;
-            Drawlist dl = {};
-            u32 maxDrawCalls =
-                  (visibleNodes.visible_nodes_count
-                + (u32)scene.instancedDrawNodes.count) * DrawlistStreams::Count;
-            dl.items =
-                (DrawCall_Item*)allocator::alloc_arena(
-                    scratchArena, maxDrawCalls * sizeof(DrawCall_Item), alignof(DrawCall_Item));
-            dl.keys =
-                (SortKey*)allocator::alloc_arena(
-                    scratchArena, maxDrawCalls * sizeof(SortKey), alignof(SortKey));
-            addNodesToDrawlistSorted(
-                dl, visibleNodes, camera.pos, scene,
-                0, renderer::DrawlistFilter::Alpha, renderer::SortParams::Type::Default);
+        driver::bind_cbuffers(
+            scene.shaders[renderer::ShaderTechniques::FullscreenBlitClearColor],
+            &clearColor_cbuffer, 1);
+        driver::bind_shader(scene.shaders[renderer::ShaderTechniques::FullscreenBlitClearColor]);
+        driver::draw_fullscreen();
+    }
+    driver::end_event();
+
+    driver::bind_RS(sceneCtx.rs);
+    {
+        allocator::Arena scratchArena = sceneCtx.scratchArena;
+        Drawlist dl = {};
+        u32 maxDrawCalls =
+              (sceneCtx.visibleNodes.visible_nodes_count
+            + (u32)scene.instancedDrawNodes.count) * DrawlistStreams::Count;
+        dl.items =
+            (DrawCall_Item*)allocator::alloc_arena(
+                scratchArena, maxDrawCalls * sizeof(DrawCall_Item), alignof(DrawCall_Item));
+        dl.keys =
+            (SortKey*)allocator::alloc_arena(
+                scratchArena, maxDrawCalls * sizeof(SortKey), alignof(SortKey));
+        addNodesToDrawlistSorted(
+            dl, sceneCtx.visibleNodes, sceneCtx.camera.pos, scene,
+            0, renderer::DrawlistFilter::Alpha, renderer::SortParams::Type::Default);
+        if (dl.count[DrawlistBuckets::Base] + dl.count[DrawlistBuckets::Instanced] > 0) {
+            driver::set_marker_name(marker, "OPAQUE"); driver::start_event(marker);
+            driver::bind_DS(sceneCtx.ds_opaque, sceneCtx.camera.depth);
             Drawlist_Context ctx = {};
             Drawlist_Overrides overrides = {};
             ctx.cbuffers[overrides.forced_cbuffer_count++] = scene_cbuffer;
             draw_drawlist(dl, ctx, overrides);
+            driver::end_event();
         }
-        driver::end_event();
-        #if __DEBUG
-        {
-            im::present3d(camera.projectionMatrix, camera.viewMatrix);
-        }
-        #endif
-        driver::set_marker_name(marker, "ALPHA"); driver::start_event(marker);
-        {
-            allocator::Arena scratchArena = scratchArenaRoot;
-            driver::bind_DS(scene.depthStateReadOnly);
-            Drawlist dl = {};
-            u32 maxDrawCalls =
-                  (visibleNodes.visible_nodes_count
-                + (u32)scene.instancedDrawNodes.count) * DrawlistStreams::Count;
-            dl.items =
-                (DrawCall_Item*)allocator::alloc_arena(
-                    scratchArena, maxDrawCalls * sizeof(DrawCall_Item), alignof(DrawCall_Item));
-            dl.keys =
-                (SortKey*)allocator::alloc_arena(
-                    scratchArena, maxDrawCalls * sizeof(SortKey), alignof(SortKey));
-            driver::bind_blend_state(scene.blendStateOn);
-            addNodesToDrawlistSorted(
-                dl, visibleNodes, camera.pos, scene,
-                renderer::DrawlistFilter::Alpha, 0, renderer::SortParams::Type::BackToFront);
+    }
+    #if __DEBUG
+    {
+        im::present3d(sceneCtx.camera.projectionMatrix, sceneCtx.camera.viewMatrix);
+    }
+    #endif
+    {
+        allocator::Arena scratchArena = sceneCtx.scratchArena;
+        Drawlist dl = {};
+        u32 maxDrawCalls =
+              (sceneCtx.visibleNodes.visible_nodes_count
+            + (u32)scene.instancedDrawNodes.count) * DrawlistStreams::Count;
+        dl.items =
+            (DrawCall_Item*)allocator::alloc_arena(
+                scratchArena, maxDrawCalls * sizeof(DrawCall_Item), alignof(DrawCall_Item));
+        dl.keys =
+            (SortKey*)allocator::alloc_arena(
+                scratchArena, maxDrawCalls * sizeof(SortKey), alignof(SortKey));
+        driver::bind_blend_state(scene.blendStateOn);
+        addNodesToDrawlistSorted(
+            dl, sceneCtx.visibleNodes, sceneCtx.camera.pos, scene,
+            renderer::DrawlistFilter::Alpha, 0, renderer::SortParams::Type::BackToFront);
+        if (dl.count[DrawlistBuckets::Base] + dl.count[DrawlistBuckets::Instanced] > 0) {
+            driver::bind_DS(sceneCtx.ds_alpha, sceneCtx.camera.depth);
+            driver::set_marker_name(marker, "ALPHA"); driver::start_event(marker);
             Drawlist_Context ctx = {};
             Drawlist_Overrides overrides = {};
             overrides.forced_blendState = true;
             ctx.blendState = &scene.blendStateOn;
             ctx.cbuffers[overrides.forced_cbuffer_count++] = scene_cbuffer;
             draw_drawlist(dl, ctx, overrides);
+            driver::end_event();
         }
-        driver::end_event();
     }
-    driver::end_event();
 }
 
 struct RenderMirrorContext {
-    allocator::Arena& scratchArenaRoot;
+    const CameraNode& camera;
+    const CameraNode& parent;
     game::Scene& gameScene;
-    const CameraNode* mirrorTreeRoot;
-    const renderer::VisibleNodes* visibleNodesTreeRoot;
-    renderer::driver::RscRasterizerState* rasterizerState;
 };
-void renderMirrorTreeRecursive(
-        RenderMirrorContext& treeCtx, const CameraNode& parent, const u32 cameraIndex) {
-
+void markMirror(RenderMirrorContext& mirrorCtx) {
     using namespace renderer;
+    Scene& scene = mirrorCtx.gameScene.renderScene;
 
-    renderer::Scene& scene = treeCtx.gameScene.renderScene;
-
-    driver::RscRasterizerState* rasterizerStateParent = treeCtx.rasterizerState;
-    driver::RscRasterizerState* rasterizerStateMirror = 
-        treeCtx.rasterizerState == &scene.rasterizerStateFillFrontfaces ?
-              &scene.rasterizerStateFillBackfaces
-            : &scene.rasterizerStateFillFrontfaces;
-
-    // render this mirror
-    const CameraNode& camera = treeCtx.mirrorTreeRoot[cameraIndex];
-    const renderer::VisibleNodes& visibleNodes = treeCtx.visibleNodesTreeRoot[cameraIndex];
-
-    driver::Marker_t marker;
-    driver::set_marker_name(marker, camera.str); driver::start_event(marker);
-    {
+    driver::RscRasterizerState& rasterizerStateParent =
+        (mirrorCtx.camera.depth & 1) != 0 ?
+              scene.rasterizerStateFillFrontfaces
+            : scene.rasterizerStateFillBackfaces;
 
     driver::RscCBuffer& scene_cbuffer =
         cbuffer_from_handle(scene, scene.cbuffer_scene);
@@ -888,140 +975,49 @@ void renderMirrorTreeRecursive(
     // mark this mirror on the stencil (using the parent's camera)
     driver::set_marker_name(marker, "MARK MIRROR"); driver::start_event(marker);
     {
-        driver::bind_DS(scene.depthStateMarkMirror, parent.depth);
-        driver::bind_RS(*rasterizerStateParent);
+        driver::bind_DS(scene.depthStateMarkMirror, mirrorCtx.parent.depth);
+        driver::bind_RS(rasterizerStateParent);
+
         driver::bind_blend_state(scene.blendStateOff);
 
-        renderer::DrawMesh& mesh = renderer::drawMesh_from_handle(scene, camera.meshHandle);
+        renderer::DrawMesh& mesh = renderer::drawMesh_from_handle(scene, mirrorCtx.camera.meshHandle);
         driver::bind_shader(scene.shaders[mesh.shaderTechnique]);
         driver::bind_indexed_vertex_buffer(mesh.vertexBuffer);
         driver::RscCBuffer buffers[] = { scene_cbuffer, identity_cbuffer };
-        driver::bind_cbuffers(scene.shaders[ShaderTechniques::Color3D], buffers, 2);
+        driver::bind_cbuffers(scene.shaders[mesh.shaderTechnique], buffers, 2);
         driver::draw_indexed_vertex_buffer(mesh.vertexBuffer);
     }
     driver::end_event();
+}
+void unmarkMirror(RenderMirrorContext& mirrorCtx) {
 
-    driver::set_marker_name(marker, "CLEAR MIRROR CONTENTS"); driver::start_event(marker);
-    {
-        renderer::driver::bind_blend_state(scene.blendStateBlendOff);
-        driver::bind_DS(scene.depthStateMirrorReflectionsDepthAlways, camera.depth);
-        driver::bind_RS(scene.rasterizerStateFillFrontfaces);
-        driver::bind_shader(scene.shaders[renderer::ShaderTechniques::FullscreenBlitClearWhite]);
-        driver::draw_fullscreen();
-        driver::bind_RS(*rasterizerStateMirror);
-    }
-    driver::end_event();
-     
-    // render reflection of this mirror
-    driver::set_marker_name(marker, "REFLECTION SCENE"); driver::start_event(marker);
-    {
-        // perspective cam set up
-        {
-            renderer::SceneData cbufferPerSceneMirrored = {};
-            cbufferPerSceneMirrored.projectionMatrix = camera.projectionMatrix;
-            cbufferPerSceneMirrored.viewMatrix = camera.viewMatrix;
-            cbufferPerSceneMirrored.viewPos = camera.pos;
-            cbufferPerSceneMirrored.lightPos = float3(3.f, 8.f, 15.f); //todo: improve
-            renderer::driver::update_cbuffer(scene_cbuffer, &cbufferPerSceneMirrored);
-        }
+    using namespace renderer;
+    Scene& scene = mirrorCtx.gameScene.renderScene;
+    driver::RscRasterizerState& rasterizerStateParent =
+        (mirrorCtx.camera.depth & 1) != 0 ?
+              scene.rasterizerStateFillFrontfaces
+            : scene.rasterizerStateFillBackfaces;
 
-        driver::set_marker_name(marker, "SKY"); driver::start_event(marker);
-        {
-            driver::bind_DS(scene.depthStateMirrorReflectionsDepthReadOnly, camera.depth);
-            driver::bind_shader(scene.shaders[ShaderTechniques::Color3D]);
-            driver::bind_blend_state(scene.blendStateBlendOff);
-            for (u32 i = 0; i < countof(scene.sky.buffers); i++) {
-                driver::bind_indexed_vertex_buffer(scene.sky.buffers[i]);
-                driver::RscCBuffer buffers[] = { scene_cbuffer, scene.sky.cbuffer };
-                driver::bind_cbuffers(scene.shaders[ShaderTechniques::Color3D], buffers, 2);
-                driver::draw_indexed_vertex_buffer(scene.sky.buffers[i]);
-            }
-        }
-        driver::end_event();
-
-        driver::set_marker_name(marker, "OPAQUE"); driver::start_event(marker);
-        {
-            driver::bind_DS(scene.depthStateMirrorReflections, camera.depth);
-            allocator::Arena scratchArena = treeCtx.scratchArenaRoot;
-            Drawlist dl = {};
-            u32 maxDrawCallsThisFrame =
-                   (visibleNodes.visible_nodes_count
-                 + (u32)scene.instancedDrawNodes.count) * DrawlistStreams::Count;
-            dl.items =
-                (DrawCall_Item*)allocator::alloc_arena(
-                        scratchArena, maxDrawCallsThisFrame * sizeof(DrawCall_Item), alignof(DrawCall_Item));
-            dl.keys = 
-                (SortKey*)allocator::alloc_arena(
-                        scratchArena, maxDrawCallsThisFrame * sizeof(SortKey), alignof(SortKey));
-            addNodesToDrawlistSorted(
-                    dl, visibleNodes, camera.pos, scene,
-                    0, renderer::DrawlistFilter::Alpha, renderer::SortParams::Type::Default);
-            Drawlist_Context ctx = {};
-            Drawlist_Overrides overrides = {};
-            ctx.cbuffers[overrides.forced_cbuffer_count++] = scene_cbuffer;
-            draw_drawlist(dl, ctx, overrides);
-        }
-        driver::end_event();
-
-        #if __DEBUG
-        {
-            im::present3d(camera.projectionMatrix, camera.viewMatrix);
-        }
-        #endif
-
-        driver::set_marker_name(marker, "ALPHA"); driver::start_event(marker);
-        {
-            driver::bind_DS(scene.depthStateMirrorReflectionsDepthReadOnly, camera.depth);
-            driver::bind_blend_state(scene.blendStateOn);
-
-            allocator::Arena scratchArena = treeCtx.scratchArenaRoot;
-            Drawlist dl = {};
-            u32 maxDrawCallsThisFrame =
-                   (visibleNodes.visible_nodes_count
-                 + (u32)scene.instancedDrawNodes.count) * DrawlistStreams::Count;
-            dl.items =
-                (DrawCall_Item*)allocator::alloc_arena(
-                        scratchArena, maxDrawCallsThisFrame * sizeof(DrawCall_Item), alignof(DrawCall_Item));
-            dl.keys =
-                (SortKey*)allocator::alloc_arena(
-                        scratchArena, maxDrawCallsThisFrame * sizeof(SortKey), alignof(SortKey));
-            addNodesToDrawlistSorted(
-                    dl, visibleNodes, camera.pos, scene,
-                    renderer::DrawlistFilter::Alpha, 0, renderer::SortParams::Type::BackToFront);
-            Drawlist_Context ctx = {};
-            Drawlist_Overrides overrides = {};
-            overrides.forced_blendState = true;
-            ctx.blendState = &scene.blendStateOn;
-            ctx.cbuffers[overrides.forced_cbuffer_count++] = scene_cbuffer;
-            draw_drawlist(dl, ctx, overrides);
-        }
-        driver::end_event();
-    }
-    driver::end_event();
-
-    // render any other mirrors seen by this mirror
-    if (cameraIndex + 1 < camera.siblingIndex) {
-        treeCtx.rasterizerState = rasterizerStateMirror;
-        renderMirrorTreeRecursive(treeCtx, camera, cameraIndex + 1);
-        treeCtx.rasterizerState = rasterizerStateParent;
-    }
+    driver::RscCBuffer& scene_cbuffer =
+        cbuffer_from_handle(scene, scene.cbuffer_scene);
+    driver::RscCBuffer& identity_cbuffer =
+        cbuffer_from_handle(scene, scene.cbuffer_nodeIdentity);
 
     {
         renderer::SceneData cbufferPerScene;
-        cbufferPerScene.projectionMatrix = parent.projectionMatrix;
-        cbufferPerScene.viewMatrix = parent.viewMatrix;
-        cbufferPerScene.viewPos = parent.pos;
-        cbufferPerScene.lightPos = float3(3.f, 8.f, 15.f); // todo: save off somewhere?
+        cbufferPerScene.vpMatrix =
+            math::mult(mirrorCtx.parent.projectionMatrix, mirrorCtx.parent.viewMatrix);
         renderer::driver::update_cbuffer(scene_cbuffer, &cbufferPerScene);
-        driver::bind_RS(*rasterizerStateParent);
     }
 
+    driver::Marker_t marker;
     driver::set_marker_name(marker, "UNMARK MIRROR"); driver::start_event(marker);
     {
-        driver::bind_DS(scene.depthStateUnmarkMirror, camera.depth);
+        driver::bind_DS(scene.depthStateUnmarkMirror, mirrorCtx.camera.depth);
+        driver::bind_RS(rasterizerStateParent);
         driver::bind_blend_state(scene.blendStateOn);
 
-        renderer::DrawMesh& mesh = renderer::drawMesh_from_handle(scene, camera.meshHandle);
+        renderer::DrawMesh& mesh = renderer::drawMesh_from_handle(scene, mirrorCtx.camera.meshHandle);
         driver::bind_shader(scene.shaders[mesh.shaderTechnique]);
         driver::bind_indexed_vertex_buffer(mesh.vertexBuffer);
         driver::RscCBuffer buffers[] = { scene_cbuffer, identity_cbuffer };
@@ -1029,13 +1025,72 @@ void renderMirrorTreeRecursive(
         driver::draw_indexed_vertex_buffer(mesh.vertexBuffer);
     }
     driver::end_event();
+}
 
-    }
-    driver::end_event();
+void renderMirrorTree(
+        const CameraNode* cameraTree,
+        const renderer::VisibleNodes* visibleNodes,
+        game::Scene& gameScene,
+        allocator::Arena scratchArena) {
 
-    // todo: test render sibling mirrors
-    if (camera.siblingIndex < parent.siblingIndex) {
-        renderMirrorTreeRecursive(treeCtx, parent, camera.siblingIndex);
+    using namespace renderer;
+    renderer::Scene& scene = gameScene.renderScene;
+    u32 numCameras = cameraTree[0].siblingIndex;
+    u32* parents =
+        (u32*) allocator::alloc_arena(
+                scratchArena, sizeof(u32) * numCameras,
+                alignof(u32));
+    u32 parentCount = 0;
+    parents[parentCount++] = 0;
+    for (u32 index = 1; index < numCameras; index++) {
+
+        const CameraNode& camera = cameraTree[index];
+        const CameraNode& parent = cameraTree[parents[parentCount - 1]];
+
+        // render this mirror
+        driver::Marker_t marker;
+        driver::set_marker_name(marker, camera.str); driver::start_event(marker);
+
+        // mark mirror
+        RenderMirrorContext mirrorContext {
+            camera, parent, gameScene
+        };
+        markMirror(mirrorContext);
+
+        // render base scene
+        driver::set_marker_name(marker, "REFLECTION SCENE"); driver::start_event(marker);
+        {
+            driver::RscRasterizerState& rasterizerStateMirror =
+                (camera.depth & 1) == 0 ?
+                      scene.rasterizerStateFillFrontfaces
+                    : scene.rasterizerStateFillBackfaces;
+            RenderSceneContext renderSceneContext = {
+                camera, visibleNodes[index], gameScene,
+                scene.depthStateMirrorReflectionsDepthAlways,
+                scene.depthStateMirrorReflections,
+                scene.depthStateMirrorReflectionsDepthReadOnly,
+                rasterizerStateMirror,
+                scratchArena };
+            renderBaseScene(renderSceneContext);
+        }
+        driver::end_event();
+
+        parents[parentCount++] = index;
+        while (parentCount > 1 && index + 1 >= cameraTree[parents[parentCount - 1]].siblingIndex) {
+
+            const CameraNode& camera = cameraTree[parents[parentCount - 1]];
+            const CameraNode& parent = cameraTree[parents[parentCount - 2]];
+
+            // unmark mirror
+            RenderMirrorContext mirrorContext {
+                camera, cameraTree[parents[parentCount - 2]], gameScene
+            };
+            unmarkMirror(mirrorContext);
+
+            driver::end_event();
+            
+            parentCount--;
+        }
     }
 }
 
@@ -1123,16 +1178,16 @@ void init_scene(game::Scene& scene, SceneMemory& memory, const platform::Screen&
     }
     renderer::driver::create_RS(renderScene.rasterizerStateFillFrontfaces,
             { renderer::driver::RasterizerFillMode::Fill,
-              renderer::driver::RasterizerCullMode::CullBack });
+              renderer::driver::RasterizerCullMode::CullBack, false });
     renderer::driver::create_RS(renderScene.rasterizerStateFillBackfaces,
             { renderer::driver::RasterizerFillMode::Fill,
-              renderer::driver::RasterizerCullMode::CullFront });
+              renderer::driver::RasterizerCullMode::CullFront, false });
     renderer::driver::create_RS(renderScene.rasterizerStateFillCullNone,
             { renderer::driver::RasterizerFillMode::Fill,
-              renderer::driver::RasterizerCullMode::CullNone });
+              renderer::driver::RasterizerCullMode::CullNone, false });
     renderer::driver::create_RS(renderScene.rasterizerStateLine,
             { renderer::driver::RasterizerFillMode::Line,
-              renderer::driver::RasterizerCullMode::CullNone });
+              renderer::driver::RasterizerCullMode::CullNone, false });
     {
         // BASE depth states
         renderer::driver::DepthStencilStateParams dsParams;
@@ -1149,6 +1204,11 @@ void init_scene(game::Scene& scene, SceneMemory& memory, const platform::Screen&
         dsParams = {};
         dsParams.depth_enable = false;
         renderer::driver::create_DS(renderScene.depthStateOff, dsParams);
+        dsParams = {};
+        dsParams.depth_enable = true;
+        dsParams.depth_func = renderer::driver::CompFunc::Always;
+        dsParams.depth_writemask = renderer::driver::DepthWriteMask::All;
+        renderer::driver::create_DS(renderScene.depthStateAlways, dsParams);
         { // MIRROR depth states
             dsParams = {};
             dsParams.depth_enable = true;
@@ -1172,17 +1232,6 @@ void init_scene(game::Scene& scene, SceneMemory& memory, const platform::Screen&
             dsParams.stencil_passOp = renderer::driver::StencilOp::Decr;
             dsParams.stencil_func = renderer::driver::CompFunc::Equal;
             renderer::driver::create_DS(renderScene.depthStateUnmarkMirror, dsParams);
-            dsParams = {};
-            dsParams.depth_enable = true;
-            dsParams.depth_func = renderer::driver::CompFunc::Always;
-            dsParams.depth_writemask = renderer::driver::DepthWriteMask::All;
-            dsParams.stencil_enable = true;
-            dsParams.stencil_readmask = dsParams.stencil_writemask = 0xff;
-            dsParams.stencil_failOp = renderer::driver::StencilOp::Keep;
-            dsParams.stencil_depthFailOp = renderer::driver::StencilOp::Keep;
-            dsParams.stencil_passOp = renderer::driver::StencilOp::Keep;
-            dsParams.stencil_func = renderer::driver::CompFunc::Equal;
-            renderer::driver::create_DS(renderScene.depthStateClearDepthInMirror, dsParams);
             dsParams.depth_enable = true;
             dsParams.depth_func = renderer::driver::CompFunc::Less;
             dsParams.depth_writemask = renderer::driver::DepthWriteMask::All;
@@ -1220,6 +1269,11 @@ void init_scene(game::Scene& scene, SceneMemory& memory, const platform::Screen&
     }
 
     // known cbuffers
+    renderer::driver::RscCBuffer& cbufferclear = allocator::alloc_pool(renderScene.cbuffers);
+    renderScene.cbuffer_clearColor = handle_from_cbuffer(renderScene, cbufferclear);
+    renderer::driver::create_cbuffer(cbufferclear, { sizeof(renderer::BlitColor) });
+    renderer::BlitColor clearColor = { float4(0.2f, 0.344f, 0.59f, 1.f) };
+    renderer::driver::update_cbuffer(cbufferclear, &clearColor);
     renderer::driver::RscCBuffer& cbufferscene = allocator::alloc_pool(renderScene.cbuffers);
     renderScene.cbuffer_scene = handle_from_cbuffer(renderScene, cbufferscene);
     renderer::driver::create_cbuffer(cbufferscene, { sizeof(renderer::SceneData) });
@@ -1295,6 +1349,9 @@ void init_scene(game::Scene& scene, SceneMemory& memory, const platform::Screen&
     };
 
     // cbuffer bindings
+    const renderer::driver::CBufferBindingDesc bufferBindings_blit_clear_color[] = {
+        { "type_BlitColor", renderer::driver::CBufferStageMask::PS }
+    };
     const renderer::driver::CBufferBindingDesc bufferBindings_untextured_base[] = {
         { "type_PerScene", renderer::driver::CBufferStageMask::VS },
         { "type_PerGroup", renderer::driver::CBufferStageMask::VS }
@@ -1331,7 +1388,7 @@ void init_scene(game::Scene& scene, SceneMemory& memory, const platform::Screen&
         // Initialize cache with room for a VS and PS shader of each technique
         renderer::driver::ShaderCache shader_cache = {};
         renderer::driver::load_shader_cache(
-            shader_cache, "shaderCache.bin", &scratchArena,
+            shader_cache, "assets/data/shaderCache.bin", &scratchArena,
             renderer::ShaderTechniques::Count * 2);
         {
             renderer::ShaderDesc desc = {};
@@ -1339,16 +1396,16 @@ void init_scene(game::Scene& scene, SceneMemory& memory, const platform::Screen&
             desc.vertexAttr_count = countof(attribs_3d);
             desc.textureBindings = nullptr;
             desc.textureBinding_count = 0;
-            desc.bufferBindings = nullptr;
-            desc.bufferBinding_count = 0;
+            desc.bufferBindings = bufferBindings_blit_clear_color;
+            desc.bufferBinding_count = countof(bufferBindings_blit_clear_color);
             // reuse 3d shaders
             desc.vs_name = renderer::shaders::vs_fullscreen_bufferless_clear_blit.name;
             desc.vs_src = renderer::shaders::vs_fullscreen_bufferless_clear_blit.src;
-            desc.ps_name = renderer::shaders::ps_fullscreen_blit_white.name;
-            desc.ps_src = renderer::shaders::ps_fullscreen_blit_white.src;
+            desc.ps_name = renderer::shaders::ps_fullscreen_blit_clear_colored.name;
+            desc.ps_src = renderer::shaders::ps_fullscreen_blit_clear_colored.src;
             desc.shader_cache = &shader_cache;
             renderer::compile_shader(
-                renderScene.shaders[renderer::ShaderTechniques::FullscreenBlitClearWhite], desc);
+                renderScene.shaders[renderer::ShaderTechniques::FullscreenBlitClearColor], desc);
         }
         {
             renderer::ShaderDesc desc = {};
@@ -1758,28 +1815,40 @@ void init_scene(game::Scene& scene, SceneMemory& memory, const platform::Screen&
     }
 
     // mirrors
+    enum { MAX_MIRRORS = 1024 * 1024 }; // TODO: clean up
+    scene.mirrors.polys = (game::Mirrors::Poly*)
+        allocator::alloc_arena(
+            persistentArena,
+            sizeof(game::Mirrors::Poly) * MAX_MIRRORS, alignof(game::Mirrors::Poly));
+    scene.mirrors.meshHandles = (renderer::MeshHandle*)
+        allocator::alloc_arena(
+            persistentArena,
+            sizeof(renderer::MeshHandle) * MAX_MIRRORS, alignof(renderer::MeshHandle));
+    obj::load_with_vertex_colors_as_mirrors(scene, scratchArena, "assets/meshes/throne.obj");
     for (u32 m = 0; m < 8; m++) {
         renderer::DrawMesh& mesh = allocator::alloc_pool(renderScene.meshes);
         mesh = {};
         mesh.shaderTechnique = renderer::ShaderTechniques::Color3D;
-        f32 w = 8.4f, h = 10.f;
+        f32 w = 12.4f, h = 10.f;
         u32 c = Color32(0.01f, 0.19f, 0.3f, 0.32f).ABGR();
         renderer::VertexLayout_Color_3D v[] = {
             { { 1.f, 0.f, -1.f }, c }, { { -1.f, 0.f, -1.f }, c },
             { { -1.f, 0.f, 1.f }, c }, { { 1.f, 0.f, 1.f }, c } };
-        const u32 mirrorId = renderScene.mirrors.count++;
-        Transform& t = renderScene.mirrors.transforms[mirrorId];
+        const u32 mirrorId = scene.mirrors.count++;
+        Transform t;
         Transform rot = math::fromOffsetAndOrbit(
             float3(0.f, 0.f, 0.f), float3(0.f, 0.f, f32(m) * math::twopi32 / f32(8) ));
         Transform translate = {};
         math::identity4x4(translate);
-        translate.pos = float3(0.f, -20.f, 0.f);
+        translate.pos = float3(0.f, -30.f, 0.f);
         t.matrix = math::mult(rot.matrix, translate.matrix);
         t.matrix.col0.xyz = math::scale(t.matrix.col0.xyz, w);
         t.matrix.col2.xyz = math::scale(t.matrix.col2.xyz, h);
         for (u32 i = 0; i < countof(v); i++) {
             v[i].pos = math::mult(t.matrix, float4(v[i].pos, 1.f)).xyz;
+            scene.mirrors.polys[mirrorId].v[i] = v[i].pos;
         }
+        scene.mirrors.polys[mirrorId].numPts = 4;
         u16 i[] = { 2, 1, 0, 0, 3, 2 };
         renderer::driver::IndexedVertexBufferDesc bufferParams;
         bufferParams.vertexData = v;
@@ -1805,10 +1874,7 @@ void init_scene(game::Scene& scene, SceneMemory& memory, const platform::Screen&
         renderer::driver::create_indexed_vertex_buffer(
                 mesh.vertexBuffer, bufferParams, attribs, countof(attribs));
         {
-            renderScene.mirrors.meshHandles[mirrorId] = handle_from_drawMesh(renderScene, mesh);
-            renderer::driver::RscCBuffer& cbuffernode =
-                allocator::alloc_pool(renderScene.cbuffers);
-            renderer::driver::create_cbuffer(cbuffernode, { sizeof(renderer::NodeData) });
+            scene.mirrors.meshHandles[mirrorId] = handle_from_drawMesh(renderScene, mesh);
         }
     }
 
@@ -1829,7 +1895,7 @@ void init_scene(game::Scene& scene, SceneMemory& memory, const platform::Screen&
         physicsScene.bounds = float2(w, h);
         physicsScene.restitution = 1.f;
         for (u32 i = 0; i < numballs; i++) {
-            physics::Ball& ball = physicsScene.balls[i];
+            physics::DynamicObject_Sphere& ball = physicsScene.balls[i];
             ball.radius = math::rand() * 3.f;
             ball.mass = math::pi32 * ball.radius * ball.radius;
             ball.pos = float3(w * (-1.f + 2.f * math::rand()), h * (-1.f + 2.f * math::rand()), 0.f);

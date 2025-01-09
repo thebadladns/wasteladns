@@ -80,20 +80,23 @@ void main()
 }
 )"
 };
-constexpr PS_src ps_fullscreen_blit_white = {
-"ps_fullscreen_blit_white",
+constexpr PS_src ps_fullscreen_blit_clear_colored = {
+"ps_fullscreen_blit_clear_colored",
 R"(
 #version 330
 #extension GL_ARB_separate_shader_objects : require
 
-uniform sampler2D texSrc;
+layout(std140) uniform type_BlitColor
+{
+    vec4 color;
+} BlitColor;
 
 layout(location = 0) in vec2 varying_TEXCOORD;
 layout(location = 0) out vec4 out_var_SV_TARGET;
 
 void main()
 {
-    out_var_SV_TARGET = vec4(1.0);
+    out_var_SV_TARGET = BlitColor.color;
 }
 )"
 };

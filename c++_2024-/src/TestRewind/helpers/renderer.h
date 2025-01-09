@@ -288,9 +288,11 @@ namespace driver {
     struct RasterizerStateParams {
         RasterizerFillMode::Enum fill;
         RasterizerCullMode::Enum cull;
+        bool scissor;
     };
     void create_RS(RscRasterizerState&, const RasterizerStateParams&);
     void bind_RS(const RscRasterizerState& rs);
+    void set_scissor(const u32, const u32, const u32, const u32);
 
     struct DepthStencilStateParams {
         CompFunc::Enum depth_func;

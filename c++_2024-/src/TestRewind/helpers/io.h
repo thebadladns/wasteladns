@@ -19,7 +19,7 @@ namespace platform {
 #endif
 #if _MSC_VER
     int fopen(FILE** f, const char* name, const char* mode) { return ::fopen_s(f, name, mode); }
-    int fscanf(FILE* f, const char* name, const char* mode) { return ::fscanf_s(f, name, mode); }
+    const auto fscanf = ::fscanf_s;
     int strncpy(char* dst, const char* src, size_t num) {return ::strncpy_s(dst, num, src, num); }
 #else
     int fopen(FILE** f, const char* name, const char* mode) {

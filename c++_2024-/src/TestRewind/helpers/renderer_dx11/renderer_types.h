@@ -129,6 +129,7 @@ namespace driver {
         DXGI_FORMAT indexType;
         u32 vertexStride;
         u32 indexCount;
+        u32 indexOffset;
     };
     
     struct RscCBuffer {

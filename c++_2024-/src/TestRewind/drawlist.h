@@ -20,13 +20,11 @@ struct VertexLayout_Textured_Skinned_3D {
 };
 
 struct CBuffer_Binding { enum { Binding_0 = 0, Binding_1 = 1, Binding_2 = 2, Count }; };
+struct BlitColor {
+    float4 color;
+};
 struct SceneData {
-    float4x4 projectionMatrix;
-    float4x4 viewMatrix;
-    float3 viewPos;
-    f32 padding1;
-    float3 lightPos;
-    f32 padding2;
+    float4x4 vpMatrix;
 };
 struct NodeData {
     float4x4 worldMatrix;
@@ -73,7 +71,7 @@ struct DrawNodeMeta { enum Enum : u32 {
 typedef u32 InstancedNodeHandle;
 
 struct SortKey { SortKeyValue v; s32 idx; };
-struct DrawlistFilter { enum Enum { Alpha = 1, Mirror = 2 }; };
+struct DrawlistFilter { enum Enum { Alpha = 1 }; };
 struct DrawlistBuckets { enum Enum { Base, Instanced, Count }; };
 struct Drawlist {
     SortKey* keys;
@@ -86,14 +84,14 @@ struct DrawlistStreams { enum Enum {
 
 typedef u32 MeshHandle;
 struct ShaderTechniques { enum Enum {
-        FullscreenBlitClearWhite, FullscreenBlitTextured,
+        FullscreenBlitClearColor, FullscreenBlitTextured,
         Instanced3D,
         Color3D, Color3DSkinned,
         Textured3D, Textured3DAlphaClip, Textured3DSkinned, Textured3DAlphaClipSkinned,
         Count, Bits = 3
 }; };
 const char* shaderNames[] = {
-    "FullscreenBlitClearWhite", "FullscreenBlitTextured",
+    "FullscreenBlitClearColor", "FullscreenBlitTextured",
     "Instanced3D",
     "Color3D", "Color3DSkinned",
     "Textured3D", "Textured3DAlphaClip", "Textured3DSkinned", "Textured3DAlphaClipSkinned"
@@ -160,11 +158,6 @@ void draw_drawlist(Drawlist& dl, Drawlist_Context& ctx, const Drawlist_Overrides
         renderer::driver::end_event();
     }
 }
-struct Mirrors { // todo: figure out delete, unhack sizes
-    Transform transforms[256]; // xy from 0.f to 1.f describe the mirror quad, z is the normal
-    MeshHandle meshHandles[256];
-    u32 count;
-};
 struct Scene {
     struct Sky {
         driver::RscCBuffer cbuffer;
@@ -184,9 +177,9 @@ struct Scene {
     renderer::driver::RscDepthStencilState depthStateOn;
     renderer::driver::RscDepthStencilState depthStateReadOnly;
     renderer::driver::RscDepthStencilState depthStateOff;
+    renderer::driver::RscDepthStencilState depthStateAlways;
     renderer::driver::RscDepthStencilState depthStateMarkMirror;
     renderer::driver::RscDepthStencilState depthStateUnmarkMirror;
-    renderer::driver::RscDepthStencilState depthStateClearDepthInMirror;
     renderer::driver::RscDepthStencilState depthStateMirrorReflections; 
     renderer::driver::RscDepthStencilState depthStateMirrorReflectionsDepthReadOnly;
     renderer::driver::RscDepthStencilState depthStateMirrorReflectionsDepthAlways;
@@ -195,10 +188,10 @@ struct Scene {
     renderer::driver::RscBlendState blendStateOff;
     renderer::driver::RscMainRenderTarget windowRT;
     renderer::driver::RscRenderTarget gameRT;
-    Mirrors mirrors;
     camera::WindowProjection windowProjection;
     camera::PerspProjection perspProjection;
     Sky sky;
+    u32 cbuffer_clearColor;
     u32 cbuffer_scene;
     u32 cbuffer_nodeIdentity;
 };
@@ -585,7 +578,7 @@ void addNodesToDrawlistSorted(Drawlist& dl, const VisibleNodes& visibleNodes, fl
             item.name = shaderNames[mesh.shaderTechnique];
         }
     }
-    const bool addInstancedNodes = (includeFilter & DrawlistFilter::Mirror) == 0;
+    const bool addInstancedNodes = true;//TODO: DO NOT COMMIT
     if (addInstancedNodes) {
         for (u32 n = 0, count = 0;n < scene.instancedDrawNodes.cap && count < scene.instancedDrawNodes.count; n++) {
             if (scene.instancedDrawNodes.data[n].alive == 0) { continue; }

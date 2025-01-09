@@ -185,7 +185,7 @@ void frustum(const float4* planes, const u32 plane_count, Color32 color) {
        
     // upper limit so we can allocate on the stack (good enough for now)
     enum { MAX_NUM_PLANES = 16 };
-    assert(plane_count < MAX_NUM_PLANES);
+    assert(plane_count <= MAX_NUM_PLANES);
 
     // Build large cube around near plane (not too big, or we'll get floating point errors)
     const f32 size = 100000.f;
@@ -203,7 +203,7 @@ void frustum(const float4* planes, const u32 plane_count, Color32 color) {
         p = math::add(p, pointOnNearPlane);
     }
     struct Face { float3 pts[32]; u32 count; };
-    Face pts_out[MAX_NUM_PLANES + 6] = {}; // TODO: check this math as needed
+    Face pts_out[MAX_NUM_PLANES + 6] = {};
     pts_out[0] = { { pts_in[1], pts_in[0], pts_in[4], pts_in[5] }, 4 }; // left
     pts_out[1] = { { pts_in[3], pts_in[2], pts_in[6], pts_in[7] }, 4 }; // right
     pts_out[2] = { { pts_in[1], pts_in[5], pts_in[7], pts_in[3] }, 4 }; // top
@@ -262,7 +262,7 @@ void frustum(const float4* planes, const u32 plane_count, Color32 color) {
 
                 // Skip repeated points on the new face
                 for (u32 i = 0; i < cutface.count && addToCutface; i++) {
-                    if (math::isCloseAll(cutface.pts[i], intersection, 0.01f)) { addToCutface = false; }
+                    if (math::isCloseAll(cutface.pts[i], intersection, 0.05f)) { addToCutface = false; }
                 }
                 if (addToCutface) { cutface.pts[cutface.count++] = intersection; }
 
@@ -579,7 +579,11 @@ void init(allocator::Arena& arena) {
         }
     }
         
-    renderer::driver::create_RS(debug::ctx.rasterizerState, { renderer::driver::RasterizerFillMode::Fill, renderer::driver::RasterizerCullMode::CullBack });
+    renderer::driver::create_RS(
+        debug::ctx.rasterizerState,
+        { renderer::driver::RasterizerFillMode::Fill,
+          renderer::driver::RasterizerCullMode::CullBack,
+          false });
     {
         renderer::driver::DepthStencilStateParams dsParams;
         dsParams = {};

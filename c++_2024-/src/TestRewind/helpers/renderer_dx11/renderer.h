@@ -487,13 +487,22 @@ namespace driver {
         rasterizerDesc.FillMode = (D3D11_FILL_MODE) params.fill;
         rasterizerDesc.FrontCounterClockwise = FALSE;
         rasterizerDesc.MultisampleEnable = FALSE;
-        rasterizerDesc.ScissorEnable = FALSE;
+        rasterizerDesc.ScissorEnable = params.scissor;
         rasterizerDesc.SlopeScaledDepthBias = 0.f;
         d3ddev->CreateRasterizerState(&rasterizerDesc, &rasterizerState);
         rs.impl = rasterizerState;
     }
     void bind_RS(const RscRasterizerState& rs) {
         d3dcontext->RSSetState(rs.impl);
+    }
+    void set_scissor(const u32 left, const u32 top, const u32 right, const u32 bottom) {
+        // todo: ensure appropriate rasterizer state?
+        D3D11_RECT rect = {};
+        rect.left = left;
+        rect.bottom = bottom;
+        rect.right = right;
+        rect.top = top;
+        d3dcontext->RSSetScissorRects(1, &rect);
     }
 
     void create_DS(RscDepthStencilState& ds, const DepthStencilStateParams& params) {
@@ -584,6 +593,7 @@ namespace driver {
         t.type = (D3D11_PRIMITIVE_TOPOLOGY) params.type;
         t.indexCount = params.indexCount;
         t.vertexStride = params.vertexSize / params.vertexCount;
+        t.indexOffset = 0;
     }
     void update_indexed_vertex_buffer(RscIndexedVertexBuffer& b, const IndexedBufferUpdateParams& params) {
         D3D11_MAPPED_SUBRESOURCE mapped;
@@ -602,7 +612,7 @@ namespace driver {
         d3dcontext->IASetPrimitiveTopology(b.type);
     }
     void draw_indexed_vertex_buffer(const RscIndexedVertexBuffer& b) {
-        d3dcontext->DrawIndexed(b.indexCount, 0, 0);
+        d3dcontext->DrawIndexed(b.indexCount, b.indexOffset, 0);
 
     }
     void draw_instances_indexed_vertex_buffer(const RscIndexedVertexBuffer& b, const u32 instanceCount) {
@@ -645,7 +655,7 @@ namespace driver {
     void set_marker_name(Marker_t& wide, const char* ansi) {
         size_t converted;
 		mbstowcs_s(&converted, wide, ansi, countof(wide));
-        //MultiByteToWideChar(CP_UTF8, 0, ansi, -1, wide, countof(wide)); via <Stringapiset.h> (Wall time: 11ms)
+        //MultiByteToWideChar(CP_UTF8, 0, ansi, -1, wide, countof(wide)); // via <Stringapiset.h> (Wall time: 11ms)
     }
     void set_marker(Marker_t data) {
         perf->SetMarker(data);

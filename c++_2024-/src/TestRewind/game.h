@@ -3,17 +3,17 @@
 
 #if USE_DEBUG_MEMORY
 const size_t persistentArenaSize = 1024 * 1024 * 1024;
-const size_t frameArenaSize = 1 * 1024 * 1024;
+const size_t frameArenaSize = 1024 * 1024 * 1024;
 const size_t scratchArenaSize = 5 * 1024 * 1024;
 const u64 maxRenderNodes = 2048;
 const u64 maxAnimatedNodes = 2048;
 const u64 maxRenderNodesInstanced = 2048;
 const u64 maxPlayerParticleCubes = 4;
 #else
-const size_t persistentArenaSize = 6 * 1024 * 1024;
-const size_t frameArenaSize = 1024 * 1024;
+const size_t persistentArenaSize = 128 * 1024 * 1024;
+const size_t frameArenaSize = 256 * 1024 * 1024;
 const size_t scratchArenaSize = 5 * 1024 * 1024;
-const u32 maxRenderNodes = 256;
+const u32 maxRenderNodes = 1024;
 const u64 maxAnimatedNodes = 32;
 const u32 maxRenderNodesInstanced = 32;
 const u32 maxPlayerParticleCubes = 4;
@@ -405,6 +405,7 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
                     // Initialize main camera in our camera tree format
                     mainCameraRoot.viewMatrix = mainCamera.viewMatrix;
                     mainCameraRoot.projectionMatrix = mainCamera.projectionMatrix;
+                    mainCameraRoot.vpMatrix = mainCamera.vpMatrix;
                     mainCameraRoot.pos = mainCamera.pos;
                     mainCameraRoot.id = 0xffffffff;
                     mainCameraRoot.depth = 0;
@@ -417,7 +418,7 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
                     cameraTreeBuffer.data = &mainCameraRoot;
                     cameraTreeBuffer.cap = cameraTreeBuffer.len = 1;
                     GatherMirrorTreeContext gatherTreeContext =
-                    { game.memory.frameArena, cameraTreeBuffer, scene.mirrors };
+                    { game.memory.frameArena, cameraTreeBuffer, game.scene.mirrors };
                     numCameras = gatherMirrorTreeRecursive(gatherTreeContext, 1, mainCameraRoot);
                     cameraTree = cameraTreeBuffer.data;
                     cameraTree[0].siblingIndex = numCameras;
@@ -486,15 +487,30 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
             }
 
             // render main camera
-            renderBaseScene(
-                    game.memory.scratchArenaRoot,
-                    game.scene, cameraTree[0], visibleNodesTree[0]);
+            driver::bind_RT(scene.gameRT);
+            // TODO: figure out whether this is needed
+            driver::clear_RT(scene.gameRT,
+                driver::RenderTargetClearFlags::Stencil);
+
+            driver::Marker_t marker;
+            driver::set_marker_name(marker, "BASE SCENE"); driver::start_event(marker);
+            {
+                RenderSceneContext renderSceneContext = {
+                    cameraTree[0], visibleNodesTree[0], game.scene,
+                    game.scene.renderScene.depthStateAlways,
+                    game.scene.renderScene.depthStateOn,
+                    game.scene.renderScene.depthStateReadOnly,
+                    game.scene.renderScene.rasterizerStateFillFrontfaces,
+                    game.memory.scratchArenaRoot };
+                renderBaseScene(renderSceneContext);
+            }
+            driver::end_event();
+
             // render camera tree
             if (cameraTree[0].siblingIndex > 1) {
-                RenderMirrorContext renderMirrorContext = {
-                    game.memory.scratchArenaRoot, game.scene, cameraTree,
-                    visibleNodesTree, &scene.rasterizerStateFillFrontfaces };
-                renderMirrorTreeRecursive(renderMirrorContext, cameraTree[0], 1);
+                renderMirrorTree(
+                        cameraTree, visibleNodesTree, game.scene,
+                        game.memory.scratchArenaRoot);
             }
         }
     }
@@ -535,19 +551,6 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
                     , axisZ);
             }
 
-            // temp
-            static float3 mousepossaved_WS = {};
-            static float3 camerapossaved_WS = {};
-            if (captureCameras) {
-                mousepossaved_WS = camera::screenPosToWorldPos(platform.input.mouse.x, platform.input.mouse.y, platform.screen.window_width, platform.screen.window_height, game.scene.renderScene.perspProjection.config, game.scene.camera.viewMatrix);;
-                camerapossaved_WS = game.scene.camera.transform.pos;
-            }
-            const Color32 mouseRayColor(0.8f, 0.15f, 0.25f, 0.7f);
-            im::sphere(mousepossaved_WS, 0.5f, mouseRayColor);
-            im::openSegment(
-                camerapossaved_WS, math::subtract(mousepossaved_WS, camerapossaved_WS),
-                mouseRayColor);
-
             if (debug::debug3Dmode == debug::Debug3DView::All
              || debug::debug3Dmode == debug::Debug3DView::Culling) {
                 const Color32 bbColor(0.8f, 0.15f, 0.25f, 0.7f);
@@ -563,6 +566,7 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
                     renderer::VisibleNodes visibleNodesDebug = {};
                     CameraNode& cameraNode = debug::capturedCameras[debug::debugCameraStage];
                     if (debug::debugCameraStage == 0) {
+                        // render culled nodes
                         visibleNodesDebug.visible_nodes =
                             (u32*)allocator::alloc_arena(
                                 scratchArena,
@@ -574,6 +578,14 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
                         const Color32 color(0.25f, 0.8f, 0.15f, 0.7f);
                         im::frustum(vpMatrix, color);
                     } else {
+                        // render mirror with normal
+                        const game::Mirrors::Poly& p = game.scene.mirrors.polys[debug::capturedCameras[debug::debugCameraStage].id];
+                        float3 normalWS = math::normalize(
+                            math::cross(math::subtract(p.v[1], p.v[0]), math::subtract(p.v[2], p.v[1])));
+                        im::ray(p.v[0], normalWS, Color32(1.f, 1.f, 1.f, 1.f));
+                        float4 planeWS(normalWS.x, normalWS.y, normalWS.z, -math::dot(p.v[0], normalWS));
+                        im::plane(planeWS, Color32(1.f, 1.f, 1.f, 1.f));
+                        // render culled nodes
                         renderer::CullEntries cullEntries = {};
                         allocCullEntries(scratchArena, cullEntries, scene);
                         renderer::computeVisibilityWS(

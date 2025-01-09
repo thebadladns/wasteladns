@@ -81,6 +81,7 @@ namespace driver {
     struct RscRasterizerState {
         GLenum fillMode;
         GLenum cullFace;
+        bool scissor;
     };
     struct RscDepthStencilState {
         bool depth_enable;
@@ -104,6 +105,7 @@ namespace driver {
     
     struct RscIndexedVertexBuffer {
         GLsizei indexCount;
+        GLuint indexOffset;
         GLuint arrayObject;
         GLuint vertexBuffer;
         GLuint indexBuffer;

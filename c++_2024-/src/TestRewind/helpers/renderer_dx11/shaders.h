@@ -70,14 +70,14 @@ float4 PS(VertexOut OUT) : SV_TARGET {
 )"
 };
 
-constexpr PS_src ps_fullscreen_blit_white = {
-"ps_fullscreen_blit_white",
+constexpr PS_src ps_fullscreen_blit_clear_colored = {
+"ps_fullscreen_blit_clear_colored",
 R"(
-struct VertexOut {
-};
-float4 PS(VertexOut IN) : SV_TARGET {
-
-    return float4(1.0, 1.0, 1.0, 1.0);
+cbuffer BlitColor : register(b0) {
+    float4 color;
+}
+float4 PS() : SV_TARGET {
+    return color;
 }
 )"
 };

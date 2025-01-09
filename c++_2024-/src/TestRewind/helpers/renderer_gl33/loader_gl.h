@@ -209,6 +209,7 @@ typedef struct __GLsync* GLsync;
 #define GL_INCR 0x1E02
 #define GL_DECR 0x1E03
 #define GL_INVERT 0x150A
+#define GL_SCISSOR_TEST 0x0C11
 
 int GL_KHR_debug = 0; //todo
 typedef void (APIENTRY* GLDEBUGPROC)(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const GLchar* message, const void* userParam);
@@ -251,6 +252,8 @@ typedef void (APIENTRYP PFNGLPOLYGONMODEPROC)(GLenum face, GLenum mode);
 PFNGLPOLYGONMODEPROC glPolygonMode;
 typedef void (APIENTRYP PFNGLFRONTFACEPROC)(GLenum mode);
 PFNGLFRONTFACEPROC glFrontFace;
+typedef void (APIENTRYP PFNGLSCISSORPROC)(GLint x, GLint y, GLsizei width, GLsizei height);
+PFNGLSCISSORPROC glScissor;
 
 typedef GLuint(APIENTRYP PFNGLCREATEPROGRAMPROC)(void);
 PFNGLCREATEPROGRAMPROC glCreateProgram = nullptr;
@@ -376,6 +379,7 @@ void loadGLExtensions() {
     glDisable = (PFNGLDISABLEPROC)getGLProcAddress("glDisable");
     glPolygonMode = (PFNGLPOLYGONMODEPROC)getGLProcAddress("glPolygonMode");
     glFrontFace = (PFNGLFRONTFACEPROC)getGLProcAddress("glFrontFace");
+    glScissor = (PFNGLSCISSORPROC)getGLProcAddress("glScissor");
     
     glCreateProgram = (PFNGLCREATEPROGRAMPROC)getGLProcAddress("glCreateProgram");
     glCreateShader = (PFNGLCREATESHADERPROC)getGLProcAddress("glCreateShader");

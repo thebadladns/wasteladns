@@ -307,6 +307,29 @@ void extract_frustum_planes_from_vp_z0to1(float4* planes, const float4x4& vpMatr
     planes[4] = math::invScale(planes[4], math::mag(planes[4].xyz));
     planes[5] = math::invScale(planes[5], math::mag(planes[5].xyz));
 }
+void generate_persp_frustum_params(
+    f32& l, f32& r, f32& t, f32& b, const PerspProjection::Config& config) {
+    f32 near = config.near;
+    f32 far = config.far;
+    f32 fov = config.fov;
+    f32 aspect = config.aspect;
+    const f32 fovtan = math::tan(math::d2r32 * fov * 0.5f);
+    t = -fovtan * near;
+    b = -t; // todo: check whether top and bottom should be switched?
+    l = -fovtan * aspect * near;
+    r = -l;
+    // for matrices like
+    //f32 matrixCM[16];
+    //matrixCM[0] = (2 * near) / (r - l);
+    //matrixCM[5] = (2 * near) / (b - t);
+    //matrixCM[8] = (l + r) / (r - l);
+    //matrixCM[9] = (t + b) / (b - t);
+    //matrixCM[10] = far / (near - far); // for [0,1]
+    //matrixCM[10] = -(far + near) / (near - far); // for [-1,1]
+    //matrixCM[11] = -1.f;
+    //matrixCM[14] = (near * far) / (near - far); for [0,1]
+    //matrixCM[14] = -(2.f * far * near) / (near - far); //for [-1,1]
+}
 
 void generate_matrix_view(float4x4& viewMatrix, const Transform& tRHwithZup) {
 

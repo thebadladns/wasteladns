@@ -270,6 +270,7 @@ namespace driver {
     void create_RS(RscRasterizerState& rs, const RasterizerStateParams& params) {
         rs.fillMode = (GLenum) params.fill;
         rs.cullFace = (GLenum) params.cull;
+        rs.scissor = params.scissor;
     }
     void bind_RS(const RscRasterizerState& rs) {
         glPolygonMode(GL_FRONT_AND_BACK, rs.fillMode);
@@ -280,8 +281,13 @@ namespace driver {
             glDisable(GL_CULL_FACE);
         }
         glFrontFace(GL_CW); // match dx
+        if (rs.scissor) { glEnable(GL_SCISSOR_TEST); }
+        else { glDisable(GL_SCISSOR_TEST); }
     }
-
+    void set_scissor(const u32 left, const u32 top, const u32 right, const u32 bottom) {
+        // todo: test y
+        glScissor(left, top, right - left, bottom - top);
+    }
     void create_DS(RscDepthStencilState& ds, const DepthStencilStateParams& params) {
         ds.depth_enable = params.depth_enable;
         ds.depth_func = (GLenum) params.depth_func;
@@ -377,6 +383,7 @@ namespace driver {
         t.indexType = (GLenum) params.indexType;
         t.type = (GLenum) params.type;
         t.indexCount = params.indexCount;
+        t.indexOffset = 0;
     }
     void update_indexed_vertex_buffer(RscIndexedVertexBuffer& b, const IndexedBufferUpdateParams& params) {
         glBindVertexArray(0); // make sure we don't accidentally unbind any buffers here
@@ -392,7 +399,8 @@ namespace driver {
         glBindVertexArray(b.arrayObject);
     }
     void draw_indexed_vertex_buffer(const RscIndexedVertexBuffer& b) {
-        glDrawElements(b.type, b.indexCount, b.indexType, nullptr);
+        const size_t index_size = (b.indexType == BufferItemType::Enum::U16) ? sizeof(u16) : sizeof(u32);
+        glDrawElements(b.type, b.indexCount, b.indexType, (void*)(b.indexOffset * index_size));
     }
     void draw_instances_indexed_vertex_buffer(const RscIndexedVertexBuffer& b, const u32 instanceCount) {
         glDrawElementsInstanced(b.type, b.indexCount, b.indexType, nullptr, instanceCount);

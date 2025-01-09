@@ -10,12 +10,7 @@ constexpr VS_src vs_3d_base = {
 "vs_3d_base",
 R"(
 cbuffer PerScene : register(b0) {
-    matrix projectionMatrix;
-    matrix viewMatrix;
-    float3 viewPosWS;
-    float padding1;
-    float3 lightPosWS;
-    float padding2;
+    matrix vpMatrix;
 }
 cbuffer PerGroup : register(b1) {
     matrix modelMatrix;
@@ -30,9 +25,8 @@ struct VertexOutput {
 };
 VertexOutput VS(AppData IN) {
     VertexOutput OUT;
-    matrix vp = mul(projectionMatrix, viewMatrix);
     float4 posWS = mul(modelMatrix, float4(IN.posMS, 1.f));
-    OUT.positionCS = mul(vp, posWS);
+    OUT.positionCS = mul(vpMatrix, posWS);
     OUT.color = groupColor;
     return OUT;
 }
@@ -43,12 +37,7 @@ constexpr VS_src vs_color3d_base = {
 "vs_color3d_base",
 R"(
 cbuffer PerScene : register(b0) {
-    matrix projectionMatrix;
-    matrix viewMatrix;
-    float3 viewPosWS;
-    float padding1;
-    float3 lightPosWS;
-    float padding2;
+    matrix vpMatrix;
 }
 cbuffer PerGroup : register(b1) {
     matrix modelMatrix;
@@ -64,9 +53,8 @@ struct VertexOutput {
 };
 VertexOutput VS(AppData IN) {
     VertexOutput OUT;
-    matrix vp = mul(projectionMatrix, viewMatrix);
     float4 posWS = mul(modelMatrix, float4(IN.posMS, 1.f));
-    OUT.positionCS = mul(vp, posWS);
+    OUT.positionCS = mul(vpMatrix, posWS);
     OUT.color = IN.color.rgba * groupColor;
     return OUT;
 }
@@ -77,12 +65,7 @@ constexpr VS_src vs_color3d_skinned_base = {
 "vs_color3d_skinned_base",
 R"(
 cbuffer PerScene : register(b0) {
-    matrix projectionMatrix;
-    matrix viewMatrix;
-    float3 viewPosWS;
-    float padding1;
-    float3 lightPosWS;
-    float padding2;
+    matrix vpMatrix;
 }
 cbuffer PerGroup : register(b1) {
     matrix modelMatrix;
@@ -108,9 +91,8 @@ VertexOutput VS(AppData IN) {
     float4x4 joint3 = skinningMatrices[IN.joint_indices.w] * IN.joint_weights.w;
     float4x4 skinning = joint0 + joint1 + joint2 + joint3;
     VertexOutput OUT;
-    matrix vp = mul(projectionMatrix, viewMatrix);
     float4 posWS = mul(mul(modelMatrix,skinning), float4(IN.posMS, 1.f));
-    OUT.positionCS = mul(vp, posWS);
+    OUT.positionCS = mul(vpMatrix, posWS);
     OUT.color = IN.color.rgba * groupColor;
     return OUT;
 }
@@ -121,12 +103,7 @@ constexpr VS_src vs_3d_instanced_base = {
 "vs_3d_instanced_base"
 , R"(
 cbuffer PerScene : register(b0) {
-    matrix projectionMatrix;
-    matrix viewMatrix;
-    float3 viewPosWS;
-    float padding1;
-    float3 lightPosWS;
-    float padding2;
+    matrix vpMatrix;
 }
 cbuffer PerGroup : register(b1) {
     matrix modelMatrix;
@@ -147,9 +124,8 @@ VertexOutput VS(AppData IN) {
     VertexOutput OUT;
     matrix instanceMatrix = instanceMatrices[IN.instanceID];
     matrix mm = mul(instanceMatrix, modelMatrix);
-    matrix vp = mul(projectionMatrix, viewMatrix);
     float4 posWS = mul(mm, float4(IN.posMS, 1.f));
-    OUT.positionCS = mul(vp, posWS);
+    OUT.positionCS = mul(vpMatrix, posWS);
     OUT.color = groupColor;
     return OUT;
 }
@@ -160,12 +136,7 @@ constexpr VS_src vs_textured3d_base = {
 "vs_textured3d_base",
 R"(
 cbuffer PerScene : register(b0) {
-    matrix projectionMatrix;
-    matrix viewMatrix;
-    float3 viewPosWS;
-    float padding1;
-    float3 lightPosWS;
-    float padding2;
+    matrix vpMatrix;
 }
 cbuffer PerGroup : register(b1) {
     matrix modelMatrix;
@@ -181,9 +152,8 @@ struct VertexOutput {
 };
 VertexOutput VS(AppData IN) {
     VertexOutput OUT;
-    matrix vp = mul(projectionMatrix, viewMatrix);
     float4 posWS = mul(modelMatrix, float4(IN.posMS, 1.f));
-    OUT.positionCS = mul(vp, posWS);
+    OUT.positionCS = mul(vpMatrix, posWS);
     OUT.uv = IN.uv;
     return OUT;
 }
@@ -194,12 +164,7 @@ constexpr VS_src vs_textured3d_skinned_base = {
 "vs_textured3d_skinned_base",
 R"(
 cbuffer PerScene : register(b0) {
-    matrix projectionMatrix;
-    matrix viewMatrix;
-    float3 viewPosWS;
-    float padding1;
-    float3 lightPosWS;
-    float padding2;
+    matrix vpMatrix;
 }
 cbuffer PerGroup : register(b1) {
     matrix modelMatrix;
@@ -225,9 +190,8 @@ VertexOutput VS(AppData IN) {
     float4x4 joint3 = skinningMatrices[IN.joint_indices.w] * IN.joint_weights.w;
     float4x4 skinning = joint0 + joint1 + joint2 + joint3;
     VertexOutput OUT;
-    matrix vp = mul(projectionMatrix, viewMatrix);
     float4 posWS = mul(modelMatrix, mul(skinning, float4(IN.posMS, 1.f)));
-    OUT.positionCS = mul(vp, posWS);
+    OUT.positionCS = mul(vpMatrix, posWS);
     OUT.uv = IN.uv;
     return OUT;
 }
@@ -300,12 +264,7 @@ out gl_PerVertex
 
 layout(std140) uniform type_PerScene
 {
-    mat4 projectionMatrix;
-    mat4 viewMatrix;
-    vec3 viewPosWS;
-    float padding1;
-    vec3 lightPosWS;
-    float padding2;
+    mat4 vpMatrix;
 } PerScene;
 
 layout(std140) uniform type_PerGroup
@@ -320,7 +279,7 @@ layout(location = 0) out vec4 varying_COLOR;
 void main()
 {
     varying_COLOR = PerGroup.groupColor;
-    gl_Position = (PerScene.projectionMatrix * PerScene.viewMatrix) * (PerGroup.modelMatrix * vec4(in_var_POSITION, 1.0));
+    gl_Position = PerScene.vpMatrix * (PerGroup.modelMatrix * vec4(in_var_POSITION, 1.0));
 }
 )"
 };
@@ -338,12 +297,7 @@ out gl_PerVertex
 
 layout(std140) uniform type_PerScene
 {
-    mat4 projectionMatrix;
-    mat4 viewMatrix;
-    vec3 viewPosWS;
-    float padding1;
-    vec3 lightPosWS;
-    float padding2;
+    mat4 vpMatrix;
 } PerScene;
 
 layout(std140) uniform type_PerGroup
@@ -359,7 +313,7 @@ layout(location = 0) out vec4 varying_COLOR;
 void main()
 {
     varying_COLOR = in_var_COLOR * PerGroup.groupColor;
-    gl_Position = (PerScene.projectionMatrix * PerScene.viewMatrix) * (PerGroup.modelMatrix * vec4(in_var_POSITION, 1.0));
+    gl_Position = PerScene.vpMatrix * (PerGroup.modelMatrix * vec4(in_var_POSITION, 1.0));
 }
 )"
 };
@@ -377,12 +331,7 @@ out gl_PerVertex
 
 layout(std140) uniform type_PerScene
 {
-    mat4 projectionMatrix;
-    mat4 viewMatrix;
-    vec3 viewPosWS;
-    float padding1;
-    vec3 lightPosWS;
-    float padding2;
+    mat4 vpMatrix;
 } PerScene;
 
 layout(std140) uniform type_PerGroup
@@ -409,7 +358,7 @@ void main()
     mat4 joint2 = PerJoint.skinningMatrices[int(in_var_JOINTINDICES.z)] * in_var_JOINTWEIGHTS.z;
     mat4 joint3 = PerJoint.skinningMatrices[int(in_var_JOINTINDICES.w)] * in_var_JOINTWEIGHTS.w;
     mat4 skinning = joint0 + joint1 + joint2 + joint3;
-    gl_Position = (PerScene.projectionMatrix * PerScene.viewMatrix) * ((PerGroup.modelMatrix * skinning) * vec4(in_var_POSITION, 1.0));
+    gl_Position = PerScene.vpMatrix * ((PerGroup.modelMatrix * skinning) * vec4(in_var_POSITION, 1.0));
 }
 )"
 };
@@ -427,12 +376,7 @@ out gl_PerVertex
 
 layout(std140) uniform type_PerScene
 {
-    mat4 projectionMatrix;
-    mat4 viewMatrix;
-    vec3 viewPosWS;
-    float padding1;
-    vec3 lightPosWS;
-    float padding2;
+    mat4 vpMatrix;
 } PerScene;
 
 layout(std140) uniform type_PerGroup
@@ -453,9 +397,8 @@ layout(location = 0) out vec4 varying_COLOR;
 void main()
 {
     mat4 mm = PerInstance.instanceMatrices[uint(gl_InstanceID + SPIRV_Cross_BaseInstance)] * PerGroup.modelMatrix;
-    mat4 vp = PerScene.projectionMatrix * PerScene.viewMatrix;
     vec4 posWS = mm * vec4(in_var_POSITION, 1.0);
-    gl_Position = vp * posWS;
+    gl_Position = PerScene.vpMatrix * posWS;
     varying_COLOR = PerGroup.groupColor;
 }
 )"
@@ -474,12 +417,7 @@ out gl_PerVertex
 
 layout(std140) uniform type_PerScene
 {
-    mat4 projectionMatrix;
-    mat4 viewMatrix;
-    vec3 viewPosWS;
-    float padding1;
-    vec3 lightPosWS;
-    float padding2;
+    mat4 vpMatrix;
 } PerScene;
 
 layout(std140) uniform type_PerGroup
@@ -495,7 +433,7 @@ layout(location = 0) out vec2 varying_TEXCOORD;
 void main()
 {
     varying_TEXCOORD = in_var_TEXCOORD;
-    gl_Position = (PerScene.projectionMatrix * PerScene.viewMatrix) * (PerGroup.modelMatrix * vec4(in_var_POSITION, 1.0));
+    gl_Position = PerScene.vpMatrix * (PerGroup.modelMatrix * vec4(in_var_POSITION, 1.0));
 }
 )"
 };
@@ -512,12 +450,7 @@ out gl_PerVertex
 };
 layout(std140) uniform type_PerScene
 {
-    mat4 projectionMatrix;
-    mat4 viewMatrix;
-    vec3 viewPosWS;
-    float padding1;
-    vec3 lightPosWS;
-    float padding2;
+    mat4 vpMatrix;
 } PerScene;
 layout(std140) uniform type_PerGroup
 {
@@ -543,7 +476,7 @@ void main()
     mat4 joint2 = PerJoint.skinningMatrices[int(in_var_JOINTINDICES.z)] * in_var_JOINTWEIGHTS.z;
     mat4 joint3 = PerJoint.skinningMatrices[int(in_var_JOINTINDICES.w)] * in_var_JOINTWEIGHTS.w;
     mat4 skinning = joint0 + joint1 + joint2 + joint3;
-    gl_Position = (PerScene.projectionMatrix * PerScene.viewMatrix) * ((PerGroup.modelMatrix * skinning) * vec4(in_var_POSITION, 1.0));
+    gl_Position = PerScene.vpMatrix * ((PerGroup.modelMatrix * skinning) * vec4(in_var_POSITION, 1.0));
 }
 )"
 };
