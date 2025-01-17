@@ -293,7 +293,7 @@ void computeVisibilityWS(allocator::Arena& frameArena, VisibleNodes& visibilityF
         
         // quad inside frustum
         bool visible = true;
-        for (u32 p = 0; p < 6; p++) {
+        for (u32 p = 0; p < frustum.numPlanes; p++) {
             int out = 0;
             out += (math::dot(frustum.planes[p], float4(entry.boxPointsWS[0], 1.f)) < 0.f) ? 1 : 0;
             out += (math::dot(frustum.planes[p], float4(entry.boxPointsWS[1], 1.f)) < 0.f) ? 1 : 0;
