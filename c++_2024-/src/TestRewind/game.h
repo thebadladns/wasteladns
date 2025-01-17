@@ -2,18 +2,22 @@
 #define __WASTELADNS_GAME_H__
 
 #if USE_DEBUG_MEMORY
-const size_t persistentArenaSize = 1024 * 1024 * 1024;
+const size_t persistentArenaSize = 512 * 1024 * 1024;
+const size_t sceneArenaSize = 512 * 1024 * 1024;
 const size_t frameArenaSize = 1024 * 1024 * 1024;
 const size_t scratchArenaSize = 5 * 1024 * 1024;
+const u64 maxRenderMeshes = 4096 * 2 + 16;
 const u64 maxRenderNodes = 2048;
 const u64 maxAnimatedNodes = 2048;
 const u64 maxRenderNodesInstanced = 2048;
 const u64 maxPlayerParticleCubes = 4;
 #else
-const size_t persistentArenaSize = 128 * 1024 * 1024;
-const size_t frameArenaSize = 256 * 1024 * 1024;
-const size_t scratchArenaSize = 5 * 1024 * 1024;
-const u32 maxRenderNodes = 1024;
+const size_t persistentArenaSize = 1 * 1024 * 1024;
+const size_t sceneArenaSize = 256 * 1024 * 1024;
+const size_t frameArenaSize = 4 * 1024 * 1024;
+const size_t scratchArenaSize = 4 * 1024 * 1024;
+const u32 maxRenderMeshes = 2080 * 2 + 16;  // TODOOOO
+const u64 maxRenderNodes = 2048;
 const u64 maxAnimatedNodes = 32;
 const u32 maxRenderNodesInstanced = 32;
 const u32 maxPlayerParticleCubes = 4;
@@ -23,7 +27,7 @@ const u32 maxPlayerParticleCubes = 4;
 struct CameraNode;
 namespace debug {
 struct OverlayMode { enum Enum { All, HelpOnly, ArenaOnly, None, Count }; };
-struct Debug3DView { enum Enum { Culling, All, None, Count }; };
+struct Debug3DView { enum Enum { Physics, Culling, All, None, Count }; };
 struct EventText { char text[256]; f64 time; };
 
 f64 frameHistory[60];
@@ -71,6 +75,7 @@ namespace input
         ;
     constexpr ::input::keyboard::Keys::Enum
           EXIT = ::input::keyboard::Keys::ESCAPE
+        , CYCLE_ROOM = ::input::keyboard::Keys::N
         #if __DEBUG
         , TOGGLE_OVERLAY = ::input::keyboard::Keys::H
         , TOGGLE_DEBUG3D = ::input::keyboard::Keys::V
@@ -90,19 +95,25 @@ namespace input
 
 struct Memory {
     allocator::Arena persistentArena;
+    allocator::Arena sceneArena;
     __DEBUGDEF(allocator::Arena debugArena;)
     allocator::Arena scratchArenaRoot; // to be passed by copy, so it works as a scoped stack allocator
     allocator::Arena frameArena;
     u8* frameArenaBuffer; // used to reset allocator::frameArena every frame
-    __DEBUGDEF(u8* persistentArenaBuffer;) // used for debugging visualization
-    __DEBUGDEF(uintptr_t scratchArenaHighmark;) // to track largest allocation
-    __DEBUGDEF(uintptr_t frameArenaHighmark;) // to track largest allocation
+    u8* sceneArenaBuffer; // used to reset allocator::sceneArena upon scene switches
+    // used for debugging visualization
+    __DEBUGDEF(u8* persistentArenaBuffer;)
+    // to track largest allocation
+    __DEBUGDEF(uintptr_t scratchArenaHighmark;)
+    __DEBUGDEF(uintptr_t frameArenaHighmark;)
 };
 
 struct Instance {
     Time time;
     Memory memory;
     Scene scene;
+    u32 roomId;
+    Resources resources;
 };
 
 void loadLaunchConfig(platform::LaunchConfig& config) {
@@ -113,10 +124,9 @@ void loadLaunchConfig(platform::LaunchConfig& config) {
     config.game_height = 240 * 1;
     config.fullscreen = false;
     config.title = "3D Test";
-    config.arena_size = persistentArenaSize + frameArenaSize + scratchArenaSize;
+    config.arena_size = persistentArenaSize + sceneArenaSize + frameArenaSize + scratchArenaSize;
     __DEBUGDEF(config.arena_size += renderer::im::arena_size;)
 }
-
 void start(Instance& game, platform::GameConfig& config, platform::State& platform) {
 
     game.time = {};
@@ -132,6 +142,10 @@ void start(Instance& game, platform::GameConfig& config, platform::State& platfo
             game.memory.persistentArena, platform.memory.curr, persistentArenaSize);
         platform.memory.curr += persistentArenaSize;
         __DEBUGDEF(game.memory.persistentArenaBuffer = game.memory.persistentArena.curr;)
+        allocator::init_arena(
+            game.memory.sceneArena, platform.memory.curr, sceneArenaSize);
+        platform.memory.curr += sceneArenaSize;
+        game.memory.sceneArenaBuffer = game.memory.sceneArena.curr;
         allocator::init_arena(game.memory.scratchArenaRoot, platform.memory.curr, scratchArenaSize);
         platform.memory.curr += scratchArenaSize;
         __DEBUGDEF(game.memory.scratchArenaHighmark =
@@ -150,12 +164,17 @@ void start(Instance& game, platform::GameConfig& config, platform::State& platfo
     }
     {
         game.scene = {};
+        game.roomId = 0;
         SceneMemory arenas = {
             game.memory.persistentArena,
             game.memory.scratchArenaRoot
             __DEBUGDEF(, game.memory.debugArena)
         };
-        init_scene(game.scene, arenas, platform.screen);
+        load_coreResources(game.resources, arenas, platform.screen);
+        spawn_scene_mirrorRoom(
+            game.scene, game.memory.sceneArena, game.resources, platform.screen,
+            roomDefinitions[game.roomId]);
+
     }
 }
 
@@ -190,11 +209,15 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
 
     // meta input checks
     const ::input::keyboard::State& keyboard = platform.input.keyboard;
+    const u32 prevRoomId = game.roomId;
     bool step = true;
     __DEBUGDEF(bool captureCameras = false;)
     {
         if (keyboard.released(input::EXIT)) {
             config.quit = true;
+        }
+        if (keyboard.pressed(input::CYCLE_ROOM)) {
+            game.roomId = (game.roomId + 1) % countof(roomDefinitions);
         }
         #if __DEBUG
         if (keyboard.pressed(input::TOGGLE_OVERLAY)) { debug::overlaymode = (debug::OverlayMode::Enum)((debug::overlaymode + 1) % debug::OverlayMode::Count); }
@@ -221,6 +244,14 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
         if (keyboard.pressed(input::TOGGLE_PAUSE_SCENE_RENDER)) { debug::pauseSceneRender = !debug::pauseSceneRender; }
         #endif      
         step = !game.time.paused;
+    }
+
+    if (prevRoomId != game.roomId) {
+        game.memory.sceneArena.curr = game.memory.sceneArenaBuffer;
+        game.scene = {};
+        spawn_scene_mirrorRoom(
+            game.scene, game.memory.sceneArena, game.resources, platform.screen,
+            roomDefinitions[game.roomId]);
     }
 
     if (step)
@@ -341,7 +372,12 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
         }
 
         // physics update
+        if (game.scene.ballInstancesDrawHandle)
         {
+            physics::updatePositionFromHandle(
+                game.scene.physicsScene, game.scene.playerPhysicsNodeHandle,
+                game.scene.player.transform.pos, (f32)game.time.lastFrameDelta);
+
             physics::updatePhysics(game.scene.physicsScene, dt);
             // update draw positions
             renderer::Matrices64* instance_matrices; u32* instance_count;
@@ -355,7 +391,11 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
             }
         }
 
-        animation::updateAnimation(game.scene.animScene, dt);
+        // anim update
+        {
+            animation::Scene& animScene = game.scene.animScene;
+            animation::updateAnimation(animScene, dt);
+        }
 
         // camera update
         {
@@ -369,16 +409,18 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
     }
 
     // Render update
+    CameraNode* cameraTree = nullptr;
+    Camera mainCamera = {};
     __DEBUGDEF(if (!debug::pauseSceneRender))
     {
         renderer::Scene& scene = game.scene.renderScene;
+        renderer::CoreResources& renderCore = game.resources.renderCore;
         using namespace renderer;
 
-        CameraNode* cameraTree = nullptr;
-        Camera mainCamera = {};
         mainCamera.viewMatrix = game.scene.camera.viewMatrix;
-        mainCamera.projectionMatrix = scene.perspProjection.matrix;
-        mainCamera.vpMatrix = math::mult(scene.perspProjection.matrix, game.scene.camera.viewMatrix);
+        mainCamera.projectionMatrix = renderCore.perspProjection.matrix;
+        mainCamera.vpMatrix =
+            math::mult(renderCore.perspProjection.matrix, game.scene.camera.viewMatrix);
         mainCamera.pos = game.scene.camera.transform.pos;
 
         {
@@ -407,18 +449,18 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
                     mainCameraRoot.projectionMatrix = mainCamera.projectionMatrix;
                     mainCameraRoot.vpMatrix = mainCamera.vpMatrix;
                     mainCameraRoot.pos = mainCamera.pos;
-                    mainCameraRoot.id = 0xffffffff;
+                    mainCameraRoot.sourceId = mainCameraRoot.parentIndex = 0xffffffff;
                     mainCameraRoot.depth = 0;
                     platform::format(mainCameraRoot.str, sizeof(mainCameraRoot.str), "_");
                     renderer::extract_frustum_planes_from_vp(
                         mainCameraRoot.frustum.planes, mainCamera.vpMatrix);
-                    mainCameraRoot.frustum.count = 6;
+                    mainCameraRoot.frustum.numPlanes = 6;
                     // the buffer will copy this data into it's allocated region as
                     // it starts adding more cameras
                     cameraTreeBuffer.data = &mainCameraRoot;
                     cameraTreeBuffer.cap = cameraTreeBuffer.len = 1;
                     GatherMirrorTreeContext gatherTreeContext =
-                    { game.memory.frameArena, cameraTreeBuffer, game.scene.mirrors };
+                    { game.memory.frameArena, cameraTreeBuffer, game.scene.mirrors, game.scene.maxMirrorBounces };
                     numCameras = gatherMirrorTreeRecursive(gatherTreeContext, 1, mainCameraRoot);
                     cameraTree = cameraTreeBuffer.data;
                     cameraTree[0].siblingIndex = numCameras;
@@ -487,20 +529,20 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
             }
 
             // render main camera
-            driver::bind_RT(scene.gameRT);
+            driver::bind_RT(renderCore.gameRT);
             // TODO: figure out whether this is needed
-            driver::clear_RT(scene.gameRT,
+            driver::clear_RT(renderCore.gameRT,
                 driver::RenderTargetClearFlags::Stencil);
 
             driver::Marker_t marker;
             driver::set_marker_name(marker, "BASE SCENE"); driver::start_event(marker);
             {
                 RenderSceneContext renderSceneContext = {
-                    cameraTree[0], visibleNodesTree[0], game.scene,
-                    game.scene.renderScene.depthStateAlways,
-                    game.scene.renderScene.depthStateOn,
-                    game.scene.renderScene.depthStateReadOnly,
-                    game.scene.renderScene.rasterizerStateFillFrontfaces,
+                    cameraTree[0], visibleNodesTree[0], game.scene, renderCore,
+                    renderCore.depthStateAlways,
+                    renderCore.depthStateOn,
+                    renderCore.depthStateReadOnly,
+                    renderCore.rasterizerStateFillFrontfaces,
                     game.memory.scratchArenaRoot };
                 renderBaseScene(renderSceneContext);
             }
@@ -509,7 +551,7 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
             // render camera tree
             if (cameraTree[0].siblingIndex > 1) {
                 renderMirrorTree(
-                        cameraTree, visibleNodesTree, game.scene,
+                        cameraTree, visibleNodesTree, game.scene, renderCore,
                         game.memory.scratchArenaRoot);
             }
         }
@@ -550,6 +592,17 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
                     , math::add(pos, float3(thickness, -thickness, spacing * i))
                     , axisZ);
             }
+            
+            if (debug::debug3Dmode == debug::Debug3DView::All
+             || debug::debug3Dmode == debug::Debug3DView::Physics) {
+                physics::Scene& pScene = game.scene.physicsScene;
+                for (u32 i = 0; i < pScene.wall_count; i++) {
+                    renderer::im::segment(pScene.walls[i].start, pScene.walls[i].end, Color32(1.f, 1.f, 1.f, 1.f));
+                }
+                for (u32 i = 0; i < pScene.obstacle_count; i++) {
+                    renderer::im::sphere(pScene.obstacles[i].pos, pScene.obstacles[i].radius, Color32(1.f, 1.f, 1.f, 1.f));
+                }
+            }
 
             if (debug::debug3Dmode == debug::Debug3DView::All
              || debug::debug3Dmode == debug::Debug3DView::Culling) {
@@ -572,19 +625,45 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
                                 scratchArena,
                                 scene.drawNodes.count * sizeof(u32), alignof(u32));
                         visibleNodesDebug.visible_nodes_count = 0;
-                        float4x4 vpMatrix = math::mult(cameraNode.projectionMatrix, cameraNode.viewMatrix);
+                        float4x4 vpMatrix =
+                            math::mult(cameraNode.projectionMatrix, cameraNode.viewMatrix);
                         renderer::computeVisibilityCS(
                             visibleNodesDebug, isEachNodeVisible, vpMatrix, scene);
                         const Color32 color(0.25f, 0.8f, 0.15f, 0.7f);
                         im::frustum(vpMatrix, color);
                     } else {
                         // render mirror with normal
-                        const game::Mirrors::Poly& p = game.scene.mirrors.polys[debug::capturedCameras[debug::debugCameraStage].id];
+                        const game::Mirrors::Poly& p = game.scene.mirrors.polys[cameraNode.sourceId];
+                        // normal is v2-v0xv1-v0 assuming clockwise winding and right handed coordinates
                         float3 normalWS = math::normalize(
-                            math::cross(math::subtract(p.v[1], p.v[0]), math::subtract(p.v[2], p.v[1])));
-                        im::ray(p.v[0], normalWS, Color32(1.f, 1.f, 1.f, 1.f));
-                        float4 planeWS(normalWS.x, normalWS.y, normalWS.z, -math::dot(p.v[0], normalWS));
+                            math::cross(
+                                math::subtract(p.v[2], p.v[0]), math::subtract(p.v[1], p.v[0])));
+                        float4 planeWS(
+                            normalWS.x, normalWS.y, normalWS.z,-math::dot(p.v[0], normalWS));
                         im::plane(planeWS, Color32(1.f, 1.f, 1.f, 1.f));
+
+                        renderer::Frustum& frustum =
+                            debug::capturedCameras[cameraNode.parentIndex].frustum;
+                        float3 quad[8];
+                        u32 quad_count = p.numPts;
+                        memcpy(quad, p.v, sizeof(float3) * p.numPts);
+                        cull_quad_with_frustum(
+                            quad, quad_count, frustum.planes, frustum.numPlanes, 8);
+                        const float2 screenScale(
+                            320.f * 3.f * 0.5f,
+                            240.f * 3.f * 0.5f);
+                        float2 polyScreen[8];
+                        for (u32 i = 0; i < quad_count; i++) {
+                            float4 pCS = math::mult(mainCamera.vpMatrix, float4(quad[i], 1.f));
+                            polyScreen[i] = math::scale(math::invScale(pCS.xy, pCS.w), screenScale);
+                            renderer::im::Text2DParams textParams;
+                            textParams.scale = 1;
+                            textParams.pos = polyScreen[i];
+                            textParams.color = Color32(1.f, 1.f, 1.f, 1.f);
+                            renderer::im::text2d(textParams, "%d", i);
+                        }
+                        renderer::im::poly2d(polyScreen, quad_count, Color32(1.f, 1.f, 1.f, 0.3f));
+
                         // render culled nodes
                         renderer::CullEntries cullEntries = {};
                         allocCullEntries(scratchArena, cullEntries, scene);
@@ -592,7 +671,7 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
                             scratchArena, visibleNodesDebug, isEachNodeVisible,
                             cameraNode.frustum, cullEntries);
                         const Color32 color(0.25f, 0.8f, 0.15f, 0.7f);
-                        im::frustum(cameraNode.frustum.planes, cameraNode.frustum.count, color);
+                        im::frustum(cameraNode.frustum.planes, cameraNode.frustum.numPlanes, color);
                     }
                     for (u32 i = 0; i < visibleNodesDebug.visible_nodes_count; i++) {
                         u32 n = visibleNodesDebug.visible_nodes[i];
@@ -605,7 +684,6 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
             im::commit3d();
         }
         #endif
-
         
         // Immediate-mode debug in 2D
         // Can be moved out of the render update, it only pushes data to cpu buffers
@@ -615,7 +693,7 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
             Color32 defaultCol(0.7f, 0.8f, 0.15f, 1.0f);
             Color32 activeCol(1.0f, 0.2f, 0.1f, 1.0f);
                 
-            f32 textscale = platform.screen.text_scale;
+            f32 textscale = platform.screen.window_scale;
             f32 lineheight = 15.f * textscale;
 
             struct EventText {
@@ -623,22 +701,23 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
                 f64 time;
             };
             renderer::im::Text2DParams textParamsLeft, textParamsRight, textParamsCenter;
-            textParamsLeft.scale = (u8)platform.screen.text_scale;
+            textParamsLeft.scale = (u8)textscale;
             textParamsLeft.pos =float2(
-                game.scene.renderScene.windowProjection.config.left + 10.f * textscale,
-                game.scene.renderScene.windowProjection.config.top - 10.f * textscale);
+                game.resources.renderCore.windowProjection.config.left + 10.f * textscale,
+                game.resources.renderCore.windowProjection.config.top - 10.f * textscale);
             textParamsLeft.color = defaultCol;
-            textParamsRight.scale = (u8)platform.screen.text_scale;
+            textParamsRight.scale = (u8)textscale;
             textParamsRight.pos = float2(
-                game.scene.renderScene.windowProjection.config.right - 60.f * textscale,
-                game.scene.renderScene.windowProjection.config.top - 10.f * textscale);
+                 game.resources.renderCore.windowProjection.config.right - 60.f * textscale,
+                 game.resources.renderCore.windowProjection.config.top - 10.f * textscale);
             textParamsRight.color = defaultCol;
-            textParamsCenter.scale = (u8)platform.screen.text_scale;
+            textParamsCenter.scale = (u8)textscale;
             textParamsCenter.pos = float2(
-                0.f, game.scene.renderScene.windowProjection.config.top - 10.f * textscale);
+                0.f, game.resources.renderCore.windowProjection.config.top - 10.f * textscale);
             textParamsCenter.color = defaultCol;
 
             const char* overlaynames[] = { "All", "Help Only", "Arenas only", "None" };
+            static_assert(countof(overlaynames) == debug::OverlayMode::Count, "check");
             if (keyboard.pressed(input::TOGGLE_OVERLAY)) {
                 platform::format(
                     debug::eventLabel.text, sizeof(debug::eventLabel.text),
@@ -649,6 +728,7 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
             else {
                 textParamsLeft.color = defaultCol;
             }
+
             renderer::im::text2d(
                 textParamsLeft, "H to toggle overlays: %s", overlaynames[debug::overlaymode]);
             textParamsLeft.pos.y -= lineheight;
@@ -665,7 +745,8 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
             renderer::im::text2d(textParamsLeft, "SPACE to toggle scene rendering pause");
             textParamsLeft.pos.y -= lineheight;
 
-            const char* visualizationModes[] = { "Culling", "All", "None" };
+            const char* visualizationModes[] = { "Physics", "Culling", "All", "None" };
+            static_assert(countof(visualizationModes) == debug::Debug3DView::Count, "check");
             if (keyboard.pressed(input::TOGGLE_DEBUG3D)) {
                 platform::format(
                     debug::eventLabel.text, sizeof(debug::eventLabel.text),
@@ -707,7 +788,11 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
             textParamsLeft.pos.y -= lineheight;
 
             if (debug::capturedCameras) {
-                for (u32 i = 0; i < debug::capturedCameras[0].siblingIndex; i++) {
+                const u32 numCameras = debug::capturedCameras[0].siblingIndex;
+                const u32 minidx = debug::debugCameraStage > 10 ? debug::debugCameraStage - 10 : 0;
+                const u32 maxidx = debug::debugCameraStage + 10 < numCameras ? debug::debugCameraStage + 10 : numCameras;
+                debug::capturedCameras[debug::debugCameraStage].siblingIndex;
+                for (u32 i = minidx; i < maxidx; i++) {
                     if (i == debug::debugCameraStage) { textParamsLeft.color = activeCol; }
                     renderer::im::text2d(textParamsLeft, "%*d: %s", debug::capturedCameras[i].depth, i, debug::capturedCameras[i].str);
                     textParamsLeft.color = defaultCol;
@@ -746,27 +831,21 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
                 textParamsLeft.pos.y -= lineheight;
             }
 
-            if (debug::overlaymode == debug::OverlayMode::All || debug::overlaymode == debug::OverlayMode::HelpOnly) {
+            if (debug::overlaymode == debug::OverlayMode::All
+                || debug::overlaymode == debug::OverlayMode::HelpOnly) {
                 textParamsLeft.color = platform.input.mouse.down(::input::mouse::Keys::BUTTON_LEFT) ? activeCol : defaultCol;
                 renderer::im::text2d(textParamsLeft, "Mouse (%.3f,%.3f)", platform.input.mouse.x, platform.input.mouse.y);
                 textParamsLeft.pos.y -= lineheight;
                 textParamsLeft.color = defaultCol;
-                const float3 mousepos_WS = camera::screenPosToWorldPos(platform.input.mouse.x, platform.input.mouse.y, platform.screen.window_width, platform.screen.window_height, game.scene.renderScene.perspProjection.config, game.scene.camera.viewMatrix);
-                renderer::im::text2d(textParamsLeft, "Mouse 3D (%.3f,%.3f,%.3f)", mousepos_WS.x, mousepos_WS.y, mousepos_WS.z);
+                const float3 mousepos_WS = camera::screenPosToWorldPos(
+                    platform.input.mouse.x, platform.input.mouse.y,
+                    platform.screen.window_width, platform.screen.window_height,
+                    game.resources.renderCore.perspProjection.config, game.scene.camera.viewMatrix);
+                renderer::im::text2d(textParamsLeft, "Mouse 3D (%.3f,%.3f,%.3f)",mousepos_WS.x, mousepos_WS.y, mousepos_WS.z);
                 textParamsLeft.pos.y -= lineheight;
-                textParamsLeft.color = platform.input.mouse.down(::input::mouse::Keys::BUTTON_LEFT) ? activeCol : defaultCol;
-                renderer::im::text2d(textParamsLeft, "   left click and drag to orbit");
-                textParamsLeft.pos.y -= lineheight;
-                textParamsLeft.color = platform.input.mouse.down(::input::mouse::Keys::BUTTON_RIGHT) ? activeCol : defaultCol;
-                renderer::im::text2d(textParamsLeft, "   right click and drag to pan");
-                textParamsLeft.pos.y -= lineheight;
-                textParamsLeft.color = platform.input.mouse.scrolldy != 0 ? activeCol : defaultCol;
-                renderer::im::text2d(textParamsLeft, "   mouse wheel to scale");
-                textParamsLeft.pos.y -= lineheight;
-                textParamsLeft.color = defaultCol;
                 {
                     float3 eulers_deg = math::scale(game.scene.orbitCamera.eulers, math::r2d32);
-                    renderer::im::text2d(textParamsLeft, "Camera eulers: " float3_FORMAT("% .3f"), float3_PARAMS(eulers_deg));
+                    renderer::im::text2d(textParamsLeft, "Camera eulers: " FLOAT3_FORMAT("% .3f"), FLOAT3_PARAMS(eulers_deg));
                     textParamsLeft.pos.y -= lineheight;
                 }
                 for (u32 i = 0; i < platform.input.padCount; i++)
@@ -811,7 +890,8 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
                 textParamsRight.pos.y -= lineheight;
             }
 
-            if (debug::overlaymode == debug::OverlayMode::All || debug::overlaymode == debug::OverlayMode::ArenaOnly)
+            if (debug::overlaymode == debug::OverlayMode::All
+             || debug::overlaymode == debug::OverlayMode::ArenaOnly)
             {
                 auto renderArena = [](renderer::im::Text2DParams& textCfg, u8* arenaEnd,
                                         u8* arenaStart, uintptr_t arenaHighmark,
@@ -827,8 +907,19 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
                     const f32 arenaHighmark_barwidth =
                         barwidth * (arenaHighmarkBytes / (f32)arenaTotal);
                     textCfg.color = highmarkCol;
-                    renderer::im::text2d(
-                        textCfg, "%s highmark: %lu bytes", arenaName, arenaHighmarkBytes);
+                    if (arenaHighmarkBytes > 1024 * 1024) {
+                        renderer::im::text2d(
+                            textCfg, "%s highmark: %lu bytes (%3.fMB)",
+                            arenaName, arenaHighmarkBytes, arenaHighmarkBytes / (1024.f * 1024.f));
+                    } else if (arenaHighmarkBytes > 1024) {
+                        renderer::im::text2d(
+                            textCfg, "%s highmark: %lu bytes (%3.fKB)",
+                            arenaName, arenaHighmarkBytes, arenaHighmarkBytes / (1024.f));
+                    } else {
+                        renderer::im::text2d(
+                            textCfg, "%s highmark: %lu bytes",
+                            arenaName, arenaHighmarkBytes);
+                    }
                     textCfg.pos.y -= lineheight;
                     textCfg.color = defaultCol;
 
@@ -873,6 +964,16 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
                         game.memory.persistentArenaBuffer,
                         (ptrdiff_t)game.memory.persistentArena.curr,
                         "Persistent arena", defaultCol, arenabaseCol, arenahighmarkCol,
+                        lineheight, textscale);
+                }
+                {
+                    const Color32 arenabaseCol(0.65f, 0.65f, 0.65f, 0.4f);
+                    const Color32 arenahighmarkCol(0.95f, 0.35f, 0.8f, 1.f);
+                    renderArena(
+                        textParamsCenter, game.memory.sceneArena.end,
+                        game.memory.sceneArenaBuffer,
+                        (ptrdiff_t)game.memory.sceneArena.curr,
+                        "Scene arena", defaultCol, arenabaseCol, arenahighmarkCol,
                         lineheight, textscale);
                 }
                 {
@@ -968,26 +1069,112 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
                     renderer::driver::set_VP(vpParams);
                 }
 
-                renderer::driver::bind_blend_state(game.scene.renderScene.blendStateBlendOff);
-                renderer::driver::bind_DS(game.scene.renderScene.depthStateOff);
-                renderer::driver::bind_RS(game.scene.renderScene.rasterizerStateFillFrontfaces);
-                renderer::driver::bind_main_RT(game.scene.renderScene.windowRT);
+                renderer::driver::bind_blend_state(game.resources.renderCore.blendStateBlendOff);
+                renderer::driver::bind_DS( game.resources.renderCore.depthStateOff);
+                renderer::driver::bind_RS( game.resources.renderCore.rasterizerStateFillFrontfaces);
+                renderer::driver::bind_main_RT(game.resources.renderCore.windowRT);
 
-                driver::bind_shader(game.scene.renderScene.shaders[renderer::ShaderTechniques::FullscreenBlitTextured]);
-                driver::bind_textures(&game.scene.renderScene.gameRT.textures[0], 1);
+                driver::bind_shader(game.resources.renderCore.shaders[renderer::ShaderTechniques::FullscreenBlitTextured]);
+                driver::bind_textures(&game.resources.renderCore.gameRT.textures[0], 1);
                 driver::draw_fullscreen();
                 renderer::driver::RscTexture nullTex = {};
                 driver::bind_textures(&nullTex, 1); // unbind gameRT
             }
             renderer::driver::end_event();
         }
+        // from now we should have
+        // driver::bind_main_RT(game.resources.renderCore.windowRT);
+        // UI
+        {
+            driver::bind_blend_state(game.resources.renderCore.blendStateOn);
+            driver::Marker_t marker;
+            driver::set_marker_name(marker, "UI");
+            driver::start_event(marker);
+            {
+                renderer::CoreResources& rsc = game.resources.renderCore;
+                driver::RscCBuffer& scene_cbuffer =
+                    rsc.cbuffers[renderer::CoreResources::CBuffersMeta::Scene];
+                driver::RscCBuffer& uitext_cbuffer =
+                    rsc.cbuffers[renderer::CoreResources::CBuffersMeta::UIText];
+
+                renderer::SceneData cbufferPerScene;
+                cbufferPerScene.vpMatrix = rsc.windowProjection.matrix;
+                renderer::driver::update_cbuffer(scene_cbuffer, &cbufferPerScene);
+
+                renderer::driver::bind_RS(game.resources.renderCore.rasterizerStateFillFrontfaces);
+                renderer::driver::bind_DS(game.resources.renderCore.depthStateOff);
+
+                driver::bind_shader(rsc.shaders[renderer::ShaderTechniques::Color2D]);
+                driver::RscCBuffer cbuffers[] = { scene_cbuffer, uitext_cbuffer };
+                driver::bind_cbuffers(rsc.shaders[renderer::ShaderTechniques::Color2D], cbuffers, 2);
+                
+                {
+                    renderer::NodeData noteUItext = {};
+                    noteUItext.groupColor = float4(1.f, 1.f, 1.f, 1.f);
+                    math::identity4x4(*(Transform*)&noteUItext.worldMatrix);
+                    renderer::driver::update_cbuffer(uitext_cbuffer, &noteUItext);
+
+                    driver::bind_indexed_vertex_buffer(game.resources.gpuBufferHeaderText);
+                    driver::draw_indexed_vertex_buffer(game.resources.gpuBufferHeaderText);
+                }
+
+                {
+                    renderer::NodeData noteUItext = {};
+                    noteUItext.groupColor =
+                        platform.input.keyboard.pressed(input::CYCLE_ROOM) ?
+                            float4(1.f, 0.f, 0.f, 1.f)
+                          : float4(1.f, 1.f, 1.f, 1.f);
+                    math::identity4x4(*(Transform*)&noteUItext.worldMatrix);
+                    renderer::driver::update_cbuffer(uitext_cbuffer, &noteUItext);
+
+                    driver::bind_indexed_vertex_buffer(game.resources.gpuBufferCycleRoomText);
+                    driver::draw_indexed_vertex_buffer(game.resources.gpuBufferCycleRoomText);
+                }
+                {
+                    renderer::NodeData noteUItext = {};
+                    noteUItext.groupColor =
+                        (platform.input.mouse.scrolldy != 0) ?
+                            float4(1.f, 0.f, 0.f, 1.f)
+                          : float4(1.f, 1.f, 1.f, 1.f);
+                    math::identity4x4(*(Transform*)&noteUItext.worldMatrix);
+                    renderer::driver::update_cbuffer(uitext_cbuffer, &noteUItext);
+
+                    driver::bind_indexed_vertex_buffer(game.resources.gpuBufferScaleText);
+                    driver::draw_indexed_vertex_buffer(game.resources.gpuBufferScaleText);
+                }
+                {
+                    renderer::NodeData noteUItext = {};
+                    noteUItext.groupColor =
+                        platform.input.mouse.down(::input::mouse::Keys::BUTTON_RIGHT) ?
+                            float4(1.f, 0.f, 0.f, 1.f)
+                          : float4(1.f, 1.f, 1.f, 1.f);
+                    math::identity4x4(*(Transform*)&noteUItext.worldMatrix);
+                    renderer::driver::update_cbuffer(uitext_cbuffer, &noteUItext);
+
+                    driver::bind_indexed_vertex_buffer(game.resources.gpuBufferPanText);
+                    driver::draw_indexed_vertex_buffer(game.resources.gpuBufferPanText);
+                }
+                {
+                    renderer::NodeData noteUItext = {};
+                    noteUItext.groupColor =
+                        platform.input.mouse.down(::input::mouse::Keys::BUTTON_LEFT) ?
+                            float4(1.f, 0.f, 0.f, 1.f)
+                          : float4(1.f, 1.f, 1.f, 1.f);
+                    math::identity4x4(*(Transform*)&noteUItext.worldMatrix);
+                    renderer::driver::update_cbuffer(uitext_cbuffer, &noteUItext);
+
+                    driver::bind_indexed_vertex_buffer(game.resources.gpuBufferOrbitText);
+                    driver::draw_indexed_vertex_buffer(game.resources.gpuBufferOrbitText);
+                }
+            }
+            driver::end_event();
+        }
         // Batched 2d debug (clear cpu buffers onto the screen)
         #if __DEBUG
         {
-            driver::bind_blend_state(game.scene.renderScene.blendStateOn);
-            driver::bind_main_RT(game.scene.renderScene.windowRT);
+            driver::bind_blend_state(game.resources.renderCore.blendStateOn);
             im::commit2d();
-            im::present2d(game.scene.renderScene.windowProjection.matrix);
+            im::present2d(game.resources.renderCore.windowProjection.matrix);
         }
         #endif
 

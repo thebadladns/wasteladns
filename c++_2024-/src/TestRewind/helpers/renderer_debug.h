@@ -1,10 +1,6 @@
 #ifndef __WASTELADNS_DEBUGDRAW_H__
 #define __WASTELADNS_DEBUGDRAW_H__
 
-#ifdef __WASTELADNS_DEBUG_TEXT__
-#include "../lib/stb/stb_easy_font.h"
-#endif
-
 namespace renderer { namespace im {
 struct Vertex2D {
     float2 pos;
@@ -16,13 +12,11 @@ struct Vertex3D {
 };
 
 const u32 max_3d_vertices = 1 << 17;
-const u32 max_2d_vertices = 1 << 20;
-// 2d vertices are stored in quads: per 4 vertex quad, we store 6 indexes (2 tris) = 6 / 4 = 3 / 2
-inline u32 vertexSizeToIndexCount(const u32 count) { return 3 * count / 2; }
-const size_t arena_size =                                   // 3.125MB
-      max_3d_vertices * sizeof(Vertex3D)                    // (1 << 17) * 16 = 2MB
-    + max_2d_vertices * sizeof(Vertex2D)                    // 2^16 * 12 = 768KB
-    + vertexSizeToIndexCount(max_2d_vertices) * sizeof(u32);// (2^16 * 3 / 2) * 4 = 384KB
+const u32 max_2d_vertices = 1 << 16;
+const size_t arena_size =                       // 3.125MB
+      max_3d_vertices * sizeof(Vertex3D)        // (1 << 17) * 16 = 2MB
+    + max_2d_vertices * sizeof(Vertex2D)        // 2^16 * 12 = 768KB
+    + (max_2d_vertices * 3 / 2) * sizeof(u32);  // ((2^16 * 3) / 2) * 4 = 384KB (at worst we use 6 indices per quad)
 
 struct Context {
 
@@ -40,6 +34,7 @@ struct Context {
 
     u32 vertices_3d_head;
     u32 vertices_2d_head;
+    u32 indices_2d_head;
 
     u32 vertexBufferIndex;
     u32 layoutBufferIndex;
@@ -424,7 +419,7 @@ void box_2d(const float2 min, const float2 max, Color32 color) {
     Vertex2D& bottomRigth = debug::ctx.vertices_2d[vertexStart + 3];
     bottomRigth.pos = { max.x, max.y };
         
-    u32 indexStart = vertexSizeToIndexCount(vertexStart);
+    u32 indexStart = debug::ctx.indices_2d_head;
     debug::ctx.indices_2d[indexStart + 0] = vertexStart + 2;
     debug::ctx.indices_2d[indexStart + 1] = vertexStart + 1;
     debug::ctx.indices_2d[indexStart + 2] = vertexStart + 0;
@@ -433,13 +428,37 @@ void box_2d(const float2 min, const float2 max, Color32 color) {
     debug::ctx.indices_2d[indexStart + 5] = vertexStart + 2;
         
     debug::ctx.vertices_2d_head += 4;
+    debug::ctx.indices_2d_head += 6;
         
     bottomLeft.color = color.ABGR();
     topLeft.color = color.ABGR();
     topRight.color = color.ABGR();
     bottomRigth.color = color.ABGR();
 }
-#ifdef __WASTELADNS_DEBUG_TEXT__
+void poly2d(const float2* vertices, const u8 count, Color32 color) {
+    u32 colorv4 = color.ABGR();
+    u8 i = 0;
+    // add vertices as a triangle fan from the first vertex
+    for (u32 i = 1; i < count; i++) {
+        u32 vertexStart = debug::ctx.vertices_2d_head;
+        Vertex2D& v_out_0 = debug::ctx.vertices_2d[vertexStart];
+        Vertex2D& v_out_1 = debug::ctx.vertices_2d[vertexStart + 1];
+        Vertex2D& v_out_2 = debug::ctx.vertices_2d[vertexStart + 2];
+        v_out_0.pos = vertices[0];
+        v_out_1.pos = vertices[i - 1];
+        v_out_2.pos = vertices[i];
+        v_out_0.color = colorv4;
+        v_out_1.color = colorv4;
+        v_out_2.color = colorv4;
+        u32 indexStart = debug::ctx.indices_2d_head;
+        debug::ctx.indices_2d[indexStart + 0] = vertexStart + 0;
+        debug::ctx.indices_2d[indexStart + 1] = vertexStart + 1;
+        debug::ctx.indices_2d[indexStart + 2] = vertexStart + 2;
+
+        debug::ctx.vertices_2d_head += 3;
+        debug::ctx.indices_2d_head += 3;
+    }
+}
 struct Text2DParams {
     Text2DParams() : color(1.f, 1.f, 1.f, 1.f), scale(1) {}
     float2 pos;
@@ -452,7 +471,7 @@ void text2d_va(const Text2DParams& params, const char* format, va_list argList) 
     platform::format_va(text, sizeof(text), format, argList);
         
     u32 vertexCount = debug::ctx.vertices_2d_head;
-    u32 indexCount = vertexSizeToIndexCount(debug::ctx.vertices_2d_head);
+    u32 indexCount = debug::ctx.indices_2d_head;
         
     unsigned char color[4];
     color[0] = params.color.getRu();
@@ -478,6 +497,8 @@ void text2d_va(const Text2DParams& params, const char* format, va_list argList) 
         debug::ctx.indices_2d[indexIndex+3] = vertexIndex + 3;
         debug::ctx.indices_2d[indexIndex+4] = vertexIndex + 0;
         debug::ctx.indices_2d[indexIndex+5] = vertexIndex + 1;
+
+        debug::ctx.indices_2d_head += 6;
     }
 }
 
@@ -498,7 +519,6 @@ void text2d(const float2& pos, const char* format, ...) {
     text2d_va(params, format, va);
     va_end(va);
 }
-#endif // __WASTELADNS_DEBUG_TEXT__
     
 void init(allocator::Arena& arena) {
 
@@ -508,10 +528,11 @@ void init(allocator::Arena& arena) {
         // reserve memory for buffers
         u32 vertices_3d_size = max_3d_vertices * sizeof(Vertex3D);
         u32 vertices_2d_size = max_2d_vertices * sizeof(Vertex2D);
-        u32 indices_2d_size = vertexSizeToIndexCount(max_2d_vertices) * sizeof(u32);
+        u32 indices_2d_size = (max_2d_vertices * 3) / 2; // at worst we have all quads, at 6 index per poly
         debug::ctx.vertices_3d = (Vertex3D*)allocator::alloc_arena(arena, vertices_3d_size, alignof(Vertex3D));
         debug::ctx.vertices_2d = (Vertex2D*)allocator::alloc_arena(arena, vertices_2d_size, alignof(Vertex2D));
         debug::ctx.indices_2d = (u32*)allocator::alloc_arena(arena, indices_2d_size, alignof(u32));
+        debug::ctx.indices_2d_head = 0;
 
         driver::create_cbuffer(debug::ctx.cbuffer, { sizeof(float4x4) });
         const renderer::driver::CBufferBindingDesc bufferBindings_MVP[] = {{ "type_PerGroup", driver::CBufferStageMask::VS }};
@@ -621,16 +642,17 @@ void present3d(const float4x4& projMatrix, const float4x4& viewMatrix) {
 }
 
 void commit2d() {
-    u32 indexCount = vertexSizeToIndexCount(debug::ctx.vertices_2d_head);
+    //u32 indexCount = vertexSizeToIndexCount(debug::ctx.vertices_2d_head);
     driver::IndexedBufferUpdateParams bufferUpdateParams;
     bufferUpdateParams.vertexData = debug::ctx.vertices_2d;
     bufferUpdateParams.vertexSize = sizeof(Vertex2D) * debug::ctx.vertices_2d_head;
     bufferUpdateParams.indexData = debug::ctx.indices_2d;
-    bufferUpdateParams.indexSize = indexCount * sizeof(u32);
-    bufferUpdateParams.indexCount = indexCount;
+    bufferUpdateParams.indexSize = debug::ctx.indices_2d_head * sizeof(u32);
+    bufferUpdateParams.indexCount = debug::ctx.indices_2d_head;
     driver::update_indexed_vertex_buffer(debug::ctx.buffer_2d, bufferUpdateParams);
     debug::vertices_2d_head_last_frame = debug::ctx.vertices_2d_head;
     debug::ctx.vertices_2d_head = 0;
+    debug::ctx.indices_2d_head = 0;
 }
 void present2d(const float4x4& projMatrix) {
 
@@ -650,7 +672,6 @@ void present2d(const float4x4& projMatrix) {
         driver::draw_indexed_vertex_buffer(debug::ctx.buffer_2d);
     }
     driver::end_event();
-    debug::ctx.vertices_2d_head = 0;
 }
     
 } } // renderer::im

@@ -85,14 +85,14 @@ struct DrawlistStreams { enum Enum {
 typedef u32 MeshHandle;
 struct ShaderTechniques { enum Enum {
         FullscreenBlitClearColor, FullscreenBlitTextured,
-        Instanced3D,
+        Color2D, Instanced3D,
         Color3D, Color3DSkinned,
         Textured3D, Textured3DAlphaClip, Textured3DSkinned, Textured3DAlphaClipSkinned,
-        Count, Bits = 3
+        Count, Bits = math::ceillog2(Count)
 }; };
 const char* shaderNames[] = {
     "FullscreenBlitClearColor", "FullscreenBlitTextured",
-    "Instanced3D",
+    "Color2D", "Instanced3D",
     "Color3D", "Color3DSkinned",
     "Textured3D", "Textured3DAlphaClip", "Textured3DSkinned", "Textured3DAlphaClipSkinned"
 };
@@ -103,6 +103,12 @@ struct DrawMesh { // id of a piece of geometry loaded on the gpu
     ShaderTechniques::Enum shaderTechnique;
     driver::RscIndexedVertexBuffer vertexBuffer;
     driver::RscTexture texture; // should this be here?
+};
+struct CPUMesh {
+    float3* vertices;
+    u16* indices;
+    u32 vertexCount;
+    u32 indexCount;
 };
 struct DrawNode { // List of meshes (one of each type), and their render data in the scene
     void* ext_data;
@@ -158,18 +164,20 @@ void draw_drawlist(Drawlist& dl, Drawlist_Context& ctx, const Drawlist_Overrides
         renderer::driver::end_event();
     }
 }
+
+
 struct Scene {
-    struct Sky {
-        driver::RscCBuffer cbuffer;
-        NodeData nodeData;
-        driver::RscIndexedVertexBuffer buffers[6];
-    };
-    driver::RscShaderSet shaders[ShaderTechniques::Count];
-	allocator::Arena persistentArena;
     allocator::Pool<DrawNode> drawNodes;
     allocator::Pool<DrawNodeInstanced> instancedDrawNodes;
-    allocator::Pool<DrawMesh> meshes;
     allocator::Pool<driver::RscCBuffer> cbuffers;
+};
+struct CoreResources {
+    driver::RscShaderSet shaders[ShaderTechniques::Count];
+    DrawMesh* meshes;
+    u32 num_meshes;
+    struct CBuffersMeta { enum {
+        ClearColor, Scene, NodeIdentity, UIText, Count }; };
+    driver::RscCBuffer cbuffers[CBuffersMeta::Count];
     renderer::driver::RscRasterizerState rasterizerStateFillFrontfaces;
     renderer::driver::RscRasterizerState rasterizerStateFillBackfaces;
     renderer::driver::RscRasterizerState rasterizerStateFillCullNone;
@@ -190,10 +198,6 @@ struct Scene {
     renderer::driver::RscRenderTarget gameRT;
     camera::WindowProjection windowProjection;
     camera::PerspProjection perspProjection;
-    Sky sky;
-    u32 cbuffer_clearColor;
-    u32 cbuffer_scene;
-    u32 cbuffer_nodeIdentity;
 };
 
 DrawNodeHandle handle_from_node(Scene& scene, DrawNode& node) {
@@ -210,11 +214,14 @@ void instanced_node_from_handle(Matrices64*& matrices, u32*& count, Scene& scene
     matrices = &node.instanceMatrices;
 	count = &node.instanceCount;
 }
-DrawMesh& drawMesh_from_handle(Scene& scene, const u32 handle) {
-    return allocator::get_pool_slot(scene.meshes, handle - 1);
+DrawMesh& alloc_drawMesh(CoreResources& core) {
+    return core.meshes[core.num_meshes++];
 }
-u32 handle_from_drawMesh(Scene& scene, DrawMesh& mesh) {
-    return allocator::get_pool_index(scene.meshes, mesh) + 1;
+DrawMesh& drawMesh_from_handle(CoreResources& core, const u32 handle) {
+    return core.meshes[handle - 1];
+}
+u32 handle_from_drawMesh(CoreResources& core, DrawMesh& mesh) {
+    return u32(&mesh - &core.meshes[0]) + 1;
 }
 driver::RscCBuffer& cbuffer_from_handle(Scene& scene, const u32 handle) {
     return allocator::get_pool_slot(scene.cbuffers, handle - 1);
@@ -225,7 +232,7 @@ u32 handle_from_cbuffer(Scene& scene, driver::RscCBuffer& cbuffer) {
 
 struct Frustum {
     float4 planes[10];
-    u32 count;
+    u32 numPlanes;
 };
 struct CullEntry {
     float3 boxPointsWS[8]; // todo: surely we can do better?
@@ -535,9 +542,10 @@ void qsort_key(SortKey* keys, s32 low, s32 high) {
         });
 };
 
-void addNodesToDrawlistSorted(Drawlist& dl, const VisibleNodes& visibleNodes, float3 cameraPos,
-                              Scene& scene, const u32 includeFilter, const u32 excludeFilter,
-                              const SortParams::Type::Enum sortType) {
+void addNodesToDrawlistSorted(
+    Drawlist& dl, const VisibleNodes& visibleNodes, float3 cameraPos,
+    Scene& scene, CoreResources& rsc, const u32 includeFilter, const u32 excludeFilter,
+    const SortParams::Type::Enum sortType) {
 
     SortParams sortParams;
     makeSortKeyBitParams(sortParams, sortType);
@@ -559,9 +567,9 @@ void addNodesToDrawlistSorted(Drawlist& dl, const VisibleNodes& visibleNodes, fl
             item = {};
             SortKey& key = dl.keys[dl_index];
             key.idx = dl_index;
-            const DrawMesh& mesh = drawMesh_from_handle(scene, node.meshHandles[m]);
+            const DrawMesh& mesh = drawMesh_from_handle(rsc, node.meshHandles[m]);
             key.v = makeSortKey(n, mesh.shaderTechnique, sortParams);
-            item.shader = scene.shaders[mesh.shaderTechnique];
+            item.shader = rsc.shaders[mesh.shaderTechnique];
             item.vertexBuffer = mesh.vertexBuffer;
             item.cbuffers[item.cbuffer_count++] = cbuffer_from_handle(scene, node.cbuffer_node);
             if (node.cbuffer_ext) {
@@ -571,9 +579,9 @@ void addNodesToDrawlistSorted(Drawlist& dl, const VisibleNodes& visibleNodes, fl
             item.texture = mesh.texture;
             if (mesh.shaderTechnique == ShaderTechniques::Textured3DAlphaClip
                 || mesh.shaderTechnique == ShaderTechniques::Textured3DAlphaClipSkinned) {
-                item.blendState = scene.blendStateOn;
+                item.blendState = rsc.blendStateOn;
             } else {
-                item.blendState = scene.blendStateBlendOff;
+                item.blendState = rsc.blendStateBlendOff;
             }
             item.name = shaderNames[mesh.shaderTechnique];
         }
@@ -598,16 +606,16 @@ void addNodesToDrawlistSorted(Drawlist& dl, const VisibleNodes& visibleNodes, fl
                 SortKey& key = dl.keys[dl_index];
                 key = {};
                 key.idx = dl_index;
-                const DrawMesh& mesh = drawMesh_from_handle(scene, node.meshHandles[m]);
+                const DrawMesh& mesh = drawMesh_from_handle(rsc, node.meshHandles[m]);
                 key.v = makeSortKey(n, mesh.shaderTechnique, sortParams);
-                item.shader = scene.shaders[mesh.shaderTechnique];
+                item.shader = rsc.shaders[mesh.shaderTechnique];
                 item.vertexBuffer = mesh.vertexBuffer;
                 item.cbuffers[item.cbuffer_count++] =
                     cbuffer_from_handle(scene, node.cbuffer_node);
                 item.cbuffers[item.cbuffer_count++] =
                     cbuffer_from_handle(scene, node.cbuffer_instances);
                 item.texture = mesh.texture;
-                item.blendState = scene.blendStateBlendOff; // todo: support blendstates?
+                item.blendState = rsc.blendStateBlendOff; // todo: support blendstates?
                 item.drawcount = node.instanceCount;
                 item.name = shaderNames[mesh.shaderTechnique];
             }

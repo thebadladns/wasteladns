@@ -20,23 +20,41 @@ void calculate_tangents(float3& t, float3& b, const float3& vbl, const float3& v
     b = math::normalize(b);
 }
 
-void create_cube_coords(uintptr_t v, ptrdiff_t stride, u16* i, const float3 scale, const float3 offset) {
+void create_cube_coords(
+uintptr_t v, ptrdiff_t stride, u16* i, const float3 scale, const float3 offset) {
     const f32 pos_x = scale.x + offset.x; const f32 neg_x = -scale.x + offset.x;
     const f32 pos_y = scale.y + offset.y; const f32 neg_y = -scale.y + offset.y;
     const f32 pos_z = scale.z + offset.z; const f32 neg_z = -scale.z + offset.z;
-    float3* v0, * v1, * v2, * v3;
-    v0 = (float3*)(v + stride * 0); v1 = (float3*)(v + stride * 1); v2 = (float3*)(v + stride * 2); v3 = (float3*)(v + stride * 3);
-    *v0 = { pos_x, pos_y, neg_z }; *v1 = { neg_x, pos_y, neg_z }; *v2 = { neg_x, pos_y, pos_z }; *v3 = { pos_x, pos_y, pos_z }; // +y quad
-    v0 = (float3*)(v + stride * 4); v1 = (float3*)(v + stride * 5); v2 = (float3*)(v + stride * 6); v3 = (float3*)(v + stride * 7);
-    *v0 = { neg_x, neg_y, neg_z }; *v1 = { pos_x, neg_y, neg_z }; *v2 = { pos_x, neg_y, pos_z }; *v3 = { neg_x, neg_y, pos_z }; // -y quad
-    v0 = (float3*)(v + stride * 8); v1 = (float3*)(v + stride * 9); v2 = (float3*)(v + stride * 10); v3 = (float3*)(v + stride * 11);
-    *v0 = { pos_x, neg_y, neg_z }; *v1 = { pos_x, pos_y, neg_z }; *v2 = { pos_x, pos_y, pos_z }; *v3 = { pos_x, neg_y, pos_z }; // +x quad
-    v0 = (float3*)(v + stride * 12); v1 = (float3*)(v + stride * 13); v2 = (float3*)(v + stride * 14); v3 = (float3*)(v + stride * 15);
-    *v0 = { neg_x, pos_y, neg_z }; *v1 = { neg_x, neg_y, neg_z }; *v2 = { neg_x, neg_y, pos_z }; *v3 = { neg_x, pos_y, pos_z }; // -x quad
-    v0 = (float3*)(v + stride * 16); v1 = (float3*)(v + stride * 17); v2 = (float3*)(v + stride * 18); v3 = (float3*)(v + stride * 19);
-    *v0 = { neg_x, neg_y, pos_z }; *v1 = { pos_x, neg_y, pos_z }; *v2 = { pos_x, pos_y, pos_z }; *v3 = { neg_x, pos_y, pos_z }; // +z quad
-    v0 = (float3*)(v + stride * 20); v1 = (float3*)(v + stride * 21); v2 = (float3*)(v + stride * 22); v3 = (float3*)(v + stride * 23);
-    *v0 = { pos_x, pos_y, neg_z }; *v1 = { pos_x, neg_y, neg_z }; *v2 = { neg_x, neg_y, neg_z }; *v3 = { neg_x, pos_y, neg_z }; // -z quad
+    // +y quad
+    *(float3*)(v + stride * 0) = { pos_x, pos_y, neg_z };
+    *(float3*)(v + stride * 1) = { neg_x, pos_y, neg_z };
+    *(float3*)(v + stride * 2) = { neg_x, pos_y, pos_z };
+    *(float3*)(v + stride * 3) = { pos_x, pos_y, pos_z };
+    // -y quad
+    *(float3*)(v + stride * 4) = { neg_x, neg_y, neg_z };
+    *(float3*)(v + stride * 5) = { pos_x, neg_y, neg_z };
+    *(float3*)(v + stride * 6) = { pos_x, neg_y, pos_z };
+    *(float3*)(v + stride * 7) = { neg_x, neg_y, pos_z };
+    // +x quad
+    *(float3*)(v + stride * 8) = { pos_x, neg_y, neg_z };
+    *(float3*)(v + stride * 9) = { pos_x, pos_y, neg_z };
+    *(float3*)(v + stride * 10) = { pos_x, pos_y, pos_z };
+    *(float3*)(v + stride * 11) = { pos_x, neg_y, pos_z };
+    // -x quad
+    *(float3*)(v + stride * 12) = { neg_x, pos_y, neg_z };
+    *(float3*)(v + stride * 13) = { neg_x, neg_y, neg_z };
+    *(float3*)(v + stride * 14) = { neg_x, neg_y, pos_z };
+    *(float3*)(v + stride * 15) = { neg_x, pos_y, pos_z };
+    // +z quad
+    *(float3*)(v + stride * 16) = { neg_x, neg_y, pos_z };
+    *(float3*)(v + stride * 17) = { pos_x, neg_y, pos_z };
+    *(float3*)(v + stride * 18) = { pos_x, pos_y, pos_z };
+    *(float3*)(v + stride * 19) = { neg_x, pos_y, pos_z };
+    // -z quad
+    *(float3*)(v + stride * 20) = { pos_x, pos_y, neg_z };
+    *(float3*)(v + stride * 21) = { pos_x, neg_y, neg_z };
+    *(float3*)(v + stride * 22) = { neg_x, neg_y, neg_z };
+    *(float3*)(v + stride * 23) = { neg_x, pos_y, neg_z };
 
     i[0] = 2; i[1] = 1; i[2] = 0; i[3] = 2; i[4] = 0; i[5] = 3;             // +y tris
     i[6] = 6; i[7] = 5; i[8] = 4; i[9] = 6; i[10] = 4; i[11] = 7;           // -y tris
@@ -52,53 +70,54 @@ void create_colored_cube_coords(ColoredCube& cube, const Color32 color, const fl
     const u32 c = color.ABGR();
     for (u32 i = 0; i < 24; i++) { cube.vertices[i].color = c; }
 }
-
-void create_untextured_sphere_coords(UntexturedSphere& s, const f32 radius) {
-    s.vertices[0] =  float3( 0.0000f,   -1.0000f,    0.0000f);
-    s.vertices[1] =  float3( 0.7227f,   -0.4453f,   -0.5254f);
-    s.vertices[2] =  float3(-0.2754f,   -0.4453f,   -0.8496f);
-    s.vertices[3] =  float3(-0.8926f,   -0.4453f,    0.0000f);
-    s.vertices[4] =  float3(-0.2754f,   -0.4453f,    0.8496f);
-    s.vertices[5] =  float3( 0.7227f,   -0.4453f,    0.5254f);
-    s.vertices[6] =  float3( 0.2754f,    0.4453f,   -0.8496f);
-    s.vertices[7] =  float3(-0.7227f,    0.4453f,   -0.5254f);
-    s.vertices[8] =  float3(-0.7227f,    0.4453f,    0.5254f);
-    s.vertices[9] =  float3( 0.2754f,    0.4453f,    0.8496f);
-    s.vertices[10] = float3( 0.8926f,    0.4453f,    0.0000f);
-    s.vertices[11] = float3( 0.0000f,    1.0000f,    0.0000f);
-    s.vertices[12] = float3(-0.1621f,   -0.8496f,   -0.4980f);
-    s.vertices[13] = float3( 0.4238f,   -0.8496f,   -0.3086f);
-    s.vertices[14] = float3( 0.2617f,   -0.5254f,   -0.8086f);
-    s.vertices[15] = float3( 0.8496f,   -0.5254f,    0.0000f);
-    s.vertices[16] = float3( 0.4238f,   -0.8496f,    0.3086f);
-    s.vertices[17] = float3(-0.5254f,   -0.8496f,    0.0000f);
-    s.vertices[18] = float3(-0.6875f,   -0.5254f,   -0.4980f);
-    s.vertices[19] = float3(-0.1621f,   -0.8496f,    0.4980f);
-    s.vertices[20] = float3(-0.6875f,   -0.5254f,    0.4980f);
-    s.vertices[21] = float3( 0.2617f,   -0.5254f,    0.8086f);
-    s.vertices[22] = float3( 0.9492f,    0.0000f,   -0.3086f);
-    s.vertices[23] = float3( 0.9492f,    0.0000f,    0.3086f);
-    s.vertices[24] = float3( 0.0000f,    0.0000f,   -1.0000f);
-    s.vertices[25] = float3( 0.5859f,    0.0000f,   -0.8086f);
-    s.vertices[26] = float3(-0.9492f,    0.0000f,   -0.3086f);
-    s.vertices[27] = float3(-0.5859f,    0.0000f,   -0.8086f);
-    s.vertices[28] = float3(-0.5859f,    0.0000f,    0.8086f);
-    s.vertices[29] = float3(-0.9492f,    0.0000f,    0.3086f);
-    s.vertices[30] = float3( 0.5859f,    0.0000f,    0.8086f);
-    s.vertices[31] = float3( 0.0000f,    0.0000f,    1.0000f);
-    s.vertices[32] = float3( 0.6875f,    0.5254f,   -0.4980f);
-    s.vertices[33] = float3(-0.2617f,    0.5254f,   -0.8086f);
-    s.vertices[34] = float3(-0.8496f,    0.5254f,    0.0000f);
-    s.vertices[35] = float3(-0.2617f,    0.5254f,    0.8086f);
-    s.vertices[36] = float3( 0.6875f,    0.5254f,    0.4980f);
-    s.vertices[37] = float3( 0.1621f,    0.8496f,   -0.4980f);
-    s.vertices[38] = float3( 0.5254f,    0.8496f,    0.0000f);
-    s.vertices[39] = float3(-0.4238f,    0.8496f,   -0.3086f);
-    s.vertices[40] = float3(-0.4238f,    0.8496f,    0.3086f);
-    s.vertices[41] = float3( 0.1621f,    0.8496f,    0.4980f);
-    for (u32 i = 0; i < 42; i++) { s.vertices[i] = math::scale(s.vertices[i], radius); }
+void create_sphere_coords(uintptr_t v, ptrdiff_t stride, u16* i, const f32 radius) {
+    *(float3*)(v + stride * 0) =   float3( 0.0000f,   -1.0000f,    0.0000f);
+    *(float3*)(v + stride * 1) =   float3( 0.7227f,   -0.4453f,   -0.5254f);
+    *(float3*)(v + stride * 2) =   float3(-0.2754f,   -0.4453f,   -0.8496f);
+    *(float3*)(v + stride * 3) =   float3(-0.8926f,   -0.4453f,    0.0000f);
+    *(float3*)(v + stride * 4) =   float3(-0.2754f,   -0.4453f,    0.8496f);
+    *(float3*)(v + stride * 5) =   float3( 0.7227f,   -0.4453f,    0.5254f);
+    *(float3*)(v + stride * 6) =   float3( 0.2754f,    0.4453f,   -0.8496f);
+    *(float3*)(v + stride * 7) =   float3(-0.7227f,    0.4453f,   -0.5254f);
+    *(float3*)(v + stride * 8) =   float3(-0.7227f,    0.4453f,    0.5254f);
+    *(float3*)(v + stride * 9) =   float3( 0.2754f,    0.4453f,    0.8496f);
+    *(float3*)(v + stride * 10) =  float3( 0.8926f,    0.4453f,    0.0000f);
+    *(float3*)(v + stride * 11) =  float3( 0.0000f,    1.0000f,    0.0000f);
+    *(float3*)(v + stride * 12) =  float3(-0.1621f,   -0.8496f,   -0.4980f);
+    *(float3*)(v + stride * 13) =  float3( 0.4238f,   -0.8496f,   -0.3086f);
+    *(float3*)(v + stride * 14) =  float3( 0.2617f,   -0.5254f,   -0.8086f);
+    *(float3*)(v + stride * 15) =  float3( 0.8496f,   -0.5254f,    0.0000f);
+    *(float3*)(v + stride * 16) =  float3( 0.4238f,   -0.8496f,    0.3086f);
+    *(float3*)(v + stride * 17) =  float3(-0.5254f,   -0.8496f,    0.0000f);
+    *(float3*)(v + stride * 18) =  float3(-0.6875f,   -0.5254f,   -0.4980f);
+    *(float3*)(v + stride * 19) =  float3(-0.1621f,   -0.8496f,    0.4980f);
+    *(float3*)(v + stride * 20) =  float3(-0.6875f,   -0.5254f,    0.4980f);
+    *(float3*)(v + stride * 21) =  float3( 0.2617f,   -0.5254f,    0.8086f);
+    *(float3*)(v + stride * 22) =  float3( 0.9492f,    0.0000f,   -0.3086f);
+    *(float3*)(v + stride * 23) =  float3( 0.9492f,    0.0000f,    0.3086f);
+    *(float3*)(v + stride * 24) =  float3( 0.0000f,    0.0000f,   -1.0000f);
+    *(float3*)(v + stride * 25) =  float3( 0.5859f,    0.0000f,   -0.8086f);
+    *(float3*)(v + stride * 26) =  float3(-0.9492f,    0.0000f,   -0.3086f);
+    *(float3*)(v + stride * 27) =  float3(-0.5859f,    0.0000f,   -0.8086f);
+    *(float3*)(v + stride * 28) =  float3(-0.5859f,    0.0000f,    0.8086f);
+    *(float3*)(v + stride * 29) =  float3(-0.9492f,    0.0000f,    0.3086f);
+    *(float3*)(v + stride * 30) =  float3( 0.5859f,    0.0000f,    0.8086f);
+    *(float3*)(v + stride * 31) =  float3( 0.0000f,    0.0000f,    1.0000f);
+    *(float3*)(v + stride * 32) =  float3( 0.6875f,    0.5254f,   -0.4980f);
+    *(float3*)(v + stride * 33) =  float3(-0.2617f,    0.5254f,   -0.8086f);
+    *(float3*)(v + stride * 34) =  float3(-0.8496f,    0.5254f,    0.0000f);
+    *(float3*)(v + stride * 35) =  float3(-0.2617f,    0.5254f,    0.8086f);
+    *(float3*)(v + stride * 36) =  float3( 0.6875f,    0.5254f,    0.4980f);
+    *(float3*)(v + stride * 37) =  float3( 0.1621f,    0.8496f,   -0.4980f);
+    *(float3*)(v + stride * 38) =  float3( 0.5254f,    0.8496f,    0.0000f);
+    *(float3*)(v + stride * 39) =  float3(-0.4238f,    0.8496f,   -0.3086f);
+    *(float3*)(v + stride * 40) =  float3(-0.4238f,    0.8496f,    0.3086f);
+    *(float3*)(v + stride * 41) =  float3( 0.1621f,    0.8496f,    0.4980f);
+    for (u32 i = 0; i < 42; i++) {
+        float3* currv = (float3*)(v + stride * i);
+        *currv = math::scale(*currv, radius);
+    }
     
-    u16* i = s.indices;
     i[ 0] = 0;     i[1] = 13;   i[2] =  12;
     i[ 3] = 1;     i[4] = 13;   i[5] =  15;
     i[ 6] = 0;     i[7] = 12;   i[8] =  17;
@@ -179,6 +198,12 @@ void create_untextured_sphere_coords(UntexturedSphere& s, const f32 radius) {
     i[ 231] = 12;  i[232] = 14; i[233] =  2;
     i[ 234] = 12;  i[235] = 13; i[236] =  14;
     i[ 237] = 13;  i[238] = 1;  i[239] =  14;
+}
+
+void create_colored_sphere_coords(ColoredSphere& s, const f32 radius, Color32 color) {
+    create_sphere_coords((uintptr_t)s.vertices, sizeof(s.vertices[0]), s.indices, radius);
+    const u32 c = color.ABGR();
+    for (u32 i = 0; i < 42; i++) { s.vertices[i].color = c; }
 }
 }
 
@@ -368,7 +393,9 @@ namespace driver {
 
 } // Driver
 
-void create_indexed_vertex_buffer_from_untextured_mesh(renderer::driver::RscIndexedVertexBuffer& buffer, float3* vertices, u32 vertices_count, u16* indices, u32 indices_count) {
+void create_indexed_vertex_buffer_from_untextured_mesh(
+renderer::driver::RscIndexedVertexBuffer& buffer, float3* vertices, u32 vertices_count,
+u16* indices, u32 indices_count) {
     renderer::driver::IndexedVertexBufferDesc bufferParams;
     bufferParams.vertexData = vertices;
     bufferParams.indexData = indices;
@@ -381,15 +408,18 @@ void create_indexed_vertex_buffer_from_untextured_mesh(renderer::driver::RscInde
     bufferParams.indexType = renderer::driver::BufferItemType::U16;
     bufferParams.type = renderer::driver::BufferTopologyType::Triangles;
     driver::VertexAttribDesc attribs[] = {
-        driver::make_vertexAttribDesc("POSITION", 0, sizeof(float3), driver::BufferAttributeFormat::R32G32B32_FLOAT)
+        driver::make_vertexAttribDesc(
+            "POSITION", 0, sizeof(float3), driver::BufferAttributeFormat::R32G32B32_FLOAT)
     };
     renderer::driver::create_indexed_vertex_buffer(buffer, bufferParams, attribs, countof(attribs));
 }
-void create_indexed_vertex_buffer_from_colored_mesh(renderer::driver::RscIndexedVertexBuffer& buffer, ColoredCube::Vertex* vertices, u32 vertices_count, u16* indices, u32 indices_count) {
+void create_indexed_vertex_buffer_from_colored_mesh(
+renderer::driver::RscIndexedVertexBuffer& buffer, ColoredVertex* vertices, u32 vertices_count,
+u16* indices, u32 indices_count) {
     renderer::driver::IndexedVertexBufferDesc bufferParams;
     bufferParams.vertexData = vertices;
     bufferParams.indexData = indices;
-    bufferParams.vertexSize = sizeof(f32) * 3 * vertices_count;
+    bufferParams.vertexSize = sizeof(ColoredVertex) * vertices_count;
     bufferParams.vertexCount = vertices_count;
     bufferParams.indexSize = sizeof(u16) * indices_count;
     bufferParams.indexCount = indices_count;
@@ -398,8 +428,12 @@ void create_indexed_vertex_buffer_from_colored_mesh(renderer::driver::RscIndexed
     bufferParams.indexType = renderer::driver::BufferItemType::U16;
     bufferParams.type = renderer::driver::BufferTopologyType::Triangles;
     driver::VertexAttribDesc attribs[] = {
-        driver::make_vertexAttribDesc("POSITION", offsetof(ColoredCube::Vertex, pos), sizeof(ColoredCube::Vertex), driver::BufferAttributeFormat::R32G32B32_FLOAT),
-        driver::make_vertexAttribDesc("COLOR", offsetof(ColoredCube::Vertex, color), sizeof(ColoredCube::Vertex), driver::BufferAttributeFormat::R8G8B8A8_UNORM)
+        driver::make_vertexAttribDesc(
+            "POSITION", offsetof(ColoredVertex, pos), sizeof(ColoredVertex),
+            driver::BufferAttributeFormat::R32G32B32_FLOAT),
+        driver::make_vertexAttribDesc(
+            "COLOR", offsetof(ColoredVertex, color), sizeof(ColoredVertex),
+            driver::BufferAttributeFormat::R8G8B8A8_UNORM)
     };
     renderer::driver::create_indexed_vertex_buffer(buffer, bufferParams, attribs, countof(attribs));
 }

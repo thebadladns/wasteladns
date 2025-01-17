@@ -19,7 +19,6 @@
 #define __DEBUGDEF(...)
 #else
 #define __DEBUG 1
-#define __WASTELADNS_DEBUG_TEXT__
 #define __DEBUGDEF(...) __VA_ARGS__
 #endif
 
@@ -61,6 +60,8 @@ struct Allocator_stb {
 #define STBI_REALLOC_SIZED(p,oldsz,newsz) Allocator_stb::realloc(p,oldsz,newsz)
 #define STB_IMAGE_IMPLEMENTATION
 #include "lib/stb/stb_image.h"
+
+#include "lib/stb/stb_easy_font.h"
 
 #define UFBX_REAL_IS_FLOAT
 #define UFBX_MINIMAL

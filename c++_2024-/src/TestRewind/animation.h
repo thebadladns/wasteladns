@@ -24,7 +24,7 @@ struct Clip {
     f32 timeEnd;
 };
 struct State {
-    float4x4* skinning; // geometry to posed geometry matrices for each joint
+    float4x4 skinning[32]; // geometry to posed geometry matrices for each joint // todo: improve??
     u32 animIndex;
     f32 time;
     f32 scale;
@@ -74,13 +74,20 @@ void updateAnimation(Scene& scene, const f32 dt) {
             skeleton.parentFromPosedJoint[jointIndex] = math::trsToMatrix(translation, q, scale);
         }
 
-        skeleton.geometryFromPosedJoint[0] = math::mult(skeleton.geometryFromRoot, skeleton.parentFromPosedJoint[0]);
+        skeleton.geometryFromPosedJoint[0] =
+            math::mult(skeleton.geometryFromRoot, skeleton.parentFromPosedJoint[0]);
         for (u32 jointIndex = 1; jointIndex < skeleton.jointCount; jointIndex++) {
             s8 parentIndex = skeleton.parentIndices[jointIndex];
-            skeleton.geometryFromPosedJoint[jointIndex] = math::mult(skeleton.geometryFromPosedJoint[parentIndex], skeleton.parentFromPosedJoint[jointIndex]);
+            skeleton.geometryFromPosedJoint[jointIndex] =
+                math::mult(
+                    skeleton.geometryFromPosedJoint[parentIndex],
+                    skeleton.parentFromPosedJoint[jointIndex]);
         }
         for (u32 jointIndex = 0; jointIndex < skeleton.jointCount; jointIndex++) {
-            state.skinning[jointIndex] = math::mult(skeleton.geometryFromPosedJoint[jointIndex], skeleton.jointFromGeometry[jointIndex]);
+            animatedData.state.skinning[jointIndex] =
+                math::mult(
+                    skeleton.geometryFromPosedJoint[jointIndex],
+                    skeleton.jointFromGeometry[jointIndex]);
         }
     }
 }

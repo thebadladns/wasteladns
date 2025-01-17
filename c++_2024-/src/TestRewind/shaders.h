@@ -33,6 +33,34 @@ VertexOutput VS(AppData IN) {
 )"
 };
 
+constexpr VS_src vs_color2d_base = {
+"vs_color3d_base",
+R"(
+cbuffer PerScene : register(b0) {
+    matrix vpMatrix;
+}
+cbuffer PerGroup : register(b1) {
+    matrix modelMatrix;
+    float4 groupColor;
+}
+struct AppData {
+    float2 posMS : POSITION;
+    float4 color : COLOR;
+};
+struct VertexOutput {
+    float4 color : COLOR;
+    float4 positionCS : SV_POSITION;
+};
+VertexOutput VS(AppData IN) {
+    VertexOutput OUT;
+    float4 posWS = mul(modelMatrix, float4(IN.posMS, 0.f, 1.f));
+    OUT.positionCS = mul(vpMatrix, posWS);
+    OUT.color = IN.color.rgba * groupColor;
+    return OUT;
+}
+)"
+};
+
 constexpr VS_src vs_color3d_base = {
 "vs_color3d_base",
 R"(
@@ -280,6 +308,40 @@ void main()
 {
     varying_COLOR = PerGroup.groupColor;
     gl_Position = PerScene.vpMatrix * (PerGroup.modelMatrix * vec4(in_var_POSITION, 1.0));
+}
+)"
+};
+
+constexpr VS_src vs_color2d_base = {
+"vs_color3d_base",
+R"(
+#version 330
+#extension GL_ARB_separate_shader_objects : require
+
+out gl_PerVertex
+{
+    vec4 gl_Position;
+};
+
+layout(std140) uniform type_PerScene
+{
+    mat4 vpMatrix;
+} PerScene;
+
+layout(std140) uniform type_PerGroup
+{
+    mat4 modelMatrix;
+    vec4 groupColor;
+} PerGroup;
+
+layout(location = 0) in vec2 in_var_POSITION;
+layout(location = 1) in vec4 in_var_COLOR;
+layout(location = 0) out vec4 varying_COLOR;
+
+void main()
+{
+    varying_COLOR = in_var_COLOR * PerGroup.groupColor;
+    gl_Position = PerScene.vpMatrix * (PerGroup.modelMatrix * vec4(in_var_POSITION, -1.0, 1.0));
 }
 )"
 };

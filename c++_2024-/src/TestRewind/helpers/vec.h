@@ -1,12 +1,12 @@
 #ifndef __WASTELADNS_VEC_H__
 #define __WASTELADNS_VEC_H__
 
-#define VEC2_FORMAT(format) "(" format ", " format ")"
-#define float3_FORMAT(format) "(" format ", " format ", " format ")"
-#define float4_FORMAT(format) "(" format ", " format ", " format ", " format ")"
-#define VEC2_PARAMS(v) (v).x, (v).y
-#define float3_PARAMS(v) (v).x, (v).y, (v).z
-#define float4_PARAMS(v) (v).x, (v).y, (v).z, (v).w
+#define FLOAT2_FORMAT(format) "(" format ", " format ")"
+#define FLOAT3_FORMAT(format) "(" format ", " format ", " format ")"
+#define FLOAT4_FORMAT(format) "(" format ", " format ", " format ", " format ")"
+#define FLOAT2_PARAMS(v) (v).x, (v).y
+#define FLOAT3_PARAMS(v) (v).x, (v).y, (v).z
+#define FLOAT4_PARAMS(v) (v).x, (v).y, (v).z, (v).w
 
 struct float2 {
     float2() : x{}, y{} {}
@@ -128,6 +128,9 @@ float4 max(const float4& a, const float4& b) { return float4(math::max(a.x,b.x),
 float2 min(const float2& a, const float2& b) { return float2(math::min(a.x,b.x), math::min(a.y, b.y)); }
 float3 min(const float3& a, const float3& b) { return float3(math::min(a.x,b.x), math::min(a.y,b.y), math::min(a.z,b.z)); }
 float4 min(const float4& a, const float4& b) { return float4(math::min(a.x,b.x), math::min(a.y,b.y), math::min(a.z,b.z), math::min(a.w,b.w)); }
+float2 clamp(const float2& a, const float2& l, const float2& h) { return float2(math::clamp(a.x, l.x, h.x), math::clamp(a.y, l.y, h.y)); }
+float3 clamp(const float3& a, const float3& l, const float3& h) { return float3(math::clamp(a.x, l.x, h.x), math::clamp(a.y, l.y, h.y), math::clamp(a.z, l.z, h.z)); }
+float4 clamp(const float4& a, const float4& l, const float4& h) { return float4(math::clamp(a.x, l.x, h.x), math::clamp(a.y, l.y, h.y), math::clamp(a.z, l.z, h.z), math::clamp(a.w, l.w, h.w)); }
 bool isCloseAll(const float2& a, const float2& b, const f32 d) { return math::abs(a.x - b.x) < d && math::abs(a.y - b.y) < d; }
 bool isCloseAll(const float3& a, const float3& b, const f32 d) { return math::abs(a.x - b.x) < d && math::abs(a.y - b.y) < d && math::abs(a.z - b.z) < d; }
 bool isCloseAll(const float4& a, const float4& b, const f32 d) { return math::abs(a.x - b.x) < d && math::abs(a.y - b.y) < d && math::abs(a.z - b.z) < d && math::abs(a.w - b.w) < d; }

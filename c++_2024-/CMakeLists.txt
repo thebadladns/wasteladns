@@ -22,6 +22,7 @@ if(WIN32)
 	# windows target using directx 11 renderer
 	add_executable(app-dx11 WIN32 ${SOURCES})
 	target_compile_definitions(app-dx11 PUBLIC __WIN64=1 __DX11=1)
+	target_link_libraries(app-dx11 user32)
 	set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT app-dx11) # set as default
 	add_custom_command(TARGET app-dx11 PRE_BUILD
                        COMMAND ${CMAKE_COMMAND} -E copy_directory
@@ -29,6 +30,7 @@ if(WIN32)
 	# windows target using opengl 3.3 renderer
 	add_executable(app-gl33 WIN32 ${SOURCES})
 	target_compile_definitions(app-gl33 PUBLIC __WIN64=1 __GL33=1)
+	target_link_libraries(app-gl33 user32 gdi32)
 	add_custom_command(TARGET app-gl33 PRE_BUILD
                        COMMAND ${CMAKE_COMMAND} -E copy_directory
                        ${CMAKE_SOURCE_DIR}/assets $<TARGET_FILE_DIR:app-gl33>/assets)

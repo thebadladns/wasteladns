@@ -43,28 +43,24 @@ namespace renderer {
     };
 
     // Convenience shapes
-    struct RenderTargetTexturedQuad {
-        struct Vertex {
-			float2 pos;
-			float2 uv;
-        };
-        Vertex vertices[4];
-        u16 indices[6];
-    };
-    struct ColoredCube {
-        struct Vertex {
-            float3 pos;
-            u32 color;
-        };
-        Vertex vertices[24];
-        u16 indices[36];
-    };
     struct UntexturedCube {
         float3 vertices[24];
         u16 indices[36];
     };
     struct UntexturedSphere {
         float3 vertices[42];
+        u16 indices[240];
+    };
+    struct ColoredVertex {
+        float3 pos;
+        u32 color;
+    };
+    struct ColoredCube {
+        ColoredVertex vertices[24];
+        u16 indices[36];
+    };
+    struct ColoredSphere {
+        ColoredVertex vertices[42];
         u16 indices[240];
     };
 }

@@ -6,30 +6,195 @@ namespace game {
 struct Mirrors { // todo: figure out delete, unhack sizes
     struct Poly { float3 v[4]; u32 numPts; };
     Poly* polys; // xy from 0.f to 1.f describe the mirror quad, z is the normal
-    renderer::MeshHandle* meshHandles;
+    renderer::DrawMesh* drawMeshes;
     u32 count;
 };
+struct GPUCPUMesh {
+    renderer::CPUMesh cpuBuffer;
+    renderer::driver::RscIndexedVertexBuffer gpuBuffer;
+};
+
 struct Scene {
     camera::Camera camera;
     renderer::Scene renderScene;
     physics::Scene physicsScene;
     animation::Scene animScene;
+    MovementController player;
     Mirrors mirrors;
-    game::MovementController player;
     game::OrbitInput orbitCamera;
     u32 playerDrawNodeHandle;
     u32 playerAnimatedNodeHandle;
+    u32 playerPhysicsNodeHandle;
     u32 ballInstancesDrawHandle;
     u32 particlesDrawHandle; // todo: improve this
+    u32 maxMirrorBounces;
 };
+struct AssetInMemory {
+    // render
+    float3 min;
+    float3 max;
+    renderer::MeshHandle meshHandles[renderer::DrawlistStreams::Count];
+    // animation
+    animation::Skeleton skeleton;
+    animation::Clip* clips;
+    u32 clipCount;
+};
+struct Resources {
+    struct MeshesMeta { enum Enum { ToiletLo, ToiletHi, Count }; };
+    struct AssetsMeta { enum Enum { Bird, Boar, Ground, Count }; };
+    struct MirrorHallMeta { enum Enum { Count = 8 }; };
+    renderer::CoreResources renderCore;
+    AssetInMemory assets[AssetsMeta::Count];
+    GPUCPUMesh meshes[MeshesMeta::Count];
+    GPUCPUMesh mirrorHallMeshes[MirrorHallMeta::Count];
+    renderer::MeshHandle instancedUnitCubeMesh;
+    renderer::MeshHandle instancedUnitSphereMesh;
+    renderer::MeshHandle groundMesh;
+    // UI
+    renderer::driver::RscIndexedVertexBuffer gpuBufferHeaderText;
+    renderer::driver::RscIndexedVertexBuffer gpuBufferOrbitText;
+    renderer::driver::RscIndexedVertexBuffer gpuBufferPanText;
+    renderer::driver::RscIndexedVertexBuffer gpuBufferScaleText;
+    renderer::driver::RscIndexedVertexBuffer gpuBufferCycleRoomText;
+};
+struct RoomDefinition {
+    Resources::MeshesMeta::Enum mirrorMesh;
+    float3 minCameraEulers;
+    float3 maxCameraEulers;
+    f32 minCameraZoom;
+    f32 maxCameraZoom;
+    u32 maxMirrorBounces;
+    bool physicsBalls;
+};
+const RoomDefinition roomDefinitions[] = {
+#if __DEBUG
+    { Resources::MeshesMeta::ToiletLo,
+      float3(-180.f * math::d2r32, 0.f, -180 * math::d2r32), // min camera eulers
+      float3(180.f * math::d2r32, 0.f, 180 * math::d2r32), // max camera eulers
+      0.3f, 2.f,
+      4, false },
+    { Resources::MeshesMeta::ToiletHi,
+      float3(-180.f * math::d2r32, 0.f, -180 * math::d2r32), // min camera eulers
+      float3(180.f * math::d2r32, 0.f, 180 * math::d2r32), // max camera eulers
+      0.2f, 0.5f,
+      2, false },
+    { Resources::MeshesMeta::Count,
+      float3(-180.f * math::d2r32, 0.f, -180 * math::d2r32), // min camera eulers
+      float3(180.f * math::d2r32, 0.f, 180 * math::d2r32), // max camera eulers
+      0.3f, 2.f,
+      8, true }
+#else
+    { Resources::MeshesMeta::ToiletLo,
+      float3(-45 * math::d2r32, 0.f, -180 * math::d2r32), // min camera eulers
+      float3(-1.f * math::d2r32, 0.f, 180 * math::d2r32), // max camera eulers
+      0.3f, 2.f,
+      4, false },
+    { Resources::MeshesMeta::ToiletHi,
+      float3(-30 * math::d2r32, 0.f, -180 * math::d2r32), // min camera eulers
+      float3(-1.f * math::d2r32, 0.f, 180 * math::d2r32), // max camera eulers
+      0.2f, 0.5f,
+      2, false },
+    { Resources::MeshesMeta::Count,
+      float3(-45 * math::d2r32, 0.f, -180 * math::d2r32), // min camera eulers
+      float3(-1.f * math::d2r32, 0.f, 180 * math::d2r32), // max camera eulers
+      0.3f, 2.f,
+      8, true }
+#endif
+};
+
+void spawnAsset(
+renderer::DrawNodeHandle& renderHandle, animation::Handle& animationHandle,
+Scene& scene, const AssetInMemory& def, const float3& spawnPos) {
+    // render data
+    renderer::Scene& renderScene = scene.renderScene;
+    renderer::DrawNode& renderNode = allocator::alloc_pool(renderScene.drawNodes);
+    renderHandle = renderer::handle_from_node(renderScene, renderNode);
+    renderNode = {};
+    math::identity4x4(*(Transform*)&(renderNode.nodeData.worldMatrix));
+    renderNode.nodeData.worldMatrix.col3.xyz = { spawnPos };
+    renderNode.nodeData.groupColor = Color32(1.f, 1.f, 1.f, 1.f).RGBAv4();
+    renderNode.min = def.min;
+    renderNode.max = def.max;
+    memcpy(renderNode.meshHandles, def.meshHandles, sizeof(renderNode.meshHandles));
+    renderer::driver::RscCBuffer& cbuffercore = allocator::alloc_pool(renderScene.cbuffers);
+    renderNode.cbuffer_node = handle_from_cbuffer(renderScene, cbuffercore);
+    renderer::driver::create_cbuffer(cbuffercore, { sizeof(renderer::NodeData) });
+    if (def.skeleton.jointCount) {
+        animation::Scene& animScene = scene.animScene;
+        animation::Node& animNode = allocator::alloc_pool(animScene.nodes);
+        animationHandle = animation::handle_from_node(animScene, animNode);
+        animNode = {};
+        animNode.skeleton = def.skeleton;
+        animNode.clips = def.clips;
+        animNode.clipCount = def.clipCount;
+        animNode.state.animIndex = 0;
+        animNode.state.time = 0.f;
+        animNode.state.scale = 1.f;
+        for (u32 m = 0; m < animNode.skeleton.jointCount; m++) {
+            float4x4& matrix = animNode.state.skinning[m];
+            math::identity4x4(*(Transform*)&(matrix));
+        }
+        // skinning data for rendering
+        renderer::driver::RscCBuffer& cbufferskinning =
+            allocator::alloc_pool(renderScene.cbuffers);
+        renderNode.cbuffer_ext = handle_from_cbuffer(renderScene, cbufferskinning);
+        renderer::driver::create_cbuffer(cbufferskinning,
+            { (u32) sizeof(float4x4) * animNode.skeleton.jointCount });
+        renderNode.ext_data = animNode.state.skinning;
+    }
+    // todo: physics??
 }
+
+void spawn_model_as_mirrors(game::Mirrors& mirrors, const game::GPUCPUMesh& loadedMesh) {
+
+    const renderer::CPUMesh& cpuMesh = loadedMesh.cpuBuffer;
+    u32 index = 0;
+    while (index < cpuMesh.indexCount) {
+        float3 v0 = cpuMesh.vertices[cpuMesh.indices[index]];
+        float3 v1 = cpuMesh.vertices[cpuMesh.indices[index + 1]];
+        float3 v2 = cpuMesh.vertices[cpuMesh.indices[index + 2]];
+        float3 v3 = cpuMesh.vertices[cpuMesh.indices[index + 3]];
+        float3 v4 = cpuMesh.vertices[cpuMesh.indices[index + 4]];
+        float3 v5 = cpuMesh.vertices[cpuMesh.indices[index + 5]];
+
+        const u32 mirrorId = mirrors.count++;
+        game::Mirrors::Poly& poly = mirrors.polys[mirrorId];
+        renderer::DrawMesh& mesh = mirrors.drawMeshes[mirrorId];
+
+        // reference triangles in the gpu mesh
+        mesh.shaderTechnique = renderer::ShaderTechniques::Color3D;
+        mesh.vertexBuffer = loadedMesh.gpuBuffer; // copy buffer
+        mesh.vertexBuffer.indexOffset = index;
+        mesh.vertexBuffer.indexCount = 3;
+
+        poly.numPts = 3;
+        poly.v[0] = v0;
+        poly.v[1] = v1;
+        poly.v[2] = v2;
+
+        const float3 normal012 = math::normalize(math::cross(math::subtract(v1, v0), math::subtract(v2, v0)));
+        const float3 normal345 = math::normalize(math::cross(math::subtract(v4, v3), math::subtract(v5, v3)));
+        const float3 normalCross = math::cross(normal012, normal345);
+        if (math::isCloseAll(normalCross, float3(0.f, 0.f, 0.f), 0.01f)) {
+            // coplanar enough (may still be degenerate, but we otherwise have too many mirrors
+            // add a quad
+            poly.numPts = 4;
+            poly.v[3] = v3;
+            mesh.vertexBuffer.indexCount = 6;
+        }
+        index += mesh.vertexBuffer.indexCount;
+    }
+}
+}
+
 
 namespace obj {
 
-void load_with_vertex_colors_as_mirrors(
-    game::Scene& scene, allocator::Arena scratchArena, const char* path) {
+void load_mesh_cpu_gpu(
+    game::GPUCPUMesh& meshToLoad, renderer::CoreResources& renderCore,
+    allocator::Arena scratchArena, allocator::Arena& persistentArena,
+    const char* path, const f32 scale) {
 
-    renderer::Scene& renderScene = scene.renderScene;
     allocator::Buffer<renderer::VertexLayout_Color_3D> vertices = {};
     allocator::Buffer<u16> indices = {};
 
@@ -38,38 +203,25 @@ void load_with_vertex_colors_as_mirrors(
         char c;
         do {
             c = platform::fgetc(f);
-            if (c == 'v') {
+            if (c == 'v') { // read vertices
                 renderer::VertexLayout_Color_3D& v = allocator::push(vertices, scratchArena);
                 f32 x, y, z, r, g, b;
                 s32 n = platform::fscanf(f, "%f%f%f%f%f%f", &x, &y, &z, &r, &g, &b);
                 if (n == 6) {
-                    const float scale = 1.f;//0.75f;
                     v.pos.x = scale * x; v.pos.y = scale * y; v.pos.z = scale * z;
                     v.color = Color32(r, g, b, 0.32f).ABGR();
                 }
-            }
-            else if (c == 'f') {
-
+            } else if (c == 'f') { // read face indices (can't read any more vertices from now on)
                 int a, b, c;
                 s32 n = platform::fscanf(f, "%d%d%d", &a, &b, &c);
                 if (n == 3) {
-
-                    const u32 mirrorId = scene.mirrors.count++;
-                    game::Mirrors::Poly& p = scene.mirrors.polys[mirrorId];
-                    p.numPts = 3;
-                    p.v[0] = vertices.data[a - 1].pos;
-                    p.v[1] = vertices.data[b - 1].pos;
-                    p.v[2] = vertices.data[c - 1].pos;
                     allocator::push(indices, scratchArena) = c - 1;
                     allocator::push(indices, scratchArena) = b - 1;
                     allocator::push(indices, scratchArena) = a - 1;
-
                     int d;
                     n = platform::fscanf(f, "%d", &d);
                     if (n > 0) {
                         // read four values: divide quad in two triangles
-                        p.v[3] = vertices.data[d - 1].pos;
-                        p.numPts = 4;
                         allocator::push(indices, scratchArena) = d - 1;
                         allocator::push(indices, scratchArena) = c - 1;
                         allocator::push(indices, scratchArena) = a - 1;
@@ -78,6 +230,22 @@ void load_with_vertex_colors_as_mirrors(
             }
         } while (c > 0);
         platform::fclose(f);
+    }
+
+    if (vertices.len) {
+        meshToLoad = {};
+
+        renderer::CPUMesh& mesh = meshToLoad.cpuBuffer;
+        mesh.vertices = (float3*)allocator::alloc_arena(
+            persistentArena,
+            sizeof(float3) * vertices.len, alignof(float3));
+        mesh.indices = (u16*)allocator::alloc_arena(
+            persistentArena,
+            sizeof(u16) * indices.len, alignof(u16));
+        for (u32 i = 0; i < vertices.len; i++) { mesh.vertices[i] = vertices.data[i].pos; }
+        memcpy(mesh.indices, indices.data, sizeof(sizeof(u16)) * indices.len);
+        mesh.indexCount = (u32)indices.len;
+        mesh.vertexCount = (u32)vertices.len;
 
         // create the global vertex buffer for all the mirrors
         renderer::driver::VertexAttribDesc attribs[] = {
@@ -101,21 +269,8 @@ void load_with_vertex_colors_as_mirrors(
         bufferParams.accessType = renderer::driver::BufferAccessType::GPU;
         bufferParams.indexType = renderer::driver::BufferItemType::U16;
         bufferParams.type = renderer::driver::BufferTopologyType::Triangles;
-        renderer::driver::RscIndexedVertexBuffer b = {};
-        renderer::driver::create_indexed_vertex_buffer(b, bufferParams, attribs, countof(attribs));
-
-        // make each mirror point to a section of the vertex buffer
-        u32 index = 0;
-        for (u32 i = 0; i < scene.mirrors.count; i++) {
-            renderer::DrawMesh& mesh = allocator::alloc_pool(renderScene.meshes);
-            mesh = {};
-            mesh.shaderTechnique = renderer::ShaderTechniques::Color3D;
-            mesh.vertexBuffer = b; // copy buffer
-            mesh.vertexBuffer.indexOffset = index;
-            mesh.vertexBuffer.indexCount = scene.mirrors.polys[i].numPts == 3 ? 3 : 6;
-            scene.mirrors.meshHandles[i] = handle_from_drawMesh(renderScene, mesh);
-            index += mesh.vertexBuffer.indexCount;
-        }
+        renderer::driver::create_indexed_vertex_buffer(
+            meshToLoad.gpuBuffer, bufferParams, attribs, countof(attribs));
     }
 }
 }
@@ -129,8 +284,7 @@ void from_ufbx_mat(float4x4& o, const ufbx_matrix& i) {
     o.col3.x = i.cols[3].x; o.col3.y = i.cols[3].y; o.col3.z = i.cols[3].z; o.col3.w = 1.f;
 };
 
-void extract_anim_data(animation::Skeleton& skeleton, float4x4*& skinning, 
-                       animation::Clip*& clips, u32& clipCount,
+void extract_anim_data(game::AssetInMemory& assetToAdd,
                        allocator::Arena& persistentArena, const ufbx_mesh& mesh,
                        const ufbx_scene& scene) {
 
@@ -149,6 +303,7 @@ void extract_anim_data(animation::Skeleton& skeleton, float4x4*& skinning,
         jointCount++;
     }
 
+    animation::Skeleton& skeleton = assetToAdd.skeleton;
     u32* node_indices_skeleton =
         (u32*) allocator::alloc_arena(
             persistentArena, sizeof(u32) * jointCount, alignof(u32));
@@ -167,9 +322,6 @@ void extract_anim_data(animation::Skeleton& skeleton, float4x4*& skinning,
     skeleton.parentIndices =
         (s8*)allocator::alloc_arena(
             persistentArena, sizeof(s8) * jointCount, alignof(s8));
-    skinning =
-        (float4x4*)allocator::alloc_arena(
-            persistentArena, sizeof(float4x4) * jointCount, alignof(float4x4));
     skeleton.jointCount = jointCount;
 
     // joints are listed in hierarchical order, first one is the root
@@ -198,13 +350,13 @@ void extract_anim_data(animation::Skeleton& skeleton, float4x4*& skinning,
     }
 
     // anim clip
-    clipCount = (u32)scene.anim_stacks.count;
-    clips =
+    assetToAdd.clipCount = (u32)scene.anim_stacks.count;
+    assetToAdd.clips =
         (animation::Clip*)allocator::alloc_arena(
             persistentArena,
             sizeof(animation::Clip) * scene.anim_stacks.count,
             alignof(animation::Clip));
-    for (size_t i = 0; i < clipCount; i++) {
+    for (size_t i = 0; i < assetToAdd.clipCount; i++) {
         const ufbx_anim_stack& stack = *(scene.anim_stacks.data[i]);
         const f64 targetFramerate = 12.f;
         const u32 maxFrames = 4096;
@@ -212,7 +364,7 @@ void extract_anim_data(animation::Skeleton& skeleton, float4x4*& skinning,
         const u32 numFrames = math::clamp((u32)(duration * targetFramerate), 2u, maxFrames);
         const f64 framerate = (numFrames-1) / duration;
 
-        animation::Clip& clip = clips[i];
+        animation::Clip& clip = assetToAdd.clips[i];
         clip.frameCount = numFrames;
         clip.joints =
             (animation::JointKeyframes*)allocator::alloc_arena(
@@ -280,9 +432,12 @@ struct PipelineAssetContext {
     const renderer::driver::VertexAttribDesc* vertexAttrs[renderer::DrawlistStreams::Count];
     u32 attr_count[renderer::DrawlistStreams::Count];
 };
-void load_with_materials(renderer::DrawNode& nodeToAdd, animation::Node& animatedNode,
-                         renderer::Scene& renderScene, PipelineAssetContext& pipelineContext,
-                         const char* path) {
+bool load_with_materials(
+    game::AssetInMemory& assetToAdd, renderer::CoreResources& renderCore,
+    PipelineAssetContext& pipelineContext, const char* path) {
+   
+    bool success = false;
+
     ufbx_load_opts opts = {};
     opts.target_axes = {
         UFBX_COORDINATE_AXIS_POSITIVE_X,
@@ -367,12 +522,9 @@ void load_with_materials(renderer::DrawNode& nodeToAdd, animation::Node& animate
 		}
 
         // hack: only consider skinning from first mesh
-        animatedNode = {};
         if (scene->meshes.count && scene->meshes[0]->skin_deformers.count) {
             extract_anim_data(
-                    animatedNode.skeleton, animatedNode.state.skinning,
-                    animatedNode.clips, animatedNode.clipCount,
-                    pipelineContext.persistentArena, *(scene->meshes[0]), *scene);
+                assetToAdd, pipelineContext.persistentArena, *(scene->meshes[0]), *scene);
         }
 
         // TODO: consider skinning
@@ -473,7 +625,7 @@ void load_with_materials(renderer::DrawNode& nodeToAdd, animation::Node& animate
                 pipelineContext.scratchArena, sizeof(u32) * mesh_vertices_count, alignof(u32));
             for (size_t m = 0; m < mesh.materials.count; m++) {
                 ufbx_mesh_material& mesh_mat = mesh.materials.data[m];
-                if (animatedNode.skeleton.jointCount) {
+                if (assetToAdd.skeleton.jointCount) {
                     if (mesh_mat.material && mesh_mat.material->pbr.base_color.has_value) {
                         if (mesh_mat.material->pbr.base_color.texture_enabled) { // textured
                             // Assume that opacity tied to a texture means that
@@ -624,20 +776,9 @@ void load_with_materials(renderer::DrawNode& nodeToAdd, animation::Node& animate
             vertexOffset += (u32)mesh.num_vertices;
         }
 
-        nodeToAdd = {};
-        nodeToAdd.max = max;
-        nodeToAdd.min = min;
-        renderer::driver::RscCBuffer& cbuffercore = allocator::alloc_pool(renderScene.cbuffers);
-        nodeToAdd.cbuffer_node = handle_from_cbuffer(renderScene, cbuffercore);
-        renderer::driver::create_cbuffer(cbuffercore, { sizeof(renderer::NodeData) });
+        assetToAdd.max = max;
+        assetToAdd.min = min;
 
-        if (animatedNode.skeleton.jointCount) {
-            renderer::driver::RscCBuffer& cbufferskinning =
-                allocator::alloc_pool(renderScene.cbuffers);
-            nodeToAdd.cbuffer_ext = handle_from_cbuffer(renderScene, cbufferskinning);
-            renderer::driver::create_cbuffer(cbufferskinning,
-                { (u32) sizeof(float4x4) * animatedNode.skeleton.jointCount });
-        }
         const renderer::ShaderTechniques::Enum shaderTechniques[renderer::DrawlistStreams::Count] = {
             renderer::ShaderTechniques::Color3D, renderer::ShaderTechniques::Color3DSkinned,
             renderer::ShaderTechniques::Textured3D, renderer::ShaderTechniques::Textured3DAlphaClip,
@@ -646,36 +787,116 @@ void load_with_materials(renderer::DrawNode& nodeToAdd, animation::Node& animate
         };
 		for (u32 i = 0; i < renderer::DrawlistStreams::Count; i++) {
 			DstStreams& stream = materialVertexBuffer[i];
-			if (stream.vertex.len) {
-                renderer::driver::IndexedVertexBufferDesc desc = {};
-                desc.vertexData = stream.vertex.data;
-                desc.vertexSize = (u32)stream.vertex.len * stream.vertex_size;
-				desc.vertexCount = (u32)stream.vertex.len;
-                desc.indexData = stream.index.data;
-                desc.indexSize = (u32)stream.index.len * sizeof(u32);
-                desc.indexCount = (u32)stream.index.len;
-                desc.memoryUsage = renderer::driver::BufferMemoryUsage::GPU;
-                desc.accessType = renderer::driver::BufferAccessType::GPU;
-                desc.indexType = renderer::driver::BufferItemType::U32;
-                desc.type = renderer::driver::BufferTopologyType::Triangles;
+			if (!stream.vertex.len) { continue; }
 
-				const renderer::ShaderTechniques::Enum shaderTechnique = shaderTechniques[i];
-                renderer::DrawMesh& mesh = allocator::alloc_pool(renderScene.meshes);
-                mesh = {};
-                mesh.shaderTechnique = shaderTechnique;
-                renderer::driver::create_indexed_vertex_buffer(
-                    mesh.vertexBuffer, desc, pipelineContext.vertexAttrs[i],
-                    pipelineContext.attr_count[i]);
-                if (stream.user) {
-                    const char* texturefile = ((ufbx_texture*)stream.user)->filename.data;
-                    renderer::driver::create_texture_from_file(
-                        mesh.texture, { pipelineContext.scratchArena, texturefile });
-                }
-                nodeToAdd.meshHandles[i] = handle_from_drawMesh(renderScene, mesh);
-			}
+            renderer::driver::IndexedVertexBufferDesc desc = {};
+            desc.vertexData = stream.vertex.data;
+            desc.vertexSize = (u32)stream.vertex.len * stream.vertex_size;
+            desc.vertexCount = (u32)stream.vertex.len;
+            desc.indexData = stream.index.data;
+            desc.indexSize = (u32)stream.index.len * sizeof(u32);
+            desc.indexCount = (u32)stream.index.len;
+            desc.memoryUsage = renderer::driver::BufferMemoryUsage::GPU;
+            desc.accessType = renderer::driver::BufferAccessType::GPU;
+            desc.indexType = renderer::driver::BufferItemType::U32;
+            desc.type = renderer::driver::BufferTopologyType::Triangles;
+
+            const renderer::ShaderTechniques::Enum shaderTechnique =
+                shaderTechniques[i];
+            renderer::DrawMesh& mesh =
+                renderer::alloc_drawMesh(renderCore);
+            mesh = {};
+            mesh.shaderTechnique = shaderTechnique;
+            renderer::driver::create_indexed_vertex_buffer(
+                mesh.vertexBuffer, desc, pipelineContext.vertexAttrs[i],
+                pipelineContext.attr_count[i]);
+            if (stream.user) {
+                const char* texturefile =
+                    ((ufbx_texture*)stream.user)->filename.data;
+                renderer::driver::create_texture_from_file(
+                    mesh.texture,
+                    { pipelineContext.scratchArena, texturefile });
+            }
+            assetToAdd.meshHandles[i] =
+                handle_from_drawMesh(renderCore, mesh);
 		}
+        success = true;
     }
+    return success;
 }
+}
+
+void cull_quad_with_frustum(
+float3* quad, u32& quad_count, const float4* planes, const u32 planeCount, const u32 maxQuadCap) {
+
+    enum { MAX_QUAD_VERTICES = 8 };
+    assert(maxQuadCap <= MAX_QUAD_VERTICES);
+    
+    // cull quad by each frustum plane via Sutherland-Hodgman
+    // todo: degenerate polys can end up with more than 1 extra vertex per plane;
+    // we "fix it" by adding the second plane intertersections in place of the vertex before
+
+    float3 inputQuad[MAX_QUAD_VERTICES];
+    u32 inputQuad_count;
+
+    // keep iterating over the culling planes until
+    // we have fully culled the quad, or the previous cut introduced too many cuts
+    for (u32 p = 0; p < planeCount && quad_count > 2 && quad_count < maxQuadCap; p++) {
+        const float4 plane = planes[p];
+        // copy our quad, so that we can iterate over the original data
+        memcpy(inputQuad, quad, quad_count * sizeof(float3));
+        inputQuad_count = quad_count;
+        quad_count = 0;
+        u32 numPlaneCuts = 0;
+        float3 va = inputQuad[inputQuad_count - 1];
+        f32 va_d = math::dot(float4(va, 1.f), plane);
+        for (u32 curr_v = 0; curr_v < inputQuad_count; curr_v++) {
+            float3 vb = inputQuad[curr_v];
+            f32 vb_d = math::dot(float4(vb, 1.f), plane);
+            float3 intersection;
+
+            const f32 eps = 0.001f;
+            if (vb_d > eps) {
+                // current vertex in positive zone,
+                // will be add to poly
+                if (va_d < -eps) {
+                    // edge entering the positive zone,
+                    // add intersection point first
+                    float3 ab = math::subtract(vb, va);
+                    f32 t = (-va_d) / math::dot(plane.xyz, ab);
+                    intersection = math::add(va, math::scale(ab, t));
+                    
+                    numPlaneCuts++;
+                    if (numPlaneCuts <= 1) { quad[quad_count++] = intersection; }
+                    else {
+                        // poly is cutting the same plane a second time: degenerate
+                        // simply place the intersection in the place of the last vertex
+                        quad[quad_count - 1] = intersection;
+                    }
+                }
+                quad[quad_count++] = vb;
+            } else if (vb_d < -eps) {
+                // current vertex in negative zone,
+                // will not be added to poly
+                if (va_d > eps) {
+                    // edge entering the negative zone,
+                    // add intersection to face
+                    float3 ab = math::subtract(vb, va);
+                    f32 t = (-va_d) / math::dot(plane.xyz, ab);
+                    intersection = math::add(va, math::scale(ab, t));
+                    quad[quad_count++] = intersection;
+                }
+            }
+            else {
+                // current vertex on plane,
+                // add to poly
+                quad[quad_count++] = vb;
+            }
+
+            va = vb;
+            va_d = vb_d;
+        }
+    }
 }
 
 struct Camera {
@@ -693,25 +914,23 @@ struct CameraNode { // Node in camera tree (stored as depth-first)
     float3 pos;
     u32 depth;          // depth of this node in the tree (0 == root)
     u32 siblingIndex;   // next sibling index in the tree
-    u32 id;
-    renderer::MeshHandle meshHandle;
+    u32 parentIndex;   // next sibling index in the tree
+    u32 sourceId;
+    renderer::DrawMesh drawMesh;
     char str[256];      // used in non-debug for GPU markers
 };
 struct GatherMirrorTreeContext {
-    #if __DEBUG 
-    enum { MAX_CAMERA_DEPTH = 4 };
-    #else
-    enum { MAX_CAMERA_DEPTH = 5 };
-    #endif
     allocator::Arena& frameArena;
     allocator::Buffer<CameraNode>& cameraTree;
     const game::Mirrors& mirrors;
+    u32 maxDepth;
 };
 u32 gatherMirrorTreeRecursive(GatherMirrorTreeContext& ctx, u32 index, const CameraNode& parent) {
     
+    u32 parentIndex = index - 1;
     for (u32 i = 0; i < ctx.mirrors.count; i++) {
         // do not self-reflect
-        if (parent.id == i) { continue; }
+        if (parent.sourceId == i) { continue; }
         // copy mirror quad (we'll modify it during culling)
         enum { MAX_MIRROR_QUAD_VERTICES = 8 };
         static_assert(MAX_MIRROR_QUAD_VERTICES <= countof(parent.frustum.planes) + 2, "check");
@@ -719,74 +938,21 @@ u32 gatherMirrorTreeRecursive(GatherMirrorTreeContext& ctx, u32 index, const Cam
         u32 quad_count = ctx.mirrors.polys[i].numPts;
         memcpy(quad, ctx.mirrors.polys[i].v, sizeof(float3) * ctx.mirrors.polys[i].numPts);
         // cull backfacing mirrors
+        // normal is v2-v0xv1-v0 assuming clockwise winding and right handed coordinates
         float3 normalWS = math::normalize(
-            math::cross(math::subtract(quad[1], quad[0]), math::subtract(quad[2], quad[1])));
+            math::cross(math::subtract(quad[2], quad[0]), math::subtract(quad[1], quad[0])));
         if (math::dot(normalWS, math::subtract(parent.pos, quad[0])) < 0.f) { continue; }
-
-        // cull quad by each frustum plane via Sutherland-Hodgman
-        // todo: degenerate polys can end up with more than 1 extra vertex per plane
-        // (if they happen to be concave), we should catch that here somehow
-        float3 quad_copy[MAX_MIRROR_QUAD_VERTICES];
-        u32 quad_copy_count;
-        for (u32 p = 0; p < parent.frustum.count
-            // if we haven't culled the quad, or the previous cut didn't introduce too many cuts, 
-            // keep iterating over the culling planes
-            && quad_count > 2 && quad_count < countof(quad);
-            p++) {
-            const float4 plane = parent.frustum.planes[p];
-            // copy our quad, so that we can iterate over the original data
-            memcpy(quad_copy, quad, quad_count * sizeof(float3));
-            quad_copy_count = quad_count;
-            quad_count = 0;
-            float3 va = quad_copy[quad_copy_count - 1];
-            f32 va_d = math::dot(float4(va, 1.f), plane);
-            for (u32 curr_v = 0; curr_v < quad_copy_count; curr_v++) {
-                float3 vb = quad_copy[curr_v];
-                f32 vb_d = math::dot(float4(vb, 1.f), plane);
-                float3 intersection;
-
-                const f32 eps = 0.001f;
-                if (vb_d > eps) { 
-                    // current vertex in positive zone,
-                    // will be add to poly
-                    if (va_d < -eps) {
-                        // edge entering the positive zone,
-                        // add intersection point first
-                        float3 ab = math::subtract(vb, va);
-                        f32 t = (-va_d) / math::dot(plane.xyz, ab);
-                        intersection = math::add(va, math::scale(ab, t));
-                        quad[quad_count++] = intersection;
-                    }
-                    quad[quad_count++] = vb;
-                } else if (vb_d < -eps) { 
-                    // current vertex in negative zone,
-                    // will not be added to poly
-                    if (va_d > eps) {
-                         // edge entering the negative zone,
-                         // add intersection to face
-                        float3 ab = math::subtract(vb, va);
-                        f32 t = (-va_d) / math::dot(plane.xyz, ab);
-                        intersection = math::add(va, math::scale(ab, t));
-                        quad[quad_count++] = intersection;
-                    }
-                } else {
-                    // current vertex on plane,
-                    // add to poly
-                    quad[quad_count++] = vb;
-                }
-
-                va = vb;
-                va_d = vb_d;
-            }
-        }
+        
+        cull_quad_with_frustum(
+            quad, quad_count, parent.frustum.planes, parent.frustum.numPlanes, countof(quad));
         // quad fully culled
         if (quad_count < 3) continue;
 
-
         // acknowledge this mirror as part of the tree
         CameraNode& curr = allocator::push(ctx.cameraTree, ctx.frameArena);
+        curr.parentIndex = parentIndex;
         curr.depth = parent.depth + 1;
-        curr.id = i;
+        curr.sourceId = i;
         // todo: text for debug only???
         platform::format(curr.str, sizeof(curr.str), "%s-%d", parent.str, i, curr.depth);
         index++;
@@ -828,25 +994,26 @@ u32 gatherMirrorTreeRecursive(GatherMirrorTreeContext& ctx, u32 index, const Cam
                 math::invScale(curr.frustum.planes[0], math::mag(curr.frustum.planes[0].xyz));
             curr.frustum.planes[1] =
                 math::invScale(curr.frustum.planes[1], math::mag(curr.frustum.planes[1].xyz));
-            curr.frustum.count = 2;
+            curr.frustum.numPlanes = 2;
 
             float3 prev_v = quad[quad_count - 1];
             for (u32 v = 0; v < quad_count; v++) {
                 float3 curr_v = quad[v];
+                // normal is cam-v0xv1-v0 assuming clockwise winding and right handed coordinates
                 float3 normal =
-                    math::cross(math::subtract(prev_v, curr_v), math::subtract(curr_v, curr.pos));
+                    math::cross(math::subtract(curr.pos, curr_v), math::subtract(curr_v, prev_v));
                 normal = math::normalize(normal);
-                curr.frustum.planes[curr.frustum.count++] =
+                curr.frustum.planes[curr.frustum.numPlanes++] =
                     float4(normal, -math::dot(curr_v, normal));
                 prev_v = curr_v;
             }
         }
 
         // recurse if there is room for one more mirror
-        if (curr.depth + 1 < GatherMirrorTreeContext::MAX_CAMERA_DEPTH) {
+        if (curr.depth + 1 < ctx.maxDepth) {
             index = gatherMirrorTreeRecursive(ctx, index, curr);
         }
-        curr.meshHandle = ctx.mirrors.meshHandles[i];
+        curr.drawMesh = ctx.mirrors.drawMeshes[i];
         curr.siblingIndex = index;
     }
     return index;
@@ -856,6 +1023,7 @@ struct RenderSceneContext {
     const CameraNode& camera;
     const renderer::VisibleNodes& visibleNodes;
     game::Scene& gameScene;
+    renderer::CoreResources& core;
     renderer::driver::RscDepthStencilState& ds_always;
     renderer::driver::RscDepthStencilState& ds_opaque;
     renderer::driver::RscDepthStencilState& ds_alpha;
@@ -866,9 +1034,11 @@ void renderBaseScene(RenderSceneContext& sceneCtx) {
 
     using namespace renderer;
     Scene& scene = sceneCtx.gameScene.renderScene;
+    renderer::CoreResources& rsc = sceneCtx.core;
     driver::Marker_t marker;
 
-    driver::RscCBuffer& scene_cbuffer = cbuffer_from_handle(scene, scene.cbuffer_scene);
+    driver::RscCBuffer& scene_cbuffer =
+        rsc.cbuffers[renderer::CoreResources::CBuffersMeta::Scene];
     SceneData cbufferPerScene;
     {
         cbufferPerScene.vpMatrix = 
@@ -879,14 +1049,14 @@ void renderBaseScene(RenderSceneContext& sceneCtx) {
     driver::set_marker_name(marker, "SKY"); driver::start_event(marker);
     {
         driver::RscCBuffer& clearColor_cbuffer =
-            cbuffer_from_handle(scene, scene.cbuffer_clearColor);
-        renderer::driver::bind_blend_state(scene.blendStateBlendOff);
+            rsc.cbuffers[renderer::CoreResources::CBuffersMeta::ClearColor];
+        renderer::driver::bind_blend_state(rsc.blendStateBlendOff);
         driver::bind_DS(sceneCtx.ds_always, sceneCtx.camera.depth);
-        driver::bind_RS(scene.rasterizerStateFillFrontfaces);
+        driver::bind_RS(rsc.rasterizerStateFillFrontfaces);
         driver::bind_cbuffers(
-            scene.shaders[renderer::ShaderTechniques::FullscreenBlitClearColor],
+            rsc.shaders[renderer::ShaderTechniques::FullscreenBlitClearColor],
             &clearColor_cbuffer, 1);
-        driver::bind_shader(scene.shaders[renderer::ShaderTechniques::FullscreenBlitClearColor]);
+        driver::bind_shader(rsc.shaders[renderer::ShaderTechniques::FullscreenBlitClearColor]);
         driver::draw_fullscreen();
     }
     driver::end_event();
@@ -905,7 +1075,7 @@ void renderBaseScene(RenderSceneContext& sceneCtx) {
             (SortKey*)allocator::alloc_arena(
                 scratchArena, maxDrawCalls * sizeof(SortKey), alignof(SortKey));
         addNodesToDrawlistSorted(
-            dl, sceneCtx.visibleNodes, sceneCtx.camera.pos, scene,
+            dl, sceneCtx.visibleNodes, sceneCtx.camera.pos, scene, rsc,
             0, renderer::DrawlistFilter::Alpha, renderer::SortParams::Type::Default);
         if (dl.count[DrawlistBuckets::Base] + dl.count[DrawlistBuckets::Instanced] > 0) {
             driver::set_marker_name(marker, "OPAQUE"); driver::start_event(marker);
@@ -934,9 +1104,9 @@ void renderBaseScene(RenderSceneContext& sceneCtx) {
         dl.keys =
             (SortKey*)allocator::alloc_arena(
                 scratchArena, maxDrawCalls * sizeof(SortKey), alignof(SortKey));
-        driver::bind_blend_state(scene.blendStateOn);
+        driver::bind_blend_state(rsc.blendStateOn);
         addNodesToDrawlistSorted(
-            dl, sceneCtx.visibleNodes, sceneCtx.camera.pos, scene,
+            dl, sceneCtx.visibleNodes, sceneCtx.camera.pos, scene, rsc,
             renderer::DrawlistFilter::Alpha, 0, renderer::SortParams::Type::BackToFront);
         if (dl.count[DrawlistBuckets::Base] + dl.count[DrawlistBuckets::Instanced] > 0) {
             driver::bind_DS(sceneCtx.ds_alpha, sceneCtx.camera.depth);
@@ -944,7 +1114,7 @@ void renderBaseScene(RenderSceneContext& sceneCtx) {
             Drawlist_Context ctx = {};
             Drawlist_Overrides overrides = {};
             overrides.forced_blendState = true;
-            ctx.blendState = &scene.blendStateOn;
+            ctx.blendState = &rsc.blendStateOn;
             ctx.cbuffers[overrides.forced_cbuffer_count++] = scene_cbuffer;
             draw_drawlist(dl, ctx, overrides);
             driver::end_event();
@@ -956,35 +1126,38 @@ struct RenderMirrorContext {
     const CameraNode& camera;
     const CameraNode& parent;
     game::Scene& gameScene;
+    renderer::CoreResources& renderCore;
 };
 void markMirror(RenderMirrorContext& mirrorCtx) {
     using namespace renderer;
     Scene& scene = mirrorCtx.gameScene.renderScene;
+    renderer::CoreResources& rsc = mirrorCtx.renderCore;
 
     driver::RscRasterizerState& rasterizerStateParent =
         (mirrorCtx.camera.depth & 1) != 0 ?
-              scene.rasterizerStateFillFrontfaces
-            : scene.rasterizerStateFillBackfaces;
+              rsc.rasterizerStateFillFrontfaces
+            : rsc.rasterizerStateFillBackfaces;
 
     driver::RscCBuffer& scene_cbuffer =
-        cbuffer_from_handle(scene, scene.cbuffer_scene);
+        rsc.cbuffers[renderer::CoreResources::CBuffersMeta::Scene];
     driver::RscCBuffer& identity_cbuffer =
-        cbuffer_from_handle(scene, scene.cbuffer_nodeIdentity);
+        rsc.cbuffers[renderer::CoreResources::CBuffersMeta::NodeIdentity];
     driver::Marker_t marker;
 
     // mark this mirror on the stencil (using the parent's camera)
     driver::set_marker_name(marker, "MARK MIRROR"); driver::start_event(marker);
     {
-        driver::bind_DS(scene.depthStateMarkMirror, mirrorCtx.parent.depth);
+        driver::bind_DS(rsc.depthStateMarkMirror, mirrorCtx.parent.depth);
         driver::bind_RS(rasterizerStateParent);
 
-        driver::bind_blend_state(scene.blendStateOff);
+        driver::bind_blend_state(rsc.blendStateOff);
 
-        renderer::DrawMesh& mesh = renderer::drawMesh_from_handle(scene, mirrorCtx.camera.meshHandle);
-        driver::bind_shader(scene.shaders[mesh.shaderTechnique]);
+        const renderer::DrawMesh& mesh =
+            mirrorCtx.camera.drawMesh;
+        driver::bind_shader(rsc.shaders[mesh.shaderTechnique]);
         driver::bind_indexed_vertex_buffer(mesh.vertexBuffer);
         driver::RscCBuffer buffers[] = { scene_cbuffer, identity_cbuffer };
-        driver::bind_cbuffers(scene.shaders[mesh.shaderTechnique], buffers, 2);
+        driver::bind_cbuffers(rsc.shaders[mesh.shaderTechnique], buffers, 2);
         driver::draw_indexed_vertex_buffer(mesh.vertexBuffer);
     }
     driver::end_event();
@@ -993,15 +1166,16 @@ void unmarkMirror(RenderMirrorContext& mirrorCtx) {
 
     using namespace renderer;
     Scene& scene = mirrorCtx.gameScene.renderScene;
+    renderer::CoreResources& rsc = mirrorCtx.renderCore;
     driver::RscRasterizerState& rasterizerStateParent =
         (mirrorCtx.camera.depth & 1) != 0 ?
-              scene.rasterizerStateFillFrontfaces
-            : scene.rasterizerStateFillBackfaces;
+              rsc.rasterizerStateFillFrontfaces
+            : rsc.rasterizerStateFillBackfaces;
 
     driver::RscCBuffer& scene_cbuffer =
-        cbuffer_from_handle(scene, scene.cbuffer_scene);
+        rsc.cbuffers[renderer::CoreResources::CBuffersMeta::Scene];
     driver::RscCBuffer& identity_cbuffer =
-        cbuffer_from_handle(scene, scene.cbuffer_nodeIdentity);
+        rsc.cbuffers[renderer::CoreResources::CBuffersMeta::NodeIdentity];
 
     {
         renderer::SceneData cbufferPerScene;
@@ -1013,15 +1187,16 @@ void unmarkMirror(RenderMirrorContext& mirrorCtx) {
     driver::Marker_t marker;
     driver::set_marker_name(marker, "UNMARK MIRROR"); driver::start_event(marker);
     {
-        driver::bind_DS(scene.depthStateUnmarkMirror, mirrorCtx.camera.depth);
+        driver::bind_DS(rsc.depthStateUnmarkMirror, mirrorCtx.camera.depth);
         driver::bind_RS(rasterizerStateParent);
-        driver::bind_blend_state(scene.blendStateOn);
+        driver::bind_blend_state(rsc.blendStateOn);
 
-        renderer::DrawMesh& mesh = renderer::drawMesh_from_handle(scene, mirrorCtx.camera.meshHandle);
-        driver::bind_shader(scene.shaders[mesh.shaderTechnique]);
+        renderer::DrawMesh mesh = //renderer::drawMesh_from_handle(rsc, mirrorCtx.camera.meshHandle);
+            mirrorCtx.camera.drawMesh;
+        driver::bind_shader(rsc.shaders[mesh.shaderTechnique]);
         driver::bind_indexed_vertex_buffer(mesh.vertexBuffer);
         driver::RscCBuffer buffers[] = { scene_cbuffer, identity_cbuffer };
-        driver::bind_cbuffers(scene.shaders[ShaderTechniques::Color3D], buffers, 2);
+        driver::bind_cbuffers(rsc.shaders[ShaderTechniques::Color3D], buffers, 2);
         driver::draw_indexed_vertex_buffer(mesh.vertexBuffer);
     }
     driver::end_event();
@@ -1031,6 +1206,7 @@ void renderMirrorTree(
         const CameraNode* cameraTree,
         const renderer::VisibleNodes* visibleNodes,
         game::Scene& gameScene,
+        renderer::CoreResources& renderCore,
         allocator::Arena scratchArena) {
 
     using namespace renderer;
@@ -1053,7 +1229,7 @@ void renderMirrorTree(
 
         // mark mirror
         RenderMirrorContext mirrorContext {
-            camera, parent, gameScene
+            camera, parent, gameScene, renderCore
         };
         markMirror(mirrorContext);
 
@@ -1062,13 +1238,13 @@ void renderMirrorTree(
         {
             driver::RscRasterizerState& rasterizerStateMirror =
                 (camera.depth & 1) == 0 ?
-                      scene.rasterizerStateFillFrontfaces
-                    : scene.rasterizerStateFillBackfaces;
+                      renderCore.rasterizerStateFillFrontfaces
+                    : renderCore.rasterizerStateFillBackfaces;
             RenderSceneContext renderSceneContext = {
-                camera, visibleNodes[index], gameScene,
-                scene.depthStateMirrorReflectionsDepthAlways,
-                scene.depthStateMirrorReflections,
-                scene.depthStateMirrorReflectionsDepthReadOnly,
+                camera, visibleNodes[index], gameScene, renderCore,
+                renderCore.depthStateMirrorReflectionsDepthAlways,
+                renderCore.depthStateMirrorReflections,
+                renderCore.depthStateMirrorReflectionsDepthReadOnly,
                 rasterizerStateMirror,
                 scratchArena };
             renderBaseScene(renderSceneContext);
@@ -1083,7 +1259,7 @@ void renderMirrorTree(
 
             // unmark mirror
             RenderMirrorContext mirrorContext {
-                camera, cameraTree[parents[parentCount - 2]], gameScene
+                camera, cameraTree[parents[parentCount - 2]], gameScene, renderCore
             };
             unmarkMirror(mirrorContext);
 
@@ -1096,96 +1272,88 @@ void renderMirrorTree(
 
 struct SceneMemory {
     allocator::Arena& persistentArena;
-    allocator::Arena scratchArena; // explicit copy, makes it a stack allocator for this context
+    // explicit copy, makes it a stack allocator for this context
+    allocator::Arena scratchArena;
     __DEBUGDEF(allocator::Arena& debugArena;)
 };
-void init_scene(game::Scene& scene, SceneMemory& memory, const platform::Screen& screen) {
+void load_coreResources(
+        game::Resources& core, SceneMemory& memory,
+        const platform::Screen& screen) {
 
     allocator::Arena& persistentArena = memory.persistentArena;
 
-    renderer::Scene& renderScene = scene.renderScene;
-    physics::Scene& physicsScene = scene.physicsScene;
-    animation::Scene& animScene = scene.animScene;
+    renderer::CoreResources& renderCore = core.renderCore;
+    renderCore = {};
 
-    const size_t drawNodePoolSize =
-        math::min((size_t)maxRenderNodes, (size_t)renderer::DrawNodeMeta::MaxNodes);
-    const size_t instancedNodePoolSize =
-		math::min((size_t)maxRenderNodesInstanced, (size_t)renderer::DrawNodeMeta::MaxNodes);
-    const size_t cbufferSize =
-		(drawNodePoolSize * 2 + instancedNodePoolSize * 2) + 16;
-    const size_t meshPoolSize =
-		(drawNodePoolSize + instancedNodePoolSize) * renderer::ShaderTechniques::Count;
-    const size_t animatedNodesSize =
-        math::min((size_t)maxAnimatedNodes, (size_t)renderer::DrawNodeMeta::MaxNodes);
-    allocator::init_pool(renderScene.cbuffers, cbufferSize, persistentArena);
-	__DEBUGDEF(renderScene.cbuffers.name = "cbuffers";)
-    allocator::init_pool(renderScene.meshes, meshPoolSize, persistentArena);
-	__DEBUGDEF(renderScene.meshes.name = "meshes";)
-    allocator::init_pool(renderScene.instancedDrawNodes, instancedNodePoolSize, persistentArena);
-	__DEBUGDEF(renderScene.instancedDrawNodes.name = "instanced draw nodes";)
-    allocator::init_pool(renderScene.drawNodes, drawNodePoolSize, persistentArena);
-	__DEBUGDEF(renderScene.drawNodes.name = "draw nodes";)
-    allocator::init_pool(animScene.nodes, animatedNodesSize, persistentArena);
-	__DEBUGDEF(animScene.nodes.name = "anim nodes";)
+    const size_t meshArenaSize = maxRenderMeshes * sizeof(renderer::DrawMesh);
+    renderCore.meshes = (renderer::DrawMesh*)allocator::alloc_arena(
+            persistentArena, meshArenaSize, alignof(renderer::DrawMesh));
+    renderCore.num_meshes = 0;
 
-    camera::WindowProjection::Config& ortho = renderScene.windowProjection.config;
+    camera::WindowProjection::Config& ortho =
+        renderCore.windowProjection.config;
     ortho.right = screen.window_width * 0.5f;
     ortho.top = screen.window_height * 0.5f;
     ortho.left = -ortho.right;
     ortho.bottom = -ortho.top;
     ortho.near = 0.f;
     ortho.far = 1000.f;
-    renderer::generate_matrix_ortho(renderScene.windowProjection.matrix, ortho);
+    renderer::generate_matrix_ortho(renderCore.windowProjection.matrix, ortho);
 
     // Todo: consider whether precision needs special handling
-    camera::PerspProjection::Config& frustum = renderScene.perspProjection.config;
+    camera::PerspProjection::Config& frustum =
+        renderCore.perspProjection.config;
     frustum.fov = 45.f;
     frustum.aspect = screen.width / (f32)screen.height;
     frustum.near = 1.f;
     frustum.far = 1000.f;
-    renderer::generate_matrix_persp(renderScene.perspProjection.matrix, frustum);
+    renderer::generate_matrix_persp(
+        renderCore.perspProjection.matrix, frustum);
 
     renderer::driver::MainRenderTargetParams windowRTparams = {};
     windowRTparams.depth = true;
     windowRTparams.width = screen.window_width;
     windowRTparams.height = screen.window_height;
-    renderer::driver::create_main_RT(renderScene.windowRT, windowRTparams);
+    renderer::driver::create_main_RT(
+        renderCore.windowRT, windowRTparams);
 
     renderer::driver::RenderTargetParams gameRTparams;
     gameRTparams.depth = true;
     gameRTparams.width = screen.width;
     gameRTparams.height = screen.height;
     gameRTparams.textureFormat = renderer::driver::TextureFormat::V4_8;
-    gameRTparams.textureInternalFormat = renderer::driver::InternalTextureFormat::V4_8;
-    gameRTparams.textureFormatType = renderer::driver::Type::Float;
+    gameRTparams.textureInternalFormat =
+        renderer::driver::InternalTextureFormat::V4_8;
+    gameRTparams.textureFormatType =
+        renderer::driver::Type::Float;
     gameRTparams.count = 1;
-    renderer::driver::create_RT(renderScene.gameRT, gameRTparams);
+    renderer::driver::create_RT(renderCore.gameRT, gameRTparams);
 
     {
         renderer::driver::BlendStateParams blendState_params;
         blendState_params = {};
         blendState_params.renderTargetWriteMask =
             renderer::driver::RenderTargetWriteMask::All; blendState_params.blendEnable = true;
-        renderer::driver::create_blend_state(renderScene.blendStateOn, blendState_params);
+        renderer::driver::create_blend_state(renderCore.blendStateOn, blendState_params);
         blendState_params = {};
         blendState_params.renderTargetWriteMask =
             renderer::driver::RenderTargetWriteMask::All;
-        renderer::driver::create_blend_state(renderScene.blendStateBlendOff, blendState_params);
+        renderer::driver::create_blend_state(renderCore.blendStateBlendOff, blendState_params);
         blendState_params = {};
         blendState_params.renderTargetWriteMask =
             renderer::driver::RenderTargetWriteMask::None;
-        renderer::driver::create_blend_state(renderScene.blendStateOff, blendState_params);
+        renderer::driver::create_blend_state(renderCore.blendStateOff, blendState_params);
     }
-    renderer::driver::create_RS(renderScene.rasterizerStateFillFrontfaces,
+    renderer::driver::create_RS(renderCore.rasterizerStateFillFrontfaces,
             { renderer::driver::RasterizerFillMode::Fill,
               renderer::driver::RasterizerCullMode::CullBack, false });
-    renderer::driver::create_RS(renderScene.rasterizerStateFillBackfaces,
+    renderer::driver::create_RS(renderCore.rasterizerStateFillBackfaces,
             { renderer::driver::RasterizerFillMode::Fill,
               renderer::driver::RasterizerCullMode::CullFront, false });
-    renderer::driver::create_RS(renderScene.rasterizerStateFillCullNone,
+    renderer::driver::create_RS(renderCore.rasterizerStateFillCullNone,
             { renderer::driver::RasterizerFillMode::Fill,
               renderer::driver::RasterizerCullMode::CullNone, false });
-    renderer::driver::create_RS(renderScene.rasterizerStateLine,
+    renderer::driver::create_RS(renderCore.rasterizerStateLine,
             { renderer::driver::RasterizerFillMode::Line,
               renderer::driver::RasterizerCullMode::CullNone, false });
     {
@@ -1195,20 +1363,20 @@ void init_scene(game::Scene& scene, SceneMemory& memory, const platform::Screen&
         dsParams.depth_enable = true;
         dsParams.depth_func = renderer::driver::CompFunc::Less;
         dsParams.depth_writemask = renderer::driver::DepthWriteMask::All;
-        renderer::driver::create_DS(renderScene.depthStateOn, dsParams);
+        renderer::driver::create_DS(renderCore.depthStateOn, dsParams);
         dsParams = {};
         dsParams.depth_enable = true;
         dsParams.depth_func = renderer::driver::CompFunc::Less;
         dsParams.depth_writemask = renderer::driver::DepthWriteMask::Zero;
-        renderer::driver::create_DS(renderScene.depthStateReadOnly, dsParams);
+        renderer::driver::create_DS(renderCore.depthStateReadOnly, dsParams);
         dsParams = {};
         dsParams.depth_enable = false;
-        renderer::driver::create_DS(renderScene.depthStateOff, dsParams);
+        renderer::driver::create_DS(renderCore.depthStateOff, dsParams);
         dsParams = {};
         dsParams.depth_enable = true;
         dsParams.depth_func = renderer::driver::CompFunc::Always;
         dsParams.depth_writemask = renderer::driver::DepthWriteMask::All;
-        renderer::driver::create_DS(renderScene.depthStateAlways, dsParams);
+        renderer::driver::create_DS(renderCore.depthStateAlways, dsParams);
         { // MIRROR depth states
             dsParams = {};
             dsParams.depth_enable = true;
@@ -1220,7 +1388,7 @@ void init_scene(game::Scene& scene, SceneMemory& memory, const platform::Screen&
             dsParams.stencil_depthFailOp = renderer::driver::StencilOp::Keep;
             dsParams.stencil_passOp = renderer::driver::StencilOp::Incr;
             dsParams.stencil_func = renderer::driver::CompFunc::Equal;
-            renderer::driver::create_DS(renderScene.depthStateMarkMirror, dsParams);
+            renderer::driver::create_DS(renderCore.depthStateMarkMirror, dsParams);
             dsParams = {};
             dsParams.depth_enable = true;
             dsParams.depth_func = renderer::driver::CompFunc::Always;
@@ -1231,7 +1399,7 @@ void init_scene(game::Scene& scene, SceneMemory& memory, const platform::Screen&
             dsParams.stencil_depthFailOp = renderer::driver::StencilOp::Keep;
             dsParams.stencil_passOp = renderer::driver::StencilOp::Decr;
             dsParams.stencil_func = renderer::driver::CompFunc::Equal;
-            renderer::driver::create_DS(renderScene.depthStateUnmarkMirror, dsParams);
+            renderer::driver::create_DS(renderCore.depthStateUnmarkMirror, dsParams);
             dsParams.depth_enable = true;
             dsParams.depth_func = renderer::driver::CompFunc::Less;
             dsParams.depth_writemask = renderer::driver::DepthWriteMask::All;
@@ -1242,7 +1410,7 @@ void init_scene(game::Scene& scene, SceneMemory& memory, const platform::Screen&
             dsParams.stencil_depthFailOp = renderer::driver::StencilOp::Keep;
             dsParams.stencil_passOp = renderer::driver::StencilOp::Keep;
             dsParams.stencil_func = renderer::driver::CompFunc::Equal;
-            renderer::driver::create_DS(renderScene.depthStateMirrorReflections, dsParams);
+            renderer::driver::create_DS(renderCore.depthStateMirrorReflections, dsParams);
             dsParams.depth_enable = true;
             dsParams.depth_func = renderer::driver::CompFunc::Less;
             dsParams.depth_writemask = renderer::driver::DepthWriteMask::Zero;
@@ -1253,7 +1421,7 @@ void init_scene(game::Scene& scene, SceneMemory& memory, const platform::Screen&
             dsParams.stencil_depthFailOp = renderer::driver::StencilOp::Keep;
             dsParams.stencil_passOp = renderer::driver::StencilOp::Keep;
             dsParams.stencil_func = renderer::driver::CompFunc::Equal;
-            renderer::driver::create_DS(renderScene.depthStateMirrorReflectionsDepthReadOnly, dsParams);
+            renderer::driver::create_DS(renderCore.depthStateMirrorReflectionsDepthReadOnly, dsParams);
             dsParams.depth_enable = true;
             dsParams.depth_func = renderer::driver::CompFunc::Always;
             dsParams.depth_writemask = renderer::driver::DepthWriteMask::All;
@@ -1264,88 +1432,101 @@ void init_scene(game::Scene& scene, SceneMemory& memory, const platform::Screen&
             dsParams.stencil_depthFailOp = renderer::driver::StencilOp::Keep;
             dsParams.stencil_passOp = renderer::driver::StencilOp::Keep;
             dsParams.stencil_func = renderer::driver::CompFunc::Equal;
-            renderer::driver::create_DS(renderScene.depthStateMirrorReflectionsDepthAlways, dsParams);
+            renderer::driver::create_DS(renderCore.depthStateMirrorReflectionsDepthAlways, dsParams);
         }
     }
 
     // known cbuffers
-    renderer::driver::RscCBuffer& cbufferclear = allocator::alloc_pool(renderScene.cbuffers);
-    renderScene.cbuffer_clearColor = handle_from_cbuffer(renderScene, cbufferclear);
+    renderer::driver::RscCBuffer& cbufferclear =
+        renderCore.cbuffers[renderer::CoreResources::CBuffersMeta::ClearColor];
     renderer::driver::create_cbuffer(cbufferclear, { sizeof(renderer::BlitColor) });
     renderer::BlitColor clearColor = { float4(0.2f, 0.344f, 0.59f, 1.f) };
     renderer::driver::update_cbuffer(cbufferclear, &clearColor);
-    renderer::driver::RscCBuffer& cbufferscene = allocator::alloc_pool(renderScene.cbuffers);
-    renderScene.cbuffer_scene = handle_from_cbuffer(renderScene, cbufferscene);
+    renderer::driver::RscCBuffer& cbufferscene =
+        renderCore.cbuffers[renderer::CoreResources::CBuffersMeta::Scene];
     renderer::driver::create_cbuffer(cbufferscene, { sizeof(renderer::SceneData) });
-    renderer::driver::RscCBuffer& cbufferNodeIdentity = allocator::alloc_pool(renderScene.cbuffers);
-    renderScene.cbuffer_nodeIdentity = handle_from_cbuffer(renderScene, cbufferNodeIdentity);
+    renderer::driver::RscCBuffer& cbufferNodeIdentity =
+        renderCore.cbuffers[renderer::CoreResources::CBuffersMeta::NodeIdentity];
     renderer::driver::create_cbuffer(cbufferNodeIdentity, { sizeof(renderer::NodeData) });
     renderer::NodeData nodeIdentity = {};
     nodeIdentity.groupColor = float4(1.f, 1.f, 1.f, 1.f);
     math::identity4x4(*(Transform*)&nodeIdentity.worldMatrix);
     renderer::driver::update_cbuffer(cbufferNodeIdentity, &nodeIdentity);
+    renderer::driver::RscCBuffer& cbufferNodeUItext =
+        renderCore.cbuffers[renderer::CoreResources::CBuffersMeta::UIText];
+    renderer::driver::create_cbuffer(cbufferNodeUItext, { sizeof(renderer::NodeData) });
+    renderer::NodeData noteUItext = {};
+    noteUItext.groupColor = float4(1.f, 1.f, 1.f, 1.f);
+    math::identity4x4(*(Transform*)&noteUItext.worldMatrix);
+    renderer::driver::update_cbuffer(cbufferNodeUItext, &noteUItext);
 
     // input layouts
+    const renderer::driver::VertexAttribDesc attribs_2d[] = {
+        renderer::driver::make_vertexAttribDesc(
+            "POSITION", offsetof(renderer::VertexLayout_Color_2D, pos),
+            sizeof(renderer::VertexLayout_Color_2D),
+            renderer::driver::BufferAttributeFormat::R32G32_FLOAT),
+        renderer::driver::make_vertexAttribDesc(
+            "COLOR", offsetof(renderer::VertexLayout_Color_2D, color),
+            sizeof(renderer::VertexLayout_Color_2D),
+            renderer::driver::BufferAttributeFormat::R8G8B8A8_UNORM) };
     const renderer::driver::VertexAttribDesc attribs_3d[] = {
         renderer::driver::make_vertexAttribDesc(
-                "POSITION", 0,
-                sizeof(float3),
-                renderer::driver::BufferAttributeFormat::R32G32B32_FLOAT),
-    };
+            "POSITION", 0,
+            sizeof(float3),
+            renderer::driver::BufferAttributeFormat::R32G32B32_FLOAT) };
     const renderer::driver::VertexAttribDesc attribs_color3d[] = {
         renderer::driver::make_vertexAttribDesc(
-				"POSITION", offsetof(renderer::VertexLayout_Color_3D, pos),
-                sizeof(renderer::VertexLayout_Color_3D),
-                renderer::driver::BufferAttributeFormat::R32G32B32_FLOAT),
+			"POSITION", offsetof(renderer::VertexLayout_Color_3D, pos),
+            sizeof(renderer::VertexLayout_Color_3D),
+            renderer::driver::BufferAttributeFormat::R32G32B32_FLOAT),
         renderer::driver::make_vertexAttribDesc(
-				"COLOR", offsetof(renderer::VertexLayout_Color_3D, color),
-                sizeof(renderer::VertexLayout_Color_3D),
-                renderer::driver::BufferAttributeFormat::R8G8B8A8_UNORM) };
+			"COLOR", offsetof(renderer::VertexLayout_Color_3D, color),
+            sizeof(renderer::VertexLayout_Color_3D),
+            renderer::driver::BufferAttributeFormat::R8G8B8A8_UNORM) };
     const renderer::driver::VertexAttribDesc attribs_color3d_skinned[] = {
         renderer::driver::make_vertexAttribDesc(
-				"POSITION", offsetof(renderer::VertexLayout_Color_Skinned_3D, pos),
-                sizeof(renderer::VertexLayout_Color_Skinned_3D),
-                renderer::driver::BufferAttributeFormat::R32G32B32_FLOAT),
+			"POSITION", offsetof(renderer::VertexLayout_Color_Skinned_3D, pos),
+            sizeof(renderer::VertexLayout_Color_Skinned_3D),
+            renderer::driver::BufferAttributeFormat::R32G32B32_FLOAT),
         renderer::driver::make_vertexAttribDesc(
-				"COLOR", offsetof(renderer::VertexLayout_Color_Skinned_3D, color),
-                sizeof(renderer::VertexLayout_Color_Skinned_3D),
-                renderer::driver::BufferAttributeFormat::R8G8B8A8_UNORM),
+			"COLOR", offsetof(renderer::VertexLayout_Color_Skinned_3D, color),
+            sizeof(renderer::VertexLayout_Color_Skinned_3D),
+            renderer::driver::BufferAttributeFormat::R8G8B8A8_UNORM),
         renderer::driver::make_vertexAttribDesc(
-				"JOINTINDICES", offsetof(renderer::VertexLayout_Color_Skinned_3D, joint_indices),
-                sizeof(renderer::VertexLayout_Color_Skinned_3D),
-                renderer::driver::BufferAttributeFormat::R8G8B8A8_SINT),
+			"JOINTINDICES", offsetof(renderer::VertexLayout_Color_Skinned_3D, joint_indices),
+            sizeof(renderer::VertexLayout_Color_Skinned_3D),
+            renderer::driver::BufferAttributeFormat::R8G8B8A8_SINT),
         renderer::driver::make_vertexAttribDesc(
-				"JOINTWEIGHTS", offsetof(renderer::VertexLayout_Color_Skinned_3D, joint_weights),
-                sizeof(renderer::VertexLayout_Color_Skinned_3D),
-                renderer::driver::BufferAttributeFormat::R8G8B8A8_UNORM)
-    };
+			"JOINTWEIGHTS", offsetof(renderer::VertexLayout_Color_Skinned_3D, joint_weights),
+            sizeof(renderer::VertexLayout_Color_Skinned_3D),
+            renderer::driver::BufferAttributeFormat::R8G8B8A8_UNORM) };
     const renderer::driver::VertexAttribDesc attribs_textured3d[] = {
         renderer::driver::make_vertexAttribDesc(
-				"POSITION", offsetof(renderer::VertexLayout_Textured_3D, pos),
-                sizeof(renderer::VertexLayout_Textured_3D),
-                renderer::driver::BufferAttributeFormat::R32G32B32_FLOAT),
+			"POSITION", offsetof(renderer::VertexLayout_Textured_3D, pos),
+            sizeof(renderer::VertexLayout_Textured_3D),
+            renderer::driver::BufferAttributeFormat::R32G32B32_FLOAT),
         renderer::driver::make_vertexAttribDesc(
-				"TEXCOORD", offsetof(renderer::VertexLayout_Textured_3D, uv),
-                sizeof(renderer::VertexLayout_Textured_3D),
-                renderer::driver::BufferAttributeFormat::R32G32_FLOAT)
-    };
+			"TEXCOORD", offsetof(renderer::VertexLayout_Textured_3D, uv),
+            sizeof(renderer::VertexLayout_Textured_3D),
+            renderer::driver::BufferAttributeFormat::R32G32_FLOAT) };
     const renderer::driver::VertexAttribDesc attribs_textured3d_skinned[] = {
         renderer::driver::make_vertexAttribDesc(
-				"POSITION", offsetof(renderer::VertexLayout_Textured_Skinned_3D, pos),
-                sizeof(renderer::VertexLayout_Textured_Skinned_3D),
-                renderer::driver::BufferAttributeFormat::R32G32B32_FLOAT),
+			"POSITION", offsetof(renderer::VertexLayout_Textured_Skinned_3D, pos),
+            sizeof(renderer::VertexLayout_Textured_Skinned_3D),
+            renderer::driver::BufferAttributeFormat::R32G32B32_FLOAT),
         renderer::driver::make_vertexAttribDesc(
-				"TEXCOORD", offsetof(renderer::VertexLayout_Textured_Skinned_3D, uv),
-                sizeof(renderer::VertexLayout_Textured_Skinned_3D),
-                renderer::driver::BufferAttributeFormat::R32G32_FLOAT),
+			"TEXCOORD", offsetof(renderer::VertexLayout_Textured_Skinned_3D, uv),
+            sizeof(renderer::VertexLayout_Textured_Skinned_3D),
+            renderer::driver::BufferAttributeFormat::R32G32_FLOAT),
         renderer::driver::make_vertexAttribDesc(
-				"JOINTINDICES", offsetof(renderer::VertexLayout_Textured_Skinned_3D, joint_indices),
-                sizeof(renderer::VertexLayout_Textured_Skinned_3D),
-                renderer::driver::BufferAttributeFormat::R8G8B8A8_SINT),
+			"JOINTINDICES", offsetof(renderer::VertexLayout_Textured_Skinned_3D, joint_indices),
+            sizeof(renderer::VertexLayout_Textured_Skinned_3D),
+            renderer::driver::BufferAttributeFormat::R8G8B8A8_SINT),
         renderer::driver::make_vertexAttribDesc(
-				"JOINTWEIGHTS", offsetof(renderer::VertexLayout_Textured_Skinned_3D, joint_weights),
-                sizeof(renderer::VertexLayout_Textured_Skinned_3D),
-                renderer::driver::BufferAttributeFormat::R8G8B8A8_UNORM)
+			"JOINTWEIGHTS", offsetof(renderer::VertexLayout_Textured_Skinned_3D, joint_weights),
+            sizeof(renderer::VertexLayout_Textured_Skinned_3D),
+            renderer::driver::BufferAttributeFormat::R8G8B8A8_UNORM)
     };
 
     // cbuffer bindings
@@ -1405,7 +1586,7 @@ void init_scene(game::Scene& scene, SceneMemory& memory, const platform::Screen&
             desc.ps_src = renderer::shaders::ps_fullscreen_blit_clear_colored.src;
             desc.shader_cache = &shader_cache;
             renderer::compile_shader(
-                renderScene.shaders[renderer::ShaderTechniques::FullscreenBlitClearColor], desc);
+                renderCore.shaders[renderer::ShaderTechniques::FullscreenBlitClearColor], desc);
         }
         {
             renderer::ShaderDesc desc = {};
@@ -1422,7 +1603,23 @@ void init_scene(game::Scene& scene, SceneMemory& memory, const platform::Screen&
             desc.ps_src = renderer::shaders::ps_fullscreen_blit_textured.src;
             desc.shader_cache = &shader_cache;
             renderer::compile_shader(
-                    renderScene.shaders[renderer::ShaderTechniques::FullscreenBlitTextured], desc);
+                renderCore.shaders[renderer::ShaderTechniques::FullscreenBlitTextured], desc);
+        }
+        {
+            renderer::ShaderDesc desc = {};
+            desc.vertexAttrs = attribs_2d;
+            desc.vertexAttr_count = countof(attribs_2d);
+            desc.textureBindings = nullptr;
+            desc.textureBinding_count = 0;
+            desc.bufferBindings = bufferBindings_untextured_base;
+            desc.bufferBinding_count = countof(bufferBindings_untextured_base);
+            desc.vs_name = renderer::shaders::vs_color2d_base.name;
+            desc.vs_src = renderer::shaders::vs_color2d_base.src;
+            desc.ps_name = renderer::shaders::ps_color3d_unlit.name;
+            desc.ps_src = renderer::shaders::ps_color3d_unlit.src;
+            desc.shader_cache = &shader_cache;
+            renderer::compile_shader(
+                renderCore.shaders[renderer::ShaderTechniques::Color2D], desc);
         }
         {
             renderer::ShaderDesc desc = {};
@@ -1438,7 +1635,7 @@ void init_scene(game::Scene& scene, SceneMemory& memory, const platform::Screen&
             desc.ps_src = renderer::shaders::ps_color3d_unlit.src;
             desc.shader_cache = &shader_cache;
             renderer::compile_shader(
-                    renderScene.shaders[renderer::ShaderTechniques::Instanced3D], desc);
+                renderCore.shaders[renderer::ShaderTechniques::Instanced3D], desc);
         }
         {
             renderer::ShaderDesc desc = {};
@@ -1453,7 +1650,7 @@ void init_scene(game::Scene& scene, SceneMemory& memory, const platform::Screen&
             desc.ps_name = renderer::shaders::ps_color3d_unlit.name;
             desc.ps_src = renderer::shaders::ps_color3d_unlit.src;
             desc.shader_cache = &shader_cache;
-            renderer::compile_shader(renderScene.shaders[renderer::ShaderTechniques::Color3D], desc);
+            renderer::compile_shader(renderCore.shaders[renderer::ShaderTechniques::Color3D], desc);
         }
         {
             renderer::ShaderDesc desc = {};
@@ -1469,7 +1666,7 @@ void init_scene(game::Scene& scene, SceneMemory& memory, const platform::Screen&
             desc.ps_src = renderer::shaders::ps_color3d_unlit.src;
             desc.shader_cache = &shader_cache;
             renderer::compile_shader(
-                    renderScene.shaders[renderer::ShaderTechniques::Color3DSkinned], desc);
+                renderCore.shaders[renderer::ShaderTechniques::Color3DSkinned], desc);
         }
         {
             renderer::ShaderDesc desc = {};
@@ -1485,7 +1682,7 @@ void init_scene(game::Scene& scene, SceneMemory& memory, const platform::Screen&
             desc.ps_src = renderer::shaders::ps_textured3d_base.src;
             desc.shader_cache = &shader_cache;
             renderer::compile_shader(
-                    renderScene.shaders[renderer::ShaderTechniques::Textured3D], desc);
+                renderCore.shaders[renderer::ShaderTechniques::Textured3D], desc);
         }
         {
             renderer::ShaderDesc desc = {};
@@ -1501,7 +1698,7 @@ void init_scene(game::Scene& scene, SceneMemory& memory, const platform::Screen&
             desc.ps_src = renderer::shaders::ps_textured3dalphaclip_base.src;
             desc.shader_cache = &shader_cache;
             renderer::compile_shader(
-                    renderScene.shaders[renderer::ShaderTechniques::Textured3DAlphaClip], desc);
+                renderCore.shaders[renderer::ShaderTechniques::Textured3DAlphaClip], desc);
         }
         {
             renderer::ShaderDesc desc = {};
@@ -1517,7 +1714,7 @@ void init_scene(game::Scene& scene, SceneMemory& memory, const platform::Screen&
             desc.ps_src = renderer::shaders::ps_textured3d_base.src;
             desc.shader_cache = &shader_cache;
             renderer::compile_shader(
-                    renderScene.shaders[renderer::ShaderTechniques::Textured3DSkinned], desc);
+                renderCore.shaders[renderer::ShaderTechniques::Textured3DSkinned], desc);
         }
         {
             renderer::ShaderDesc desc = {};
@@ -1533,26 +1730,12 @@ void init_scene(game::Scene& scene, SceneMemory& memory, const platform::Screen&
             desc.ps_src = renderer::shaders::ps_textured3dalphaclip_base.src;
             desc.shader_cache = &shader_cache;
             renderer::compile_shader(
-                    renderScene.shaders[renderer::ShaderTechniques::Textured3DAlphaClipSkinned], desc);
+                renderCore.shaders[renderer::ShaderTechniques::Textured3DAlphaClipSkinned], desc);
         }
         renderer::driver::write_shader_cache(shader_cache);
     }
 
     allocator::Arena scratchArena = memory.scratchArena; // explicit copy
-
-    struct AssetData {
-        const char* path;
-        float3 asset_init_pos;
-        u32 count;
-        bool player; // only first count
-    };
-    // from blender: export fbx -> Apply Scalings: FBX All
-    // -> Forward: the one in Blender -> Use Space Transform: yes
-    const AssetData assets[] = {
-          { "assets/meshes/boar.fbx", { -5.f, 10.f, 2.30885f }, 1, false }
-        , { "assets/meshes/bird.fbx", { 1.f, 3.f, 2.23879f }, 1, true }
-        , { "assets/meshes/bird.fbx", { -8.f, 12.f, 2.23879f }, 1, false }
-    };
 
     fbx::PipelineAssetContext ctx = { scratchArena, persistentArena };
     ctx.vertexAttrs[renderer::DrawlistStreams::Color3D] 
@@ -1579,204 +1762,64 @@ void init_scene(game::Scene& scene, SceneMemory& memory, const platform::Screen&
 		= attribs_textured3d_skinned;
     ctx.attr_count[renderer::DrawlistStreams::Textured3DAlphaClipSkinned] 
 		= countof(attribs_textured3d_skinned);
-
+    // from blender: export fbx -> Apply Scalings: FBX All
+    // -> Forward: the one in Blender -> Use Space Transform: yes
+    struct AssetDef {
+        const char* path;
+        game::Resources::AssetsMeta::Enum assetId;
+    };
+    const AssetDef assets[] = {
+          { "assets/meshes/boar.fbx", game::Resources::AssetsMeta::Boar }
+        , { "assets/meshes/bird.fbx", game::Resources::AssetsMeta::Bird }
+    };
     for (u32 asset_idx = 0; asset_idx < countof(assets); asset_idx++) {
-        const AssetData& asset = assets[asset_idx];
-
-        for (u32 asset_rep = 0; asset_rep < asset.count; asset_rep++) {
-            animation::Node animatedNode = {};
-
-            float3 asset_init_pos = asset.asset_init_pos;
-            const f32 spacing = 10.f;
-            const s32 grid_size = 16;
-            const s32 max_row = (asset.count - 1) % grid_size;
-            const s32 max_column = ((asset.count - 1) / grid_size) % grid_size;
-            s32 row = asset_rep % grid_size;
-            s32 column = (asset_rep / grid_size) % grid_size;
-            s32 stride = asset_rep / (grid_size * grid_size);
-            asset_init_pos = math::add(asset_init_pos,
-                                      {(row - max_row /2) * spacing,
-                                       (column - max_column/2) * spacing,
-                                        stride * spacing });
-
-            u32 nodeHandle = 0;
-		    ctx.scratchArena = scratchArena; // explicit copy
-            renderer::DrawNode nodeToAdd = {};
-            fbx::load_with_materials(nodeToAdd, animatedNode, renderScene, ctx, asset.path);
-
-            renderer::DrawNode& node = allocator::alloc_pool(renderScene.drawNodes);
-            node = nodeToAdd; // todo: validate that node was loaded?
-            nodeHandle = renderer::handle_from_node(renderScene, node);
-            math::identity4x4(*(Transform*)&(node.nodeData.worldMatrix));
-            node.nodeData.worldMatrix.col3 = { asset_init_pos, 1.f };
-            node.nodeData.groupColor = Color32(1.f, 1.f, 1.f, 1.f).RGBAv4();
-            animation::Handle animHandle = {};
-            if (animatedNode.skeleton.jointCount) {
-                for (u32 m = 0; m < animatedNode.skeleton.jointCount; m++) {
-                    float4x4& matrix = animatedNode.state.skinning[m];
-                    math::identity4x4(*(Transform*)&(matrix));
-                }
-                renderer::driver::RscCBuffer& cbufferskinning =
-                    allocator::alloc_pool(renderScene.cbuffers);
-                node.cbuffer_ext = handle_from_cbuffer(renderScene, cbufferskinning);
-                renderer::driver::create_cbuffer(
-                    cbufferskinning,
-                    { (u32)sizeof(float4x4) * animatedNode.skeleton.jointCount });
-                node.ext_data = animatedNode.state.skinning; // hack: improve
-                animatedNode.state.animIndex = 0;
-                animatedNode.state.time = 0.f;
-                animatedNode.state.scale = 1.f;
-                animation::Node& animatedNodeToAdd = allocator::alloc_pool(animScene.nodes);
-                animatedNodeToAdd = animatedNode;
-                animHandle = animation::handle_from_node(scene.animScene, animatedNodeToAdd);
-		    }
-
-            if (asset.player) {
-                scene.playerAnimatedNodeHandle = animHandle;
-                scene.playerDrawNodeHandle = nodeHandle;
-                math::identity4x4(scene.player.transform);
-                scene.player.transform.pos = asset_init_pos;
-            }
-        }
+        u32 assetHandle = 0;
+		ctx.scratchArena = scratchArena; // explicit copy
+        game::AssetInMemory& assetToAdd = core.assets[assets[asset_idx].assetId];
+        assetToAdd = {};
+        fbx::load_with_materials(assetToAdd, renderCore, ctx, assets[asset_idx].path);
     }
 
-    // sky
+    // instanced cubes
     {
-        renderer::driver::create_cbuffer(renderScene.sky.cbuffer, { sizeof(renderer::NodeData) });
-        math::identity4x4(*(Transform*)&(renderScene.sky.nodeData.worldMatrix));
-        renderScene.sky.nodeData.worldMatrix.col3.xyz = float3(-5.f, -8.f, 5.f);
-        renderScene.sky.nodeData.groupColor = Color32(1.f, 1.f, 1.f, 1.f).RGBAv4();
-        renderer::driver::update_cbuffer(renderScene.sky.cbuffer, &renderScene.sky.nodeData);
-
-        renderer::driver::IndexedVertexBufferDesc bufferParams;
-        bufferParams.vertexSize = 4 * sizeof(renderer::VertexLayout_Color_3D);
-        bufferParams.vertexCount = 4;
-        bufferParams.indexSize = 6 * sizeof(u16);
-        bufferParams.indexCount = 6;
-        bufferParams.memoryUsage = renderer::driver::BufferMemoryUsage::GPU;
-        bufferParams.accessType = renderer::driver::BufferAccessType::GPU;
-        bufferParams.indexType = renderer::driver::BufferItemType::U16;
-        bufferParams.type = renderer::driver::BufferTopologyType::Triangles;
-        renderer::driver::VertexAttribDesc attribs[] = {
-            renderer::driver::make_vertexAttribDesc(
-                    "POSITION", offsetof(renderer::VertexLayout_Color_3D, pos),
-                    sizeof(renderer::VertexLayout_Color_3D),
-                    renderer::driver::BufferAttributeFormat::R32G32B32_FLOAT),
-            renderer::driver::make_vertexAttribDesc(
-                    "COLOR", offsetof(renderer::VertexLayout_Color_3D, color),
-                    sizeof(renderer::VertexLayout_Color_3D),
-                    renderer::driver::BufferAttributeFormat::R8G8B8A8_UNORM)
-        };
-
-        u32 c = Color32(0.2f, 0.344f, 0.59f, 1.f).ABGR();
-        f32 w = 150.f;
-        f32 h = 500.f;
-        {
-            renderer::VertexLayout_Color_3D v[] = {
-                { { w, w, -h }, c }, { { -w, w, -h }, c },
-                { { -w, w, h }, c }, { { w, w, h }, c } };
-            u16 i[] = { 0, 1, 2, 2, 3, 0 };
-            bufferParams.vertexData = v;
-            bufferParams.indexData = i;
-            renderer::driver::create_indexed_vertex_buffer(
-                    renderScene.sky.buffers[0], bufferParams, attribs, countof(attribs));
-        }
-        {
-            renderer::VertexLayout_Color_3D v[] = {
-				{ { w, -w, -h }, c }, { { -w, -w, -h }, c },
-				{ { -w, -w, h }, c }, { { w, -w, h }, c } };
-            u16 i[] = { 2, 1, 0, 0, 3, 2 };
-            bufferParams.vertexData = v;
-            bufferParams.indexData = i;
-            renderer::driver::create_indexed_vertex_buffer(
-					renderScene.sky.buffers[1], bufferParams, attribs, countof(attribs));
-        }
-        {
-            renderer::VertexLayout_Color_3D v[] = {
-				{ { w, w, -h }, c }, { { w, -w, -h }, c },
-				{ { w, -w, h }, c }, { { w, w, h }, c } };
-            u16 i[] = { 2, 1, 0, 0, 3, 2 };
-            bufferParams.vertexData = v;
-            bufferParams.indexData = i;
-            renderer::driver::create_indexed_vertex_buffer(
-					renderScene.sky.buffers[2], bufferParams, attribs, countof(attribs));
-        }
-        {
-            renderer::VertexLayout_Color_3D v[] = {
-				{ { -w, w, -h }, c }, { { -w, -w, -h }, c },
-				{ { -w, -w, h }, c }, { { -w, w, h }, c } };
-            u16 i[] = { 0, 1, 2, 0, 2, 3 };
-            bufferParams.vertexData = v;
-            bufferParams.indexData = i;
-            renderer::driver::create_indexed_vertex_buffer(
-					renderScene.sky.buffers[3], bufferParams, attribs, countof(attribs));
-        }
-        {
-            renderer::VertexLayout_Color_3D v[] = {
-				{ { -w, w, h }, c }, { { -w, -w, h }, c },
-				{ { w, -w, h }, c }, { { w, w, h }, c } };
-            u16 i[] = { 0, 1, 2, 0, 2, 3 };
-            bufferParams.vertexData = v;
-            bufferParams.indexData = i;
-            renderer::driver::create_indexed_vertex_buffer(
-					renderScene.sky.buffers[4], bufferParams, attribs, countof(attribs));
-        }
-        {
-            renderer::VertexLayout_Color_3D v[] = {
-				{ { -w, w, -h/4 }, c }, { { -w, -w, -h/4 }, c },
-				{ { w, -w, -h/4 }, c }, { { w, w, -h/4 }, c } };
-            u16 i[] = { 2, 1, 0, 0, 3, 2 };
-            bufferParams.vertexData = v;
-            bufferParams.indexData = i;
-            renderer::driver::create_indexed_vertex_buffer(
-					renderScene.sky.buffers[5], bufferParams, attribs, countof(attribs));
-        }
-    }
-
-    // alpha unit cubes (todo: shouldn't be alpha and instanced)
-    {
-        renderer::DrawMesh& mesh = allocator::alloc_pool(renderScene.meshes);
+        renderer::DrawMesh& mesh = renderer::alloc_drawMesh(renderCore);
         mesh = {};
         mesh.shaderTechnique = renderer::ShaderTechniques::Instanced3D;
         renderer::UntexturedCube cube;
         renderer::create_cube_coords(
-				(uintptr_t)cube.vertices, sizeof(cube.vertices[0]),
-                cube.indices, float3(1.f, 1.f, 1.f), float3(0.f, 0.f, 0.f));
+            (uintptr_t)cube.vertices, sizeof(cube.vertices[0]),
+            cube.indices, float3(1.f, 1.f, 1.f), float3(0.f, 0.f, 0.f));
         renderer::create_indexed_vertex_buffer_from_untextured_mesh(
-				mesh.vertexBuffer, cube.vertices, countof(cube.vertices),
-                cube.indices, countof(cube.indices));
-        renderer::DrawNodeInstanced& node = allocator::alloc_pool(renderScene.instancedDrawNodes);
-        node = {};
-		node.meshHandles[0] = handle_from_drawMesh(renderScene, mesh);
-        math::identity4x4(*(Transform*)&(node.nodeData.worldMatrix));
-        node.nodeData.groupColor = Color32(0.9f, 0.7f, 0.8f, 0.6f).RGBAv4();
-        node.instanceCount = maxPlayerParticleCubes;
-        renderer::driver::RscCBuffer& cbuffercore = allocator::alloc_pool(renderScene.cbuffers);
-        node.cbuffer_node = handle_from_cbuffer(renderScene, cbuffercore);
-        renderer::driver::create_cbuffer(cbuffercore, { sizeof(renderer::NodeData) });
-        renderer::driver::RscCBuffer& cbufferinstances =
-            allocator::alloc_pool(renderScene.cbuffers);
-        node.cbuffer_instances = handle_from_cbuffer(renderScene, cbufferinstances);
-        renderer::driver::create_cbuffer(
-                cbufferinstances,
-                { (u32) sizeof(float4x4) * node.instanceCount });
-        for (u32 m = 0; m < countof(node.instanceMatrices.data); m++) {
-            float4x4& matrix = node.instanceMatrices.data[m];
-            math::identity4x4(*(Transform*)&(matrix));
-        }
-        scene.particlesDrawHandle = handle_from_instanced_node(renderScene, node);
+            mesh.vertexBuffer, cube.vertices, countof(cube.vertices),
+            cube.indices, countof(cube.indices));
+        core.instancedUnitCubeMesh = renderer::handle_from_drawMesh(renderCore, mesh);
+    }
+
+    // instanced spheres
+    {
+        renderer::DrawMesh& mesh = renderer::alloc_drawMesh(renderCore);
+        mesh = {};
+        mesh.shaderTechnique = renderer::ShaderTechniques::Instanced3D;
+        renderer::UntexturedSphere sphere;
+        renderer::create_sphere_coords(
+            (uintptr_t)sphere.vertices, sizeof(sphere.vertices[0]),
+            sphere.indices, 1.f);
+        renderer::create_indexed_vertex_buffer_from_untextured_mesh(
+            mesh.vertexBuffer, sphere.vertices, countof(sphere.vertices),
+            sphere.indices, countof(sphere.indices));
+        core.instancedUnitSphereMesh = renderer::handle_from_drawMesh(renderCore, mesh);
     }
 
     // ground
     {
-        renderer::DrawMesh& mesh = allocator::alloc_pool(renderScene.meshes);
+        renderer::DrawMesh& mesh = renderer::alloc_drawMesh(renderCore);
         mesh = {};
         mesh.shaderTechnique = renderer::ShaderTechniques::Color3D;
         f32 w = 30.f, h = 30.f;
-        u32 c = Color32(1.f, 1.f, 1.f, 1.f).ABGR();
+        u32 c = Color32(0.13f, 0.51f, 0.23f, 1.f).ABGR();
         renderer::VertexLayout_Color_3D v[] = {
             { { w, -h, 0.f }, c }, { { -w, -h, 0.f }, c },
-			{ { -w, h, 0.f }, c }, { { w, h, 0.f }, c } };
+            { { -w, h, 0.f }, c }, { { w, h, 0.f }, c } };
         u16 i[] = { 0, 1, 2, 2, 3, 0 };
         renderer::driver::IndexedVertexBufferDesc bufferParams;
         bufferParams.vertexData = v;
@@ -1800,44 +1843,35 @@ void init_scene(game::Scene& scene, SceneMemory& memory, const platform::Screen&
                     renderer::driver::BufferAttributeFormat::R8G8B8A8_UNORM)
         };
         renderer::driver::create_indexed_vertex_buffer(
-                mesh.vertexBuffer, bufferParams, attribs, countof(attribs));
-        renderer::DrawNode& node = allocator::alloc_pool(renderScene.drawNodes);
-        node = {};
-        node.meshHandles[0] = handle_from_drawMesh(renderScene, mesh);
-        math::identity4x4(*(Transform*)&(node.nodeData.worldMatrix));
-        node.nodeData.worldMatrix.col3.xyz = float3(0.f, 0.f, 0.f);
-        node.nodeData.groupColor = Color32(0.13f, 0.51f, 0.23f, 1.f).RGBAv4();
-        node.max = float3(w, h, 0.f); // todo: improve node generation!!! I KEEP MISSING THIS
-        node.min = float3(-w, -h, 0.f);
-        renderer::driver::RscCBuffer& cbuffernode = allocator::alloc_pool(renderScene.cbuffers);
-        node.cbuffer_node = handle_from_cbuffer(renderScene, cbuffernode);
-        renderer::driver::create_cbuffer(cbuffernode, { sizeof(renderer::NodeData) });
+            mesh.vertexBuffer, bufferParams, attribs, countof(attribs));
+
+        game::AssetInMemory& ground = core.assets[game::Resources::AssetsMeta::Ground];
+        ground = {};
+        ground.min = float3(-w, -h, 0.f);
+        ground.max = float3(w, h, 0.f);
+        ground.meshHandles[0] = renderer::handle_from_drawMesh(renderCore, mesh);
+        ground.skeleton.jointCount = 0;
     }
 
-    // mirrors
-    enum { MAX_MIRRORS = 1024 * 1024 }; // TODO: clean up
-    scene.mirrors.polys = (game::Mirrors::Poly*)
-        allocator::alloc_arena(
-            persistentArena,
-            sizeof(game::Mirrors::Poly) * MAX_MIRRORS, alignof(game::Mirrors::Poly));
-    scene.mirrors.meshHandles = (renderer::MeshHandle*)
-        allocator::alloc_arena(
-            persistentArena,
-            sizeof(renderer::MeshHandle) * MAX_MIRRORS, alignof(renderer::MeshHandle));
-    obj::load_with_vertex_colors_as_mirrors(scene, scratchArena, "assets/meshes/throne.obj");
-    for (u32 m = 0; m < 8; m++) {
-        renderer::DrawMesh& mesh = allocator::alloc_pool(renderScene.meshes);
-        mesh = {};
-        mesh.shaderTechnique = renderer::ShaderTechniques::Color3D;
+    // Mirror models
+    obj::load_mesh_cpu_gpu(
+        core.meshes[game::Resources::MeshesMeta::ToiletLo], renderCore,
+        scratchArena, persistentArena, "assets/meshes/throne.obj", 1.f);
+    obj::load_mesh_cpu_gpu(
+        core.meshes[game::Resources::MeshesMeta::ToiletHi], renderCore,
+        scratchArena, persistentArena, "assets/meshes/mid-smooth.obj", 1.5f);
+
+    // Hall of mirrors
+    for (u32 m = 0; m < game::Resources::MirrorHallMeta::Count; m++) {
+        game::GPUCPUMesh& meshToLoad = core.mirrorHallMeshes[m];
         f32 w = 12.4f, h = 10.f;
         u32 c = Color32(0.01f, 0.19f, 0.3f, 0.32f).ABGR();
         renderer::VertexLayout_Color_3D v[] = {
             { { 1.f, 0.f, -1.f }, c }, { { -1.f, 0.f, -1.f }, c },
             { { -1.f, 0.f, 1.f }, c }, { { 1.f, 0.f, 1.f }, c } };
-        const u32 mirrorId = scene.mirrors.count++;
         Transform t;
         Transform rot = math::fromOffsetAndOrbit(
-            float3(0.f, 0.f, 0.f), float3(0.f, 0.f, f32(m) * math::twopi32 / f32(8) ));
+            float3(0.f, 0.f, 0.f), float3(0.f, 0.f, f32(m) * math::twopi32 / f32(8)));
         Transform translate = {};
         math::identity4x4(translate);
         translate.pos = float3(0.f, -30.f, 0.f);
@@ -1846,10 +1880,9 @@ void init_scene(game::Scene& scene, SceneMemory& memory, const platform::Screen&
         t.matrix.col2.xyz = math::scale(t.matrix.col2.xyz, h);
         for (u32 i = 0; i < countof(v); i++) {
             v[i].pos = math::mult(t.matrix, float4(v[i].pos, 1.f)).xyz;
-            scene.mirrors.polys[mirrorId].v[i] = v[i].pos;
         }
-        scene.mirrors.polys[mirrorId].numPts = 4;
-        u16 i[] = { 2, 1, 0, 0, 3, 2 };
+        // clock-wise indices
+        u16 i[] = { 2, 1, 0, 3, 2, 0 }; // todo: start of second tri needs to be the last vertex, fix this weird restriction
         renderer::driver::IndexedVertexBufferDesc bufferParams;
         bufferParams.vertexData = v;
         bufferParams.indexData = i;
@@ -1872,13 +1905,156 @@ void init_scene(game::Scene& scene, SceneMemory& memory, const platform::Screen&
                     renderer::driver::BufferAttributeFormat::R8G8B8A8_UNORM)
         };
         renderer::driver::create_indexed_vertex_buffer(
-                mesh.vertexBuffer, bufferParams, attribs, countof(attribs));
-        {
-            scene.mirrors.meshHandles[mirrorId] = handle_from_drawMesh(renderScene, mesh);
-        }
+            meshToLoad.gpuBuffer, bufferParams, attribs, countof(attribs));
+
+        renderer::CPUMesh& mesh = meshToLoad.cpuBuffer;
+        mesh.vertices = (float3*)allocator::alloc_arena(
+            persistentArena,
+            sizeof(float3) * countof(v), alignof(float3));
+        mesh.indices = (u16*)allocator::alloc_arena(
+            persistentArena,
+            sizeof(u16) * countof(i), alignof(u16));
+        for (u32 i = 0; i < countof(v); i++) { mesh.vertices[i] = v[i].pos; }
+        memcpy(mesh.indices, i, sizeof(u16) * countof(i));
+        mesh.indexCount = countof(i);
+        mesh.vertexCount = countof(v);
     }
 
+    // UI text
+    {
+        struct Buffer2D {
+            renderer::VertexLayout_Color_2D* vertices;
+            u32* indices;
+            u32 vertexCount;
+            u32 vertexCap;
+        };
+        struct Text2DParams {
+            float2 pos;
+            Color32 color;
+            u8 scale;
+        };
+        auto text2d = [](Buffer2D& buffer, const Text2DParams& params, char* text) {
+
+            const u32 vertexCount = buffer.vertexCount;
+            const u32 indexCount = 3 * vertexCount / 2; // every 4 vertices form a 6 index quad
+
+            unsigned char color[4];
+            color[0] = params.color.getRu();
+            color[1] = params.color.getGu();
+            color[2] = params.color.getBu();
+            color[3] = params.color.getAu();
+            u8* vertexBuffer = (u8*)&buffer.vertices[vertexCount];
+            s32 vertexBufferSize =
+                (buffer.vertexCap - vertexCount) * sizeof(renderer::VertexLayout_Color_2D);
+            // negate y, since our (0,0) is the center of the screen, stb's is bottom left
+            u32 quadCount = stb_easy_font_print(
+                params.pos.x, -params.pos.y, params.scale, text,
+                color, vertexBuffer, vertexBufferSize);
+            buffer.vertexCount += quadCount * 4;
+
+            // stb uses ccw winding, but we are negating the y, so it matches our cw winding
+            for (u32 i = 0; i < quadCount; i++) {
+                const u32 vertexIndex = vertexCount + i * 4;
+                const u32 indexIndex = indexCount + i * 6;
+                buffer.indices[indexIndex] = vertexIndex + 1;
+                buffer.indices[indexIndex + 1] = vertexIndex + 2;
+                buffer.indices[indexIndex + 2] = vertexIndex + 3;
+
+                buffer.indices[indexIndex + 3] = vertexIndex + 3;
+                buffer.indices[indexIndex + 4] = vertexIndex + 0;
+                buffer.indices[indexIndex + 5] = vertexIndex + 1;
+            }
+        };
+
+        auto commit2d = [](
+            renderer::driver::RscIndexedVertexBuffer& gpuBuffer, Buffer2D& buffer,
+            const renderer::driver::VertexAttribDesc* attribs, const u32 attribs_count){
+            const u32 vertexCount = buffer.vertexCount;
+            const u32 indexCount = 3 * vertexCount / 2; // every 4 vertices form a 6 index quad
+            renderer::driver::IndexedVertexBufferDesc bufferParams;
+            bufferParams.vertexData = buffer.vertices;
+            bufferParams.indexData = buffer.indices;
+            bufferParams.vertexSize = vertexCount * sizeof(renderer::VertexLayout_Color_2D);
+            bufferParams.vertexCount = vertexCount;
+            bufferParams.indexSize = indexCount * sizeof(u32);
+            bufferParams.indexCount = indexCount;
+            bufferParams.memoryUsage = renderer::driver::BufferMemoryUsage::GPU;
+            bufferParams.accessType = renderer::driver::BufferAccessType::GPU;
+            bufferParams.indexType = renderer::driver::BufferItemType::U32;
+            bufferParams.type = renderer::driver::BufferTopologyType::Triangles;
+            renderer::driver::create_indexed_vertex_buffer(
+                gpuBuffer, bufferParams, attribs, attribs_count);
+            buffer.vertexCount = 0;
+        };
+
+        enum { MAX_VERTICES2D_COUNT = 1024 };
+        Buffer2D buffer2D = {};
+        buffer2D.vertices = (renderer::VertexLayout_Color_2D*)allocator::alloc_arena(
+            scratchArena, MAX_VERTICES2D_COUNT * sizeof(renderer::VertexLayout_Color_2D),
+            alignof(renderer::VertexLayout_Color_2D));
+        buffer2D.vertexCap = MAX_VERTICES2D_COUNT;
+        buffer2D.indices = (u32*)allocator::alloc_arena(
+            scratchArena, (MAX_VERTICES2D_COUNT * 3 / 2) * sizeof(u32),
+            alignof(u32));
+
+        const f32 lineheight = 15.f * screen.window_scale;
+        Text2DParams textParams;
+        textParams.scale = (u8)screen.window_scale;
+        textParams.pos = float2(
+           renderCore.windowProjection.config.left + 10.f * screen.window_scale,
+           renderCore.windowProjection.config.bottom + 10.f * screen.window_scale);
+        textParams.pos.y += lineheight;
+        textParams.color = Color32(0.7f, 0.8f, 0.15f, 1.0f);
+        text2d(buffer2D, textParams, "Left click and drag to orbit");
+        textParams.pos.y += lineheight;
+        commit2d(core.gpuBufferOrbitText, buffer2D, attribs_2d, countof(attribs_2d));
+        text2d(buffer2D, textParams, "Right click and drag to pan");
+        textParams.pos.y += lineheight;
+        commit2d(core.gpuBufferPanText, buffer2D, attribs_2d, countof(attribs_2d));
+        text2d(buffer2D, textParams, "Mouse wheel to scale");
+        textParams.pos.y += lineheight;
+        commit2d(core.gpuBufferScaleText, buffer2D, attribs_2d, countof(attribs_2d));
+        text2d(buffer2D, textParams, "Press N to cycle through the three different rooms");
+        textParams.pos.y += lineheight;
+        commit2d(core.gpuBufferCycleRoomText, buffer2D, attribs_2d, countof(attribs_2d));
+        text2d(buffer2D, textParams, "Please enjoy your mirrors");
+        textParams.pos.y += lineheight;
+        text2d(buffer2D, textParams, "Welcome to the mirror room");
+        textParams.pos.y += lineheight;
+        commit2d(core.gpuBufferHeaderText, buffer2D, attribs_2d, countof(attribs_2d));
+    }
+
+    // debug renderer
+    __DEBUGDEF(renderer::im::init(memory.debugArena);)
+}
+void spawn_scene_mirrorRoom(
+    game::Scene& scene, allocator::Arena& sceneArena,
+    const game::Resources& core, const platform::Screen& screen,
+    const game::RoomDefinition& roomDef) {
+
+    renderer::Scene& renderScene = scene.renderScene;
+    animation::Scene& animScene = scene.animScene;
+    physics::Scene& physicsScene = scene.physicsScene;
+
+    // TODO: improve counts
+    const size_t drawNodePoolSize = (size_t)maxRenderNodes;
+    const size_t instancedNodePoolSize =
+		(size_t)maxRenderNodesInstanced;
+    const size_t cbufferSize =
+		(drawNodePoolSize * 2 + instancedNodePoolSize * 2) + 16;
+    const size_t animatedNodesSize =
+        math::min((size_t)maxAnimatedNodes, (size_t)renderer::DrawNodeMeta::MaxNodes);
+    allocator::init_pool(renderScene.cbuffers, cbufferSize, sceneArena);
+	__DEBUGDEF(renderScene.cbuffers.name = "cbuffers";)
+    allocator::init_pool(renderScene.instancedDrawNodes, instancedNodePoolSize, sceneArena);
+	__DEBUGDEF(renderScene.instancedDrawNodes.name = "instanced draw nodes";)
+    allocator::init_pool(renderScene.drawNodes, drawNodePoolSize, sceneArena);
+	__DEBUGDEF(renderScene.drawNodes.name = "draw nodes";)
+    allocator::init_pool(animScene.nodes, animatedNodesSize, sceneArena);
+	__DEBUGDEF(animScene.nodes.name = "anim nodes";)
+
     // physics
+    if (roomDef.physicsBalls)
     {
         struct BallAssets {
             float3 position;
@@ -1887,43 +2063,44 @@ void init_scene(game::Scene& scene, SceneMemory& memory, const platform::Screen&
             float mass;
         };
         BallAssets ballAssets[8];
-        const u32 numballs = countof(ballAssets);
         const f32 w = 30.f;
         const f32 h = 30.f;
         const f32 maxspeed = 20.f;
         //physicsScene.dt = 1 / 60.f;
+        physicsScene.ball_count = 8;
         physicsScene.bounds = float2(w, h);
         physicsScene.restitution = 1.f;
-        for (u32 i = 0; i < numballs; i++) {
+        for (u32 i = 0; i < physicsScene.ball_count; i++) {
             physics::DynamicObject_Sphere& ball = physicsScene.balls[i];
-            ball.radius = math::rand() * 3.f;
+            ball.radius = (math::rand() + 1.f) * 2.f;
             ball.mass = math::pi32 * ball.radius * ball.radius;
-            ball.pos = float3(w * (-1.f + 2.f * math::rand()), h * (-1.f + 2.f * math::rand()), 0.f);
-            ball.vel = float3(maxspeed * (-1.f + 2.f * math::rand()), maxspeed * (-1.f + 2.f * math::rand()), 0.f);
+            ball.pos =
+                float3(
+                    w * (-1.f + 2.f * math::rand()),
+                    h * (-1.f + 2.f * math::rand()),
+                    ball.radius * 0.5f);
+            ball.vel =
+                float3(
+                    maxspeed * (-1.f + 2.f * math::rand()),
+                    maxspeed * (-1.f + 2.f * math::rand()),
+                    0.f);
         }
-        renderer::DrawMesh& mesh = allocator::alloc_pool(renderScene.meshes);
-        mesh = {};
-        mesh.shaderTechnique = renderer::ShaderTechniques::Instanced3D;
 
-        renderer::UntexturedSphere sphere;
-        renderer::create_untextured_sphere_coords(sphere, 1.f);
-        renderer::create_indexed_vertex_buffer_from_untextured_mesh(
-                mesh.vertexBuffer, sphere.vertices, countof(sphere.vertices),
-                sphere.indices, countof(sphere.indices));
         renderer::DrawNodeInstanced& node = allocator::alloc_pool(renderScene.instancedDrawNodes);
         node = {};
-        node.meshHandles[0] = handle_from_drawMesh(renderScene, mesh);
+        node.meshHandles[0] = core.instancedUnitSphereMesh;
         math::identity4x4(*(Transform*)&(node.nodeData.worldMatrix));
         node.nodeData.groupColor = Color32(0.72f, 0.74f, 0.12f, 1.f).RGBAv4();
-        node.instanceCount = numballs;
+        node.instanceCount = physicsScene.ball_count;
         renderer::driver::RscCBuffer& cbuffercore = allocator::alloc_pool(renderScene.cbuffers);
         node.cbuffer_node = handle_from_cbuffer(renderScene, cbuffercore);
         renderer::driver::create_cbuffer(cbuffercore, { sizeof(renderer::NodeData) });
         renderer::driver::RscCBuffer& cbufferinstances =
             allocator::alloc_pool(renderScene.cbuffers);
-        node.cbuffer_instances = 
+        node.cbuffer_instances =
             handle_from_cbuffer(renderScene, cbufferinstances);
-        renderer::driver::create_cbuffer(cbufferinstances, { sizeof(float4x4) * numballs });
+        renderer::driver::create_cbuffer(
+            cbufferinstances, { u32(sizeof(float4x4)) * physicsScene.ball_count });
         for (u32 m = 0; m < countof(node.instanceMatrices.data); m++) {
             float4x4& matrix = node.instanceMatrices.data[m];
             math::identity4x4(*(Transform*)&(matrix));
@@ -1931,13 +2108,153 @@ void init_scene(game::Scene& scene, SceneMemory& memory, const platform::Screen&
         scene.ballInstancesDrawHandle = handle_from_instanced_node(renderScene, node);
     }
 
+        
+    struct AssetData {
+        game::Resources::AssetsMeta::Enum assetId;
+        float3 asset_init_pos;
+        u32 count;
+        bool player; // only first count
+        bool physicsObstacle;
+    };
+    const AssetData assetDefs[] = {
+          { game::Resources::AssetsMeta::Boar, { -5.f, 10.f, 2.30885f }, 1, false, true }
+        , { game::Resources::AssetsMeta::Bird, { 9.f, 6.f, 2.23879f }, 1, true, true }
+        , { game::Resources::AssetsMeta::Bird, { -8.f, 12.f, 2.23879f }, 1, false, true }
+    };
+    for (u32 asset_idx = 0; asset_idx < countof(assetDefs); asset_idx++) {
+        const AssetData& assetDef = assetDefs[asset_idx];
+        for (u32 asset_rep = 0; asset_rep < assetDef.count; asset_rep++) {
+            float3 asset_init_pos = assetDef.asset_init_pos;
+            const f32 spacing = 10.f;
+            const s32 grid_size = 16;
+            const s32 max_row = (assetDef.count - 1) % grid_size;
+            const s32 max_column = ((assetDef.count - 1) / grid_size) % grid_size;
+            s32 row = asset_rep % grid_size;
+            s32 column = (asset_rep / grid_size) % grid_size;
+            s32 stride = asset_rep / (grid_size * grid_size);
+            asset_init_pos = math::add(asset_init_pos,
+                { (row - max_row / 2) * spacing,
+                 (column - max_column / 2) * spacing,
+                  stride * spacing });
+
+            const game::AssetInMemory& asset = core.assets[assetDef.assetId];
+
+            renderer::DrawNodeHandle renderHandle = {};
+            animation::Handle animHandle = {};
+            spawnAsset(renderHandle, animHandle, scene, asset, asset_init_pos); 
+
+            if (assetDef.player) {
+                scene.playerAnimatedNodeHandle = animHandle;
+                scene.playerDrawNodeHandle = renderHandle;
+                math::identity4x4(scene.player.transform);
+                scene.player.transform.pos = asset_init_pos;
+            }
+
+            if (roomDef.physicsBalls && assetDef.physicsObstacle) {
+                physics::StaticObject_Sphere& o =
+                    physicsScene.obstacles[physicsScene.obstacle_count++];
+                o = {};
+                o.pos = assetDef.asset_init_pos;
+                f32 radius = math::min(
+                    math::min(math::abs(asset.max.x), math::abs(asset.max.y)),
+                    math::min(math::abs(asset.min.x), math::abs(asset.min.y)));
+                o.radius = radius;
+
+                if (assetDef.player) {
+                    scene.playerPhysicsNodeHandle = physics::handleFromObject(o, physicsScene);
+                }
+            }
+        }
+    }
+
+    // unit cubes
+    {
+        renderer::DrawNodeInstanced& node = allocator::alloc_pool(renderScene.instancedDrawNodes);
+        node = {};
+		node.meshHandles[0] = core.instancedUnitCubeMesh;
+        math::identity4x4(*(Transform*)&(node.nodeData.worldMatrix));
+        node.nodeData.groupColor = Color32(0.68f, 0.69f, 0.71f, 1.f).RGBAv4();
+        node.instanceCount = maxPlayerParticleCubes;
+        renderer::driver::RscCBuffer& cbuffercore = allocator::alloc_pool(renderScene.cbuffers);
+        node.cbuffer_node = handle_from_cbuffer(renderScene, cbuffercore);
+        renderer::driver::create_cbuffer(cbuffercore, { sizeof(renderer::NodeData) });
+        renderer::driver::RscCBuffer& cbufferinstances =
+            allocator::alloc_pool(renderScene.cbuffers);
+        node.cbuffer_instances = handle_from_cbuffer(renderScene, cbufferinstances);
+        renderer::driver::create_cbuffer(
+                cbufferinstances,
+                { (u32) sizeof(float4x4) * node.instanceCount });
+        for (u32 m = 0; m < countof(node.instanceMatrices.data); m++) {
+            float4x4& matrix = node.instanceMatrices.data[m];
+            math::identity4x4(*(Transform*)&(matrix));
+        }
+        scene.particlesDrawHandle = handle_from_instanced_node(renderScene, node);
+    }
+
+    // ground
+    {
+        renderer::DrawNodeHandle renderHandle;
+        animation::Handle animHandle;
+        game::spawnAsset(
+            renderHandle, animHandle, scene, core.assets[game::Resources::AssetsMeta::Ground],
+            float3(0.f, 0.f, 0.f));
+    }
+
+    // hall of mirrors
+    if (roomDef.mirrorMesh < game::Resources::MeshesMeta::Count) {
+        const u32 numMirrors = 1024 * 1024;
+        scene.mirrors.polys = (game::Mirrors::Poly*)
+            allocator::alloc_arena(
+                sceneArena,
+                sizeof(game::Mirrors::Poly) * numMirrors,
+                alignof(game::Mirrors::Poly));
+        scene.mirrors.drawMeshes = (renderer::DrawMesh*)
+            allocator::alloc_arena(
+                sceneArena,
+                sizeof(renderer::DrawMesh) * numMirrors,
+                alignof(renderer::DrawMesh));
+        game::spawn_model_as_mirrors(scene.mirrors, core.meshes[roomDef.mirrorMesh]);
+    } else {
+        const u32 numMirrors = game::Resources::MirrorHallMeta::Count * 2;
+        scene.mirrors.polys = (game::Mirrors::Poly*)
+            allocator::alloc_arena(
+                sceneArena,
+                sizeof(game::Mirrors::Poly) * numMirrors,
+                alignof(game::Mirrors::Poly));
+        scene.mirrors.drawMeshes = (renderer::DrawMesh*)
+            allocator::alloc_arena(
+                sceneArena,
+                sizeof(renderer::DrawMesh) * numMirrors,
+                alignof(renderer::DrawMesh));
+        for (u32 m = 0; m < game::Resources::MirrorHallMeta::Count; m++) {
+            const game::GPUCPUMesh& mirrorMesh = core.mirrorHallMeshes[m];
+            game::spawn_model_as_mirrors(scene.mirrors, mirrorMesh);
+        }
+        for (u32 i = 0; i < scene.mirrors.count; i++) {
+            game::Mirrors::Poly& p = scene.mirrors.polys[i];
+            physics::StaticObject_Line& wall = physicsScene.walls[physicsScene.wall_count++];
+            wall = {};
+            wall.start = p.v[0];
+            for (u32 j = 1; j < p.numPts; j++) {
+                if ((p.v[j].x != wall.start.x) || (p.v[j].y != wall.start.y)) {
+                    wall.end = p.v[j];
+                }
+            }
+            wall.start.z = 0.f;
+            wall.end.z = 0.f;
+        }
+    }
+    scene.maxMirrorBounces = roomDef.maxMirrorBounces;
+
     // camera
     scene.orbitCamera.offset = float3(0.f, -100.f, 0.f);
     scene.orbitCamera.eulers = float3(-25.f * math::d2r32, 0.f, 135.f * math::d2r32);
+    scene.orbitCamera.minEulers = roomDef.minCameraEulers;
+    scene.orbitCamera.maxEulers = roomDef.maxCameraEulers;
     scene.orbitCamera.scale = 1.f;
     scene.orbitCamera.origin = float3(0.f, 0.f, 0.f);
-
-    __DEBUGDEF(renderer::im::init(memory.debugArena);)
+    scene.orbitCamera.minScale = roomDef.minCameraZoom;
+    scene.orbitCamera.maxScale = roomDef.maxCameraZoom;
 }
 
 #endif // __WASTELADNS_SCENE_H__

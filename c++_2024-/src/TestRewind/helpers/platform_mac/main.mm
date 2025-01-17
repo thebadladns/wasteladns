@@ -116,7 +116,7 @@ int main(int , char** ) {
             platform.screen.height = config.game_height;
             platform.screen.desiredRatio = platform.screen.width / (f32)platform.screen.height;
             platform.screen.fullscreen = config.fullscreen;
-            __DEBUGDEF(platform.screen.text_scale = windowScale);
+            platform.screen.window_scale = windowScale;
             
             platform.memory.curr = (u8*)malloc(config.arena_size);
             platform.memory.cap = platform.memory.curr + config.arena_size;

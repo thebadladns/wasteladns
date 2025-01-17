@@ -13,6 +13,8 @@ const f32 eps32 = 1.19e-07f;
 const f64 eps64 = 2.22e-16;
 const f32 e32 = 2.7182818284590452353602874713527f;
 const f64 e64 = 2.7182818284590452353602874713527;
+constexpr unsigned floorlog2(unsigned x) { return x == 1 ? 0 : 1 + floorlog2(x >> 1); }
+constexpr unsigned ceillog2(unsigned x) { return x == 1 ? 0 : floorlog2(x - 1) + 1; }
 }
 
 namespace math {

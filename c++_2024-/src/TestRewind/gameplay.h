@@ -145,9 +145,13 @@ void updateMovement_cameraRelative(Transform& transform, MovementState& controll
 
 struct OrbitInput {
     float3 eulers;
+    float3 minEulers;
+    float3 maxEulers;
     float3 offset;
     float3 origin;
     f32 scale;
+    f32 maxScale;
+    f32 minScale;
 };
 
 void orbitInputFromPad(OrbitInput& controller, const ::input::gamepad::State& pad)
@@ -160,11 +164,12 @@ void orbitInputFromPad(OrbitInput& controller, const ::input::gamepad::State& pa
         controller.eulers.x = math::clamp(math::wrap(controller.eulers.x - speedy), -math::halfpi32, 0.f); // Positive 0 is below ground
         controller.eulers.z = math::wrap(controller.eulers.z - speedx);
     }
+    controller.eulers = math::clamp(controller.eulers, controller.minEulers, controller.maxEulers);
 
     const f32 scrollSpeed = 0.1f;
     controller.scale -= scrollSpeed * pad.sliders[::input::gamepad::Sliders::TRIGGER_RIGHT];
     controller.scale += scrollSpeed * pad.sliders[::input::gamepad::Sliders::TRIGGER_LEFT];
-    controller.scale = math::clamp(controller.scale, 0.3f, 2.f);
+    controller.scale = math::clamp(controller.scale, controller.minScale, controller.maxScale);
 }
 void orbitInputFromMouse(OrbitInput& controller, const ::input::mouse::State& mouse)
 {
@@ -178,6 +183,7 @@ void orbitInputFromMouse(OrbitInput& controller, const ::input::mouse::State& mo
             controller.eulers.z = math::wrap(controller.eulers.z - speedx);
         }
     }
+    controller.eulers = math::clamp(controller.eulers, controller.minEulers, controller.maxEulers);
     if (mouse.down(::input::mouse::Keys::BUTTON_RIGHT)) {
         constexpr f32 panSpeed = 0.1f;
         constexpr f32 panEps = 0.01f;
@@ -191,8 +197,8 @@ void orbitInputFromMouse(OrbitInput& controller, const ::input::mouse::State& mo
     if (mouse.scrolldy != 0) {
         const f32 scrollSpeed = 0.1f;
         controller.scale -= mouse.scrolldy * scrollSpeed;
-        controller.scale = math::clamp(controller.scale, 0.3f, 2.f);
     }
+    controller.scale = math::clamp(controller.scale, controller.minScale, controller.maxScale);
 }
 void updateOrbit(Transform& transform, const OrbitInput& controller) {
     float3 localOffset(controller.offset.x, controller.scale * controller.offset.y, controller.offset.z);
