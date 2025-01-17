@@ -917,7 +917,7 @@ struct CameraNode { // Node in camera tree (stored as depth-first)
     u32 parentIndex;   // next sibling index in the tree
     u32 sourceId;
     renderer::DrawMesh drawMesh;
-    char str[256];      // used in non-debug for GPU markers
+    __PROFILEONLY(char str[256];)      // used in non-debug for GPU markers
 };
 struct GatherMirrorTreeContext {
     allocator::Arena& frameArena;
@@ -953,8 +953,7 @@ u32 gatherMirrorTreeRecursive(GatherMirrorTreeContext& ctx, u32 index, const Cam
         curr.parentIndex = parentIndex;
         curr.depth = parent.depth + 1;
         curr.sourceId = i;
-        // todo: text for debug only???
-        platform::format(curr.str, sizeof(curr.str), "%s-%d", parent.str, i, curr.depth);
+        __PROFILEONLY(platform::format(curr.str, sizeof(curr.str), "%s-%d", parent.str, i, curr.depth);)
         index++;
 
         // compute mirror matrices
@@ -1225,7 +1224,8 @@ void renderMirrorTree(
 
         // render this mirror
         driver::Marker_t marker;
-        driver::set_marker_name(marker, camera.str); driver::start_event(marker);
+        __PROFILEONLY(driver::set_marker_name(marker, camera.str);)
+        driver::start_event(marker);
 
         // mark mirror
         RenderMirrorContext mirrorContext {

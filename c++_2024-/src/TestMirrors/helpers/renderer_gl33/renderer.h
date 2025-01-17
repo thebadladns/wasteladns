@@ -431,9 +431,11 @@ namespace driver {
         }
     }
 
+#if __PROFILE
     void set_marker_name(Marker_t& marker, const char* ansi) { marker = ansi; }
     void start_event(Marker_t data) { if (glPushDebugGroup) { glPushDebugGroup(GL_DEBUG_SOURCE_APPLICATION, 0, -1, data); } }
     void end_event() { if (glPopDebugGroup) { glPopDebugGroup(); } }
+#endif
 }
 }
 #endif // __WASTELADNS_RENDERER_GL33_H__

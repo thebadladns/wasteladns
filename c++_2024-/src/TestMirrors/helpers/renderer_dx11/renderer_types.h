@@ -136,7 +136,7 @@ namespace driver {
         ID3D11Buffer* impl;
     };
 
-    typedef wchar_t Marker_t[64];
+    __PROFILEONLY(typedef wchar_t Marker_t[64];)
 }
 }
 #endif // __WASTELADNS_RENDERER_TYPES_DX11_H__

@@ -118,7 +118,7 @@ namespace driver {
         u32 byteWidth;
     };
 
-    typedef const char* Marker_t;
+    __PROFILEONLY(typedef const char* Marker_t;)
 }
 }
 #endif // __WASTELADNS_RENDERER_TYPES_GL33_H__

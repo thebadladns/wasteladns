@@ -451,7 +451,7 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
                     mainCameraRoot.pos = mainCamera.pos;
                     mainCameraRoot.sourceId = mainCameraRoot.parentIndex = 0xffffffff;
                     mainCameraRoot.depth = 0;
-                    platform::format(mainCameraRoot.str, sizeof(mainCameraRoot.str), "_");
+                    __PROFILEONLY(platform::format(mainCameraRoot.str, sizeof(mainCameraRoot.str), "_");)
                     renderer::extract_frustum_planes_from_vp(
                         mainCameraRoot.frustum.planes, mainCamera.vpMatrix);
                     mainCameraRoot.frustum.numPlanes = 6;

@@ -34,6 +34,12 @@
 #endif
 
 #define USE_DEBUG_MEMORY __DEBUG
+#define __PROFILE __DEBUG
+#if __PROFILE
+#define __PROFILEONLY(...) __VA_ARGS__
+#else
+#define __PROFILEONLY(...)
+#endif
 
 #if __WIN64
 	#include "helpers/platform_win/core.h"

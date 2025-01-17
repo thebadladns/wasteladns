@@ -386,10 +386,19 @@ namespace driver {
     void update_cbuffer(RscCBuffer& cb, const void* data);
     void bind_cbuffers(const RscShaderSet& ss, const RscCBuffer* cb, const u32 count);
 
-    void set_marker_name(Marker_t& wide, const char* ansi);
+#if __PROFILE
+    void set_marker_name(Marker_t&, const char*);
     void set_marker(Marker_t);
     void start_event(Marker_t);
     void end_event();
+#else
+    // dummy impl
+    typedef u32 Marker_t;
+    void set_marker_name(Marker_t&, const char*) {}
+    void set_marker(Marker_t) {}
+    void start_event(Marker_t) {}
+    void end_event() {}
+#endif
 
 } // Driver
 

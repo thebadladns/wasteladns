@@ -652,9 +652,10 @@ namespace driver {
         if (vs_count) { d3dcontext->VSSetConstantBuffers(0, vs_count, vs_cbuffers); }
         if (ps_count) { d3dcontext->PSSetConstantBuffers(0, ps_count, ps_cbuffers); }
     }
+#if __PROFILE
     void set_marker_name(Marker_t& wide, const char* ansi) {
         size_t converted;
-		mbstowcs_s(&converted, wide, ansi, countof(wide));
+        mbstowcs_s(&converted, wide, ansi, countof(wide));
         //MultiByteToWideChar(CP_UTF8, 0, ansi, -1, wide, countof(wide)); // via <Stringapiset.h> (Wall time: 11ms)
     }
     void set_marker(Marker_t data) {
@@ -666,6 +667,7 @@ namespace driver {
     void end_event() {
         perf->EndEvent();
     }
+#endif
 }
 
 }
