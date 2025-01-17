@@ -1818,9 +1818,17 @@ void load_coreResources(
         f32 w = 30.f, h = 30.f;
         u32 c = Color32(0.13f, 0.51f, 0.23f, 1.f).ABGR();
         renderer::VertexLayout_Color_3D v[] = {
-            { { w, -h, 0.f }, c }, { { -w, -h, 0.f }, c },
-            { { -w, h, 0.f }, c }, { { w, h, 0.f }, c } };
-        u16 i[] = { 0, 1, 2, 2, 3, 0 };
+            { float3(12.4f, 30.f, 0.f), c },
+            { float3(-12.4f, 30.f, 0.f), c },
+            { float3(-30.f, 12.4f, 0.f), c },
+            { float3(-30.f, -12.4f, 0.f), c },
+            { float3(-12.4f, -30.f, 0.f), c },
+            { float3(12.4f, -30.f, 0.f), c },
+            { float3(30.f, -12.4f, 0.f), c },
+            { float3(30.f, 12.4f, 0.f), c },
+        };
+
+        u16 i[] = { 0, 2, 1, 0, 3, 2, 0, 4, 3, 0, 5, 4, 0, 6, 5, 0, 7, 6 };
         renderer::driver::IndexedVertexBufferDesc bufferParams;
         bufferParams.vertexData = v;
         bufferParams.indexData = i;
@@ -2200,7 +2208,6 @@ void spawn_scene_mirrorRoom(
             float3(0.f, 0.f, 0.f));
     }
 
-    // hall of mirrors
     if (roomDef.mirrorMesh < game::Resources::MeshesMeta::Count) {
         const u32 numMirrors = 1024 * 1024;
         scene.mirrors.polys = (game::Mirrors::Poly*)
@@ -2214,7 +2221,7 @@ void spawn_scene_mirrorRoom(
                 sizeof(renderer::DrawMesh) * numMirrors,
                 alignof(renderer::DrawMesh));
         game::spawn_model_as_mirrors(scene.mirrors, core.meshes[roomDef.mirrorMesh]);
-    } else {
+    } else { // hall of mirrors
         const u32 numMirrors = game::Resources::MirrorHallMeta::Count * 2;
         scene.mirrors.polys = (game::Mirrors::Poly*)
             allocator::alloc_arena(
