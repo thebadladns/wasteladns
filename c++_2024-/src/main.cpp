@@ -1,7 +1,7 @@
-#define TEST_REWIND 0
+#define TEST_MIRRORS 0
 
-#define COMPILE_TARGET TEST_REWIND
+#define COMPILE_TARGET TEST_MIRRORS
 
 #if COMPILE_TARGET == TEST_REWIND
-    #include "TestRewind/main.cpp"
+    #include "TestMirrors/main.cpp"
 #endif
