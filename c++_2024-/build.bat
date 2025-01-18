@@ -2,8 +2,7 @@
 cd /D "%~dp0"
 
 :: usage
-:: build.bat [dx11|gl33] [debug|release]
-:: build.bat assets
+:: build.bat [dx11|gl33] [debug|release] [assets|]
 :: defaults to dx11 debug no assets
 set debug=0
 set release=0
@@ -21,27 +20,27 @@ if "%dx11%"=="1" set gl33=0
 if "%gl33%"=="1" set dx11=0
 
 :: figure out compile args
-set cl_debug=call cl /Od /Ob1 /D__DEBUG=1 /D__PROFILE=1
-set cl_release=call cl /O2 /D__DEBUG=0 /D__PROFILE=0
+set cl_debug=call cl /Od /Ob1
+set cl_release=call cl /O2 /DNDEBUG
 if "%dx11%"=="1" (
-	set compileoutdir=.\app-dx11.dir
-	set flags=/D__DX11=1
-	set libs=user32.lib
+    set compileoutdir=.\app-dx11.dir
+    set flags=/D__DX11=1
+    set libs=user32.lib
 )
 if "%gl33%"=="1" (
-	set compileoutdir=.\app-gl33.dir
-	set flags=/D__GL33=1
-	set libs=user32.lib gdi32.lib
+    set compileoutdir=.\app-gl33.dir
+    set flags=/D__GL33=1
+    set libs=user32.lib gdi32.lib
 )
 if "%debug%"=="1" (
-	set outdir=.\bin\Debug
-	set objectdir=%compileoutdir%\Debug\
-	set compile=%cl_debug%
+    set outdir=.\bin\Debug
+    set objectdir=%compileoutdir%\Debug\
+    set compile=%cl_debug%
 )
 if "%release%"=="1" (
-	set outdir=.\bin\Release\
-	set objectdir=%compileoutdir%\Release\
-	set compile=%cl_release%
+    set outdir=.\bin\Release\
+    set objectdir=%compileoutdir%\Release\
+    set compile=%cl_release%
 )
 
 :: create dirs
