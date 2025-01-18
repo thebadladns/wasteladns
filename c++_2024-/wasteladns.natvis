@@ -1,21 +1,3 @@
 <?xml version="1.0" encoding="utf-8"?>  
 <AutoVisualizer xmlns="http://schemas.microsoft.com/vstudio/debugger/natvis/2010">  
-	<Type Name="tinystl::buffer&lt;*,*&gt;">
-		<DisplayString>{{ size={last - first} }}</DisplayString>
-		<Expand>
-			<Item Name="[size]">last - first</Item>
-			<Item Name="[capacity]">capacity - first</Item>
-			<ArrayItems>
-				<Size>last - first</Size>
-				<ValuePointer>first</ValuePointer>
-			</ArrayItems>
-		</Expand>
-	</Type>
-
-	<Type Name="tinystl::vector&lt;*,*&gt;">
-		<DisplayString>{{ size={m_buffer.last - m_buffer.first} }}</DisplayString>
-		<Expand>
-			<ExpandedItem>m_buffer</ExpandedItem>
-		</Expand>
-	</Type>
 </AutoVisualizer>
