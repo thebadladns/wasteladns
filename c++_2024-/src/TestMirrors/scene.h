@@ -4,7 +4,7 @@
 namespace game {
 
 struct Mirrors { // todo: figure out delete, unhack sizes
-    struct Poly { float3 v[4]; u32 numPts; };
+    struct Poly { float3 v[4]; float3 normal; u32 numPts; };
     Poly* polys; // xy from 0.f to 1.f describe the mirror quad, z is the normal
     renderer::DrawMesh* drawMeshes;
     u32 count;
@@ -182,6 +182,7 @@ void spawn_model_as_mirrors(game::Mirrors& mirrors, const game::GPUCPUMesh& load
             poly.v[3] = v3;
             mesh.vertexBuffer.indexCount = 6;
         }
+        poly.normal = math::normalize(math::cross(math::subtract(poly.v[2], poly.v[0]), math::subtract(poly.v[1], poly.v[0])));
         index += mesh.vertexBuffer.indexCount;
     }
 }
@@ -836,17 +837,24 @@ float3* quad, u32& quad_count, const float4* planes, const u32 planeCount, const
     // todo: degenerate polys can end up with more than 1 extra vertex per plane;
     // we "fix it" by adding the second plane intertersections in place of the vertex before
 
-    float3 inputQuad[MAX_QUAD_VERTICES];
-    u32 inputQuad_count;
+    // we'll use a temporary buffer to loop over the input, then swap buffers each iteration
+    float3 quadBuffer[MAX_QUAD_VERTICES];
+    float3* inputQuad = quadBuffer;
+    u32 inputQuad_count = 0;
+    float3* outputQuad = quad;
+    u32 outputQuad_count = quad_count;
 
     // keep iterating over the culling planes until
     // we have fully culled the quad, or the previous cut introduced too many cuts
-    for (u32 p = 0; p < planeCount && quad_count > 2 && quad_count < maxQuadCap; p++) {
+    for (u32 p = 0; p < planeCount && outputQuad_count > 2 && outputQuad_count < maxQuadCap; p++) {
+
+        float3* tmpQuad = inputQuad;
+        inputQuad = outputQuad;
+        inputQuad_count = outputQuad_count;
+        outputQuad = tmpQuad;
+        outputQuad_count = 0;
+
         const float4 plane = planes[p];
-        // copy our quad, so that we can iterate over the original data
-        memcpy(inputQuad, quad, quad_count * sizeof(float3));
-        inputQuad_count = quad_count;
-        quad_count = 0;
         u32 numPlaneCuts = 0;
         float3 va = inputQuad[inputQuad_count - 1];
         f32 va_d = math::dot(float4(va, 1.f), plane);
@@ -867,14 +875,14 @@ float3* quad, u32& quad_count, const float4* planes, const u32 planeCount, const
                     intersection = math::add(va, math::scale(ab, t));
                     
                     numPlaneCuts++;
-                    if (numPlaneCuts <= 1) { quad[quad_count++] = intersection; }
+                    if (numPlaneCuts <= 1) { outputQuad[outputQuad_count++] = intersection; }
                     else {
                         // poly is cutting the same plane a second time: degenerate
                         // simply place the intersection in the place of the last vertex
-                        quad[quad_count - 1] = intersection;
+                        outputQuad[outputQuad_count - 1] = intersection;
                     }
                 }
-                quad[quad_count++] = vb;
+                outputQuad[outputQuad_count++] = vb;
             } else if (vb_d < -eps) {
                 // current vertex in negative zone,
                 // will not be added to poly
@@ -884,19 +892,21 @@ float3* quad, u32& quad_count, const float4* planes, const u32 planeCount, const
                     float3 ab = math::subtract(vb, va);
                     f32 t = (-va_d) / math::dot(plane.xyz, ab);
                     intersection = math::add(va, math::scale(ab, t));
-                    quad[quad_count++] = intersection;
+                    outputQuad[outputQuad_count++] = intersection;
                 }
             }
             else {
                 // current vertex on plane,
                 // add to poly
-                quad[quad_count++] = vb;
+                outputQuad[outputQuad_count++] = vb;
             }
 
             va = vb;
             va_d = vb_d;
         }
     }
+    memcpy(quad, outputQuad, outputQuad_count * sizeof(float3));
+    quad_count = outputQuad_count;
 }
 
 struct Camera {
@@ -931,18 +941,17 @@ u32 gatherMirrorTreeRecursive(GatherMirrorTreeContext& ctx, u32 index, const Cam
     for (u32 i = 0; i < ctx.mirrors.count; i++) {
         // do not self-reflect
         if (parent.sourceId == i) { continue; }
-        // copy mirror quad (we'll modify it during culling)
-        enum { MAX_MIRROR_QUAD_VERTICES = 8 };
+        enum { MAX_MIRROR_QUAD_VERTICES = 7 };
         static_assert(MAX_MIRROR_QUAD_VERTICES <= countof(parent.frustum.planes) + 2, "check");
-        float3 quad[MAX_MIRROR_QUAD_VERTICES];
-        u32 quad_count = ctx.mirrors.polys[i].numPts;
-        memcpy(quad, ctx.mirrors.polys[i].v, sizeof(float3) * ctx.mirrors.polys[i].numPts);
+        const game::Mirrors::Poly& poly = ctx.mirrors.polys[i];
         // cull backfacing mirrors
         // normal is v2-v0xv1-v0 assuming clockwise winding and right handed coordinates
-        float3 normalWS = math::normalize(
-            math::cross(math::subtract(quad[2], quad[0]), math::subtract(quad[1], quad[0])));
-        if (math::dot(normalWS, math::subtract(parent.pos, quad[0])) < 0.f) { continue; }
-        
+        if (math::dot(poly.normal, math::subtract(parent.pos, poly.v[0])) < 0.f) { continue; }
+
+        // copy mirror quad (we'll modify it during culling)
+        float3 quad[MAX_MIRROR_QUAD_VERTICES];
+        u32 quad_count = ctx.mirrors.polys[i].numPts;
+        memcpy(quad, ctx.mirrors.polys[i].v, sizeof(float3)* ctx.mirrors.polys[i].numPts);
         cull_quad_with_frustum(
             quad, quad_count, parent.frustum.planes, parent.frustum.numPlanes, countof(quad));
         // quad fully culled
@@ -967,12 +976,12 @@ u32 gatherMirrorTreeRecursive(GatherMirrorTreeContext& ctx, u32 index, const Cam
         };
         // World Space (WS) values
         float3 posWS = quad[0];
-        float4 planeWS(normalWS.x, normalWS.y, normalWS.z, -math::dot(posWS, normalWS));
+        float4 planeWS(poly.normal.x, poly.normal.y, poly.normal.z, -math::dot(posWS, poly.normal));
         float4x4 reflect = reflectionMatrix(planeWS);
         curr.viewMatrix = math::mult(parent.viewMatrix, reflect);
         curr.projectionMatrix = parent.projectionMatrix;
         // Eye Space (ES) values
-        float3 normalES = math::mult(curr.viewMatrix, float4(normalWS, 0.f)).xyz;
+        float3 normalES = math::mult(curr.viewMatrix, float4(poly.normal, 0.f)).xyz;
         float3 posES = math::mult(curr.viewMatrix, float4(posWS, 1.f)).xyz;
         float4 planeES(normalES.x, normalES.y, normalES.z, -math::dot(posES, normalES));
         renderer::add_oblique_plane_to_persp(curr.projectionMatrix, planeES);
@@ -1224,8 +1233,8 @@ void renderMirrorTree(
 
         // render this mirror
         driver::Marker_t marker;
-        __PROFILEONLY(driver::set_marker_name(marker, camera.str);)
-        driver::start_event(marker);
+        __PROFILEONLY(driver::set_marker_name(marker, camera.str); driver::start_event(marker);)
+        
 
         // mark mirror
         RenderMirrorContext mirrorContext {
@@ -1249,7 +1258,7 @@ void renderMirrorTree(
                 scratchArena };
             renderBaseScene(renderSceneContext);
         }
-        driver::end_event();
+        __PROFILEONLY(driver::end_event();)
 
         parents[parentCount++] = index;
         while (parentCount > 1 && index + 1 >= cameraTree[parents[parentCount - 1]].siblingIndex) {
