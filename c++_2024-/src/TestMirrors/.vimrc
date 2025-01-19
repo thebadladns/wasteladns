@@ -9,7 +9,7 @@ set tabstop=4
 set expandtab
 set shiftwidth=4
 " build/run commands
-noremap <leader>bcd let [g:config,g:outdir]=['debug','Debug']<CR>
+noremap <leader>bcd :let [g:config,g:outdir]=['debug','Debug']<CR>
 noremap <leader>bcr :let [g:config,g:outdir]=['release','Release']<CR>
 if has('mac')
     let g:config='release'
