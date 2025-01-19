@@ -62,7 +62,7 @@ struct Time {
     f64 nextFrame;
     f64 updateOverspeed;
     s64 frameCount;
-    bool paused;
+    bool pausedRender;
 };
 
 namespace input
@@ -72,6 +72,7 @@ namespace input
         , DOWN = ::input::keyboard::Keys::S
         , LEFT = ::input::keyboard::Keys::A
         , RIGHT = ::input::keyboard::Keys::D
+        , TOGGLE_PAUSE_SCENE_RENDER = ::input::keyboard::Keys::SPACE
         ;
     constexpr ::input::keyboard::Keys::Enum
           EXIT = ::input::keyboard::Keys::ESCAPE
@@ -79,7 +80,6 @@ namespace input
         #if __DEBUG
         , TOGGLE_OVERLAY = ::input::keyboard::Keys::H
         , TOGGLE_DEBUG3D = ::input::keyboard::Keys::V
-        , TOGGLE_PAUSE_SCENE_RENDER = ::input::keyboard::Keys::SPACE
         , CAPTURE_CAMERAS = ::input::keyboard::Keys::P
         , TOGGLE_CAPTURED_CAMERA = ::input::keyboard::Keys::C
         , TOGGLE_FRUSTUM_CUT = ::input::keyboard::Keys::NUM0
@@ -219,6 +219,7 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
         if (keyboard.pressed(input::CYCLE_ROOM)) {
             game.roomId = (game.roomId + 1) % countof(roomDefinitions);
         }
+        if (keyboard.pressed(input::TOGGLE_PAUSE_SCENE_RENDER)) { game.time.pausedRender = !game.time.pausedRender; }
         #if __DEBUG
         if (keyboard.pressed(input::TOGGLE_OVERLAY)) { debug::overlaymode = (debug::OverlayMode::Enum)((debug::overlaymode + 1) % debug::OverlayMode::Count); }
         if (keyboard.pressed(input::TOGGLE_DEBUG3D)) { debug::debug3Dmode = (debug::Debug3DView::Enum)((debug::debug3Dmode + 1) % debug::Debug3DView::Count); }
@@ -241,9 +242,7 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
         if (keyboard.pressed(input::TOGGLE_FRUSTUM_RIGHT)) { debug::frustum_planes_off[3] = !debug::frustum_planes_off[3]; }
         if (keyboard.pressed(input::TOGGLE_FRUSTUM_BOTTOM)) { debug::frustum_planes_off[4] = !debug::frustum_planes_off[4]; }
         if (keyboard.pressed(input::TOGGLE_FRUSTUM_TOP)) { debug::frustum_planes_off[5] = !debug::frustum_planes_off[5]; }
-        if (keyboard.pressed(input::TOGGLE_PAUSE_SCENE_RENDER)) { debug::pauseSceneRender = !debug::pauseSceneRender; }
-        #endif      
-        step = !game.time.paused;
+        #endif
     }
 
     if (prevRoomId != game.roomId) {
@@ -411,7 +410,7 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
     // Render update
     CameraNode* cameraTree = nullptr;
     Camera mainCamera = {};
-    __DEBUGDEF(if (!debug::pauseSceneRender))
+    if (!game.time.pausedRender)
     {
         renderer::Scene& scene = game.scene.renderScene;
         renderer::CoreResources& renderCore = game.resources.renderCore;
@@ -644,17 +643,17 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
 
                         renderer::Frustum& frustum =
                             debug::capturedCameras[cameraNode.parentIndex].frustum;
-                        float3 quad[8];
-                        u32 quad_count = p.numPts;
-                        memcpy(quad, p.v, sizeof(float3) * p.numPts);
-                        cull_quad_with_frustum(
-                            quad, quad_count, frustum.planes, frustum.numPlanes, 8);
+                        float3 poly[8];
+                        u32 poly_count = p.numPts;
+                        memcpy(poly, p.v, sizeof(float3) * p.numPts);
+                        clip_poly_in_frustum(
+                            poly, poly_count, frustum.planes, frustum.numPlanes, 8);
                         const float2 screenScale(
                             320.f * 3.f * 0.5f,
                             240.f * 3.f * 0.5f);
                         float2 polyScreen[8];
-                        for (u32 i = 0; i < quad_count; i++) {
-                            float4 pCS = math::mult(mainCamera.vpMatrix, float4(quad[i], 1.f));
+                        for (u32 i = 0; i < poly_count; i++) {
+                            float4 pCS = math::mult(mainCamera.vpMatrix, float4(poly[i], 1.f));
                             polyScreen[i] = math::scale(math::invScale(pCS.xy, pCS.w), screenScale);
                             renderer::im::Text2DParams textParams;
                             textParams.scale = 1;
@@ -662,7 +661,7 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
                             textParams.color = Color32(1.f, 1.f, 1.f, 1.f);
                             renderer::im::text2d(textParams, "%d", i);
                         }
-                        renderer::im::poly2d(polyScreen, quad_count, Color32(1.f, 1.f, 1.f, 0.3f));
+                        renderer::im::poly2d(polyScreen, poly_count, Color32(1.f, 1.f, 1.f, 0.3f));
 
                         // render culled nodes
                         renderer::CullEntries cullEntries = {};

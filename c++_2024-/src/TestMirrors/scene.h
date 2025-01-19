@@ -827,39 +827,41 @@ bool load_with_materials(
 }
 }
 
-void cull_quad_with_frustum(
-float3* quad, u32& quad_count, const float4* planes, const u32 planeCount, const u32 maxQuadCap) {
+void clip_poly_in_frustum(
+float3* poly, u32& poly_count, const float4* planes, const u32 planeCount, const u32 polyCountCap) {
 
-    enum { MAX_QUAD_VERTICES = 8 };
-    assert(maxQuadCap <= MAX_QUAD_VERTICES);
+    // todo: consider speeding this up somehow, as it's pretty expensive when called 1000+ times
+
+    enum { MAX_POLY_VERTICES = 8 };
+    assert(polyCountCap <= MAX_POLY_VERTICES);
     
     // cull quad by each frustum plane via Sutherland-Hodgman
     // todo: degenerate polys can end up with more than 1 extra vertex per plane;
     // we "fix it" by adding the second plane intertersections in place of the vertex before
 
     // we'll use a temporary buffer to loop over the input, then swap buffers each iteration
-    float3 quadBuffer[MAX_QUAD_VERTICES];
-    float3* inputQuad = quadBuffer;
-    u32 inputQuad_count = 0;
-    float3* outputQuad = quad;
-    u32 outputQuad_count = quad_count;
+    float3 quadBuffer[MAX_POLY_VERTICES];
+    float3* inputPoly = quadBuffer;
+    u32 inputPoly_count = 0;
+    float3* outputQuad = poly;
+    u32 outputPoly_count = poly_count;
 
     // keep iterating over the culling planes until
     // we have fully culled the quad, or the previous cut introduced too many cuts
-    for (u32 p = 0; p < planeCount && outputQuad_count > 2 && outputQuad_count < maxQuadCap; p++) {
+    for (u32 p = 0; p < planeCount && outputPoly_count > 2 && outputPoly_count < polyCountCap; p++) {
 
-        float3* tmpQuad = inputQuad;
-        inputQuad = outputQuad;
-        inputQuad_count = outputQuad_count;
+        float3* tmpQuad = inputPoly;
+        inputPoly = outputQuad;
+        inputPoly_count = outputPoly_count;
         outputQuad = tmpQuad;
-        outputQuad_count = 0;
+        outputPoly_count = 0;
 
         const float4 plane = planes[p];
         u32 numPlaneCuts = 0;
-        float3 va = inputQuad[inputQuad_count - 1];
+        float3 va = inputPoly[inputPoly_count - 1];
         f32 va_d = math::dot(float4(va, 1.f), plane);
-        for (u32 curr_v = 0; curr_v < inputQuad_count; curr_v++) {
-            float3 vb = inputQuad[curr_v];
+        for (u32 curr_v = 0; curr_v < inputPoly_count; curr_v++) {
+            float3 vb = inputPoly[curr_v];
             f32 vb_d = math::dot(float4(vb, 1.f), plane);
             float3 intersection;
 
@@ -875,14 +877,14 @@ float3* quad, u32& quad_count, const float4* planes, const u32 planeCount, const
                     intersection = math::add(va, math::scale(ab, t));
                     
                     numPlaneCuts++;
-                    if (numPlaneCuts <= 1) { outputQuad[outputQuad_count++] = intersection; }
+                    if (numPlaneCuts <= 1) { outputQuad[outputPoly_count++] = intersection; }
                     else {
                         // poly is cutting the same plane a second time: degenerate
                         // simply place the intersection in the place of the last vertex
-                        outputQuad[outputQuad_count - 1] = intersection;
+                        outputQuad[outputPoly_count - 1] = intersection;
                     }
                 }
-                outputQuad[outputQuad_count++] = vb;
+                outputQuad[outputPoly_count++] = vb;
             } else if (vb_d < -eps) {
                 // current vertex in negative zone,
                 // will not be added to poly
@@ -892,21 +894,21 @@ float3* quad, u32& quad_count, const float4* planes, const u32 planeCount, const
                     float3 ab = math::subtract(vb, va);
                     f32 t = (-va_d) / math::dot(plane.xyz, ab);
                     intersection = math::add(va, math::scale(ab, t));
-                    outputQuad[outputQuad_count++] = intersection;
+                    outputQuad[outputPoly_count++] = intersection;
                 }
             }
             else {
                 // current vertex on plane,
                 // add to poly
-                outputQuad[outputQuad_count++] = vb;
+                outputQuad[outputPoly_count++] = vb;
             }
 
             va = vb;
             va_d = vb_d;
         }
     }
-    memcpy(quad, outputQuad, outputQuad_count * sizeof(float3));
-    quad_count = outputQuad_count;
+    memcpy(poly, outputQuad, outputPoly_count * sizeof(float3));
+    poly_count = outputPoly_count;
 }
 
 struct Camera {
@@ -941,21 +943,22 @@ u32 gatherMirrorTreeRecursive(GatherMirrorTreeContext& ctx, u32 index, const Cam
     for (u32 i = 0; i < ctx.mirrors.count; i++) {
         // do not self-reflect
         if (parent.sourceId == i) { continue; }
-        enum { MAX_MIRROR_QUAD_VERTICES = 7 };
-        static_assert(MAX_MIRROR_QUAD_VERTICES <= countof(parent.frustum.planes) + 2, "check");
-        const game::Mirrors::Poly& poly = ctx.mirrors.polys[i];
+
+        const game::Mirrors::Poly& mirrorGeo = ctx.mirrors.polys[i];
         // cull backfacing mirrors
         // normal is v2-v0xv1-v0 assuming clockwise winding and right handed coordinates
-        if (math::dot(poly.normal, math::subtract(parent.pos, poly.v[0])) < 0.f) { continue; }
+        if (math::dot(mirrorGeo.normal, math::subtract(parent.pos, mirrorGeo.v[0])) < 0.f) { continue; }
 
-        // copy mirror quad (we'll modify it during culling)
-        float3 quad[MAX_MIRROR_QUAD_VERTICES];
-        u32 quad_count = ctx.mirrors.polys[i].numPts;
-        memcpy(quad, ctx.mirrors.polys[i].v, sizeof(float3)* ctx.mirrors.polys[i].numPts);
-        cull_quad_with_frustum(
-            quad, quad_count, parent.frustum.planes, parent.frustum.numPlanes, countof(quad));
-        // quad fully culled
-        if (quad_count < 3) continue;
+        // copy mirror quad (we'll modify it during clipping)
+        enum { MAX_MIRROR_POLY_VERTICES = 7 };
+        static_assert(MAX_MIRROR_POLY_VERTICES <= countof(parent.frustum.planes) + 2,
+            "mirror poly has too many vertices, it will generate too many frustum planes");
+        float3 poly[MAX_MIRROR_POLY_VERTICES];
+        u32 poly_count = ctx.mirrors.polys[i].numPts;
+        memcpy(poly, ctx.mirrors.polys[i].v, sizeof(float3)* ctx.mirrors.polys[i].numPts);
+        clip_poly_in_frustum(
+            poly, poly_count, parent.frustum.planes, parent.frustum.numPlanes, countof(poly));
+        if (poly_count < 3) continue; // resulting mirror poly is fully culled
 
         // acknowledge this mirror as part of the tree
         CameraNode& curr = allocator::push(ctx.cameraTree, ctx.frameArena);
@@ -975,13 +978,15 @@ u32 gatherMirrorTreeRecursive(GatherMirrorTreeContext& ctx, u32 index, const Cam
             return o;
         };
         // World Space (WS) values
-        float3 posWS = quad[0];
-        float4 planeWS(poly.normal.x, poly.normal.y, poly.normal.z, -math::dot(posWS, poly.normal));
+        float3 posWS = poly[0];
+        float4 planeWS(
+            mirrorGeo.normal.x, mirrorGeo.normal.y, mirrorGeo.normal.z,
+            -math::dot(posWS, mirrorGeo.normal));
         float4x4 reflect = reflectionMatrix(planeWS);
         curr.viewMatrix = math::mult(parent.viewMatrix, reflect);
         curr.projectionMatrix = parent.projectionMatrix;
         // Eye Space (ES) values
-        float3 normalES = math::mult(curr.viewMatrix, float4(poly.normal, 0.f)).xyz;
+        float3 normalES = math::mult(curr.viewMatrix, float4(mirrorGeo.normal, 0.f)).xyz;
         float3 posES = math::mult(curr.viewMatrix, float4(posWS, 1.f)).xyz;
         float4 planeES(normalES.x, normalES.y, normalES.z, -math::dot(posES, normalES));
         renderer::add_oblique_plane_to_persp(curr.projectionMatrix, planeES);
@@ -1004,9 +1009,9 @@ u32 gatherMirrorTreeRecursive(GatherMirrorTreeContext& ctx, u32 index, const Cam
                 math::invScale(curr.frustum.planes[1], math::mag(curr.frustum.planes[1].xyz));
             curr.frustum.numPlanes = 2;
 
-            float3 prev_v = quad[quad_count - 1];
-            for (u32 v = 0; v < quad_count; v++) {
-                float3 curr_v = quad[v];
+            float3 prev_v = poly[poly_count - 1];
+            for (u32 v = 0; v < poly_count; v++) {
+                float3 curr_v = poly[v];
                 // normal is cam-v0xv1-v0 assuming clockwise winding and right handed coordinates
                 float3 normal =
                     math::cross(math::subtract(curr.pos, curr_v), math::subtract(curr_v, prev_v));
