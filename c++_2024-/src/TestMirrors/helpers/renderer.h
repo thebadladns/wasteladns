@@ -229,9 +229,9 @@ namespace driver {
         bool depth;
     };
     void create_RT(RscRenderTarget& rt, const RenderTargetParams& params);
-    void bind_RT(const RscRenderTarget& rt);
-    void clear_RT(const RscRenderTarget& rt, u32 flags);
-    void clear_RT(const RscRenderTarget& rt, u32 flags, Color32 color);
+    force_inline void bind_RT(const RscRenderTarget& rt);
+    force_inline void clear_RT(const RscRenderTarget& rt, u32 flags);
+    force_inline void clear_RT(const RscRenderTarget& rt, u32 flags, Color32 color);
     struct RenderTargetCopyParams {
         // for now
         bool depth;
@@ -247,7 +247,7 @@ namespace driver {
         f32 minDepth;
         f32 maxDepth;
     };
-    void set_VP(const ViewportParams&);
+    force_inline void set_VP(const ViewportParams&);
 
     struct TextureFromFileParams {
         allocator::Arena& arena;
@@ -262,7 +262,7 @@ namespace driver {
         Type::Enum type;
     };
     void create_texture_empty(RscTexture& t, const TextureRenderTargetCreateParams& params);
-    void bind_textures(const RscTexture* textures, const u32 count);
+    force_inline void bind_textures(const RscTexture* textures, const u32 count);
 
     void load_shader_cache(ShaderCache& shaderCache, const char* path, allocator::Arena* arena, const u32 maxShaders);
     void write_shader_cache(ShaderCache& shaderCache);
@@ -301,14 +301,14 @@ namespace driver {
         u32 texture_count;
     };
     ShaderResult create_shader_set(RscShaderSet&, const ShaderSetRuntimeCompileParams&);
-    void bind_shader(const RscShaderSet& ss);
+    force_inline void bind_shader(const RscShaderSet& ss);
 
     struct BlendStateParams {
         RenderTargetWriteMask::Enum renderTargetWriteMask;
         bool blendEnable;
     };
     void create_blend_state(RscBlendState&, const BlendStateParams&);
-    void bind_blend_state(const RscBlendState& bs);
+    force_inline void bind_blend_state(const RscBlendState& bs);
 
     struct RasterizerStateParams {
         RasterizerFillMode::Enum fill;
@@ -316,8 +316,8 @@ namespace driver {
         bool scissor;
     };
     void create_RS(RscRasterizerState&, const RasterizerStateParams&);
-    void bind_RS(const RscRasterizerState& rs);
-    void set_scissor(const u32, const u32, const u32, const u32);
+    force_inline void bind_RS(const RscRasterizerState& rs);
+    force_inline void set_scissor(const u32, const u32, const u32, const u32);
 
     struct DepthStencilStateParams {
         CompFunc::Enum depth_func;
@@ -332,7 +332,7 @@ namespace driver {
         u8 stencil_writemask;
     };
     void create_DS(RscDepthStencilState&, const DepthStencilStateParams&);
-    void bind_DS(const RscDepthStencilState&, const u32);
+    force_inline void bind_DS(const RscDepthStencilState&, const u32);
 
     struct VertexBufferDesc {
         void* vertexData;
@@ -349,8 +349,8 @@ namespace driver {
         u32 vertexCount;
     };
     void update_vertex_buffer(RscVertexBuffer&, const BufferUpdateParams&);
-    void bind_vertex_buffer(const RscVertexBuffer&);
-    void draw_vertex_buffer(const RscVertexBuffer&);
+    force_inline void bind_vertex_buffer(const RscVertexBuffer&);
+    force_inline void draw_vertex_buffer(const RscVertexBuffer&);
     
     struct IndexedVertexBufferDesc {
         void* vertexData;
@@ -373,31 +373,31 @@ namespace driver {
         u32 indexCount;
     };
     void update_indexed_vertex_buffer(RscIndexedVertexBuffer&, const IndexedBufferUpdateParams&);
-    void bind_indexed_vertex_buffer(const RscIndexedVertexBuffer&);
-    void draw_indexed_vertex_buffer(const RscIndexedVertexBuffer&);
-    void draw_instances_indexed_vertex_buffer(const RscIndexedVertexBuffer&, const u32);
+    force_inline void bind_indexed_vertex_buffer(const RscIndexedVertexBuffer&);
+    force_inline void draw_indexed_vertex_buffer(const RscIndexedVertexBuffer&);
+    force_inline void draw_instances_indexed_vertex_buffer(const RscIndexedVertexBuffer&, const u32);
 
-    void draw_fullscreen();
+    force_inline void draw_fullscreen();
 
     struct CBufferCreateParams {
         u32 byteWidth;
     };
     void create_cbuffer(RscCBuffer& cb, const CBufferCreateParams& params);
-    void update_cbuffer(RscCBuffer& cb, const void* data);
-    void bind_cbuffers(const RscShaderSet& ss, const RscCBuffer* cb, const u32 count);
+    force_inline void update_cbuffer(RscCBuffer& cb, const void* data);
+    force_inline void bind_cbuffers(const RscShaderSet& ss, const RscCBuffer* cb, const u32 count);
 
 #if __PROFILE
-    void set_marker_name(Marker_t&, const char*);
-    void set_marker(Marker_t);
-    void start_event(Marker_t);
-    void end_event();
+    force_inline void set_marker_name(Marker_t&, const char*);
+    force_inline void set_marker(Marker_t);
+    force_inline void start_event(Marker_t);
+    force_inline void end_event();
 #else
     // dummy impl
     typedef u32 Marker_t;
-    void set_marker_name(Marker_t&, const char*) {}
-    void set_marker(Marker_t) {}
-    void start_event(Marker_t) {}
-    void end_event() {}
+    force_inline void set_marker_name(Marker_t&, const char*) {}
+    force_inline void set_marker(Marker_t) {}
+    force_inline void start_event(Marker_t) {}
+    force_inline void end_event() {}
 #endif
 
 } // Driver

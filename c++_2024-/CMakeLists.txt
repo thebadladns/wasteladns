@@ -19,6 +19,8 @@ set(SOURCES "src/main.cpp" "src")
 endif (WIN32)
 
 if(WIN32)
+	# ensure debug builds inline as needed
+	set(CMAKE_CXX_FLAGS_DEBUG "/MDd /Zi /Ob1 /Od /RTC1")
 	# windows target using directx 11 renderer
 	add_executable(app-dx11 WIN32 ${SOURCES})
 	target_compile_definitions(app-dx11 PUBLIC __WIN64=1 __DX11=1)

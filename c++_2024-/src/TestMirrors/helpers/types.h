@@ -15,4 +15,10 @@ typedef double f64;
 
 #define countof(x) (sizeof(x)/sizeof(0[x]))
 
+#if _MSC_VER
+#define force_inline __forceinline
+#elif __clang__
+# define force_inline __attribute__((always_inline))
+#endif
+
 #endif // __WASTELADNS_TYPES_H__

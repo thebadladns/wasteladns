@@ -200,33 +200,33 @@ struct CoreResources {
     camera::PerspProjection perspProjection;
 };
 
-DrawNodeHandle handle_from_node(Scene& scene, DrawNode& node) {
+force_inline DrawNodeHandle handle_from_node(Scene& scene, DrawNode& node) {
     return allocator::get_pool_index(scene.drawNodes, node) + 1;
 }
-DrawNode& node_from_handle(Scene& scene, const DrawNodeHandle handle) {
+force_inline DrawNode& node_from_handle(Scene& scene, const DrawNodeHandle handle) {
     return allocator::get_pool_slot(scene.drawNodes, handle - 1);
 }
-DrawNodeHandle handle_from_instanced_node(Scene& scene, DrawNodeInstanced& node) {
+force_inline DrawNodeHandle handle_from_instanced_node(Scene& scene, DrawNodeInstanced& node) {
     return allocator::get_pool_index(scene.instancedDrawNodes, node) + 1;
 }
-void instanced_node_from_handle(Matrices64*& matrices, u32*& count, Scene& scene, const u32 handle) {
+force_inline void instanced_node_from_handle(Matrices64*& matrices, u32*& count, Scene& scene, const u32 handle) {
     DrawNodeInstanced& node = allocator::get_pool_slot(scene.instancedDrawNodes, handle - 1);
     matrices = &node.instanceMatrices;
 	count = &node.instanceCount;
 }
-DrawMesh& alloc_drawMesh(CoreResources& core) {
+force_inline DrawMesh& alloc_drawMesh(CoreResources& core) {
     return core.meshes[core.num_meshes++];
 }
-DrawMesh& drawMesh_from_handle(CoreResources& core, const u32 handle) {
+force_inline DrawMesh& drawMesh_from_handle(CoreResources& core, const u32 handle) {
     return core.meshes[handle - 1];
 }
-u32 handle_from_drawMesh(CoreResources& core, DrawMesh& mesh) {
+force_inline u32 handle_from_drawMesh(CoreResources& core, DrawMesh& mesh) {
     return u32(&mesh - &core.meshes[0]) + 1;
 }
-driver::RscCBuffer& cbuffer_from_handle(Scene& scene, const u32 handle) {
+force_inline driver::RscCBuffer& cbuffer_from_handle(Scene& scene, const u32 handle) {
     return allocator::get_pool_slot(scene.cbuffers, handle - 1);
 }
-u32 handle_from_cbuffer(Scene& scene, driver::RscCBuffer& cbuffer) {
+force_inline u32 handle_from_cbuffer(Scene& scene, driver::RscCBuffer& cbuffer) {
     return allocator::get_pool_index(scene.cbuffers, cbuffer) + 1;
 }
 

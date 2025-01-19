@@ -37,13 +37,13 @@ struct Scene {
 	StaticObject_Sphere obstacles[8];
 	DynamicObject_Sphere balls[8];
 };
-Handle handleFromObject(StaticObject_Line& w, Scene& scene) {
+force_inline Handle handleFromObject(StaticObject_Line& w, Scene& scene) {
 	return (u32(&w - scene.walls) << ObjectType::Bits) | ObjectType::StaticLine;
 }
-Handle handleFromObject(StaticObject_Sphere& o, Scene& scene) {
+force_inline Handle handleFromObject(StaticObject_Sphere& o, Scene& scene) {
 	return (u32(&o - scene.obstacles) << ObjectType::Bits) | ObjectType::StaticSphere;
 }
-Handle handleFromObject(DynamicObject_Sphere& b, Scene& scene) {
+force_inline Handle handleFromObject(DynamicObject_Sphere& b, Scene& scene) {
 	return (u32(&b - scene.balls) << ObjectType::Bits) | ObjectType::DynamicSphere;
 }
 void updatePositionFromHandle(Scene& scene, Handle& handle, const float3 pos, const f32 dt) {

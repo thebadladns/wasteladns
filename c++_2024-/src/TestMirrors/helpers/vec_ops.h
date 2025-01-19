@@ -3,7 +3,7 @@
 
 namespace math {
 
-f32 quaternionDot(const float4& a, const float4& b) { return a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w; }
+force_inline f32 quaternionDot(const float4& a, const float4& b) { return a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w; }
 float4 quaternionSlerp(const f32 t, const float4& a, const float4& b) {
     f32 bx = b.x, by = b.y, bz = b.z, bw = b.w;
     f32 ax = a.x, ay = a.y, az = a.z, aw = a.w;

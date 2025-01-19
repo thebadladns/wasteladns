@@ -41,8 +41,12 @@ struct Scene {
     allocator::Pool<Node> nodes;
 };
 
-Node& get_node(Scene& scene, const Handle handle) { return allocator::get_pool_slot(scene.nodes, handle - 1); }
-Handle handle_from_node(Scene& scene, Node& node) { return allocator::get_pool_index(scene.nodes, node) + 1; }
+force_inline Node& get_node(Scene& scene, const Handle handle) {
+    return allocator::get_pool_slot(scene.nodes, handle - 1);
+}
+force_inline Handle handle_from_node(Scene& scene, Node& node) {
+    return allocator::get_pool_index(scene.nodes, node) + 1;
+}
 
 void updateAnimation(Scene& scene, const f32 dt) {
 
