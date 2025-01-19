@@ -826,13 +826,12 @@ bool load_with_materials(
     return success;
 }
 }
-
 void clip_poly_in_frustum(
 float3* poly, u32& poly_count, const float4* planes, const u32 planeCount, const u32 polyCountCap) {
 
     // todo: consider speeding this up somehow, as it's pretty expensive when called 1000+ times
 
-    enum { MAX_POLY_VERTICES = 8 };
+    enum { MAX_POLY_VERTICES = 7 };
     assert(polyCountCap <= MAX_POLY_VERTICES);
     
     // cull quad by each frustum plane via Sutherland-Hodgman
@@ -858,23 +857,30 @@ float3* poly, u32& poly_count, const float4* planes, const u32 planeCount, const
 
         const float4 plane = planes[p];
         u32 numPlaneCuts = 0;
-        float3 va = inputPoly[inputPoly_count - 1];
-        f32 va_d = math::dot(float4(va, 1.f), plane);
-        for (u32 curr_v = 0; curr_v < inputPoly_count; curr_v++) {
-            float3 vb = inputPoly[curr_v];
-            f32 vb_d = math::dot(float4(vb, 1.f), plane);
-            float3 intersection;
 
+        // compute all distances ahead of time
+        // even if the poly doesn't have the maximum number of vertices, this speeds things up
+        f32 distances[MAX_POLY_VERTICES];
+        distances[0] = math::dot(float4(inputPoly[0], 1.f), plane);
+        distances[1] = math::dot(float4(inputPoly[1], 1.f), plane);
+        distances[2] = math::dot(float4(inputPoly[2], 1.f), plane);
+        distances[3] = math::dot(float4(inputPoly[3], 1.f), plane);
+        distances[4] = math::dot(float4(inputPoly[4], 1.f), plane);
+        distances[5] = math::dot(float4(inputPoly[5], 1.f), plane);
+        distances[6] = math::dot(float4(inputPoly[6], 1.f), plane);
+        u32 prev_v = inputPoly_count - 1;
+
+        for (u32 curr_v = 0; curr_v < inputPoly_count; curr_v++) {
             const f32 eps = 0.001f;
-            if (vb_d > eps) {
+            if (distances[curr_v] > eps) {
                 // current vertex in positive zone,
                 // will be add to poly
-                if (va_d < -eps) {
+                if (distances[prev_v] < -eps) {
                     // edge entering the positive zone,
                     // add intersection point first
-                    float3 ab = math::subtract(vb, va);
-                    f32 t = (-va_d) / math::dot(plane.xyz, ab);
-                    intersection = math::add(va, math::scale(ab, t));
+                    float3 ab = math::subtract(inputPoly[curr_v], inputPoly[prev_v]);
+                    f32 t = (-distances[prev_v]) / math::dot(plane.xyz, ab);
+                    float3 intersection = math::add(inputPoly[prev_v], math::scale(ab, t));
                     
                     numPlaneCuts++;
                     if (numPlaneCuts <= 1) { outputQuad[outputPoly_count++] = intersection; }
@@ -884,27 +890,25 @@ float3* poly, u32& poly_count, const float4* planes, const u32 planeCount, const
                         outputQuad[outputPoly_count - 1] = intersection;
                     }
                 }
-                outputQuad[outputPoly_count++] = vb;
-            } else if (vb_d < -eps) {
+                outputQuad[outputPoly_count++] = inputPoly[curr_v];
+            } else if (distances[curr_v] < -eps) {
                 // current vertex in negative zone,
                 // will not be added to poly
-                if (va_d > eps) {
+                if (distances[prev_v] > eps) {
                     // edge entering the negative zone,
                     // add intersection to face
-                    float3 ab = math::subtract(vb, va);
-                    f32 t = (-va_d) / math::dot(plane.xyz, ab);
-                    intersection = math::add(va, math::scale(ab, t));
+                    float3 ab = math::subtract(inputPoly[curr_v], inputPoly[prev_v]);
+                    f32 t = (-distances[prev_v]) / math::dot(plane.xyz, ab);
+                    float3 intersection = math::add(inputPoly[prev_v], math::scale(ab, t));
                     outputQuad[outputPoly_count++] = intersection;
                 }
-            }
-            else {
+            } else {
                 // current vertex on plane,
                 // add to poly
-                outputQuad[outputPoly_count++] = vb;
+                outputQuad[outputPoly_count++] = inputPoly[curr_v];
             }
 
-            va = vb;
-            va_d = vb_d;
+            prev_v = curr_v;
         }
     }
     memcpy(poly, outputQuad, outputPoly_count * sizeof(float3));
