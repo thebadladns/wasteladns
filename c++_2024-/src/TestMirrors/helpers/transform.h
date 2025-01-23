@@ -310,7 +310,7 @@ void extract_frustum_planes_from_vp_z0to1(float4* planes, const float4x4& vpMatr
 void generate_persp_frustum_params(
     f32& l, f32& r, f32& t, f32& b, const PerspProjection::Config& config) {
     f32 near = config.near;
-    f32 far = config.far;
+    //f32 far = config.far;
     f32 fov = config.fov;
     f32 aspect = config.aspect;
     const f32 fovtan = math::tan(math::d2r32 * fov * 0.5f);

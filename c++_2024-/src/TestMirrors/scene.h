@@ -963,7 +963,6 @@ struct GatherMirrorTreeContext {
 };
 u32 gatherMirrorTreeRecursive(GatherMirrorTreeContext& ctx, u32 index, const CameraNode& parent) {
 
-    u32 triangleSourceIds_count = ctx.mirrors.count;
     bool* mirrorVisibility =
         (bool*)allocator::alloc_arena(
             ctx.scratchArenaRoot, sizeof(bool) * ctx.mirrors.count, alignof(bool));
@@ -1185,7 +1184,6 @@ struct RenderMirrorContext {
 };
 void markMirror(RenderMirrorContext& mirrorCtx) {
     using namespace renderer;
-    Scene& scene = mirrorCtx.gameScene.renderScene;
     renderer::CoreResources& rsc = mirrorCtx.renderCore;
 
     driver::RscRasterizerState& rasterizerStateParent =
@@ -1220,7 +1218,6 @@ void markMirror(RenderMirrorContext& mirrorCtx) {
 void unmarkMirror(RenderMirrorContext& mirrorCtx) {
 
     using namespace renderer;
-    Scene& scene = mirrorCtx.gameScene.renderScene;
     renderer::CoreResources& rsc = mirrorCtx.renderCore;
     driver::RscRasterizerState& rasterizerStateParent =
         (mirrorCtx.camera.depth & 1) != 0 ?
@@ -1265,7 +1262,6 @@ void renderMirrorTree(
         allocator::Arena scratchArena) {
 
     using namespace renderer;
-    renderer::Scene& scene = gameScene.renderScene;
     u32 numCameras = cameraTree[0].siblingIndex;
     u32* parents =
         (u32*) allocator::alloc_arena(
@@ -1309,18 +1305,14 @@ void renderMirrorTree(
 
         parents[parentCount++] = index;
         while (parentCount > 1 && index + 1 >= cameraTree[parents[parentCount - 1]].siblingIndex) {
-
+            // unmark mirror
             const CameraNode& camera = cameraTree[parents[parentCount - 1]];
             const CameraNode& parent = cameraTree[parents[parentCount - 2]];
-
-            // unmark mirror
             RenderMirrorContext mirrorContext {
-                camera, cameraTree[parents[parentCount - 2]], gameScene, renderCore
+                camera, parent, gameScene, renderCore
             };
             unmarkMirror(mirrorContext);
-
             driver::end_event();
-            
             parentCount--;
         }
     }
@@ -1832,7 +1824,6 @@ void load_coreResources(
         , { "assets/meshes/bird.fbx", game::Resources::AssetsMeta::Bird }
     };
     for (u32 asset_idx = 0; asset_idx < countof(assets); asset_idx++) {
-        u32 assetHandle = 0;
 		ctx.scratchArena = scratchArena; // explicit copy
         game::AssetInMemory& assetToAdd = core.assets[assets[asset_idx].assetId];
         assetToAdd = {};
@@ -2000,7 +1991,10 @@ void load_coreResources(
             Color32 color;
             u8 scale;
         };
-        auto text2d = [](Buffer2D& buffer, const Text2DParams& params, char* text) {
+        auto text2d = [](Buffer2D& buffer, const Text2DParams& params, const char* str) {
+
+            char text[256];
+            platform::strncpy(text, str, 256);
 
             const u32 vertexCount = buffer.vertexCount;
             const u32 indexCount = 3 * vertexCount / 2; // every 4 vertices form a 6 index quad

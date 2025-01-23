@@ -237,7 +237,7 @@ void findTrianglesIntersectingFrustum(
             if (n.frustumStatus == FrustumStatus::In) {
                 lStatus = rStatus = n.frustumStatus;
                 nodeStack[stackCount++] = { bvh.nodes[n.nodeId].lchildId, lStatus };
-                nodeStack[stackCount++] = { bvh.nodes[n.nodeId].lchildId + 1u, rStatus };
+                nodeStack[stackCount++] = { u16(bvh.nodes[n.nodeId].lchildId + 1u), rStatus };
             } else {
                 // test each child against the frustum, cull if fully not visible
                 lStatus = queryIsBoxVisibleInFrustum(planes, numPlanes, lchild.min, lchild.max);
@@ -246,7 +246,7 @@ void findTrianglesIntersectingFrustum(
                     nodeStack[stackCount++] = { bvh.nodes[n.nodeId].lchildId, lStatus };
                 }
                 if (rStatus != FrustumStatus::Out) {
-                    nodeStack[stackCount++] = { bvh.nodes[n.nodeId].lchildId + 1u, rStatus };
+                    nodeStack[stackCount++] = { u16(bvh.nodes[n.nodeId].lchildId + 1u), rStatus };
                 }
             }
         }

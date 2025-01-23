@@ -675,9 +675,9 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
                                 allocator::push(aabbs, scratchArena) = { center, scale };
                             } else {
                                 nodeStack[stackCount++] =
-                                    DrawNode{ bvh.nodes[n.nodeid].lchildId, n.depth + 1u };
+                                    DrawNode{ bvh.nodes[n.nodeid].lchildId, u16(n.depth + 1u) };
                                 nodeStack[stackCount++] =
-                                    DrawNode{ bvh.nodes[n.nodeid].lchildId + 1u, n.depth + 1u };
+                                    DrawNode{ u16(bvh.nodes[n.nodeid].lchildId + 1u), u16(n.depth + 1u) };
                             }
                         }
                     }
@@ -954,7 +954,6 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
                     const u32 numCameras = debug::capturedCameras[0].siblingIndex;
                     const u32 minidx = debug::debugCameraStage > 10 ? debug::debugCameraStage - 10 : 0;
                     const u32 maxidx = debug::debugCameraStage + 10 < numCameras ? debug::debugCameraStage + 10 : numCameras;
-                    debug::capturedCameras[debug::debugCameraStage].siblingIndex;
                     for (u32 i = minidx; i < maxidx; i++) {
                         if (i == debug::debugCameraStage) { textParamsLeft.color = activeCol; }
                         renderer::im::text2d(textParamsLeft, "%*d: %s", debug::capturedCameras[i].depth, i, debug::capturedCameras[i].str);

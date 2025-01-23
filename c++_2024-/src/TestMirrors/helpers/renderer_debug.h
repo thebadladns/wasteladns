@@ -437,7 +437,6 @@ void box_2d(const float2 min, const float2 max, Color32 color) {
 }
 void poly2d(const float2* vertices, const u8 count, Color32 color) {
     u32 colorv4 = color.ABGR();
-    u8 i = 0;
     // add vertices as a triangle fan from the first vertex
     for (u32 i = 1; i < count; i++) {
         u32 vertexStart = debug::ctx.vertices_2d_head;
