@@ -176,7 +176,7 @@ struct CoreResources {
     DrawMesh* meshes;
     u32 num_meshes;
     struct CBuffersMeta { enum {
-        ClearColor, Scene, NodeIdentity, UIText, Count }; };
+        ClearColor, Scene, NodeIdentity, UIText, Instances64, Count }; };
     driver::RscCBuffer cbuffers[CBuffersMeta::Count];
     renderer::driver::RscRasterizerState rasterizerStateFillFrontfaces;
     renderer::driver::RscRasterizerState rasterizerStateFillBackfaces;

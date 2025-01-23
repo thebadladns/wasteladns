@@ -10,7 +10,7 @@
 
 struct float2 {
     float2() : x{}, y{} {}
-    float2(const f32 _x, const f32 _y) : x(_x), y(_y) {}
+    float2(const f32 x, const f32 y) : x(x), y(y) {}
     union {
         struct { f32 x, y; };
         f32 v[2];
@@ -19,32 +19,32 @@ struct float2 {
 
 struct float3 {
     float3() : x{}, y{}, z{} {}
-    float3(const f32 _x, const f32 _y, const f32 _z) : x(_x), y(_y), z(_z) {}
-    float3(const f32 _x, const float2& _yz) : x(_x), y(_yz.x), z(_yz.y) {}
-    float3(const float2& _xy, const f32 _z) : x(_xy.x), y(_xy.y), z(_z) {}
+    float3(const f32 x, const f32 y, const f32 z) : x(x), y(y), z(z) {}
+    float3(const f32 x, const float2& yz) : x(x), y(yz.x), z(yz.y) {}
+    float3(const float2& xy, const f32 z) : x(xy.x), y(xy.y), z(z) {}
     union {
         struct { f32 x, y, z; };
         f32 v[3];
         struct { float2 xy; };
-        struct { f32 _padding; float2 yz; };
+        struct { f32 padding; float2 yz; };
     };
 };
 
 struct float4 {
     float4() : x{}, y{}, z{}, w{} {}
-    float4(const f32 _x, const f32 _y, const f32 _z, const f32 _w) : x(_x), y(_y), z(_z), w(_w) {}
-    float4(const f32 _x, const float3& _yzw) : x(_x), y(_yzw.x), z(_yzw.y), w(_yzw.z) {}
-    float4(const float3& _xyz, const f32 _w) : x(_xyz.x), y(_xyz.y), z(_xyz.z), w(_w) {}
-    float4(const float2& _xy, const float2& _yz) : x(_xy.x), y(_xy.y), z(_yz.x), w(_yz.y) {}
+    float4(const f32 x, const f32 y, const f32 z, const f32 w) : x(x), y(y), z(z), w(w) {}
+    float4(const f32 x, const float3& yzw) : x(x), y(yzw.x), z(yzw.y), w(yzw.z) {}
+    float4(const float3& xyz, const f32 w) : x(xyz.x), y(xyz.y), z(xyz.z), w(w) {}
+    float4(const float2& xy, const float2& yz) : x(xy.x), y(xy.y), z(yz.x), w(yz.y) {}
 
     union {
         struct { f32 x, y, z, w;
         };
         f32 v[4];
         struct { float2 xy, zw; };
-        struct { f32 _padding0; float2 yz; };
+        struct { f32 padding0; float2 yz; };
         struct { float3 xyz; };
-        struct { f32 _padding1; float3 yzw; };
+        struct { f32 padding1; float3 yzw; };
     };
 };
 

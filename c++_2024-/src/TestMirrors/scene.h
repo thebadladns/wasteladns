@@ -7,6 +7,7 @@ struct Mirrors { // todo: figure out delete, unhack sizes
     struct Poly { float3 v[4]; float3 normal; u32 numPts; };
     Poly* polys; // xy from 0.f to 1.f describe the mirror quad, z is the normal
     renderer::DrawMesh* drawMeshes;
+    bvh::Tree bvh; // used to accelerate visibility queries
     u32 count;
 };
 struct GPUCPUMesh {
@@ -145,10 +146,20 @@ Scene& scene, const AssetInMemory& def, const float3& spawnPos) {
     // todo: physics??
 }
 
-void spawn_model_as_mirrors(game::Mirrors& mirrors, const game::GPUCPUMesh& loadedMesh) {
+void spawn_model_as_mirrors(
+    game::Mirrors& mirrors, const game::GPUCPUMesh& loadedMesh,
+    allocator::Arena scratchArena, allocator::Arena& sceneArena, bool accelerateBVH) {
 
     const renderer::CPUMesh& cpuMesh = loadedMesh.cpuBuffer;
+    u32* triangleIds;
+    if (accelerateBVH) {
+        triangleIds =
+        (u32*)allocator::alloc_arena(
+            scratchArena, sizeof(u32) * (cpuMesh.indexCount / 3), alignof(u32));
+    }
+
     u32 index = 0;
+    u32 triangles = 0;
     while (index < cpuMesh.indexCount) {
         float3 v0 = cpuMesh.vertices[cpuMesh.indices[index]];
         float3 v1 = cpuMesh.vertices[cpuMesh.indices[index + 1]];
@@ -171,6 +182,7 @@ void spawn_model_as_mirrors(game::Mirrors& mirrors, const game::GPUCPUMesh& load
         poly.v[0] = v0;
         poly.v[1] = v1;
         poly.v[2] = v2;
+        if (accelerateBVH) { triangleIds[triangles++] = mirrorId; }
 
         const float3 normal012 = math::normalize(math::cross(math::subtract(v1, v0), math::subtract(v2, v0)));
         const float3 normal345 = math::normalize(math::cross(math::subtract(v4, v3), math::subtract(v5, v3)));
@@ -181,9 +193,16 @@ void spawn_model_as_mirrors(game::Mirrors& mirrors, const game::GPUCPUMesh& load
             poly.numPts = 4;
             poly.v[3] = v3;
             mesh.vertexBuffer.indexCount = 6;
+            if (accelerateBVH) { triangleIds[triangles++] = mirrorId; }
         }
         poly.normal = math::normalize(math::cross(math::subtract(poly.v[2], poly.v[0]), math::subtract(poly.v[1], poly.v[0])));
         index += mesh.vertexBuffer.indexCount;
+    }
+
+    if (accelerateBVH) {
+        bvh::buildTree(
+            sceneArena, scratchArena, mirrors.bvh, &(loadedMesh.cpuBuffer.vertices[0].x),
+            loadedMesh.cpuBuffer.indices, loadedMesh.cpuBuffer.indexCount, triangleIds);
     }
 }
 }
@@ -937,14 +956,33 @@ struct CameraNode { // Node in camera tree (stored as depth-first)
 };
 struct GatherMirrorTreeContext {
     allocator::Arena& frameArena;
+    allocator::Arena scratchArenaRoot;
     allocator::Buffer<CameraNode>& cameraTree;
     const game::Mirrors& mirrors;
     u32 maxDepth;
 };
 u32 gatherMirrorTreeRecursive(GatherMirrorTreeContext& ctx, u32 index, const CameraNode& parent) {
-    
+
+    u32 triangleSourceIds_count = ctx.mirrors.count;
+    bool* mirrorVisibility =
+        (bool*)allocator::alloc_arena(
+            ctx.scratchArenaRoot, sizeof(bool) * ctx.mirrors.count, alignof(bool));
+    memset(mirrorVisibility, 0, ctx.mirrors.count * sizeof(bool));
+    if (ctx.mirrors.bvh.nodeCount) {
+        memset(mirrorVisibility, 0, ctx.mirrors.count * sizeof(bool));
+        bvh::findTrianglesIntersectingFrustum(
+            ctx.scratchArenaRoot,
+            mirrorVisibility, ctx.mirrors.bvh,
+            parent.frustum.planes, parent.frustum.numPlanes);
+    } else {
+        memset(mirrorVisibility, 1, ctx.mirrors.count * sizeof(bool));
+    }
+
     u32 parentIndex = index - 1;
     for (u32 i = 0; i < ctx.mirrors.count; i++) {
+
+        // didn't pass visibility pre-pass, if appropriate
+        if (!mirrorVisibility[i]) { continue; }
         // do not self-reflect
         if (parent.sourceId == i) { continue; }
 
@@ -959,7 +997,7 @@ u32 gatherMirrorTreeRecursive(GatherMirrorTreeContext& ctx, u32 index, const Cam
             "mirror poly has too many vertices, it will generate too many frustum planes");
         float3 poly[MAX_MIRROR_POLY_VERTICES];
         u32 poly_count = ctx.mirrors.polys[i].numPts;
-        memcpy(poly, ctx.mirrors.polys[i].v, sizeof(float3)* ctx.mirrors.polys[i].numPts);
+        memcpy(poly, ctx.mirrors.polys[i].v, sizeof(float3) * ctx.mirrors.polys[i].numPts);
         clip_poly_in_frustum(
             poly, poly_count, parent.frustum.planes, parent.frustum.numPlanes, countof(poly));
         if (poly_count < 3) continue; // resulting mirror poly is fully culled
@@ -1477,6 +1515,9 @@ void load_coreResources(
     noteUItext.groupColor = float4(1.f, 1.f, 1.f, 1.f);
     math::identity4x4(*(Transform*)&noteUItext.worldMatrix);
     renderer::driver::update_cbuffer(cbufferNodeUItext, &noteUItext);
+    renderer::driver::RscCBuffer& cbufferinstances64 =
+        renderCore.cbuffers[renderer::CoreResources::CBuffersMeta::Instances64];
+    renderer::driver::create_cbuffer(cbufferinstances64, { u32(sizeof(float4x4)) * 64 });
 
     // input layouts
     const renderer::driver::VertexAttribDesc attribs_2d[] = {
@@ -2054,7 +2095,7 @@ void load_coreResources(
     __DEBUGDEF(renderer::im::init(memory.debugArena);)
 }
 void spawn_scene_mirrorRoom(
-    game::Scene& scene, allocator::Arena& sceneArena,
+    game::Scene& scene, allocator::Arena& sceneArena, allocator::Arena scratchArena,
     const game::Resources& core, const platform::Screen& screen,
     const game::RoomDefinition& roomDef) {
 
@@ -2208,8 +2249,8 @@ void spawn_scene_mirrorRoom(
             allocator::alloc_pool(renderScene.cbuffers);
         node.cbuffer_instances = handle_from_cbuffer(renderScene, cbufferinstances);
         renderer::driver::create_cbuffer(
-                cbufferinstances,
-                { (u32) sizeof(float4x4) * node.instanceCount });
+            cbufferinstances,
+            { (u32) sizeof(float4x4) * node.instanceCount });
         for (u32 m = 0; m < countof(node.instanceMatrices.data); m++) {
             float4x4& matrix = node.instanceMatrices.data[m];
             math::identity4x4(*(Transform*)&(matrix));
@@ -2238,7 +2279,9 @@ void spawn_scene_mirrorRoom(
                 sceneArena,
                 sizeof(renderer::DrawMesh) * numMirrors,
                 alignof(renderer::DrawMesh));
-        game::spawn_model_as_mirrors(scene.mirrors, core.meshes[roomDef.mirrorMesh]);
+        scene.mirrors.bvh = {};
+        game::spawn_model_as_mirrors(
+            scene.mirrors, core.meshes[roomDef.mirrorMesh], scratchArena, sceneArena, true);
     } else { // hall of mirrors
         const u32 numMirrors = game::Resources::MirrorHallMeta::Count * 2;
         scene.mirrors.polys = (game::Mirrors::Poly*)
@@ -2251,9 +2294,11 @@ void spawn_scene_mirrorRoom(
                 sceneArena,
                 sizeof(renderer::DrawMesh) * numMirrors,
                 alignof(renderer::DrawMesh));
+        scene.mirrors.bvh = {};
         for (u32 m = 0; m < game::Resources::MirrorHallMeta::Count; m++) {
             const game::GPUCPUMesh& mirrorMesh = core.mirrorHallMeshes[m];
-            game::spawn_model_as_mirrors(scene.mirrors, mirrorMesh);
+            game::spawn_model_as_mirrors(
+                scene.mirrors, mirrorMesh, scratchArena, sceneArena, false);
         }
         for (u32 i = 0; i < scene.mirrors.count; i++) {
             game::Mirrors::Poly& p = scene.mirrors.polys[i];

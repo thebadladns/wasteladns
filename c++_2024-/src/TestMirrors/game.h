@@ -4,8 +4,8 @@
 #if USE_DEBUG_MEMORY
 const size_t persistentArenaSize = 512 * 1024 * 1024;
 const size_t sceneArenaSize = 512 * 1024 * 1024;
-const size_t frameArenaSize = 1024 * 1024 * 1024;
-const size_t scratchArenaSize = 5 * 1024 * 1024;
+const size_t frameArenaSize = 512 * 1024 * 1024;
+const size_t scratchArenaSize = 512 * 1024 * 1024;
 const u64 maxRenderMeshes = 4096 * 2 + 16;
 const u64 maxRenderNodes = 2048;
 const u64 maxAnimatedNodes = 2048;
@@ -27,7 +27,11 @@ const u32 maxPlayerParticleCubes = 4;
 struct CameraNode;
 namespace debug {
 struct OverlayMode { enum Enum { All, HelpOnly, ArenaOnly, None, Count }; };
-struct Debug3DView { enum Enum { Physics, Culling, All, None, Count }; };
+const char* overlaynames[] = { "All", "Help Only", "Arenas only", "None" };
+static_assert(countof(overlaynames) == debug::OverlayMode::Count, "check");
+struct Debug3DView { enum Enum { Physics, Culling, BVH, All, None, Count }; };
+const char* visualizationModes[] = { "Physics", "Culling", "BVH", "All", "None" };
+static_assert(countof(visualizationModes) == debug::Debug3DView::Count, "check");
 struct EventText { char text[256]; f64 time; };
 
 f64 frameHistory[60];
@@ -36,6 +40,7 @@ u64 frameHistoryIdx = 0;
 OverlayMode::Enum overlaymode = OverlayMode::Enum::All;
 Debug3DView::Enum debug3Dmode = Debug3DView::Enum::None;
 u32 debugCameraStage = 0;
+u32 bvhDepth = 0;
 CameraNode* capturedCameras = nullptr;
 EventText eventLabel = {};
 }
@@ -89,6 +94,7 @@ namespace input
         , TOGGLE_FRUSTUM_RIGHT = ::input::keyboard::Keys::NUM4
         , TOGGLE_FRUSTUM_BOTTOM = ::input::keyboard::Keys::NUM5
         , TOGGLE_FRUSTUM_TOP = ::input::keyboard::Keys::NUM6
+        , TOGGLE_BVH_LEVEL = ::input::keyboard::Keys::C
         #endif
         ;
 };
@@ -172,7 +178,8 @@ void start(Instance& game, platform::GameConfig& config, platform::State& platfo
         };
         load_coreResources(game.resources, arenas, platform.screen);
         spawn_scene_mirrorRoom(
-            game.scene, game.memory.sceneArena, game.resources, platform.screen,
+            game.scene, game.memory.sceneArena, game.memory.scratchArenaRoot,
+            game.resources, platform.screen,
             roomDefinitions[game.roomId]);
 
     }
@@ -219,29 +226,61 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
         if (keyboard.pressed(input::CYCLE_ROOM)) {
             game.roomId = (game.roomId + 1) % countof(roomDefinitions);
         }
-        if (keyboard.pressed(input::TOGGLE_PAUSE_SCENE_RENDER)) { game.time.pausedRender = !game.time.pausedRender; }
+        if (keyboard.pressed(input::TOGGLE_PAUSE_SCENE_RENDER)) {
+            game.time.pausedRender = !game.time.pausedRender;
+        }
         #if __DEBUG
-        if (keyboard.pressed(input::TOGGLE_OVERLAY)) { debug::overlaymode = (debug::OverlayMode::Enum)((debug::overlaymode + 1) % debug::OverlayMode::Count); }
-        if (keyboard.pressed(input::TOGGLE_DEBUG3D)) { debug::debug3Dmode = (debug::Debug3DView::Enum)((debug::debug3Dmode + 1) % debug::Debug3DView::Count); }
-        if (keyboard.pressed(input::TOGGLE_CAPTURED_CAMERA)) {
-            if (debug::capturedCameras) {
-                if (keyboard.down(::input::keyboard::Keys::LEFT_SHIFT)) {
-                    if (debug::debugCameraStage == 0) { debug::debugCameraStage = debug::capturedCameras[0].siblingIndex - 1; }
-                    else { debug::debugCameraStage--; }
-                } else {
-                    if (debug::debugCameraStage == debug::capturedCameras[0].siblingIndex - 1) { debug::debugCameraStage = 0; }
-                    else { debug::debugCameraStage++; }
+        if (keyboard.pressed(input::TOGGLE_OVERLAY)) {
+            debug::overlaymode =
+                (debug::OverlayMode::Enum)((debug::overlaymode + 1) % debug::OverlayMode::Count);
+        }
+        if (keyboard.pressed(input::TOGGLE_DEBUG3D)) {
+            debug::debug3Dmode =
+                (debug::Debug3DView::Enum)((debug::debug3Dmode + 1) % debug::Debug3DView::Count);
+        }
+        if (debug::debug3Dmode == debug::Debug3DView::Culling) {
+            if (keyboard.pressed(input::TOGGLE_CAPTURED_CAMERA)) {
+                if (debug::capturedCameras) {
+                    if (keyboard.down(::input::keyboard::Keys::LEFT_SHIFT)) {
+                        if (debug::debugCameraStage == 0) {
+                            debug::debugCameraStage = debug::capturedCameras[0].siblingIndex - 1;
+                        } else { debug::debugCameraStage--; }
+                    } else {
+                        if (debug::debugCameraStage == debug::capturedCameras[0].siblingIndex - 1) {
+                            debug::debugCameraStage = 0;
+                        } else { debug::debugCameraStage++; }
+                    }
                 }
             }
+            if (keyboard.pressed(input::CAPTURE_CAMERAS)) { captureCameras = true; }
+            if (keyboard.pressed(input::TOGGLE_FRUSTUM_CUT)) {
+                debug::force_cut_frustum = !debug::force_cut_frustum;
+            }
+            if (keyboard.pressed(input::TOGGLE_FRUSTUM_NEAR)) {
+                debug::frustum_planes_off[0] = !debug::frustum_planes_off[0];
+            }
+            if (keyboard.pressed(input::TOGGLE_FRUSTUM_FAR)) {
+                debug::frustum_planes_off[1] = !debug::frustum_planes_off[1];
+            }
+            if (keyboard.pressed(input::TOGGLE_FRUSTUM_LEFT)) {
+                debug::frustum_planes_off[2] = !debug::frustum_planes_off[2];
+            }
+            if (keyboard.pressed(input::TOGGLE_FRUSTUM_RIGHT)) {
+                debug::frustum_planes_off[3] = !debug::frustum_planes_off[3];
+            }
+            if (keyboard.pressed(input::TOGGLE_FRUSTUM_BOTTOM)) {
+                debug::frustum_planes_off[4] = !debug::frustum_planes_off[4];
+            }
+            if (keyboard.pressed(input::TOGGLE_FRUSTUM_TOP)) {
+                debug::frustum_planes_off[5] = !debug::frustum_planes_off[5];
+            }
+        } else if (debug::debug3Dmode == debug::Debug3DView::BVH) {
+            if (keyboard.pressed(input::TOGGLE_BVH_LEVEL)) {
+                if (keyboard.down(::input::keyboard::Keys::LEFT_SHIFT)) {
+                    if (debug::bvhDepth > 0) { debug::bvhDepth--; }
+                } else { debug::bvhDepth++; }
+            }
         }
-        if (keyboard.pressed(input::CAPTURE_CAMERAS)) { captureCameras = true; }
-        if (keyboard.pressed(input::TOGGLE_FRUSTUM_CUT)) { debug::force_cut_frustum = !debug::force_cut_frustum; }
-        if (keyboard.pressed(input::TOGGLE_FRUSTUM_NEAR)) { debug::frustum_planes_off[0] = !debug::frustum_planes_off[0]; }
-        if (keyboard.pressed(input::TOGGLE_FRUSTUM_FAR)) { debug::frustum_planes_off[1] = !debug::frustum_planes_off[1]; }
-        if (keyboard.pressed(input::TOGGLE_FRUSTUM_LEFT)) { debug::frustum_planes_off[2] = !debug::frustum_planes_off[2]; }
-        if (keyboard.pressed(input::TOGGLE_FRUSTUM_RIGHT)) { debug::frustum_planes_off[3] = !debug::frustum_planes_off[3]; }
-        if (keyboard.pressed(input::TOGGLE_FRUSTUM_BOTTOM)) { debug::frustum_planes_off[4] = !debug::frustum_planes_off[4]; }
-        if (keyboard.pressed(input::TOGGLE_FRUSTUM_TOP)) { debug::frustum_planes_off[5] = !debug::frustum_planes_off[5]; }
         #endif
     }
 
@@ -249,7 +288,8 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
         game.memory.sceneArena.curr = game.memory.sceneArenaBuffer;
         game.scene = {};
         spawn_scene_mirrorRoom(
-            game.scene, game.memory.sceneArena, game.resources, platform.screen,
+            game.scene, game.memory.sceneArena, game.memory.scratchArenaRoot,
+            game.resources, platform.screen,
             roomDefinitions[game.roomId]);
     }
 
@@ -459,7 +499,8 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
                     cameraTreeBuffer.data = &mainCameraRoot;
                     cameraTreeBuffer.cap = cameraTreeBuffer.len = 1;
                     GatherMirrorTreeContext gatherTreeContext =
-                    { game.memory.frameArena, cameraTreeBuffer, game.scene.mirrors, game.scene.maxMirrorBounces };
+                    { game.memory.frameArena, game.memory.scratchArenaRoot,
+                      cameraTreeBuffer, game.scene.mirrors, game.scene.maxMirrorBounces };
                     numCameras = gatherMirrorTreeRecursive(gatherTreeContext, 1, mainCameraRoot);
                     cameraTree = cameraTreeBuffer.data;
                     cameraTree[0].siblingIndex = numCameras;
@@ -591,6 +632,112 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
                     , math::add(pos, float3(thickness, -thickness, spacing * i))
                     , axisZ);
             }
+
+
+            if (debug::debug3Dmode == debug::Debug3DView::All
+                || debug::debug3Dmode == debug::Debug3DView::BVH) {
+
+                allocator::Arena scratchArena = game.memory.scratchArenaRoot; // explicity copy
+                renderer::CoreResources& renderCore = game.resources.renderCore;
+                bvh::Tree& bvh = game.scene.mirrors.bvh;
+
+                driver::Marker_t marker;
+                driver::set_marker_name(marker, "BVH"); driver::start_event(marker);
+                if (bvh.nodeCount > 0) {
+
+                    struct DrawNode {
+                        u16 nodeid;
+                        u16 depth;
+                    };
+                    DrawNode* nodeStack = (DrawNode*)allocator::alloc_arena(
+                        scratchArena, bvh.nodeCount * sizeof(DrawNode), alignof(DrawNode));
+                    u32 stackCount = 0;
+                    nodeStack[stackCount++] = { 0, 0 };
+                    struct AABB {
+                        float3 center;
+                        float3 scale;
+                    };
+                    allocator::Buffer<AABB> aabbs = {};
+                    const Color32 boxColor(0.1f, 0.8f, 0.8f, 0.7f);
+                    while (stackCount > 0) {
+                        DrawNode n = nodeStack[--stackCount];
+                        if (!bvh.nodes[n.nodeid].isLeaf) {
+                            if (n.depth == debug::bvhDepth) {
+                                float3 center =
+                                    math::scale(
+                                        math::add(bvh.nodes[n.nodeid].min,
+                                            bvh.nodes[n.nodeid].max), 0.5f);
+                                float3 scale =
+                                    math::scale(
+                                        math::subtract(
+                                            bvh.nodes[n.nodeid].max, bvh.nodes[n.nodeid].min),
+                                        0.5f);
+                                allocator::push(aabbs, scratchArena) = { center, scale };
+                            } else {
+                                nodeStack[stackCount++] =
+                                    DrawNode{ bvh.nodes[n.nodeid].lchildId, n.depth + 1u };
+                                nodeStack[stackCount++] =
+                                    DrawNode{ bvh.nodes[n.nodeid].lchildId + 1u, n.depth + 1u };
+                            }
+                        }
+                    }
+
+                    renderer::DrawNodeInstanced& node =
+                        allocator::get_pool_slot(
+                            scene.instancedDrawNodes, game.scene.particlesDrawHandle - 1);
+                    driver::RscCBuffer& scene_cbuffer =
+                        renderCore.cbuffers[renderer::CoreResources::CBuffersMeta::Scene];
+                    driver::RscCBuffer& node_cbuffer =
+                        renderCore.cbuffers[renderer::CoreResources::CBuffersMeta::NodeIdentity];
+                    driver::RscCBuffer& instanced_cbuffer =
+                        renderCore.cbuffers[renderer::CoreResources::CBuffersMeta::Instances64];
+
+                    renderer::NodeData nodeColor = {};
+                    math::identity4x4(*(Transform*)&nodeColor.worldMatrix);
+                    nodeColor.groupColor = Color32(0.4f, 0.54f, 1.f, 0.3f).RGBAv4();
+                    driver::update_cbuffer(node_cbuffer, &nodeColor);
+
+                    driver::RscCBuffer cbuffers[] =
+                    { scene_cbuffer, node_cbuffer, instanced_cbuffer };
+                    renderer::DrawMesh& drawMesh =
+                        renderer::drawMesh_from_handle(
+                            renderCore, game.resources.instancedUnitCubeMesh);
+
+                    renderer::driver::bind_DS(renderCore.depthStateOn);
+                    renderer::driver::bind_shader(renderCore.shaders[drawMesh.shaderTechnique]);
+                    renderer::driver::bind_RS(renderCore.rasterizerStateLine);
+                    renderer::driver::bind_indexed_vertex_buffer(drawMesh.vertexBuffer);
+                    driver::bind_cbuffers(
+                        renderCore.shaders[drawMesh.shaderTechnique], cbuffers, countof(cbuffers));
+
+                    // round up, the last block will have less than or equal max elems
+                    u32 blockCount = ((u32)aabbs.len + 64 - 1) / 64;
+                    for (u32 blockId = 0; blockId < blockCount; blockId++) {
+                        u32 begin = blockId * 64;
+                        u32 end = math::min(begin + 64, (u32)aabbs.len);
+
+                        u32 bufferId = 0;
+                        for (u32 i = begin; i < end; i++) {
+                            Transform t;
+                            math::identity4x4(t);
+                            t.pos = aabbs.data[i].center;
+                            t.matrix.col0.x = aabbs.data[i].scale.x;
+                            t.matrix.col1.y = aabbs.data[i].scale.y;
+                            t.matrix.col2.z = aabbs.data[i].scale.z;
+                            node.instanceMatrices.data[bufferId++] = t.matrix;
+                        }
+                        driver::update_cbuffer(instanced_cbuffer, &node.instanceMatrices);
+                        driver::draw_instances_indexed_vertex_buffer(
+                            drawMesh.vertexBuffer, end - begin);
+                    }
+
+                    // clean up identity node
+                    node.nodeData.groupColor = Color32(1.f, 1.f, 1.f, 1.f).RGBAv4();
+                    driver::update_cbuffer(node_cbuffer, &node.nodeData);
+                }
+                renderer::driver::end_event();
+            }
+
             
             if (debug::debug3Dmode == debug::Debug3DView::All
              || debug::debug3Dmode == debug::Debug3DView::Physics) {
@@ -643,11 +790,11 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
 
                         renderer::Frustum& frustum =
                             debug::capturedCameras[cameraNode.parentIndex].frustum;
-                        float3 poly[8];
+                        float3 poly[7];
                         u32 poly_count = p.numPts;
                         memcpy(poly, p.v, sizeof(float3) * p.numPts);
                         clip_poly_in_frustum(
-                            poly, poly_count, frustum.planes, frustum.numPlanes, 8);
+                            poly, poly_count, frustum.planes, frustum.numPlanes, 7);
                         const float2 screenScale(
                             320.f * 3.f * 0.5f,
                             240.f * 3.f * 0.5f);
@@ -695,6 +842,8 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
             f32 textscale = platform.screen.window_scale;
             f32 lineheight = 15.f * textscale;
 
+            char appendBuff[128];
+
             struct EventText {
                 char text[256];
                 f64 time;
@@ -715,12 +864,10 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
                 0.f, game.resources.renderCore.windowProjection.config.top - 10.f * textscale);
             textParamsCenter.color = defaultCol;
 
-            const char* overlaynames[] = { "All", "Help Only", "Arenas only", "None" };
-            static_assert(countof(overlaynames) == debug::OverlayMode::Count, "check");
             if (keyboard.pressed(input::TOGGLE_OVERLAY)) {
                 platform::format(
                     debug::eventLabel.text, sizeof(debug::eventLabel.text),
-                    "Overlays: %s", overlaynames[debug::overlaymode]);
+                    "Overlays: %s", debug::overlaynames[debug::overlaymode]);
                 debug::eventLabel.time = platform.time.now;
                 textParamsLeft.color = activeCol;
             }
@@ -729,7 +876,7 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
             }
 
             renderer::im::text2d(
-                textParamsLeft, "H to toggle overlays: %s", overlaynames[debug::overlaymode]);
+                textParamsLeft, "H to toggle overlays: %s", debug::overlaynames[debug::overlaymode]);
             textParamsLeft.pos.y -= lineheight;
 
             if (keyboard.pressed(input::TOGGLE_PAUSE_SCENE_RENDER)) {
@@ -744,12 +891,10 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
             renderer::im::text2d(textParamsLeft, "SPACE to toggle scene rendering pause");
             textParamsLeft.pos.y -= lineheight;
 
-            const char* visualizationModes[] = { "Physics", "Culling", "All", "None" };
-            static_assert(countof(visualizationModes) == debug::Debug3DView::Count, "check");
             if (keyboard.pressed(input::TOGGLE_DEBUG3D)) {
                 platform::format(
                     debug::eventLabel.text, sizeof(debug::eventLabel.text),
-                    "Visualization mode: %s", visualizationModes[debug::debug3Dmode]);
+                    "Visualization mode: %s", debug::visualizationModes[debug::debug3Dmode]);
                 debug::eventLabel.time = platform.time.now;
                 textParamsLeft.color = activeCol;
             }
@@ -758,76 +903,95 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
             }
             renderer::im::text2d(
                 textParamsLeft, "V to toggle 3D visualization modes: %s",
-                visualizationModes[debug::debug3Dmode]);
+                debug::visualizationModes[debug::debug3Dmode]);
             textParamsLeft.pos.y -= lineheight;
 
-            if (keyboard.pressed(input::CAPTURE_CAMERAS)) {
-                platform::format(
-                    debug::eventLabel.text, sizeof(debug::eventLabel.text), "Capture cameras");
-                debug::eventLabel.time = platform.time.now;
-                textParamsLeft.color = activeCol;
-            }
-            else {
+            if (debug::debug3Dmode == debug::Debug3DView::BVH) {
+
+                if (keyboard.pressed(input::TOGGLE_BVH_LEVEL)) {
+                    platform::format(
+                        debug::eventLabel.text, sizeof(debug::eventLabel.text),
+                        "BVH level: %d", debug::bvhDepth);
+                    debug::eventLabel.time = platform.time.now;
+                    textParamsLeft.color = activeCol;
+                }
+                else {
+                    textParamsLeft.color = defaultCol;
+                }
+                renderer::im::text2d(textParamsLeft,
+                    "C to increase bvh depth level (+shift to decrease): %d", debug::bvhDepth);
                 textParamsLeft.color = defaultCol;
+                textParamsLeft.pos.y -= lineheight;
             }
-            renderer::im::text2d(textParamsLeft, "P to capture cameras in scene");
-            textParamsLeft.color = defaultCol;
-            textParamsLeft.pos.y -= lineheight;
 
-            if (keyboard.pressed(input::TOGGLE_CAPTURED_CAMERA)) {
-                platform::format(
-                    debug::eventLabel.text,sizeof(debug::eventLabel.text), "Camera #%d/#%d", debug::debugCameraStage + 1, debug::capturedCameras ? debug::capturedCameras[0].siblingIndex : 0);
-                debug::eventLabel.time = platform.time.now;
-                textParamsLeft.color = activeCol;
-            } else {
+            if (debug::debug3Dmode == debug::Debug3DView::Culling) {
+                if (keyboard.pressed(input::CAPTURE_CAMERAS)) {
+                    platform::format(
+                        debug::eventLabel.text, sizeof(debug::eventLabel.text), "Capture cameras");
+                    debug::eventLabel.time = platform.time.now;
+                    textParamsLeft.color = activeCol;
+                }
+                else {
+                    textParamsLeft.color = defaultCol;
+                }
+                renderer::im::text2d(textParamsLeft, "P to capture cameras in scene");
                 textParamsLeft.color = defaultCol;
-            }
-            renderer::im::text2d(textParamsLeft, "C to toggle camera capture stages (+shift to go back): #%d/#%d", debug::debugCameraStage + 1, debug::capturedCameras ? debug::capturedCameras[0].siblingIndex : 0);
-            textParamsLeft.color = defaultCol;
-            textParamsLeft.pos.y -= lineheight;
+                textParamsLeft.pos.y -= lineheight;
 
-            if (debug::capturedCameras) {
-                const u32 numCameras = debug::capturedCameras[0].siblingIndex;
-                const u32 minidx = debug::debugCameraStage > 10 ? debug::debugCameraStage - 10 : 0;
-                const u32 maxidx = debug::debugCameraStage + 10 < numCameras ? debug::debugCameraStage + 10 : numCameras;
-                debug::capturedCameras[debug::debugCameraStage].siblingIndex;
-                for (u32 i = minidx; i < maxidx; i++) {
-                    if (i == debug::debugCameraStage) { textParamsLeft.color = activeCol; }
-                    renderer::im::text2d(textParamsLeft, "%*d: %s", debug::capturedCameras[i].depth, i, debug::capturedCameras[i].str);
+                if (keyboard.pressed(input::TOGGLE_CAPTURED_CAMERA)) {
+                    platform::format(
+                        debug::eventLabel.text,sizeof(debug::eventLabel.text), "Camera #%d/#%d", debug::debugCameraStage + 1, debug::capturedCameras ? debug::capturedCameras[0].siblingIndex : 0);
+                    debug::eventLabel.time = platform.time.now;
+                    textParamsLeft.color = activeCol;
+                } else {
+                    textParamsLeft.color = defaultCol;
+                }
+                renderer::im::text2d(textParamsLeft, "C to toggle camera capture stages (+shift to go back): #%d/#%d", debug::debugCameraStage + 1, debug::capturedCameras ? debug::capturedCameras[0].siblingIndex : 0);
+                textParamsLeft.color = defaultCol;
+                textParamsLeft.pos.y -= lineheight;
+
+                if (debug::capturedCameras) {
+                    const u32 numCameras = debug::capturedCameras[0].siblingIndex;
+                    const u32 minidx = debug::debugCameraStage > 10 ? debug::debugCameraStage - 10 : 0;
+                    const u32 maxidx = debug::debugCameraStage + 10 < numCameras ? debug::debugCameraStage + 10 : numCameras;
+                    debug::capturedCameras[debug::debugCameraStage].siblingIndex;
+                    for (u32 i = minidx; i < maxidx; i++) {
+                        if (i == debug::debugCameraStage) { textParamsLeft.color = activeCol; }
+                        renderer::im::text2d(textParamsLeft, "%*d: %s", debug::capturedCameras[i].depth, i, debug::capturedCameras[i].str);
+                        textParamsLeft.color = defaultCol;
+                        textParamsLeft.pos.y -= lineheight;
+                    }
+                }
+               
+                {
+                    if (platform.input.keyboard.pressed(input::TOGGLE_FRUSTUM_CUT)) { textParamsLeft.color = activeCol; }
+                    else { textParamsLeft.color = defaultCol; }
+                    platform::StrBuilder frustumStr { appendBuff, sizeof(appendBuff) };
+                    constexpr ::input::keyboard::Keys::Enum keys[] = {
+                        input::TOGGLE_FRUSTUM_NEAR, input::TOGGLE_FRUSTUM_FAR,
+                        input::TOGGLE_FRUSTUM_LEFT, input::TOGGLE_FRUSTUM_RIGHT,
+                        input::TOGGLE_FRUSTUM_BOTTOM, input::TOGGLE_FRUSTUM_TOP };
+                    platform::append(
+                        frustumStr.curr, frustumStr.last,
+                        "%sFrustum planes: ", debug::force_cut_frustum ? "[forced cut] " : "");
+                    for (s32 i = 0; i < countof(debug::frustum_planes_off) && !frustumStr.full(); i++) {
+                        if (!debug::frustum_planes_off[i]) {
+                            platform::append(
+                                frustumStr.curr,
+                                frustumStr.last, "%s ", debug::frustum_planes_names[i]);
+                        }
+                        if (platform.input.keyboard.pressed(::input::keyboard::Keys::Enum(keys[i]))) {
+                            textParamsLeft.color = activeCol;
+                            platform::format(debug::eventLabel.text, sizeof(debug::eventLabel.text), debug::frustum_planes_off[i] ? "%s frustum plane off" : "%s frustum plane on", debug::frustum_planes_names[i]);
+                            debug::eventLabel.time = platform.time.now;
+                        }
+                    };
+                    renderer::im::text2d(textParamsLeft, "[0] to force frustum cut, [1-6] to toggle frustum planes");
+                    textParamsLeft.pos.y -= lineheight;
+                    renderer::im::text2d(textParamsLeft, frustumStr.str);
                     textParamsLeft.color = defaultCol;
                     textParamsLeft.pos.y -= lineheight;
                 }
-            }
-               
-            char appendBuff[128];
-            {
-                if (platform.input.keyboard.pressed(input::TOGGLE_FRUSTUM_CUT)) { textParamsLeft.color = activeCol; }
-                else { textParamsLeft.color = defaultCol; }
-                platform::StrBuilder frustumStr { appendBuff, sizeof(appendBuff) };
-                constexpr ::input::keyboard::Keys::Enum keys[] = {
-                    input::TOGGLE_FRUSTUM_NEAR, input::TOGGLE_FRUSTUM_FAR,
-                    input::TOGGLE_FRUSTUM_LEFT, input::TOGGLE_FRUSTUM_RIGHT,
-                    input::TOGGLE_FRUSTUM_BOTTOM, input::TOGGLE_FRUSTUM_TOP };
-                platform::append(
-                    frustumStr.curr, frustumStr.last,
-                    "%sFrustum planes: ", debug::force_cut_frustum ? "[forced cut] " : "");
-                for (s32 i = 0; i < countof(debug::frustum_planes_off) && !frustumStr.full(); i++) {
-                    if (!debug::frustum_planes_off[i]) {
-                        platform::append(
-                            frustumStr.curr,
-                            frustumStr.last, "%s ", debug::frustum_planes_names[i]);
-                    }
-                    if (platform.input.keyboard.pressed(::input::keyboard::Keys::Enum(keys[i]))) {
-                        textParamsLeft.color = activeCol;
-                        platform::format(debug::eventLabel.text, sizeof(debug::eventLabel.text), debug::frustum_planes_off[i] ? "%s frustum plane off" : "%s frustum plane on", debug::frustum_planes_names[i]);
-                        debug::eventLabel.time = platform.time.now;
-                    }
-                };
-                renderer::im::text2d(textParamsLeft, "[0] to force frustum cut, [1-6] to toggle frustum planes");
-                textParamsLeft.pos.y -= lineheight;
-                renderer::im::text2d(textParamsLeft, frustumStr.str);
-                textParamsLeft.color = defaultCol;
-                textParamsLeft.pos.y -= lineheight;
             }
 
             if (debug::overlaymode == debug::OverlayMode::All

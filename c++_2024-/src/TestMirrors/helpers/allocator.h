@@ -78,33 +78,33 @@ void reserve(Buffer_t& b, ptrdiff_t cap, ptrdiff_t size, ptrdiff_t align, Arena&
     b.len = 0;
     b.cap = cap;
 }
-template<typename _T>
+template<typename T>
 struct Buffer {
-    _T* data;
+    T* data;
     ptrdiff_t len;
     ptrdiff_t cap;
 };
-template<typename _T>
-_T& push(Buffer<_T>& b, Arena& arena) {
-    if (b.len >= b.cap) { grow(*(Buffer_t*)&b, sizeof(_T), alignof(_T), arena); }
+template<typename T>
+T& push(Buffer<T>& b, Arena& arena) {
+    if (b.len >= b.cap) { grow(*(Buffer_t*)&b, sizeof(T), alignof(T), arena); }
     return *(b.data + b.len++);
 }
-template<typename _T>
-void reserve(Buffer<_T>& b, ptrdiff_t cap, Arena& arena) {
+template<typename T>
+void reserve(Buffer<T>& b, ptrdiff_t cap, Arena& arena) {
     assert(b.cap == 0); // buffer is not empty
-    b.data = (_T*)alloc_arena(arena, sizeof(_T) * cap, alignof(_T));
+    b.data = (T*)alloc_arena(arena, sizeof(T) * cap, alignof(T));
     b.len = 0;
     b.cap = cap;
 }
 
 // tmp pool: mostly untested
-template<typename _T>
+template<typename T>
 struct Pool {
     // important: _T must be the first member of the union, so we can assume _T* = Slot<_T>*
     struct Slot {
         union {
-			_T live;
-		    Slot* next;
+            T live;
+            Slot* next;
         } state;
         u32 alive;
     };
@@ -114,40 +114,40 @@ struct Pool {
 	ptrdiff_t cap;
     ptrdiff_t count;
 };
-template<typename _T>
-void init_pool(Pool<_T>& pool, ptrdiff_t cap, Arena& arena) {
-	typedef typename Pool<_T>::Slot _Slot;
+template<typename T>
+void init_pool(Pool<T>& pool, ptrdiff_t cap, Arena& arena) {
+	typedef typename Pool<T>::Slot Slot;
 	pool.cap = cap;
-    pool.data = (_Slot*)allocator::alloc_arena(arena, sizeof(_Slot) * cap, alignof(_Slot));
+    pool.data = (Slot*)allocator::alloc_arena(arena, sizeof(Slot) * cap, alignof(Slot));
     pool.firstAvailable = pool.data;
 	for (u32 i = 0; i < cap - 1; i++)
     { pool.data[i].state.next = &(pool.data[i+1]); pool.data[i].alive = 0; }
 	pool.data[cap - 1].state.next = nullptr; pool.data[cap - 1].alive = 0;
 	pool.count = 0;
 }
-template<typename _T>
-_T&  alloc_pool(Pool<_T>& pool) {
+template<typename T>
+T&  alloc_pool(Pool<T>& pool) {
     assert(pool.firstAvailable); // can't regrow without messing up existing pointers to the pool
-    _T& out = pool.firstAvailable->state.live;
+    T& out = pool.firstAvailable->state.live;
     pool.firstAvailable->alive = 1;
     pool.firstAvailable = pool.firstAvailable->state.next;
 	pool.count++;
     return out;
 }
-template<typename _T>
-void free_pool(Pool<_T>& pool, _T& slot) {
-    typedef typename Pool<_T>::Slot _Slot;
-    assert((_Slot*)slot >= &pool.data && (_Slot*)slot < &pool.data + pool.cap); // object didn't come from this pool
-    ((_Slot*)&slot)->state.next = pool.firstAvailable;
-    ((_Slot*)&slot)->alive = 0;
-    pool.firstAvailable = (_Slot*)slot;
+template<typename T>
+void free_pool(Pool<T>& pool, T& slot) {
+    typedef typename Pool<T>::Slot Slot;
+    assert((Slot*)slot >= &pool.data && (Slot*)slot < &pool.data + pool.cap); // object didn't come from this pool
+    ((Slot*)&slot)->state.next = pool.firstAvailable;
+    ((Slot*)&slot)->alive = 0;
+    pool.firstAvailable = (Slot*)slot;
 	pool.count--;
 }
-template<typename _T>
-u32 get_pool_index(Pool<_T>& pool, _T& slot)
-{ return (u32)(((typename Pool<_T>::Slot*)&slot) - pool.data); }
-template<typename _T>
-_T& get_pool_slot(Pool<_T>& pool, const u32 index) { return pool.data[index].state.live; }
+template<typename T>
+u32 get_pool_index(Pool<T>& pool, T& slot)
+{ return (u32)(((typename Pool<T>::Slot*)&slot) - pool.data); }
+template<typename T>
+T& get_pool_slot(Pool<T>& pool, const u32 index) { return pool.data[index].state.live; }
 
 }
 

@@ -82,6 +82,7 @@ struct Allocator_stb {
 #include "helpers/vec_ops.h"
 #include "helpers/transform.h"
 #include "helpers/color.h"
+#include "helpers/bvh.h"
 #if __WIN64
 	#include "helpers/platform_win/input_types.h"
 #elif __MACOS
