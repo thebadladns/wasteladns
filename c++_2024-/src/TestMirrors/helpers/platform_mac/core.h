@@ -18,7 +18,13 @@
 #define consoleLog(a) printf("%s", a)
 
 namespace platform {
+
 const char* name = "MAC+GL";
+
+void* mem_reserve(size_t size) {
+    return mmap(0, size, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANON, -1, 0);
+}
+void mem_commit(void* ptr, size_t size) { /* no-op, OS will commit memory pages as needed */ }
 }
 
 #endif // __WASTELADNS_CORE_MACOS_H__

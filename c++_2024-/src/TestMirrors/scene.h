@@ -16,6 +16,7 @@ struct GPUCPUMesh {
 };
 
 struct Scene {
+    struct InstancedTypes { enum Enum { PlayerTrail, PhysicsBalls, Count }; };
     camera::Camera camera;
     renderer::Scene renderScene;
     physics::Scene physicsScene;
@@ -23,11 +24,10 @@ struct Scene {
     MovementController player;
     Mirrors mirrors;
     game::OrbitInput orbitCamera;
+    u32 instancedNodesHandles[InstancedTypes::Count];
     u32 playerDrawNodeHandle;
     u32 playerAnimatedNodeHandle;
     u32 playerPhysicsNodeHandle;
-    u32 ballInstancesDrawHandle;
-    u32 particlesDrawHandle; // todo: improve this
     u32 maxMirrorBounces;
 };
 struct AssetInMemory {
@@ -160,13 +160,10 @@ void spawn_model_as_mirrors(
 
     u32 index = 0;
     u32 triangles = 0;
-    while (index < cpuMesh.indexCount) {
+    while (index + 3 <= cpuMesh.indexCount) {
         float3 v0 = cpuMesh.vertices[cpuMesh.indices[index]];
         float3 v1 = cpuMesh.vertices[cpuMesh.indices[index + 1]];
         float3 v2 = cpuMesh.vertices[cpuMesh.indices[index + 2]];
-        float3 v3 = cpuMesh.vertices[cpuMesh.indices[index + 3]];
-        float3 v4 = cpuMesh.vertices[cpuMesh.indices[index + 4]];
-        float3 v5 = cpuMesh.vertices[cpuMesh.indices[index + 5]];
 
         const u32 mirrorId = mirrors.count++;
         game::Mirrors::Poly& poly = mirrors.polys[mirrorId];
@@ -184,16 +181,21 @@ void spawn_model_as_mirrors(
         poly.v[2] = v2;
         if (accelerateBVH) { triangleIds[triangles++] = mirrorId; }
 
-        const float3 normal012 = math::normalize(math::cross(math::subtract(v1, v0), math::subtract(v2, v0)));
-        const float3 normal345 = math::normalize(math::cross(math::subtract(v4, v3), math::subtract(v5, v3)));
-        const float3 normalCross = math::cross(normal012, normal345);
-        if (math::isCloseAll(normalCross, float3(0.f, 0.f, 0.f), 0.01f)) {
-            // coplanar enough (may still be degenerate, but we otherwise have too many mirrors
-            // add a quad
-            poly.numPts = 4;
-            poly.v[3] = v3;
-            mesh.vertexBuffer.indexCount = 6;
-            if (accelerateBVH) { triangleIds[triangles++] = mirrorId; }
+        if (index + 6 <= cpuMesh.indexCount) {
+            float3 v3 = cpuMesh.vertices[cpuMesh.indices[index + 3]];
+            float3 v4 = cpuMesh.vertices[cpuMesh.indices[index + 4]];
+            float3 v5 = cpuMesh.vertices[cpuMesh.indices[index + 5]];
+            const float3 normal012 = math::normalize(math::cross(math::subtract(v1, v0), math::subtract(v2, v0)));
+            const float3 normal345 = math::normalize(math::cross(math::subtract(v4, v3), math::subtract(v5, v3)));
+            const float3 normalCross = math::cross(normal012, normal345);
+            if (math::isCloseAll(normalCross, float3(0.f, 0.f, 0.f), 0.01f)) {
+                // coplanar enough (may still be degenerate, but we otherwise have too many mirrors
+                // add a quad
+                poly.numPts = 4;
+                poly.v[3] = v3;
+                mesh.vertexBuffer.indexCount = 6;
+                if (accelerateBVH) { triangleIds[triangles++] = mirrorId; }
+            }
         }
         poly.normal = math::normalize(math::cross(math::subtract(poly.v[2], poly.v[0]), math::subtract(poly.v[1], poly.v[0])));
         index += mesh.vertexBuffer.indexCount;
@@ -263,7 +265,7 @@ void load_mesh_cpu_gpu(
             persistentArena,
             sizeof(u16) * indices.len, alignof(u16));
         for (u32 i = 0; i < vertices.len; i++) { mesh.vertices[i] = vertices.data[i].pos; }
-        memcpy(mesh.indices, indices.data, sizeof(sizeof(u16)) * indices.len);
+        memcpy(mesh.indices, indices.data, sizeof(u16) * indices.len);
         mesh.indexCount = (u32)indices.len;
         mesh.vertexCount = (u32)vertices.len;
 
@@ -1333,7 +1335,18 @@ void load_coreResources(
     renderer::CoreResources& renderCore = core.renderCore;
     renderCore = {};
 
-    const size_t meshArenaSize = maxRenderMeshes * sizeof(renderer::DrawMesh);
+    // from blender: export fbx -> Apply Scalings: FBX All
+    // -> Forward: the one in Blender -> Use Space Transform: yes
+    struct AssetDef {
+        const char* path;
+        game::Resources::AssetsMeta::Enum assetId;
+    };
+    const AssetDef assets[] = {
+          { "assets/meshes/boar.fbx", game::Resources::AssetsMeta::Boar }
+        , { "assets/meshes/bird.fbx", game::Resources::AssetsMeta::Bird }
+    };
+    // very very hack: number of assets * 4 + 16 (for the meshes we load ourselves)
+    const size_t meshArenaSize = (countof(assets) * 4 + 16) * sizeof(renderer::DrawMesh);
     renderCore.meshes = (renderer::DrawMesh*)allocator::alloc_arena(
             persistentArena, meshArenaSize, alignof(renderer::DrawMesh));
     renderCore.num_meshes = 0;
@@ -1813,16 +1826,6 @@ void load_coreResources(
 		= attribs_textured3d_skinned;
     ctx.attr_count[renderer::DrawlistStreams::Textured3DAlphaClipSkinned] 
 		= countof(attribs_textured3d_skinned);
-    // from blender: export fbx -> Apply Scalings: FBX All
-    // -> Forward: the one in Blender -> Use Space Transform: yes
-    struct AssetDef {
-        const char* path;
-        game::Resources::AssetsMeta::Enum assetId;
-    };
-    const AssetDef assets[] = {
-          { "assets/meshes/boar.fbx", game::Resources::AssetsMeta::Boar }
-        , { "assets/meshes/bird.fbx", game::Resources::AssetsMeta::Bird }
-    };
     for (u32 asset_idx = 0; asset_idx < countof(assets); asset_idx++) {
 		ctx.scratchArena = scratchArena; // explicit copy
         game::AssetInMemory& assetToAdd = core.assets[assets[asset_idx].assetId];
@@ -2097,21 +2100,31 @@ void spawn_scene_mirrorRoom(
     animation::Scene& animScene = scene.animScene;
     physics::Scene& physicsScene = scene.physicsScene;
 
-    // TODO: improve counts
-    const size_t drawNodePoolSize = (size_t)maxRenderNodes;
-    const size_t instancedNodePoolSize =
-		(size_t)maxRenderNodesInstanced;
-    const size_t cbufferSize =
-		(drawNodePoolSize * 2 + instancedNodePoolSize * 2) + 16;
-    const size_t animatedNodesSize =
-        math::min((size_t)maxAnimatedNodes, (size_t)renderer::DrawNodeMeta::MaxNodes);
-    allocator::init_pool(renderScene.cbuffers, cbufferSize, sceneArena);
+    struct AssetData {
+        game::Resources::AssetsMeta::Enum assetId;
+        float3 asset_init_pos;
+        u32 count;
+        bool player; // only first count
+        bool physicsObstacle;
+    };
+    const AssetData assetDefs[] = {
+          { game::Resources::AssetsMeta::Boar, { -5.f, 10.f, 2.30885f }, 1, false, true }
+        , { game::Resources::AssetsMeta::Bird, { 9.f, 6.f, 2.23879f }, 1, true, true }
+        , { game::Resources::AssetsMeta::Bird, { -8.f, 12.f, 2.23879f }, 1, false, true }
+        , { game::Resources::AssetsMeta::Ground, { 0.f, 0.f, 0.f }, 1, false, false }
+    };
+
+    size_t maxDrawNodes = countof(assetDefs); 
+    size_t maxInstancedNodes = game::Scene::InstancedTypes::Count; 
+    size_t cbufferCount = (maxDrawNodes + maxInstancedNodes) * 2;
+    size_t maxAnimNodes = countof(assetDefs);
+    allocator::init_pool(renderScene.cbuffers, cbufferCount, sceneArena);
 	__DEBUGDEF(renderScene.cbuffers.name = "cbuffers";)
-    allocator::init_pool(renderScene.instancedDrawNodes, instancedNodePoolSize, sceneArena);
+    allocator::init_pool(renderScene.instancedDrawNodes, maxInstancedNodes, sceneArena);
 	__DEBUGDEF(renderScene.instancedDrawNodes.name = "instanced draw nodes";)
-    allocator::init_pool(renderScene.drawNodes, drawNodePoolSize, sceneArena);
+    allocator::init_pool(renderScene.drawNodes, maxDrawNodes, sceneArena);
 	__DEBUGDEF(renderScene.drawNodes.name = "draw nodes";)
-    allocator::init_pool(animScene.nodes, animatedNodesSize, sceneArena);
+    allocator::init_pool(animScene.nodes, maxAnimNodes, sceneArena);
 	__DEBUGDEF(animScene.nodes.name = "anim nodes";)
 
     // physics
@@ -2166,22 +2179,10 @@ void spawn_scene_mirrorRoom(
             float4x4& matrix = node.instanceMatrices.data[m];
             math::identity4x4(*(Transform*)&(matrix));
         }
-        scene.ballInstancesDrawHandle = handle_from_instanced_node(renderScene, node);
+        scene.instancedNodesHandles[game::Scene::InstancedTypes::PhysicsBalls] =
+            handle_from_instanced_node(renderScene, node);
     }
 
-        
-    struct AssetData {
-        game::Resources::AssetsMeta::Enum assetId;
-        float3 asset_init_pos;
-        u32 count;
-        bool player; // only first count
-        bool physicsObstacle;
-    };
-    const AssetData assetDefs[] = {
-          { game::Resources::AssetsMeta::Boar, { -5.f, 10.f, 2.30885f }, 1, false, true }
-        , { game::Resources::AssetsMeta::Bird, { 9.f, 6.f, 2.23879f }, 1, true, true }
-        , { game::Resources::AssetsMeta::Bird, { -8.f, 12.f, 2.23879f }, 1, false, true }
-    };
     for (u32 asset_idx = 0; asset_idx < countof(assetDefs); asset_idx++) {
         const AssetData& assetDef = assetDefs[asset_idx];
         for (u32 asset_rep = 0; asset_rep < assetDef.count; asset_rep++) {
@@ -2235,7 +2236,7 @@ void spawn_scene_mirrorRoom(
 		node.meshHandles[0] = core.instancedUnitCubeMesh;
         math::identity4x4(*(Transform*)&(node.nodeData.worldMatrix));
         node.nodeData.groupColor = Color32(0.68f, 0.69f, 0.71f, 1.f).RGBAv4();
-        node.instanceCount = maxPlayerParticleCubes;
+        node.instanceCount = 4;
         renderer::driver::RscCBuffer& cbuffercore = allocator::alloc_pool(renderScene.cbuffers);
         node.cbuffer_node = handle_from_cbuffer(renderScene, cbuffercore);
         renderer::driver::create_cbuffer(cbuffercore, { sizeof(renderer::NodeData) });
@@ -2249,16 +2250,8 @@ void spawn_scene_mirrorRoom(
             float4x4& matrix = node.instanceMatrices.data[m];
             math::identity4x4(*(Transform*)&(matrix));
         }
-        scene.particlesDrawHandle = handle_from_instanced_node(renderScene, node);
-    }
-
-    // ground
-    {
-        renderer::DrawNodeHandle renderHandle;
-        animation::Handle animHandle;
-        game::spawnAsset(
-            renderHandle, animHandle, scene, core.assets[game::Resources::AssetsMeta::Ground],
-            float3(0.f, 0.f, 0.f));
+        scene.instancedNodesHandles[game::Scene::InstancedTypes::PlayerTrail] =
+            handle_from_instanced_node(renderScene, node);
     }
 
     if (roomDef.mirrorMesh < game::Resources::MeshesMeta::Count) {

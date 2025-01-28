@@ -2,31 +2,79 @@
 #define __WASTELADNS_ALLOCATOR_H__
 
 namespace allocator {
+
+// for allocators that are passed by copy, we store a separate pointer to their highmark value
+// so we can keep track of the highest allocation at any time. When using virtual memory, this value
+// is necessary to know when to commit more pages, while in other cases the value is useful for
+// debug purposes
+#define TRACK_HIGHMARKS USE_VIRTUAL_MEMORY || __DEBUG
+#if TRACK_HIGHMARKS
+#define __HIGHMARKS_DEF(...) __VA_ARGS__
+#else
+#define __HIGHMARKS_DEF(...)
+#endif
+
 // Simple arena buffer header: only the current offset is stored, as well as the capacity
 // It can be used as a stack allocator by simply copying this header into a scoped variable
 // For more details, see: https://nullprogram.com/blog/2023/09/27/
 struct Arena {
     u8* curr;
     u8* end;
-    __DEBUGDEF(uintptr_t* highmark;) // pointer to track overall allocations of scoped copies
+    __HIGHMARKS_DEF(uintptr_t* highmark;) // pointer to track overall allocations of scoped copies
 };
+#if USE_VIRTUAL_MEMORY
 void init_arena(Arena& arena, u8* mem, size_t capacity) {
-    arena.curr = mem;
-    arena.end = arena.curr + capacity;
-    __DEBUGDEF(arena.highmark = nullptr;)
+    // ignore parameters, reserve 4GB of virtual memory
+    (void)mem;
+    const size_t capacity_aligned = 4ULL * 1024ULL * 1024ULL * 1024ULL;
+    arena.curr = (u8*)platform::mem_reserve(capacity_aligned);
+    arena.end = arena.curr;
+    __HIGHMARKS_DEF(arena.highmark = nullptr;)
 }
 void* alloc_arena(Arena& arena, ptrdiff_t size, ptrdiff_t align) {
     assert((align & (align - 1)) == 0); // Alignment needs to be a power of two
     uintptr_t curr_aligned = ((uintptr_t)arena.curr + (align - 1)) & -align;
+    // no bounds check when using virtual memory, if we commit more than 4GB we'll just crash
+    uintptr_t end_aligned = curr_aligned + size;
+    arena.curr = (u8*)end_aligned;
+    uintptr_t highmark = (uintptr_t)arena.end;
+    #if TRACK_HIGHMARKS
+    if (arena.highmark) { highmark = math::max(*arena.highmark, highmark); };
+    #endif
+    // figure out highest memory accessed so far, and commit if needed
+    if (end_aligned > highmark) {
+        const ptrdiff_t pagesize = 4 * 1024;
+        const size_t commitsize = end_aligned - highmark;
+        size_t commitsize_aligned = (commitsize + (pagesize - 1)) & -pagesize;
+        platform::mem_commit((void*)highmark, commitsize_aligned);
+        arena.end = (u8*)(highmark + commitsize_aligned);
+        #if TRACK_HIGHMARKS
+        if (arena.highmark) { *arena.highmark = (uintptr_t)arena.end; }
+        #endif
+    }
+    return (void*)curr_aligned;
+}
+#else
+void init_arena(Arena & arena, u8 * mem, size_t capacity) {
+    // ignore parameters, reserve 4GB of virtual memory
+    arena.curr = mem;
+    arena.end = arena.curr + capacity;
+    __HIGHMARKS_DEF(arena.highmark = nullptr;)
+}
+void* alloc_arena(Arena & arena, ptrdiff_t size, ptrdiff_t align) {
+    assert((align & (align - 1)) == 0); // Alignment needs to be a power of two
+    uintptr_t curr_aligned = ((uintptr_t)arena.curr + (align - 1)) & -align;
     if (curr_aligned + size <= (uintptr_t)arena.end) {
         arena.curr = (u8*)(curr_aligned + size);
-        __DEBUGDEF(if (arena.highmark)
-                { *arena.highmark = math::max(*arena.highmark, (uintptr_t)arena.curr); };)
+        #if TRACK_HIGHMARKS
+        if (arena.highmark) {*arena.highmark = math::max(*arena.highmark, (uintptr_t)arena.curr); };
+        #endif
         return (void*)curr_aligned;
     }
-    assert(0);
+    assert(0); // out of memory: consider defining USE_VIRTUAL_MEMORY to see how much we actually use
     return 0;
 }
+#endif
 void* realloc_arena(Arena& arena, void* oldptr, ptrdiff_t oldsize, ptrdiff_t newsize, ptrdiff_t align) {
     void* oldbuff = (void*)((uintptr_t)arena.curr - oldsize);
     if (oldbuff == oldptr) {

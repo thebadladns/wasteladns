@@ -16,6 +16,8 @@
 #include <windef.h> // types used by winuser // Wall time: 101.898ms
 #include <winuser.h> // api for windows stuff, PeekMessage, CreateWindowEx, etc // Wall time: 38.148ms
 
+#include <memoryapi.h> // for VirtualAlloc
+
 #if __DX11
     // types defined by winuser.h->libloaderapi.h->minwinbase.h,
     // that directx will try to define again via oaidl.h->objidl.h->unknwn.h->wtypes.h->wtypesbase.h
@@ -35,17 +37,13 @@
     // already included by stb_image, does not incur in extra cost
     #include <stdlib.h> // Wall time: 10ms
 
-namespace platform {
-    const char* name = "WIN64+DX11";
-}
+    namespace platform { const char* name = "WIN64+DX11"; }
 #elif __GL33
     #include <wingdi.h> // defines like WINGDIAPI, used by opengl
     #pragma comment(lib, "opengl32.lib")
     #include "../renderer_gl33/loader_gl.h"
 
-namespace platform {
-    const char* name = "WIN64+GL";
-}
+    namespace platform { const char* name = "WIN64+GL"; }
 #endif
 
 #undef near
@@ -59,4 +57,8 @@ namespace platform {
 
 #define consoleLog OutputDebugString
 
+namespace platform {
+void* mem_reserve(size_t size) { return VirtualAlloc(0, size, MEM_RESERVE, PAGE_NOACCESS); }
+void mem_commit(void* ptr, size_t size) { VirtualAlloc(ptr, size, MEM_COMMIT, PAGE_READWRITE); }
+}
 #endif // __WASTELADNS_CORE_WIN64_H__

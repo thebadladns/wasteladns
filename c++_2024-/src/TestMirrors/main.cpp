@@ -21,6 +21,7 @@
 #define __DEBUG 1
 #define __DEBUGDEF(...) __VA_ARGS__
 #endif
+#define USE_VIRTUAL_MEMORY 0
 
 #define WRITE_SHADERCACHE 0
 #define READ_SHADERCACHE 0
@@ -33,7 +34,6 @@
 	#endif
 #endif
 
-#define USE_DEBUG_MEMORY __DEBUG
 #define __PROFILE __DEBUG
 #if __PROFILE
 #define __PROFILEONLY(...) __VA_ARGS__

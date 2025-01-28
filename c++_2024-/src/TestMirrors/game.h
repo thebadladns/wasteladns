@@ -1,27 +1,10 @@
 #ifndef __WASTELADNS_GAME_H__
 #define __WASTELADNS_GAME_H__
 
-#if USE_DEBUG_MEMORY
-const size_t persistentArenaSize = 512 * 1024 * 1024;
-const size_t sceneArenaSize = 512 * 1024 * 1024;
-const size_t frameArenaSize = 512 * 1024 * 1024;
-const size_t scratchArenaSize = 512 * 1024 * 1024;
-const u64 maxRenderMeshes = 4096 * 2 + 16;
-const u64 maxRenderNodes = 2048;
-const u64 maxAnimatedNodes = 2048;
-const u64 maxRenderNodesInstanced = 2048;
-const u64 maxPlayerParticleCubes = 4;
-#else
 const size_t persistentArenaSize = 1 * 1024 * 1024;
 const size_t sceneArenaSize = 256 * 1024 * 1024;
 const size_t frameArenaSize = 4 * 1024 * 1024;
 const size_t scratchArenaSize = 4 * 1024 * 1024;
-const u32 maxRenderMeshes = 2080 * 2 + 16;  // TODOOOO
-const u64 maxRenderNodes = 2048;
-const u64 maxAnimatedNodes = 32;
-const u32 maxRenderNodesInstanced = 32;
-const u32 maxPlayerParticleCubes = 4;
-#endif
 
 #if __DEBUG
 struct CameraNode;
@@ -43,6 +26,7 @@ u32 debugCameraStage = 0;
 u32 bvhDepth = 0;
 CameraNode* capturedCameras = nullptr;
 EventText eventLabel = {};
+
 }
 #endif
 
@@ -381,7 +365,7 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
                 renderer::instanced_node_from_handle(
                         instance_matrices, instance_count,
                         game.scene.renderScene,
-                        game.scene.particlesDrawHandle);
+                        game.scene.instancedNodesHandles[Scene::InstancedTypes::PlayerTrail]);
                 for (u32 i = 0; i < *instance_count; i++) {
 
                     const f32 scaley = particle_scaley;
@@ -411,16 +395,17 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
         }
 
         // physics update
-        if (game.scene.ballInstancesDrawHandle)
+        if (game.scene.instancedNodesHandles[Scene::InstancedTypes::PhysicsBalls])
         {
             physics::updatePositionFromHandle(
-                game.scene.physicsScene, game.scene.playerPhysicsNodeHandle,
+                game.scene.physicsScene,
+                game.scene.instancedNodesHandles[Scene::InstancedTypes::PhysicsBalls],
                 game.scene.player.transform.pos, (f32)game.time.lastFrameDelta);
 
             physics::updatePhysics(game.scene.physicsScene, dt);
             // update draw positions
             renderer::Matrices64* instance_matrices; u32* instance_count;
-            renderer::instanced_node_from_handle(instance_matrices, instance_count, game.scene.renderScene, game.scene.ballInstancesDrawHandle);
+            renderer::instanced_node_from_handle(instance_matrices, instance_count, game.scene.renderScene, game.scene.instancedNodesHandles[Scene::InstancedTypes::PhysicsBalls]);
             for (u32 i = 0; i < *instance_count; i++) {
                 float4x4& m = instance_matrices->data[i];
                 m.col3.xyz = game.scene.physicsScene.balls[i].pos;
@@ -637,7 +622,7 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
             if (debug::debug3Dmode == debug::Debug3DView::All
                 || debug::debug3Dmode == debug::Debug3DView::BVH) {
 
-                allocator::Arena scratchArena = game.memory.scratchArenaRoot; // explicity copy
+                allocator::Arena scratchArena = game.memory.scratchArenaRoot; // explicit copy
                 renderer::CoreResources& renderCore = game.resources.renderCore;
                 bvh::Tree& bvh = game.scene.mirrors.bvh;
 
@@ -682,9 +667,6 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
                         }
                     }
 
-                    renderer::DrawNodeInstanced& node =
-                        allocator::get_pool_slot(
-                            scene.instancedDrawNodes, game.scene.particlesDrawHandle - 1);
                     driver::RscCBuffer& scene_cbuffer =
                         renderCore.cbuffers[renderer::CoreResources::CBuffersMeta::Scene];
                     driver::RscCBuffer& node_cbuffer =
@@ -717,6 +699,7 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
                         u32 end = math::min(begin + 64, (u32)aabbs.len);
 
                         u32 bufferId = 0;
+                        Matrices64 matrices = {};
                         for (u32 i = begin; i < end; i++) {
                             Transform t;
                             math::identity4x4(t);
@@ -724,16 +707,16 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
                             t.matrix.col0.x = aabbs.data[i].scale.x;
                             t.matrix.col1.y = aabbs.data[i].scale.y;
                             t.matrix.col2.z = aabbs.data[i].scale.z;
-                            node.instanceMatrices.data[bufferId++] = t.matrix;
+                            matrices.data[bufferId++] = t.matrix;
                         }
-                        driver::update_cbuffer(instanced_cbuffer, &node.instanceMatrices);
+                        driver::update_cbuffer(instanced_cbuffer, &matrices);
                         driver::draw_instances_indexed_vertex_buffer(
                             drawMesh.vertexBuffer, end - begin);
                     }
 
                     // clean up identity node
-                    node.nodeData.groupColor = Color32(1.f, 1.f, 1.f, 1.f).RGBAv4();
-                    driver::update_cbuffer(node_cbuffer, &node.nodeData);
+                    nodeColor.groupColor = Color32(1.f, 1.f, 1.f, 1.f).RGBAv4();
+                    driver::update_cbuffer(node_cbuffer, &nodeColor);
                 }
                 renderer::driver::end_event();
             }
@@ -1066,21 +1049,24 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
                     const ptrdiff_t arenaTotal = (ptrdiff_t)arenaEnd - (ptrdiff_t)arenaStart;
                     const ptrdiff_t arenaHighmarkBytes =
                         (ptrdiff_t)arenaHighmark - (ptrdiff_t)arenaStart;
-                    const f32 arenaHighmark_barwidth =
-                        barwidth * (arenaHighmarkBytes / (f32)arenaTotal);
+                    const f32 occupancy = arenaHighmarkBytes / (f32)arenaTotal;
+                    const f32 arenaHighmark_barwidth = barwidth * occupancy;
                     textCfg.color = highmarkCol;
                     if (arenaHighmarkBytes > 1024 * 1024) {
                         renderer::im::text2d(
-                            textCfg, "%s highmark: %lu bytes (%3.fMB)",
-                            arenaName, arenaHighmarkBytes, arenaHighmarkBytes / (1024.f * 1024.f));
+                            textCfg, "%s highmark: %lu bytes (%.3fMB) / %.3f%%",
+                            arenaName, arenaHighmarkBytes, arenaHighmarkBytes / (1024.f * 1024.f),
+                            occupancy * 100.f);
                     } else if (arenaHighmarkBytes > 1024) {
                         renderer::im::text2d(
-                            textCfg, "%s highmark: %lu bytes (%3.fKB)",
-                            arenaName, arenaHighmarkBytes, arenaHighmarkBytes / (1024.f));
+                            textCfg, "%s highmark: %lu bytes (%.3fKB) / %.3f%%",
+                            arenaName, arenaHighmarkBytes, arenaHighmarkBytes / (1024.f),
+                            occupancy * 100.f);
                     } else {
                         renderer::im::text2d(
-                            textCfg, "%s highmark: %lu bytes",
-                            arenaName, arenaHighmarkBytes);
+                            textCfg, "%s highmark: %lu bytes / %.3f%%",
+                            arenaName, arenaHighmarkBytes,
+                            occupancy * 100.f);
                     }
                     textCfg.pos.y -= lineheight;
                     textCfg.color = defaultCol;
@@ -1104,7 +1090,9 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
                     const Color32 arenabaseCol(0.65f, 0.65f, 0.65f, 0.4f);
                     const Color32 arenahighmarkCol(0.95f, 0.35f, 0.8f, 1.f);
                     renderArena(
-                        textParamsCenter, game.memory.frameArena.end,
+                        textParamsCenter,
+                        (u8*)math::max(
+                            (uintptr_t)game.memory.frameArena.end, game.memory.frameArenaHighmark),
                         game.memory.frameArenaBuffer, game.memory.frameArenaHighmark,
                         "Frame arena", defaultCol, arenabaseCol, arenahighmarkCol,
                         lineheight, textscale);
@@ -1113,7 +1101,9 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
                     const Color32 arenabaseCol(0.65f, 0.65f, 0.65f, 0.4f);
                     const Color32 arenahighmarkCol(0.95f, 0.35f, 0.8f, 1.f);
                     renderArena(
-                        textParamsCenter, game.memory.scratchArenaRoot.end,
+                        textParamsCenter,
+                        (u8*)math::max(
+                            (uintptr_t)game.memory.scratchArenaRoot.end, game.memory.scratchArenaHighmark),
                         game.memory.scratchArenaRoot.curr, game.memory.scratchArenaHighmark,
                         "Scratch arena", defaultCol, arenabaseCol, arenahighmarkCol,
                         lineheight, textscale);
