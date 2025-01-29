@@ -55,13 +55,13 @@ void* alloc_arena(Arena& arena, ptrdiff_t size, ptrdiff_t align) {
     return (void*)curr_aligned;
 }
 #else
-void init_arena(Arena & arena, u8 * mem, size_t capacity) {
+void init_arena(Arena& arena, u8 * mem, size_t capacity) {
     // ignore parameters, reserve 4GB of virtual memory
     arena.curr = mem;
     arena.end = arena.curr + capacity;
     __HIGHMARKS_DEF(arena.highmark = nullptr;)
 }
-void* alloc_arena(Arena & arena, ptrdiff_t size, ptrdiff_t align) {
+void* alloc_arena(Arena& arena, ptrdiff_t size, ptrdiff_t align) {
     assert((align & (align - 1)) == 0); // Alignment needs to be a power of two
     uintptr_t curr_aligned = ((uintptr_t)arena.curr + (align - 1)) & -align;
     if (curr_aligned + size <= (uintptr_t)arena.end) {

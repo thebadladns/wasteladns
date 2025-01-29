@@ -301,7 +301,13 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
     u64 start;
     QueryPerformanceCounter((LARGE_INTEGER*)&start);
-
+    const u32 desiredSchedulerMS = 1;
+    // we only use one function from Winmm.dll, no need to load the whole lib
+    typedef MMRESULT (*TIMEBEGINPERIODPROC)(_In_ UINT uPeriod);
+    HMODULE winmmModule = LoadLibraryA("Winmm.dll");
+    TIMEBEGINPERIODPROC timeBeginPeriod = 
+        (TIMEBEGINPERIODPROC)GetProcAddress(winmmModule, "timeBeginPeriod");
+    bool sleepIsGranular = (timeBeginPeriod(desiredSchedulerMS) == TIMERR_NOERROR);
     platform.time.running = 0.0;
     platform.time.now = platform.time.start = start / (f64)frequency;
 
@@ -311,94 +317,125 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
     MSG msg = {};
     do {
-        if (platform.time.now >= config.nextFrame) {
+        // Input
+        {
+        for (u32 i = 0; i < platform.input.padCount; i++)
+        { platform.input.pads[i].last_keys = platform.input.pads[i].curr_keys; }
+        memcpy(
+            platform.input.keyboard.last, platform.input.keyboard.current,
+            sizeof(u8) * ::input::keyboard::Keys::COUNT);
+        memcpy(
+            platform.input.mouse.last, platform.input.mouse.curr,
+            sizeof(u8) * ::input::mouse::Keys::COUNT);
+        const f32 mouse_prevx = platform.input.mouse.x, mouse_prevy = platform.input.mouse.y;
+        platform.input.mouse.dx = platform.input.mouse.dy =
+            platform.input.mouse.scrolldx = platform.input.mouse.scrolldy = 0.f;
 
-            // Input
-            {
-            for (u32 i = 0; i < platform.input.padCount; i++) { platform.input.pads[i].last_keys = platform.input.pads[i].curr_keys; }
-            memcpy(platform.input.keyboard.last, platform.input.keyboard.current, sizeof(u8)* ::input::keyboard::Keys::COUNT);
-            memcpy(platform.input.mouse.last, platform.input.mouse.curr, sizeof(u8) * ::input::mouse::Keys::COUNT);
-            const f32 mouse_prevx = platform.input.mouse.x, mouse_prevy = platform.input.mouse.y;
-            platform.input.mouse.dx = platform.input.mouse.dy = platform.input.mouse.scrolldx = platform.input.mouse.scrolldy = 0.f;
-
-            while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
-                // Process some messages locally instead of through a callback
-                // Keystrokes only need TranslateMessage when handling text
-                switch (msg.message) {
-                    case WM_QUIT: {
-                        config.quit = true;
+        while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
+            // Process some messages locally instead of through a callback
+            // Keystrokes only need TranslateMessage when handling text
+            switch (msg.message) {
+                case WM_QUIT: {
+                    config.quit = true;
+                }
+                break;
+                case WM_KEYUP:
+                case WM_SYSKEYUP: {
+                    if (msg.wParam != VK_CONTROL && msg.wParam != VK_PROCESSKEY) {
+                        const ::input::keyboard::Keys::Enum keycode =
+                            (::input::keyboard::Keys::Enum)(HIWORD(msg.lParam) & 0x1FF);
+						platform.input.keyboard.current[keycode] = 0;
                     }
-                    break;
-                    case WM_KEYUP:
-                    case WM_SYSKEYUP: {
-                        if (msg.wParam != VK_CONTROL && msg.wParam != VK_PROCESSKEY) {
-                            ::input::keyboard::Keys::Enum keycode = (::input::keyboard::Keys::Enum)(HIWORD(msg.lParam) & 0x1FF);
-							platform.input.keyboard.current[keycode] = 0;
-                        }
+                }
+                break;
+                case WM_KEYDOWN:
+                case WM_SYSKEYDOWN: {
+                    if (msg.wParam != VK_CONTROL && msg.wParam != VK_PROCESSKEY) {
+                        const ::input::keyboard::Keys::Enum keycode =
+                            (::input::keyboard::Keys::Enum)(HIWORD(msg.lParam) & 0x1FF);
+                        platform.input.keyboard.current[keycode] = 1;
                     }
-                    break;
-                    case WM_KEYDOWN:
-                    case WM_SYSKEYDOWN: {
-                        if (msg.wParam != VK_CONTROL && msg.wParam != VK_PROCESSKEY) {
-                            ::input::keyboard::Keys::Enum keycode = (::input::keyboard::Keys::Enum)(HIWORD(msg.lParam) & 0x1FF);
-                            platform.input.keyboard.current[keycode] = 1;
-                        }
-                    }
-                    break;
-                    case WM_LBUTTONUP:
-                    case WM_RBUTTONUP: {
-                        ::input::mouse::Keys::Enum keycode = (::input::mouse::Keys::Enum) ((msg.message >> 2) & 0x1);
-						platform.input.mouse.curr[keycode] = 0;
-                    }
-                    break;
-                    case WM_LBUTTONDOWN:
-                    case WM_RBUTTONDOWN: {
-                        ::input::mouse::Keys::Enum keycode = (::input::mouse::Keys::Enum) ((msg.message >> 2) & 0x1);
-                        platform.input.mouse.curr[keycode] = 1;
-                    }
-                    break;
-                    case WM_MOUSEMOVE: {
-                        LPARAM lParam = msg.lParam;
-                        // avoid using MAKEPOINTS, since it requires undef far
-                        POINTS mouseCoords = (*((POINTS*)&(lParam)));
-                        platform.input.mouse.x = mouseCoords.x;
-                        platform.input.mouse.y = mouseCoords.y;
-						platform.input.mouse.dx = platform.input.mouse.x - mouse_prevx;
-                        platform.input.mouse.dy = platform.input.mouse.y - mouse_prevy;
-                    }
-                    break;
-                    case WM_MOUSEWHEEL:
-                    case WM_MOUSEHWHEEL: {
-                        short scroll = (short)HIWORD(msg.wParam);
-                        platform.input.mouse.scrolldx += 0.01f * scroll * (msg.message == WM_MOUSEHWHEEL);
-                        platform.input.mouse.scrolldy += 0.01f * scroll * (msg.message == WM_MOUSEWHEEL);
-                    }
-                    break;
-                    case WM_INPUT: {
-                        u8 mem[2048]; // local arena
-                        allocator::Arena scratchArena = {};
-                        allocator::init_arena(scratchArena, mem, sizeof(mem));
-                        ::input::gamepad::process_hid_pads_win(scratchArena, platform.input.pads, platform.input.padCount, countof(platform.input.pads), (HRAWINPUT)msg.lParam);
-                    }
-                    break;
-                    default: {
-                        TranslateMessage(&msg);
-                        DispatchMessage(&msg);
-                    }
-                    break;
-                };
-            }
-            } // Input
-
-            game::update(game, config, platform);
-
-            swapBuffers();
+                }
+                break;
+                case WM_LBUTTONUP:
+                case WM_RBUTTONUP: {
+                    const ::input::mouse::Keys::Enum keycode =
+                        (::input::mouse::Keys::Enum) ((msg.message >> 2) & 0x1);
+					platform.input.mouse.curr[keycode] = 0;
+                }
+                break;
+                case WM_LBUTTONDOWN:
+                case WM_RBUTTONDOWN: {
+                    const ::input::mouse::Keys::Enum keycode =
+                        (::input::mouse::Keys::Enum) ((msg.message >> 2) & 0x1);
+                    platform.input.mouse.curr[keycode] = 1;
+                }
+                break;
+                case WM_MOUSEMOVE: {
+                    LPARAM lParam = msg.lParam;
+                    // avoid using MAKEPOINTS, since it requires undef far
+                    POINTS mouseCoords = (*((POINTS*)&(lParam)));
+                    platform.input.mouse.x = mouseCoords.x;
+                    platform.input.mouse.y = mouseCoords.y;
+					platform.input.mouse.dx = platform.input.mouse.x - mouse_prevx;
+                    platform.input.mouse.dy = platform.input.mouse.y - mouse_prevy;
+                }
+                break;
+                case WM_MOUSEWHEEL:
+                case WM_MOUSEHWHEEL: {
+                    short scroll = (short)HIWORD(msg.wParam);
+                    platform.input.mouse.scrolldx +=
+                        0.01f * scroll * (msg.message == WM_MOUSEHWHEEL);
+                    platform.input.mouse.scrolldy +=
+                        0.01f * scroll * (msg.message == WM_MOUSEWHEEL);
+                }
+                break;
+                case WM_INPUT: {
+                    u8 mem[2048]; // local arena
+                    allocator::Arena scratchArena = {};
+                    allocator::init_arena(scratchArena, mem, sizeof(mem));
+                    ::input::gamepad::process_hid_pads_win(
+                        scratchArena, platform.input.pads,
+                        platform.input.padCount, countof(platform.input.pads),
+                        (HRAWINPUT)msg.lParam);
+                }
+                break;
+                default: {
+                    TranslateMessage(&msg);
+                    DispatchMessage(&msg);
+                }
+                break;
+            };
         }
+        } // Input
 
+        // update and render game
+        game::update(game, config, platform);
+
+        // present game frame onscreen
+        swapBuffers();
+
+        // frame time handling: sleep a number of Windows scheduler periods until we hit our
+        // next target time: https://blog.bearcats.nl/perfect-sleep-function/
         u64 now;
         QueryPerformanceCounter((LARGE_INTEGER*)&now);
         platform.time.now = now / (f64)frequency;
+        if (platform.time.now < config.nextFrame) {
+            if (sleepIsGranular) { // sleep with 1ms granularity away from the target time
+                const f64 sleepSeconds = config.nextFrame - platform.time.now;
+                // round up desired sleep time, to compensate for Windows' scheduler rounding up
+                const f64 sleepMs = sleepSeconds * 1000. - (desiredSchedulerMS + 0.02);
+                s32 sleepPeriodCount = s32(sleepMs / (f64)desiredSchedulerMS);
+                if (sleepPeriodCount > 0) { Sleep(DWORD(sleepPeriodCount * desiredSchedulerMS)); }
+            }
+            do { // spin-lock until the next target time is hit
+                YieldProcessor();
+                QueryPerformanceCounter((LARGE_INTEGER*)&now);
+                platform.time.now = now / (f64)frequency;
+            } while (platform.time.now < config.nextFrame);
+        }
         platform.time.running = platform.time.now - platform.time.start;
+        
     } while (!config.quit);
 
     return 1;

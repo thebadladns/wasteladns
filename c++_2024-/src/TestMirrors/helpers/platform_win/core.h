@@ -13,10 +13,12 @@
 
 #define RPC_NO_WINDOWS_H
 #define COM_NO_WINDOWS_H
-#include <windef.h> // types used by winuser // Wall time: 101.898ms
+#include <windef.h> // types used by winuser // Wall time: 48.729ms
 #include <winuser.h> // api for windows stuff, PeekMessage, CreateWindowEx, etc // Wall time: 38.148ms
 
-#include <memoryapi.h> // for VirtualAlloc
+#include <timeapi.h> // for timeBeginPeriod // Wall time: 1.123ms
+#include <synchapi.h> // for Sleep // Wall time: 1.737ms
+#include <memoryapi.h> // for VirtualAlloc // Wall time: 2.469ms
 
 #if __DX11
     // types defined by winuser.h->libloaderapi.h->minwinbase.h,
