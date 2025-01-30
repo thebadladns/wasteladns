@@ -1,5 +1,9 @@
 @echo off
+setlocal
 cd /D "%~dp0"
+
+:: track start time
+set t0=%time: =0%
 
 :: usage
 :: build.bat [dx11|gl33|] [debug|release] [assets|]
@@ -58,3 +62,20 @@ if not exist %outdir% mkdir %outdir%
 
 :: post-build step (/E for recursive, /Y for overwrite without prompting)
 if "%assets%"=="1" xcopy .\assets\ %outdir%\assets\ /E /Y
+
+:: track end time
+set t=%time: =0%
+
+:: output total compilation time (/a for arithmetic statements, not strings)
+set /a h=1%t0:~0,2%-100
+set /a m=1%t0:~3,2%-100
+set /a s=1%t0:~6,2%-100
+set /a c=1%t0:~9,2%-100
+set /a starttime = %h% * 360000 + %m% * 6000 + 100 * %s% + %c%
+set /a h=1%t:~0,2%-100
+set /a m=1%t:~3,2%-100
+set /a s=1%t:~6,2%-100
+set /a c=1%t:~9,2%-100
+set /a endtime = %h% * 360000 + %m% * 6000 + 100 * %s% + %c%
+set /a runtime = %endtime% - %starttime%
+echo Compilation time: %runtime%0 ms
