@@ -1,10 +1,8 @@
 // C libs
 #include <math.h>
 #include <stdlib.h> // rand, mbstowcs_s
-#include <cstring>
-#include "stdint.h"
+#include <stdint.h> // int8_t, int16_t, int32_t, etc
 #include <assert.h>
-
 #include <stdio.h> // printf
 
 // Debug
@@ -22,6 +20,13 @@
 #define __DEBUGDEF(...) __VA_ARGS__
 #endif
 
+#define __PROFILE __DEBUG
+#if __PROFILE
+#define __PROFILEONLY(...) __VA_ARGS__
+#else
+#define __PROFILEONLY(...)
+#endif
+
 #define WRITE_SHADERCACHE 0
 #define READ_SHADERCACHE 0
 #if __WIN64
@@ -31,13 +36,6 @@
 		#define WRITE_SHADERCACHE __DEBUG
 		#define READ_SHADERCACHE 1-WRITE_SHADERCACHE
 	#endif
-#endif
-
-#define __PROFILE __DEBUG
-#if __PROFILE
-#define __PROFILEONLY(...) __VA_ARGS__
-#else
-#define __PROFILEONLY(...)
 #endif
 
 #if __WIN64
