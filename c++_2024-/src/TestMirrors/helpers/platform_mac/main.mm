@@ -117,11 +117,6 @@ int main(int , char** ) {
         platform.screen.desiredRatio = platform.screen.width / (f32)platform.screen.height;
         platform.screen.fullscreen = config.fullscreen;
         platform.screen.window_scale = windowScale;
-        
-#if !USE_VIRTUAL_MEMORY
-        platform.memory.curr = (u8*)malloc(config.arena_size);
-        platform.memory.cap = platform.memory.curr + config.arena_size;
-#endif
     }
     
     const int hotkeyMask = NSEventModifierFlagCommand | NSEventModifierFlagOption | NSEventModifierFlagControl | NSEventModifierFlagCapsLock;

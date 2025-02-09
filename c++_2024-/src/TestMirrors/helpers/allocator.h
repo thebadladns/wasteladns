@@ -3,79 +3,67 @@
 
 namespace allocator {
 
-// for allocators that are passed by copy, we store a separate pointer to their highmark value
-// so we can keep track of the highest allocation at any time. When using virtual memory, this value
-// is necessary to know when to commit more pages, while in other cases the value is useful for
-// debug purposes
-#define TRACK_HIGHMARKS USE_VIRTUAL_MEMORY || __DEBUG
-#if TRACK_HIGHMARKS
-#define __HIGHMARKS_DEF(...) __VA_ARGS__
-#else
-#define __HIGHMARKS_DEF(...)
-#endif
-
 // Simple arena buffer header: only the current offset is stored, as well as the capacity
 // It can be used as a stack allocator by simply copying this header into a scoped variable
 // For more details, see: https://nullprogram.com/blog/2023/09/27/
-struct Arena {
-    u8* curr;
-    u8* end;
-    __HIGHMARKS_DEF(uintptr_t* highmark;) // pointer to track overall allocations of scoped copies
-};
-#if USE_VIRTUAL_MEMORY
+struct Arena { u8* curr; u8* end; };
 void init_arena(Arena& arena, u8* mem, size_t capacity) {
-    // ignore parameters, reserve 4GB of virtual memory
-    (void)mem;
-    const size_t capacity_aligned = 4ULL * 1024ULL * 1024ULL * 1024ULL;
-    arena.curr = (u8*)platform::mem_reserve(capacity_aligned);
-    arena.end = arena.curr;
-    __HIGHMARKS_DEF(arena.highmark = nullptr;)
-}
-void* alloc_arena(Arena& arena, ptrdiff_t size, ptrdiff_t align) {
-    assert((align & (align - 1)) == 0); // Alignment needs to be a power of two
-    uintptr_t curr_aligned = ((uintptr_t)arena.curr + (align - 1)) & -align;
-    // no bounds check when using virtual memory, if we commit more than 4GB we'll just crash
-    uintptr_t end_aligned = curr_aligned + size;
-    arena.curr = (u8*)end_aligned;
-    uintptr_t highmark = (uintptr_t)arena.end;
-    #if TRACK_HIGHMARKS
-    if (arena.highmark) { highmark = math::max(*arena.highmark, highmark); };
-    #endif
-    // figure out highest memory accessed so far, and commit if needed
-    if (end_aligned > highmark) {
-        const ptrdiff_t pagesize = 4 * 1024;
-        const size_t commitsize = end_aligned - highmark;
-        size_t commitsize_aligned = (commitsize + (pagesize - 1)) & -pagesize;
-        platform::mem_commit((void*)highmark, commitsize_aligned);
-        arena.end = (u8*)(highmark + commitsize_aligned);
-        #if TRACK_HIGHMARKS
-        if (arena.highmark) { *arena.highmark = (uintptr_t)arena.end; }
-        #endif
-    }
-    return (void*)curr_aligned;
-}
-#else
-void init_arena(Arena& arena, u8 * mem, size_t capacity) {
-    // ignore parameters, reserve 4GB of virtual memory
     arena.curr = mem;
     arena.end = arena.curr + capacity;
-    __HIGHMARKS_DEF(arena.highmark = nullptr;)
 }
 void* alloc_arena(Arena& arena, ptrdiff_t size, ptrdiff_t align) {
     assert((align & (align - 1)) == 0); // Alignment needs to be a power of two
     uintptr_t curr_aligned = ((uintptr_t)arena.curr + (align - 1)) & -align;
     if (curr_aligned + size <= (uintptr_t)arena.end) {
         arena.curr = (u8*)(curr_aligned + size);
-        #if TRACK_HIGHMARKS
-        if (arena.highmark) {*arena.highmark = math::max(*arena.highmark, (uintptr_t)arena.curr); };
-        #endif
         return (void*)curr_aligned;
     }
-    assert(0); // out of memory: consider defining USE_VIRTUAL_MEMORY to see how much we actually use
+    assert(0); // out of memory: consider using VirtualArena
     return 0;
 }
-#endif
-void* realloc_arena(Arena& arena, void* oldptr, ptrdiff_t oldsize, ptrdiff_t newsize, ptrdiff_t align) {
+
+// Same as Arena, except we reserve 4GB of memory first, and commit 4KB pages as needed
+// For arenas that are passed by copy, we store a separate pointer to their highmark value.
+// This value is necessary to know when to commit more pages for scoped copies.
+// It also lets us keep track of the highest allocation at any time.
+struct PagedArena {
+    u8* curr;
+    u8* end;
+    uintptr_t* highmark; // pointer to track overall allocations of scoped copies (see mention above)
+};
+u8* reserve_pages(const uintptr_t end, const uintptr_t start) {
+    const ptrdiff_t pagesize = 4 * 1024; // assume 4kb pages
+    const size_t commitsize = end - start; assert(end > start);
+    size_t commitsize_aligned = (commitsize + (pagesize - 1)) & -pagesize;
+    platform::mem_commit((void*)start, commitsize_aligned);
+    return (u8*)(start + commitsize_aligned);
+};
+void init_arena(PagedArena& arena, size_t capacity) {
+    // reserve 4GB of virtual memory (we'll crash if we touch anything past that)
+    const size_t capacity_aligned = 4ULL * 1024ULL * 1024ULL * 1024ULL;
+    arena.curr = (u8*)platform::mem_reserve(capacity_aligned);
+    arena.end = reserve_pages(uintptr_t(arena.curr + capacity), (uintptr_t)arena.curr);
+    arena.highmark = nullptr;
+}
+void* alloc_arena(PagedArena& arena, ptrdiff_t size, ptrdiff_t align) {
+    assert((align & (align - 1)) == 0); // Alignment needs to be a power of two
+    uintptr_t curr_aligned = ((uintptr_t)arena.curr + (align - 1)) & -align;
+    uintptr_t end_aligned = curr_aligned + size;
+    uintptr_t highmark = (uintptr_t)arena.end;
+    if (arena.highmark) { highmark = math::max(*arena.highmark, highmark); };
+    if (end_aligned <= highmark) {
+        // allocation successful, update highmark if needed
+        if (arena.highmark) { *arena.highmark = math::max(*arena.highmark, end_aligned); };
+    } else {
+        // allocation goes past our committed memory space
+        // commit however many pages we need
+        arena.end = reserve_pages(end_aligned, highmark);
+        if (arena.highmark) { *arena.highmark = (uintptr_t)arena.end; }
+    }
+    arena.curr = (u8*)end_aligned;
+    return (void*)curr_aligned;
+}
+void* realloc_arena(PagedArena& arena, void* oldptr, ptrdiff_t oldsize, ptrdiff_t newsize, ptrdiff_t align) {
     void* oldbuff = (void*)((uintptr_t)arena.curr - oldsize);
     if (oldbuff == oldptr) {
         return alloc_arena(arena, newsize - oldsize, align);
@@ -85,7 +73,7 @@ void* realloc_arena(Arena& arena, void* oldptr, ptrdiff_t oldsize, ptrdiff_t new
         return data;
     }
 }
-void free_arena(Arena& arena, void* ptr, ptrdiff_t size) {
+void free_arena(PagedArena& arena, void* ptr, ptrdiff_t size) {
     // because of alignment differences between allocations, we don't have enough information
     // to guarantee freeing all allocations. However, we can still try and see if the requested
     // pointer coincides with the last allocation
@@ -105,7 +93,7 @@ struct Buffer_t {
     ptrdiff_t len;
     ptrdiff_t cap;
 };
-void grow(Buffer_t& b, ptrdiff_t size, ptrdiff_t align, Arena& arena) {
+void grow(Buffer_t& b, ptrdiff_t size, ptrdiff_t align, PagedArena& arena) {
     ptrdiff_t doublecap = b.cap ? 2 * b.cap : 2;
     if (b.data + size * b.cap == arena.curr) {
         alloc_arena(arena, size * b.cap, align);
@@ -116,11 +104,11 @@ void grow(Buffer_t& b, ptrdiff_t size, ptrdiff_t align, Arena& arena) {
     }
     b.cap = doublecap;
 }
-u8& push(Buffer_t& b, ptrdiff_t size, ptrdiff_t align, Arena& arena) {
+u8& push(Buffer_t& b, ptrdiff_t size, ptrdiff_t align, PagedArena& arena) {
     if (b.len >= b.cap) { grow(b, size, align, arena); }
     return *(b.data + size * b.len++);
 }
-void reserve(Buffer_t& b, ptrdiff_t cap, ptrdiff_t size, ptrdiff_t align, Arena& arena) {
+void reserve(Buffer_t& b, ptrdiff_t cap, ptrdiff_t size, ptrdiff_t align, PagedArena& arena) {
     assert(b.cap == 0); // buffer is not empty
     b.data = (u8*)alloc_arena(arena, cap * size, align);
     b.len = 0;
@@ -133,12 +121,12 @@ struct Buffer {
     ptrdiff_t cap;
 };
 template<typename T>
-T& push(Buffer<T>& b, Arena& arena) {
+T& push(Buffer<T>& b, PagedArena& arena) {
     if (b.len >= b.cap) { grow(*(Buffer_t*)&b, sizeof(T), alignof(T), arena); }
     return *(b.data + b.len++);
 }
 template<typename T>
-void reserve(Buffer<T>& b, ptrdiff_t cap, Arena& arena) {
+void reserve(Buffer<T>& b, ptrdiff_t cap, PagedArena& arena) {
     assert(b.cap == 0); // buffer is not empty
     b.data = (T*)alloc_arena(arena, sizeof(T) * cap, alignof(T));
     b.len = 0;
@@ -163,7 +151,7 @@ struct Pool {
     ptrdiff_t count;
 };
 template<typename T>
-void init_pool(Pool<T>& pool, ptrdiff_t cap, Arena& arena) {
+void init_pool(Pool<T>& pool, ptrdiff_t cap, PagedArena& arena) {
 	typedef typename Pool<T>::Slot Slot;
 	pool.cap = cap;
     pool.data = (Slot*)allocator::alloc_arena(arena, sizeof(Slot) * cap, alignof(Slot));

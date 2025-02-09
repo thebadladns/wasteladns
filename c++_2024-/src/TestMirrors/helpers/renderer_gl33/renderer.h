@@ -149,7 +149,7 @@ namespace driver {
 
     }
 
-    void load_shader_cache(ShaderCache&, const char*, allocator::Arena*, const u32) {}
+    void load_shader_cache(ShaderCache&, const char*, allocator::PagedArena*, const u32) {}
     void write_shader_cache(ShaderCache&) {}
     ShaderResult create_shader_vs(RscVertexShader& vs, const VertexShaderRuntimeCompileParams& params) {
         GLuint vertexShader;

@@ -289,7 +289,7 @@ namespace driver {
         d3dcontext->PSSetSamplers(0, count, samplers);
     }
 
-    void load_shader_cache(ShaderCache& shaderCache, const char* path, allocator::Arena* arena, u32 maxShaders) {
+    void load_shader_cache(ShaderCache& shaderCache, const char* path, allocator::PagedArena* arena, u32 maxShaders) {
         shaderCache.arena = arena;
         shaderCache.path = path;
         #if WRITE_SHADERCACHE

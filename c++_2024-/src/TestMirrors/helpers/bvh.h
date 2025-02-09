@@ -21,7 +21,7 @@ struct Triangle {
 };
 struct BuildTreeContext {
     allocator::Buffer<Node>& nodes;
-    allocator::Arena& persistentArena;
+    allocator::PagedArena& persistentArena;
     const Triangle* trianglePool;
     const f32* vertexPool;
     const u16* indexPool;
@@ -128,7 +128,7 @@ BuildTreeContext& ctx, u16* triangleIds, u32 triangleId_count, const u32 nodeId)
     }
 }
 void buildTree(
-allocator::Arena& persistentArena, allocator::Arena scratchArena,
+allocator::PagedArena& persistentArena, allocator::PagedArena scratchArena,
 Tree& bvh, f32* vertexPool, const u16* indexPool, const u32 indexCount,
 const u32* sourceIds) {
 
@@ -211,7 +211,7 @@ const float4* planes, const u32 numPlanes, const float3& min, const float3& max)
     return status;
 }
 void findTrianglesIntersectingFrustum(
-    allocator::Arena scratchArena,
+    allocator::PagedArena scratchArena,
     bool* sourceVisibility, const Tree& bvh,
     const float4* planes, const u32 numPlanes) {
     struct FrustumQueryNode { u16 nodeId; FrustumStatus::Enum frustumStatus; };

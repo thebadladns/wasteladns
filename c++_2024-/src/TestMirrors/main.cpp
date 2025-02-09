@@ -21,7 +21,6 @@
 #define __DEBUG 1
 #define __DEBUGDEF(...) __VA_ARGS__
 #endif
-#define USE_VIRTUAL_MEMORY 0
 
 #define WRITE_SHADERCACHE 0
 #define READ_SHADERCACHE 0
@@ -50,7 +49,7 @@
 #include "helpers/math.h"
 #include "helpers/allocator.h"
 
-allocator::Arena* Allocator_stb_arena = nullptr;
+allocator::PagedArena* Allocator_stb_arena = nullptr;
 struct Allocator_stb {
 	static void* malloc(size_t size) {
 		return allocator::alloc_arena(*Allocator_stb_arena, size, 16);

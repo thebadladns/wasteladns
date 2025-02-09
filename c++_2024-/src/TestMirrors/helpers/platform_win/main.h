@@ -281,11 +281,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         platform.screen.height = config.game_height;
         platform.screen.desiredRatio = platform.screen.width / (f32)platform.screen.height;
         platform.screen.fullscreen = config.fullscreen;
-
-#if !USE_VIRTUAL_MEMORY
-        platform.memory.curr = (u8*)malloc(config.arena_size);
-        platform.memory.cap = platform.memory.curr + config.arena_size;
-#endif
     }
 
     u64 frequency;

@@ -148,7 +148,7 @@ Scene& scene, const AssetInMemory& def, const float3& spawnPos) {
 
 void spawn_model_as_mirrors(
     game::Mirrors& mirrors, const game::GPUCPUMesh& loadedMesh,
-    allocator::Arena scratchArena, allocator::Arena& sceneArena, bool accelerateBVH) {
+    allocator::PagedArena scratchArena, allocator::PagedArena& sceneArena, bool accelerateBVH) {
 
     const renderer::CPUMesh& cpuMesh = loadedMesh.cpuBuffer;
     u32* triangleIds;
@@ -214,7 +214,7 @@ namespace obj {
 
 void load_mesh_cpu_gpu(
     game::GPUCPUMesh& meshToLoad, renderer::CoreResources& renderCore,
-    allocator::Arena scratchArena, allocator::Arena& persistentArena,
+    allocator::PagedArena scratchArena, allocator::PagedArena& persistentArena,
     const char* path, const f32 scale) {
 
     allocator::Buffer<renderer::VertexLayout_Color_3D> vertices = {};
@@ -307,7 +307,7 @@ void from_ufbx_mat(float4x4& o, const ufbx_matrix& i) {
 };
 
 void extract_anim_data(game::AssetInMemory& assetToAdd,
-                       allocator::Arena& persistentArena, const ufbx_mesh& mesh,
+                       allocator::PagedArena& persistentArena, const ufbx_mesh& mesh,
                        const ufbx_scene& scene) {
 
     const u32 maxjoints = 128;
@@ -449,8 +449,8 @@ void extract_skinning_attribs(u8* joint_indices, u8* joint_weights,
     }
 }
 struct PipelineAssetContext {
-    allocator::Arena scratchArena;
-    allocator::Arena& persistentArena;
+    allocator::PagedArena scratchArena;
+    allocator::PagedArena& persistentArena;
     const renderer::driver::VertexAttribDesc* vertexAttrs[renderer::DrawlistStreams::Count];
     u32 attr_count[renderer::DrawlistStreams::Count];
 };
@@ -471,15 +471,15 @@ bool load_with_materials(
 
     struct Allocator_ufbx {
         static void* alloc_fn(void* user, size_t size) {
-            allocator::Arena* arena = (allocator::Arena*)user;
+            allocator::PagedArena* arena = (allocator::PagedArena*)user;
             return allocator::alloc_arena(*arena, size, 16);
         }
         static void* realloc_fn(void* user, void* old_ptr, size_t old_size, size_t new_size) {
-            allocator::Arena* arena = (allocator::Arena*)user;
+            allocator::PagedArena* arena = (allocator::PagedArena*)user;
             return allocator::realloc_arena(*arena, old_ptr, old_size, new_size, 16);
         }
         static void free_fn(void* user, void* ptr, size_t size) {
-            allocator::Arena* arena = (allocator::Arena*)user;
+            allocator::PagedArena* arena = (allocator::PagedArena*)user;
             allocator::free_arena(*arena, ptr, size);
         }
     };
@@ -595,7 +595,7 @@ bool load_with_materials(
             };
             const auto add_material_indices_to_stream =
                 [](DstStreams & stream_dst,MaterialVertexBufferContext & ctx,
-                   allocator::Arena & scratchArena, const u32 vertices_src_count,
+                   allocator::PagedArena & scratchArena, const u32 vertices_src_count,
                    const ufbx_mesh & mesh, const ufbx_mesh_material & mesh_mat) {
 
                 memset(ctx.fbxvertex_to_dstvertex, 0xffffffff, sizeof(u32) * vertices_src_count);
@@ -957,8 +957,8 @@ struct CameraNode { // Node in camera tree (stored as depth-first)
     __PROFILEONLY(char str[256];)      // used in non-debug for GPU markers
 };
 struct GatherMirrorTreeContext {
-    allocator::Arena& frameArena;
-    allocator::Arena scratchArenaRoot;
+    allocator::PagedArena& frameArena;
+    allocator::PagedArena scratchArenaRoot;
     allocator::Buffer<CameraNode>& cameraTree;
     const game::Mirrors& mirrors;
     u32 maxDepth;
@@ -1084,7 +1084,7 @@ struct RenderSceneContext {
     renderer::driver::RscDepthStencilState& ds_opaque;
     renderer::driver::RscDepthStencilState& ds_alpha;
     renderer::driver::RscRasterizerState& rs;
-    allocator::Arena scratchArena;
+    allocator::PagedArena scratchArena;
 };
 void renderBaseScene(RenderSceneContext& sceneCtx) {
 
@@ -1119,7 +1119,7 @@ void renderBaseScene(RenderSceneContext& sceneCtx) {
 
     driver::bind_RS(sceneCtx.rs);
     {
-        allocator::Arena scratchArena = sceneCtx.scratchArena;
+        allocator::PagedArena scratchArena = sceneCtx.scratchArena;
         Drawlist dl = {};
         u32 maxDrawCalls =
               (sceneCtx.visibleNodes.visible_nodes_count
@@ -1149,7 +1149,7 @@ void renderBaseScene(RenderSceneContext& sceneCtx) {
     }
     #endif
     {
-        allocator::Arena scratchArena = sceneCtx.scratchArena;
+        allocator::PagedArena scratchArena = sceneCtx.scratchArena;
         Drawlist dl = {};
         u32 maxDrawCalls =
               (sceneCtx.visibleNodes.visible_nodes_count
@@ -1261,7 +1261,7 @@ void renderMirrorTree(
         const renderer::VisibleNodes* visibleNodes,
         game::Scene& gameScene,
         renderer::CoreResources& renderCore,
-        allocator::Arena scratchArena) {
+        allocator::PagedArena scratchArena) {
 
     using namespace renderer;
     u32 numCameras = cameraTree[0].siblingIndex;
@@ -1321,16 +1321,16 @@ void renderMirrorTree(
 }
 
 struct SceneMemory {
-    allocator::Arena& persistentArena;
+    allocator::PagedArena& persistentArena;
     // explicit copy, makes it a stack allocator for this context
-    allocator::Arena scratchArena;
-    __DEBUGDEF(allocator::Arena& debugArena;)
+    allocator::PagedArena scratchArena;
+    __DEBUGDEF(allocator::PagedArena& debugArena;)
 };
 void load_coreResources(
         game::Resources& core, SceneMemory& memory,
         const platform::Screen& screen) {
 
-    allocator::Arena& persistentArena = memory.persistentArena;
+    allocator::PagedArena& persistentArena = memory.persistentArena;
 
     renderer::CoreResources& renderCore = core.renderCore;
     renderCore = {};
@@ -1629,7 +1629,7 @@ void load_coreResources(
 
     // shaders
     {
-        allocator::Arena scratchArena = memory.scratchArena; // explicit copy
+        allocator::PagedArena scratchArena = memory.scratchArena; // explicit copy
         // Initialize cache with room for a VS and PS shader of each technique
         renderer::driver::ShaderCache shader_cache = {};
         renderer::driver::load_shader_cache(
@@ -1799,7 +1799,7 @@ void load_coreResources(
         renderer::driver::write_shader_cache(shader_cache);
     }
 
-    allocator::Arena scratchArena = memory.scratchArena; // explicit copy
+    allocator::PagedArena scratchArena = memory.scratchArena; // explicit copy
 
     fbx::PipelineAssetContext ctx = { scratchArena, persistentArena };
     ctx.vertexAttrs[renderer::DrawlistStreams::Color3D] 
@@ -2092,7 +2092,7 @@ void load_coreResources(
     __DEBUGDEF(renderer::im::init(memory.debugArena);)
 }
 void spawn_scene_mirrorRoom(
-    game::Scene& scene, allocator::Arena& sceneArena, allocator::Arena scratchArena,
+    game::Scene& scene, allocator::PagedArena& sceneArena, allocator::PagedArena scratchArena,
     const game::Resources& core, const platform::Screen& screen,
     const game::RoomDefinition& roomDef) {
 

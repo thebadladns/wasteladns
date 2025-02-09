@@ -242,7 +242,7 @@ struct CullEntries {
     CullEntry* entries;
     u32 count;
 };
-void allocCullEntries(allocator::Arena scratchArena, CullEntries& cullEntries, const Scene& scene) {
+void allocCullEntries(allocator::PagedArena scratchArena, CullEntries& cullEntries, const Scene& scene) {
     
     cullEntries.entries = 
         (CullEntry*)allocator::alloc_arena(
@@ -282,7 +282,7 @@ struct VisibleNodes {
     u32* visible_nodes;
     u32 visible_nodes_count;
 };
-void computeVisibilityWS(allocator::Arena& frameArena, VisibleNodes& visibilityFrustum,
+void computeVisibilityWS(allocator::PagedArena& frameArena, VisibleNodes& visibilityFrustum,
                          u32* isEachNodeVisible, const Frustum& frustum,
                          const CullEntries& cullEntries) {
 

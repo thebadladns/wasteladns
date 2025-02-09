@@ -41,16 +41,10 @@ namespace platform
         u32 padCount;
     };
     
-    struct Memory {
-        u8* curr;
-        u8* cap;
-    };
-
     struct State {
         Screen screen;
         Time time;
         Input input;
-        Memory memory;
     };
     
     void loadLaunchConfig(LaunchConfig& config);

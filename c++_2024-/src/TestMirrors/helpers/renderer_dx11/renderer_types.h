@@ -67,7 +67,7 @@ namespace driver {
 
     struct ShaderCache {
         struct ByteCode { u8* data; u64 size; };
-        allocator::Arena* arena;
+        allocator::PagedArena* arena;
         const char* path;
         ByteCode* shaderBytecode;
         u64 shaderBytecodeCount;

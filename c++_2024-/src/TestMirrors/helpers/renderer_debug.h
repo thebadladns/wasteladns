@@ -519,7 +519,7 @@ void text2d(const float2& pos, const char* format, ...) {
     va_end(va);
 }
     
-void init(allocator::Arena& arena) {
+void init(allocator::PagedArena& arena) {
 
     debug::ctx = {};
 

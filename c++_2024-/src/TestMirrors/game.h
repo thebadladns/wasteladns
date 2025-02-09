@@ -84,11 +84,11 @@ namespace input
 };
 
 struct Memory {
-    allocator::Arena persistentArena;
-    allocator::Arena sceneArena;
-    __DEBUGDEF(allocator::Arena debugArena;)
-    allocator::Arena scratchArenaRoot; // to be passed by copy, so it works as a scoped stack allocator
-    allocator::Arena frameArena;
+    allocator::PagedArena persistentArena;
+    allocator::PagedArena sceneArena;
+    __DEBUGDEF(allocator::PagedArena debugArena;)
+    allocator::PagedArena scratchArenaRoot; // to be passed by copy, so it works as a scoped stack allocator
+    allocator::PagedArena frameArena;
     u8* frameArenaBuffer; // used to reset allocator::frameArena every frame
     u8* sceneArenaBuffer; // used to reset allocator::sceneArena upon scene switches
     // used for debugging visualization
@@ -129,28 +129,23 @@ void start(Instance& game, platform::GameConfig& config, platform::State& platfo
 
     {
         allocator::init_arena(
-            game.memory.persistentArena, platform.memory.curr, persistentArenaSize);
-        platform.memory.curr += persistentArenaSize;
+            game.memory.persistentArena, persistentArenaSize);
         __DEBUGDEF(game.memory.persistentArenaBuffer = game.memory.persistentArena.curr;)
         allocator::init_arena(
-            game.memory.sceneArena, platform.memory.curr, sceneArenaSize);
-        platform.memory.curr += sceneArenaSize;
+            game.memory.sceneArena, sceneArenaSize);
         game.memory.sceneArenaBuffer = game.memory.sceneArena.curr;
-        allocator::init_arena(game.memory.scratchArenaRoot, platform.memory.curr, scratchArenaSize);
-        platform.memory.curr += scratchArenaSize;
+        allocator::init_arena(game.memory.scratchArenaRoot, scratchArenaSize);
         __DEBUGDEF(game.memory.scratchArenaHighmark =
                 (uintptr_t)game.memory.scratchArenaRoot.curr;
             game.memory.scratchArenaRoot.highmark = &game.memory.scratchArenaHighmark;)
         allocator::init_arena(
-            game.memory.frameArena, platform.memory.curr, frameArenaSize);
-        platform.memory.curr += frameArenaSize;
+            game.memory.frameArena, frameArenaSize);
         game.memory.frameArenaBuffer = game.memory.frameArena.curr;
         __DEBUGDEF(game.memory.frameArenaHighmark =
                 (uintptr_t)game.memory.frameArena.curr;
             game.memory.frameArena.highmark = &game.memory.frameArenaHighmark;)
         __DEBUGDEF(allocator::init_arena(
-                game.memory.debugArena, platform.memory.curr, renderer::im::arena_size);
-            platform.memory.curr += renderer::im::arena_size;)
+                game.memory.debugArena, renderer::im::arena_size);)
     }
     {
         game.scene = {};
@@ -461,7 +456,7 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
         
             renderer::VisibleNodes* visibleNodesTree = nullptr;
             {
-                allocator::Arena scratchArena = game.memory.scratchArenaRoot;
+                allocator::PagedArena scratchArena = game.memory.scratchArenaRoot;
 
                 // gather mirrors
                 u32 numCameras = 0;
@@ -622,7 +617,7 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
             if (debug::debug3Dmode == debug::Debug3DView::All
                 || debug::debug3Dmode == debug::Debug3DView::BVH) {
 
-                allocator::Arena scratchArena = game.memory.scratchArenaRoot; // explicit copy
+                allocator::PagedArena scratchArena = game.memory.scratchArenaRoot; // explicit copy
                 renderer::CoreResources& renderCore = game.resources.renderCore;
                 bvh::Tree& bvh = game.scene.mirrors.bvh;
 
@@ -739,7 +734,7 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
                 const Color32 ceColor(0.2f, 0.85f, 0.85f, 0.7f);
                 
                 if (debug::capturedCameras) {
-                    allocator::Arena scratchArena = game.memory.scratchArenaRoot; // explicit copy
+                    allocator::PagedArena scratchArena = game.memory.scratchArenaRoot; // explicit copy
                     u32* isEachNodeVisible =
                         (u32*)allocator::alloc_arena(
                             scratchArena,

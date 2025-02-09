@@ -250,7 +250,7 @@ namespace driver {
     force_inline void set_VP(const ViewportParams&);
 
     struct TextureFromFileParams {
-        allocator::Arena& arena;
+        allocator::PagedArena& arena;
         const char* path;
     };
     void create_texture_from_file(RscTexture& t, const TextureFromFileParams& params);
@@ -264,7 +264,7 @@ namespace driver {
     void create_texture_empty(RscTexture& t, const TextureRenderTargetCreateParams& params);
     force_inline void bind_textures(const RscTexture* textures, const u32 count);
 
-    void load_shader_cache(ShaderCache& shaderCache, const char* path, allocator::Arena* arena, const u32 maxShaders);
+    void load_shader_cache(ShaderCache& shaderCache, const char* path, allocator::PagedArena* arena, const u32 maxShaders);
     void write_shader_cache(ShaderCache& shaderCache);
     struct ShaderResult {
         char error[128];
