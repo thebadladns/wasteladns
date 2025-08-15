@@ -306,6 +306,19 @@ bool inverse(float4x4& m) {
     
     return true;
 }
+f32 poly_area(const float3* poly, const u32 count) {
+    float3 normal = math::cross(math::subtract(poly[1], poly[0]), math::subtract(poly[2], poly[0]));
+    math::normalizeSafe(normal);
+    f32 area = 0.f;
+    float3 prev_v = math::subtract(poly[0], poly[count - 1]);
+    for (u32 c = 0; c < count; ++c) {
+        float3 curr_v = math::subtract(poly[0], poly[c]);
+        area += math::dot(math::cross(curr_v, prev_v), normal);
+        prev_v = curr_v;
+    }
+    area = math::abs(0.5f*area);
+    return area;
+}
 
 }
 

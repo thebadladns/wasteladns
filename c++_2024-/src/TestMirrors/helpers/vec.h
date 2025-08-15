@@ -145,6 +145,9 @@ force_inline bool isZeroAll(const float4x4& m) {
     return m.m[0] == 0.f && m.m[1] == 0.f && m.m[2] == 0.f && m.m[3] == 0.f && m.m[4] == 0.f && m.m[5] == 0.f && m.m[6] == 0.f && m.m[7] == 0.f
         && m.m[8] == 0.f && m.m[9] == 0.f && m.m[10] == 0.f && m.m[11] == 0.f && m.m[12] == 0.f && m.m[13] == 0.f && m.m[14] == 0.f && m.m[15] == 0.f;
 }
+force_inline bool isNanAny(const float2& v) { return isnan(v.x) && isnan(v.x); }
+force_inline bool isNanAny(const float3& v) { return isnan(v.x) && isnan(v.y) && isnan(v.z); }
+force_inline bool isNanAny(const float4& v) { return isnan(v.x) && isnan(v.y) && isnan(v.z) && isnan(v.w); }
 force_inline float2 lerp(const f32 t, const float2& a, const float2& b) { return float2(a.x+t*(b.x-a.x), a.y+t*(b.y-a.y)); }
 force_inline float3 lerp(const f32 t, const float3& a, const float3& b) { return float3(a.x+t*(b.x-a.x), a.y+t*(b.y-a.y), a.z+t*(b.z-a.z)); }
 force_inline float4 lerp(const f32 t, const float4& a, const float4& b) { return float4(a.x+t*(b.x-a.x), a.y+t*(b.y-a.y), a.z+t*(b.z-a.z), a.w+t*(b.w-a.w)); }

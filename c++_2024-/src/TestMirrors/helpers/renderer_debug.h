@@ -181,6 +181,8 @@ void frustum(const float4* planes, const u32 plane_count, Color32 color) {
     // upper limit so we can allocate on the stack (good enough for now)
     enum { MAX_NUM_PLANES = 16 };
     assert(plane_count <= MAX_NUM_PLANES);
+    // for degenerate cases, if applicable:
+    //for (u32 i = 0; i < plane_count; i++) { assert(!math::isNanAny(planes[i])); if (math::isNanAny(planes[i])) return; }
 
     // Build large cube around near plane (not too big, or we'll get floating point errors)
     const f32 size = 100000.f;
@@ -301,6 +303,7 @@ void frustum(const float4* planes, const u32 plane_count, Color32 color) {
                     a_rightof_b(ax, ay, sortedcutface.pts[sortedcutface.count - 2], sortedcutface.pts[sortedcutface.count - 1], cutface.pts[i]) > 0.f) {
                     sortedcutface.count--;
                 }
+                if (sortedcutface.count == countof(sortedcutface.pts)) break; // crash fix for degenerate cases
                 sortedcutface.pts[sortedcutface.count++] = cutface.pts[i];
             }
             // Compute upper hull
@@ -309,6 +312,7 @@ void frustum(const float4* planes, const u32 plane_count, Color32 color) {
                     a_rightof_b(ax, ay, sortedcutface.pts[sortedcutface.count - 2], sortedcutface.pts[sortedcutface.count - 1], cutface.pts[i - 1]) > 0.f) {
                     sortedcutface.count--;
                 }
+                if (sortedcutface.count == countof(sortedcutface.pts)) break; // crash fix for degenerate cases
                 sortedcutface.pts[sortedcutface.count++] = cutface.pts[i - 1];
             }
             sortedcutface.count--;

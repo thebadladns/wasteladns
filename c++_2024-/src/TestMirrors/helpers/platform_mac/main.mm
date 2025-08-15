@@ -128,6 +128,9 @@ int main(int , char** ) {
     }
     // gamepad
     ::input::gamepad::init_hid_pads_mac(platform);
+
+    // Initialize page size, for virtual memory allocators TODO: TEST
+    allocator::pagesize = getpagesize();
     
     mach_timebase_info_data_t ticks_to_nanos;
     mach_timebase_info(&ticks_to_nanos);

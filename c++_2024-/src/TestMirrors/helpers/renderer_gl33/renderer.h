@@ -88,10 +88,10 @@ namespace driver {
     }
     
     void create_texture_from_file(RscTexture& t, const TextureFromFileParams& params) {
-        Allocator_stb_arena = &params.arena;
+        allocator::Allocator_stb_arena = &params.arena;
         s32 w, h, channels;
         u8* data = stbi_load(params.path, &w, &h, &channels, 4);
-        Allocator_stb_arena = nullptr;
+        allocator::Allocator_stb_arena = nullptr;
         if (data) {
             GLenum format = GL_RGBA;
             GLenum type = GL_UNSIGNED_BYTE;

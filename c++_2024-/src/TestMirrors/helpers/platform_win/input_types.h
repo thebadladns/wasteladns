@@ -4,6 +4,14 @@
 namespace input {
     
     namespace keyboard {
+        // Scancodes for Windows keyboards, found between bits 23 and 16 of the lParam in
+        // a Windows WM_KEY message. If the 24th bit is set, it means it's an extended key.
+        // Technically Extended keys (Arrow Keys, Control, etc) should have a 0xE0 value preceeding
+        // the lower byte in their scancode, however since that's notified on the WM_KEY messages
+        // with a single bit preceeding the scancode, we'll just use the bit. For example: here UP
+        // is 0x148 instead of 0xE048. This is a hack and may be a source of regret in the future.
+        // https://learn.microsoft.com/en-us/windows/win32/inputdev/about-keyboard-input#keystroke-message-flags
+        #define SCANCODE(lParam) (HIWORD(lParam) & 0x1FF)
         struct Keys { enum Enum : s32 {
               SPACE = 0x039
             , APOSTROPHE = 0x028 /* ' */

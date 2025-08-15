@@ -5,11 +5,6 @@
 #include <assert.h>
 #include <stdio.h> // printf
 
-// Debug
-//#include <memory>
-//#include <cxxabi.h>
-//#include "debug/types.h"
-
 #define __GPU_DEBUG 0
 
 #ifdef NDEBUG
@@ -20,12 +15,14 @@
 #define __DEBUGDEF(...) __VA_ARGS__
 #endif
 
-#define __PROFILE __DEBUG
+#define __PROFILE 1
 #if __PROFILE
 #define __PROFILEONLY(...) __VA_ARGS__
 #else
 #define __PROFILEONLY(...)
 #endif
+
+#define DISABLE_INTRINSICS 0
 
 #define WRITE_SHADERCACHE 0
 #define READ_SHADERCACHE 0
@@ -47,20 +44,6 @@
 #include "helpers/math.h"
 #include "helpers/allocator.h"
 
-allocator::PagedArena* Allocator_stb_arena = nullptr;
-struct Allocator_stb {
-	static void* malloc(size_t size) {
-		return allocator::alloc_arena(*Allocator_stb_arena, size, 16);
-	}
-	static void* realloc(void* oldptr, size_t oldsize, size_t newsize) {
-		return allocator::realloc_arena(*Allocator_stb_arena, oldptr, oldsize, newsize, 16);
-	}
-	static void free(void* ptr) {}
-};
-#define STBI_MALLOC(sz)           Allocator_stb::malloc(sz)
-#define STBI_REALLOC(p,newsz)     Allocator_stb::realloc(p,0,newsz)
-#define STBI_FREE(p)              Allocator_stb::free(p)
-#define STBI_REALLOC_SIZED(p,oldsz,newsz) Allocator_stb::realloc(p,oldsz,newsz)
 #define STB_IMAGE_IMPLEMENTATION
 #include "lib/stb/stb_image.h"
 

@@ -3,6 +3,8 @@
 
 namespace allocator {
 
+ptrdiff_t pagesize = 4 * 1024; // defaults to 4KB // TODO: INIT ON MAC
+
 // Simple arena buffer header: only the current offset is stored, as well as the capacity
 // It can be used as a stack allocator by simply copying this header into a scoped variable
 // For more details, see: https://nullprogram.com/blog/2023/09/27/
@@ -22,17 +24,16 @@ void* alloc_arena(Arena& arena, ptrdiff_t size, ptrdiff_t align) {
     return 0;
 }
 
-// Same as Arena, except we reserve 4GB of memory first, and commit 4KB pages as needed
+// Same as Arena, except we reserve 4GB of virtual memory first, and commit 4KB pages as needed
 // For arenas that are passed by copy, we store a separate pointer to their highmark value.
 // This value is necessary to know when to commit more pages for scoped copies.
 // It also lets us keep track of the highest allocation at any time.
 struct PagedArena {
     u8* curr;
     u8* end;
-    uintptr_t* highmark; // pointer to track overall allocations of scoped copies (see mention above)
+    uintptr_t* highmark; // pointer to track overall allocations of scoped copies (see above)
 };
 u8* reserve_pages(const uintptr_t end, const uintptr_t start) {
-    const ptrdiff_t pagesize = 4 * 1024; // assume 4kb pages
     const size_t commitsize = end - start; assert(end > start);
     size_t commitsize_aligned = (commitsize + (pagesize - 1)) & -pagesize;
     platform::mem_commit((void*)start, commitsize_aligned);
@@ -82,6 +83,22 @@ void free_arena(PagedArena& arena, void* ptr, ptrdiff_t size) {
         arena.curr = (u8*)oldbuff;
     }
 }
+
+PagedArena* Allocator_stb_arena = nullptr;
+struct Allocator_stb {
+    static void* malloc(size_t size) {
+        return allocator::alloc_arena(*allocator::Allocator_stb_arena, size, 16);
+    }
+    static void* realloc(void* oldptr, size_t oldsize, size_t newsize) {
+        return allocator::realloc_arena(*allocator::Allocator_stb_arena, oldptr, oldsize, newsize, 16);
+    }
+    static void free(void* ptr) {}
+};
+#define STBI_MALLOC(sz)           allocator::Allocator_stb::malloc(sz)
+#define STBI_REALLOC(p,newsz)     allocator::Allocator_stb::realloc(p,0,newsz)
+#define STBI_FREE(p)              allocator::Allocator_stb::free(p)
+#define STBI_REALLOC_SIZED(p,oldsz,newsz) allocator::Allocator_stb::realloc(p,oldsz,newsz)
+
 
 // Dynamic array. When used with the same arena without any external allocations in between calls
 // to allocator::push, the array will continue to grow in place. Note that, in any other case,

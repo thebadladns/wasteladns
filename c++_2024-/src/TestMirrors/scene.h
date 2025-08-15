@@ -94,7 +94,7 @@ const RoomDefinition roomDefinitions[] = {
       float3(-30 * math::d2r32, 0.f, -180 * math::d2r32), // min camera eulers
       float3(-1.f * math::d2r32, 0.f, 180 * math::d2r32), // max camera eulers
       0.2f, 0.5f,
-      2, false },
+      3, false },
     { Resources::MeshesMeta::Count,
       float3(-45 * math::d2r32, 0.f, -180 * math::d2r32), // min camera eulers
       float3(-1.f * math::d2r32, 0.f, 180 * math::d2r32), // max camera eulers
@@ -846,21 +846,22 @@ bool load_with_materials(
     }
     return success;
 }
-}
+} // fbx
+
+#if DISABLE_INTRINSICS
 void clip_poly_in_frustum(
-float3* poly, u32& poly_count, const float4* planes, const u32 planeCount, const u32 polyCountCap) {
+    float3* poly, u32& poly_count, const float4* planes, const u32 planeCount, const u32 polyCountCap) {
 
     // todo: consider speeding this up somehow, as it's pretty expensive when called 1000+ times
 
-    enum { MAX_POLY_VERTICES = 7 };
-    assert(polyCountCap <= MAX_POLY_VERTICES);
-    
+    assert(polyCountCap <= 8);
+
     // cull quad by each frustum plane via Sutherland-Hodgman
     // todo: degenerate polys can end up with more than 1 extra vertex per plane;
     // we "fix it" by adding the second plane intertersections in place of the vertex before
 
     // we'll use a temporary buffer to loop over the input, then swap buffers each iteration
-    float3 quadBuffer[MAX_POLY_VERTICES];
+    float3 quadBuffer[8];
     float3* inputPoly = quadBuffer;
     u32 inputPoly_count = 0;
     float3* outputQuad = poly;
@@ -881,7 +882,7 @@ float3* poly, u32& poly_count, const float4* planes, const u32 planeCount, const
 
         // compute all distances ahead of time
         // even if the poly doesn't have the maximum number of vertices, this speeds things up
-        f32 distances[MAX_POLY_VERTICES];
+        f32 distances[8];
         distances[0] = math::dot(float4(inputPoly[0], 1.f), plane);
         distances[1] = math::dot(float4(inputPoly[1], 1.f), plane);
         distances[2] = math::dot(float4(inputPoly[2], 1.f), plane);
@@ -889,20 +890,21 @@ float3* poly, u32& poly_count, const float4* planes, const u32 planeCount, const
         distances[4] = math::dot(float4(inputPoly[4], 1.f), plane);
         distances[5] = math::dot(float4(inputPoly[5], 1.f), plane);
         distances[6] = math::dot(float4(inputPoly[6], 1.f), plane);
+        distances[7] = math::dot(float4(inputPoly[7], 1.f), plane);
         u32 prev_v = inputPoly_count - 1;
 
         for (u32 curr_v = 0; curr_v < inputPoly_count; curr_v++) {
             const f32 eps = 0.001f;
             if (distances[curr_v] > eps) {
                 // current vertex in positive zone,
-                // will be add to poly
+                // will be added to poly
                 if (distances[prev_v] < -eps) {
                     // edge entering the positive zone,
                     // add intersection point first
                     float3 ab = math::subtract(inputPoly[curr_v], inputPoly[prev_v]);
                     f32 t = (-distances[prev_v]) / math::dot(plane.xyz, ab);
                     float3 intersection = math::add(inputPoly[prev_v], math::scale(ab, t));
-                    
+
                     numPlaneCuts++;
                     if (numPlaneCuts <= 1) { outputQuad[outputPoly_count++] = intersection; }
                     else {
@@ -912,6 +914,7 @@ float3* poly, u32& poly_count, const float4* planes, const u32 planeCount, const
                     }
                 }
                 outputQuad[outputPoly_count++] = inputPoly[curr_v];
+
             } else if (distances[curr_v] < -eps) {
                 // current vertex in negative zone,
                 // will not be added to poly
@@ -935,6 +938,489 @@ float3* poly, u32& poly_count, const float4* planes, const u32 planeCount, const
     memcpy(poly, outputQuad, outputPoly_count * sizeof(float3));
     poly_count = outputPoly_count;
 }
+#else
+void clip_poly_in_frustum_256(
+    float3* poly, u32& poly_count, const m256_4* planes, const u32 planeCount, const u32 polyCountCap) {
+
+    assert(polyCountCap <= 8);
+    // cull quad by each frustum plane via Sutherland-Hodgman using AVX2's 256-bit vectors
+    // a lookup-table tells us which edges we should be doing intersection checks on, as well as
+    // handles degenerate cases by picking just 2 intersecting edges
+
+    // duplicate last entry to ensure no new intersections
+    for (u32 i = poly_count; i < 8; i++) { poly[i] = poly[poly_count - 1]; }
+    // expand input:
+    // (x0,x1,x2,x3,x4,x5,x6,x7)
+    // (y0,y1,y2,y3,y4,y5,y6,y7)
+    // (z0,z1,z2,z3,z4,z5,z6,z7)
+    __m256 vx_in, vy_in, vz_in;
+    vx_in = _mm256_set_ps(poly[7].x, poly[6].x, poly[5].x, poly[4].x, poly[3].x, poly[2].x, poly[1].x, poly[0].x);
+    vy_in = _mm256_set_ps(poly[7].y, poly[6].y, poly[5].y, poly[4].y, poly[3].y, poly[2].y, poly[1].y, poly[0].y);
+    vz_in = _mm256_set_ps(poly[7].z, poly[6].z, poly[5].z, poly[4].z, poly[3].z, poly[2].z, poly[1].z, poly[0].z);
+
+    const f32 eps = 0.001f;
+    __m256 veps = _mm256_set1_ps(eps);
+
+    u32 input_poly_count = 0;
+    u32 output_poly_count = poly_count;
+
+    // keep iterating over the culling planes until
+    // we have fully culled the quad, or the previous cut introduced too many cuts
+    for (u32 p = 0; p < planeCount && output_poly_count > 2 && output_poly_count < polyCountCap; p++) {
+
+        input_poly_count = output_poly_count;
+        output_poly_count = 0;
+
+        // compute all clip flags
+        const m256_4& plane = planes[p];
+        __m256 vdotxw = _mm256_fmadd_ps(vx_in, plane.vx, plane.vw);
+        __m256 vdotxyw = _mm256_fmadd_ps(vy_in, plane.vy, vdotxw);
+        __m256 vdot = _mm256_fmadd_ps(vz_in, plane.vz, vdotxyw);
+        __m256 vdoteps = _mm256_sub_ps(vdot, veps);
+        const u32 clipFlags = _mm256_movemask_ps(vdoteps);
+        /*
+        // Code to generate the couple of indices that mark the first intersection from a positive
+        // region (0) into a negative region (1), followed by the reversed intersection, using the
+        // clip flags (whether a vertex is in the positive or negative region) as input
+        printf("const u8 transitionLUT[] = {\n");
+        for (int n = 0; n < 256;n++) {
+            int i, j;
+            if (n == 0)         { i = j = 0; }  // 0b00000000 -> all in positive region: cull none
+            else if (n == 0xff) { i = j = 8; }  // 0b11111111 -> all in negative region: cull all
+            else {
+                // capture start and ends of a group of 1s closest to the least significant bits
+                // i.e.: 0b00001100 -> { 2, 4 }
+                // i.e.: 0b00000111 -> { 0, 3 }
+                // it is important that we select the group of 1s closest to the right,
+                // so the flags work with polygons with less than 8 vertices
+                // i.e.: 0b01100101 -> { 0, 1 }, not { 2, 3 } nor { 5, 7 }
+                int k = 0;
+                if ((n & (1 << k)) == 0) {
+                    // first digit is 0, poly starts in the positive zone
+                    // find the next digit in the negative zone
+                    k = 1;
+                    while (k < 8 && (n & (1 << k)) == 0) { k++; }
+                    i = k;
+                    // next, find the next digit in the positive zone (we may loop to the beginning)
+                    while (k < 8 && (n & (1 << k)) != 0) { k++; }
+                    j = k % 8;
+                } else {
+                    // first digit is 1, poly starts in the negative zone
+                    // find the last digit inside the negative zone, towards the left
+                    k = 1;
+                    while (k < 8 && (n & (1 << k)) != 0) { k++; }
+                    j = k;
+                    // find the next digit on the right from the start inside a positive zone
+                    k = 7;
+                    while (k > 0 && (n & (1 << k)) != 0) { k--; }
+                    i = (k + 1) % 8;
+                }
+            }
+            // generate code
+            printf("    0x%02x,", i << 4 | j);  // actual array byte content, one index in each half
+            printf(" // {%d, %d} : 0b", i, j);  // readable indexes for reference, and clip flags as
+            for (int s = 128; s; s>>=1)         // binary: print each digit separately
+            { printf("%d", (n & s) != 0); }     // print as bool digit (0 or 1)
+            printf(" (%d)\n", n);               // clip flags in base 10
+        };
+        printf("};\n");
+        */
+        static const u8 transitionLUT[] = {
+            0x00, // {0, 0} : 0b00000000 (0)
+            0x01, // {0, 1} : 0b00000001 (1)
+            0x12, // {1, 2} : 0b00000010 (2)
+            0x02, // {0, 2} : 0b00000011 (3)
+            0x23, // {2, 3} : 0b00000100 (4)
+            0x01, // {0, 1} : 0b00000101 (5)
+            0x13, // {1, 3} : 0b00000110 (6)
+            0x03, // {0, 3} : 0b00000111 (7)
+            0x34, // {3, 4} : 0b00001000 (8)
+            0x01, // {0, 1} : 0b00001001 (9)
+            0x12, // {1, 2} : 0b00001010 (10)
+            0x02, // {0, 2} : 0b00001011 (11)
+            0x24, // {2, 4} : 0b00001100 (12)
+            0x01, // {0, 1} : 0b00001101 (13)
+            0x14, // {1, 4} : 0b00001110 (14)
+            0x04, // {0, 4} : 0b00001111 (15)
+            0x45, // {4, 5} : 0b00010000 (16)
+            0x01, // {0, 1} : 0b00010001 (17)
+            0x12, // {1, 2} : 0b00010010 (18)
+            0x02, // {0, 2} : 0b00010011 (19)
+            0x23, // {2, 3} : 0b00010100 (20)
+            0x01, // {0, 1} : 0b00010101 (21)
+            0x13, // {1, 3} : 0b00010110 (22)
+            0x03, // {0, 3} : 0b00010111 (23)
+            0x35, // {3, 5} : 0b00011000 (24)
+            0x01, // {0, 1} : 0b00011001 (25)
+            0x12, // {1, 2} : 0b00011010 (26)
+            0x02, // {0, 2} : 0b00011011 (27)
+            0x25, // {2, 5} : 0b00011100 (28)
+            0x01, // {0, 1} : 0b00011101 (29)
+            0x15, // {1, 5} : 0b00011110 (30)
+            0x05, // {0, 5} : 0b00011111 (31)
+            0x56, // {5, 6} : 0b00100000 (32)
+            0x01, // {0, 1} : 0b00100001 (33)
+            0x12, // {1, 2} : 0b00100010 (34)
+            0x02, // {0, 2} : 0b00100011 (35)
+            0x23, // {2, 3} : 0b00100100 (36)
+            0x01, // {0, 1} : 0b00100101 (37)
+            0x13, // {1, 3} : 0b00100110 (38)
+            0x03, // {0, 3} : 0b00100111 (39)
+            0x34, // {3, 4} : 0b00101000 (40)
+            0x01, // {0, 1} : 0b00101001 (41)
+            0x12, // {1, 2} : 0b00101010 (42)
+            0x02, // {0, 2} : 0b00101011 (43)
+            0x24, // {2, 4} : 0b00101100 (44)
+            0x01, // {0, 1} : 0b00101101 (45)
+            0x14, // {1, 4} : 0b00101110 (46)
+            0x04, // {0, 4} : 0b00101111 (47)
+            0x46, // {4, 6} : 0b00110000 (48)
+            0x01, // {0, 1} : 0b00110001 (49)
+            0x12, // {1, 2} : 0b00110010 (50)
+            0x02, // {0, 2} : 0b00110011 (51)
+            0x23, // {2, 3} : 0b00110100 (52)
+            0x01, // {0, 1} : 0b00110101 (53)
+            0x13, // {1, 3} : 0b00110110 (54)
+            0x03, // {0, 3} : 0b00110111 (55)
+            0x36, // {3, 6} : 0b00111000 (56)
+            0x01, // {0, 1} : 0b00111001 (57)
+            0x12, // {1, 2} : 0b00111010 (58)
+            0x02, // {0, 2} : 0b00111011 (59)
+            0x26, // {2, 6} : 0b00111100 (60)
+            0x01, // {0, 1} : 0b00111101 (61)
+            0x16, // {1, 6} : 0b00111110 (62)
+            0x06, // {0, 6} : 0b00111111 (63)
+            0x67, // {6, 7} : 0b01000000 (64)
+            0x01, // {0, 1} : 0b01000001 (65)
+            0x12, // {1, 2} : 0b01000010 (66)
+            0x02, // {0, 2} : 0b01000011 (67)
+            0x23, // {2, 3} : 0b01000100 (68)
+            0x01, // {0, 1} : 0b01000101 (69)
+            0x13, // {1, 3} : 0b01000110 (70)
+            0x03, // {0, 3} : 0b01000111 (71)
+            0x34, // {3, 4} : 0b01001000 (72)
+            0x01, // {0, 1} : 0b01001001 (73)
+            0x12, // {1, 2} : 0b01001010 (74)
+            0x02, // {0, 2} : 0b01001011 (75)
+            0x24, // {2, 4} : 0b01001100 (76)
+            0x01, // {0, 1} : 0b01001101 (77)
+            0x14, // {1, 4} : 0b01001110 (78)
+            0x04, // {0, 4} : 0b01001111 (79)
+            0x45, // {4, 5} : 0b01010000 (80)
+            0x01, // {0, 1} : 0b01010001 (81)
+            0x12, // {1, 2} : 0b01010010 (82)
+            0x02, // {0, 2} : 0b01010011 (83)
+            0x23, // {2, 3} : 0b01010100 (84)
+            0x01, // {0, 1} : 0b01010101 (85)
+            0x13, // {1, 3} : 0b01010110 (86)
+            0x03, // {0, 3} : 0b01010111 (87)
+            0x35, // {3, 5} : 0b01011000 (88)
+            0x01, // {0, 1} : 0b01011001 (89)
+            0x12, // {1, 2} : 0b01011010 (90)
+            0x02, // {0, 2} : 0b01011011 (91)
+            0x25, // {2, 5} : 0b01011100 (92)
+            0x01, // {0, 1} : 0b01011101 (93)
+            0x15, // {1, 5} : 0b01011110 (94)
+            0x05, // {0, 5} : 0b01011111 (95)
+            0x57, // {5, 7} : 0b01100000 (96)
+            0x01, // {0, 1} : 0b01100001 (97)
+            0x12, // {1, 2} : 0b01100010 (98)
+            0x02, // {0, 2} : 0b01100011 (99)
+            0x23, // {2, 3} : 0b01100100 (100)
+            0x01, // {0, 1} : 0b01100101 (101)
+            0x13, // {1, 3} : 0b01100110 (102)
+            0x03, // {0, 3} : 0b01100111 (103)
+            0x34, // {3, 4} : 0b01101000 (104)
+            0x01, // {0, 1} : 0b01101001 (105)
+            0x12, // {1, 2} : 0b01101010 (106)
+            0x02, // {0, 2} : 0b01101011 (107)
+            0x24, // {2, 4} : 0b01101100 (108)
+            0x01, // {0, 1} : 0b01101101 (109)
+            0x14, // {1, 4} : 0b01101110 (110)
+            0x04, // {0, 4} : 0b01101111 (111)
+            0x47, // {4, 7} : 0b01110000 (112)
+            0x01, // {0, 1} : 0b01110001 (113)
+            0x12, // {1, 2} : 0b01110010 (114)
+            0x02, // {0, 2} : 0b01110011 (115)
+            0x23, // {2, 3} : 0b01110100 (116)
+            0x01, // {0, 1} : 0b01110101 (117)
+            0x13, // {1, 3} : 0b01110110 (118)
+            0x03, // {0, 3} : 0b01110111 (119)
+            0x37, // {3, 7} : 0b01111000 (120)
+            0x01, // {0, 1} : 0b01111001 (121)
+            0x12, // {1, 2} : 0b01111010 (122)
+            0x02, // {0, 2} : 0b01111011 (123)
+            0x27, // {2, 7} : 0b01111100 (124)
+            0x01, // {0, 1} : 0b01111101 (125)
+            0x17, // {1, 7} : 0b01111110 (126)
+            0x07, // {0, 7} : 0b01111111 (127)
+            0x70, // {7, 0} : 0b10000000 (128)
+            0x71, // {7, 1} : 0b10000001 (129)
+            0x12, // {1, 2} : 0b10000010 (130)
+            0x72, // {7, 2} : 0b10000011 (131)
+            0x23, // {2, 3} : 0b10000100 (132)
+            0x71, // {7, 1} : 0b10000101 (133)
+            0x13, // {1, 3} : 0b10000110 (134)
+            0x73, // {7, 3} : 0b10000111 (135)
+            0x34, // {3, 4} : 0b10001000 (136)
+            0x71, // {7, 1} : 0b10001001 (137)
+            0x12, // {1, 2} : 0b10001010 (138)
+            0x72, // {7, 2} : 0b10001011 (139)
+            0x24, // {2, 4} : 0b10001100 (140)
+            0x71, // {7, 1} : 0b10001101 (141)
+            0x14, // {1, 4} : 0b10001110 (142)
+            0x74, // {7, 4} : 0b10001111 (143)
+            0x45, // {4, 5} : 0b10010000 (144)
+            0x71, // {7, 1} : 0b10010001 (145)
+            0x12, // {1, 2} : 0b10010010 (146)
+            0x72, // {7, 2} : 0b10010011 (147)
+            0x23, // {2, 3} : 0b10010100 (148)
+            0x71, // {7, 1} : 0b10010101 (149)
+            0x13, // {1, 3} : 0b10010110 (150)
+            0x73, // {7, 3} : 0b10010111 (151)
+            0x35, // {3, 5} : 0b10011000 (152)
+            0x71, // {7, 1} : 0b10011001 (153)
+            0x12, // {1, 2} : 0b10011010 (154)
+            0x72, // {7, 2} : 0b10011011 (155)
+            0x25, // {2, 5} : 0b10011100 (156)
+            0x71, // {7, 1} : 0b10011101 (157)
+            0x15, // {1, 5} : 0b10011110 (158)
+            0x75, // {7, 5} : 0b10011111 (159)
+            0x56, // {5, 6} : 0b10100000 (160)
+            0x71, // {7, 1} : 0b10100001 (161)
+            0x12, // {1, 2} : 0b10100010 (162)
+            0x72, // {7, 2} : 0b10100011 (163)
+            0x23, // {2, 3} : 0b10100100 (164)
+            0x71, // {7, 1} : 0b10100101 (165)
+            0x13, // {1, 3} : 0b10100110 (166)
+            0x73, // {7, 3} : 0b10100111 (167)
+            0x34, // {3, 4} : 0b10101000 (168)
+            0x71, // {7, 1} : 0b10101001 (169)
+            0x12, // {1, 2} : 0b10101010 (170)
+            0x72, // {7, 2} : 0b10101011 (171)
+            0x24, // {2, 4} : 0b10101100 (172)
+            0x71, // {7, 1} : 0b10101101 (173)
+            0x14, // {1, 4} : 0b10101110 (174)
+            0x74, // {7, 4} : 0b10101111 (175)
+            0x46, // {4, 6} : 0b10110000 (176)
+            0x71, // {7, 1} : 0b10110001 (177)
+            0x12, // {1, 2} : 0b10110010 (178)
+            0x72, // {7, 2} : 0b10110011 (179)
+            0x23, // {2, 3} : 0b10110100 (180)
+            0x71, // {7, 1} : 0b10110101 (181)
+            0x13, // {1, 3} : 0b10110110 (182)
+            0x73, // {7, 3} : 0b10110111 (183)
+            0x36, // {3, 6} : 0b10111000 (184)
+            0x71, // {7, 1} : 0b10111001 (185)
+            0x12, // {1, 2} : 0b10111010 (186)
+            0x72, // {7, 2} : 0b10111011 (187)
+            0x26, // {2, 6} : 0b10111100 (188)
+            0x71, // {7, 1} : 0b10111101 (189)
+            0x16, // {1, 6} : 0b10111110 (190)
+            0x76, // {7, 6} : 0b10111111 (191)
+            0x60, // {6, 0} : 0b11000000 (192)
+            0x61, // {6, 1} : 0b11000001 (193)
+            0x12, // {1, 2} : 0b11000010 (194)
+            0x62, // {6, 2} : 0b11000011 (195)
+            0x23, // {2, 3} : 0b11000100 (196)
+            0x61, // {6, 1} : 0b11000101 (197)
+            0x13, // {1, 3} : 0b11000110 (198)
+            0x63, // {6, 3} : 0b11000111 (199)
+            0x34, // {3, 4} : 0b11001000 (200)
+            0x61, // {6, 1} : 0b11001001 (201)
+            0x12, // {1, 2} : 0b11001010 (202)
+            0x62, // {6, 2} : 0b11001011 (203)
+            0x24, // {2, 4} : 0b11001100 (204)
+            0x61, // {6, 1} : 0b11001101 (205)
+            0x14, // {1, 4} : 0b11001110 (206)
+            0x64, // {6, 4} : 0b11001111 (207)
+            0x45, // {4, 5} : 0b11010000 (208)
+            0x61, // {6, 1} : 0b11010001 (209)
+            0x12, // {1, 2} : 0b11010010 (210)
+            0x62, // {6, 2} : 0b11010011 (211)
+            0x23, // {2, 3} : 0b11010100 (212)
+            0x61, // {6, 1} : 0b11010101 (213)
+            0x13, // {1, 3} : 0b11010110 (214)
+            0x63, // {6, 3} : 0b11010111 (215)
+            0x35, // {3, 5} : 0b11011000 (216)
+            0x61, // {6, 1} : 0b11011001 (217)
+            0x12, // {1, 2} : 0b11011010 (218)
+            0x62, // {6, 2} : 0b11011011 (219)
+            0x25, // {2, 5} : 0b11011100 (220)
+            0x61, // {6, 1} : 0b11011101 (221)
+            0x15, // {1, 5} : 0b11011110 (222)
+            0x65, // {6, 5} : 0b11011111 (223)
+            0x50, // {5, 0} : 0b11100000 (224)
+            0x51, // {5, 1} : 0b11100001 (225)
+            0x12, // {1, 2} : 0b11100010 (226)
+            0x52, // {5, 2} : 0b11100011 (227)
+            0x23, // {2, 3} : 0b11100100 (228)
+            0x51, // {5, 1} : 0b11100101 (229)
+            0x13, // {1, 3} : 0b11100110 (230)
+            0x53, // {5, 3} : 0b11100111 (231)
+            0x34, // {3, 4} : 0b11101000 (232)
+            0x51, // {5, 1} : 0b11101001 (233)
+            0x12, // {1, 2} : 0b11101010 (234)
+            0x52, // {5, 2} : 0b11101011 (235)
+            0x24, // {2, 4} : 0b11101100 (236)
+            0x51, // {5, 1} : 0b11101101 (237)
+            0x14, // {1, 4} : 0b11101110 (238)
+            0x54, // {5, 4} : 0b11101111 (239)
+            0x40, // {4, 0} : 0b11110000 (240)
+            0x41, // {4, 1} : 0b11110001 (241)
+            0x12, // {1, 2} : 0b11110010 (242)
+            0x42, // {4, 2} : 0b11110011 (243)
+            0x23, // {2, 3} : 0b11110100 (244)
+            0x41, // {4, 1} : 0b11110101 (245)
+            0x13, // {1, 3} : 0b11110110 (246)
+            0x43, // {4, 3} : 0b11110111 (247)
+            0x30, // {3, 0} : 0b11111000 (248)
+            0x31, // {3, 1} : 0b11111001 (249)
+            0x12, // {1, 2} : 0b11111010 (250)
+            0x32, // {3, 2} : 0b11111011 (251)
+            0x20, // {2, 0} : 0b11111100 (252)
+            0x21, // {2, 1} : 0b11111101 (253)
+            0x10, // {1, 0} : 0b11111110 (254)
+            0x88, // {8, 8} : 0b11111111 (255)
+        };
+
+        u8 intersection_indexes = transitionLUT[clipFlags];
+        // first index that enters the negative zone
+        u32 first_intersection_curr = 0xf & (intersection_indexes >> 4);
+        // first index that enters the positive zone
+        u32 second_intersection_curr = 0xf & intersection_indexes;
+        u32 clipped_vertices_count = (second_intersection_curr < first_intersection_curr) ?
+            (second_intersection_curr + input_poly_count - first_intersection_curr)
+            : (second_intersection_curr - first_intersection_curr);
+        u32 first_intersection_prev =
+            first_intersection_curr == 0 ? input_poly_count - 1 : first_intersection_curr - 1;
+        u32 second_intersection_prev =
+            second_intersection_curr == 0 ? input_poly_count - 1 : second_intersection_curr - 1;
+        if (intersection_indexes == 0) { // no intersections: keep all vertices
+            output_poly_count = input_poly_count;
+            continue;
+        }
+        else if (intersection_indexes == 0x88) { // all vertices are clipped: keep no vertices
+            output_poly_count = 0;
+            break;
+        }
+
+        // example: first intersection 1, second intersection 5, this is (1,1,0,0,5,5,4,4)
+        __m256i permute_indexes_xy = _mm256_set_epi32(
+            second_intersection_prev, second_intersection_prev,
+            second_intersection_curr, second_intersection_curr,
+            first_intersection_prev, first_intersection_prev,
+            first_intersection_curr, first_intersection_curr);
+        // in the example, this yields:
+        // (x1,x1,x0,x0,x5,x5,x4,x4)
+        // (y1,y1,y0,y0,y5,y5,y4,y4)
+        // (x1,y1,x0,y0,x5,y5,x4,y4)
+        __m256 permuted_x = _mm256_permutevar8x32_ps(vx_in, permute_indexes_xy);
+        __m256 permuted_y = _mm256_permutevar8x32_ps(vy_in, permute_indexes_xy);
+        __m256 permuted_xy = _mm256_blend_ps(permuted_x, permuted_y, 0b10101010);
+        // in the example: (0,0,1,1,4,4,5,5)
+        // (z0,z0,z1,z1,z4,z4,z5,z5)
+        __m256i permute_indexes_z = _mm256_set_epi32(
+            second_intersection_curr, second_intersection_curr,
+            second_intersection_prev, second_intersection_prev,
+            first_intersection_curr, first_intersection_curr,
+            first_intersection_prev, first_intersection_prev);
+        __m256 permuted_z = _mm256_permutevar8x32_ps(vz_in, permute_indexes_z);
+        // in the example, this yields:
+        // (d0,d0,d0,d0,d4,d4,d4,d4)
+        __m256i permute_indexes_dot = _mm256_set_epi32(
+            second_intersection_prev, second_intersection_prev,
+            second_intersection_prev, second_intersection_prev,
+            first_intersection_prev, first_intersection_prev,
+            first_intersection_prev, first_intersection_prev);
+
+        __m256 permuted_dot = _mm256_permutevar8x32_ps(vdoteps, permute_indexes_dot);
+        __m256 permuted_zdot = _mm256_blend_ps(permuted_z, permuted_dot, 0b10101010);
+        // in the example: (x1,y1,z1,d0,x5,y5,z5,d4)
+        __m256 vcurr = _mm256_blend_ps(permuted_xy, permuted_zdot, 0b11001100);
+        // in the example: (z0,d0,x0,y0,z4,d4,x4,y4)
+        __m256 permuted_tmp = _mm256_blend_ps(permuted_xy, permuted_zdot, 0b00110011);
+        __m256i permuted_indexes_prev = _mm256_set_epi32(5, 4, 7, 6, 1, 0, 3, 2);
+        // in the example: (x0,y0,z0,d0,x4,y4,z4,d4)
+        __m256 vprev = _mm256_permutevar8x32_ps(permuted_tmp, permuted_indexes_prev);
+        __m256i permuted_indexes_dot = _mm256_set_epi32(7, 7, 7, 7, 3, 3, 3, 3);
+        // in the example: (d0,d0,d0,d0,d4,d4,d4,d4)
+        __m256 distance_distance = _mm256_permutevar8x32_ps(vprev, permuted_indexes_dot);
+
+        // plane is xxxxxxxx, yyyyyyyy, zzzzzzzz, wwwwwwww
+        // this yields (x,y,x,x,x,y,x,x)
+        __m256 plane_xy = _mm256_blend_ps(plane.vx, plane.vy, 0b10100010);
+        // this yields (z,z,z,w,z,z,z,w)
+        __m256 plane_zw = _mm256_blend_ps(plane.vz, plane.vw, 0b10001000);
+        __m256 plane_plane = _mm256_blend_ps(plane_xy, plane_zw, 0b11001100);
+
+        // (curr-prev)0.xyzw (curr-prev)1.xyzw = ab0 ab1, w component cancels out
+        __m256 ab_ab = _mm256_sub_ps(vcurr, vprev);
+        // ab0*p.xyzw ab1*p.xyzw
+        __m256 planeab_planeab = _mm256_mul_ps(plane_plane, ab_ab);
+        // sum0_0 sum0_1 sum0_0 sum0_1 sum1_0 sum1_1 sum1_0 sum1_1
+        __m256 dottmp = _mm256_hadd_ps(planeab_planeab, planeab_planeab);
+        // dot0 dot0 dot0 dot0 dot1 dot1 dot1 dot1
+        __m256 dot_dot = _mm256_hadd_ps(dottmp, dottmp);
+        __m256 negt_negt = _mm256_div_ps(distance_distance, dot_dot);
+        // two intersection points
+        __m256 i_i = _mm256_fnmadd_ps(ab_ab, negt_negt, vprev);
+
+        // Now that we have the intersection points, we need to reformat the output poly, so we
+        // replace the values outside (o) and keep the ones inside (i), for example:
+        //  i  i  i  o  o  o  i
+        // p0 p1 p2 p3 p4 p5 p6
+        // with the intersection points (x0 and x1), repeating the last vertex so the count stays 8
+        // p0 p1 p2 x0 x1 p6
+        // we'll change the ordering so they start at the intersection points
+        // x0 x1 p6 p0 p1 p2
+        u8 output_indexes[8] = {};
+        output_indexes[output_poly_count++] = first_intersection_curr;
+        output_indexes[output_poly_count++] = second_intersection_curr;
+        u32 remaining = input_poly_count - clipped_vertices_count;
+        for (u32 step = 0; step < remaining; step++) {
+            u32 index = (step + second_intersection_curr) % input_poly_count;
+            output_indexes[output_poly_count++] = index;
+        }
+        for (u32 step = output_poly_count; step < 8; step++) {
+            output_indexes[step] = output_indexes[output_poly_count - 1];
+        }
+
+        // in the example, this yields:
+        // (x1,x5,x5,x6,x7,x0,x0,x0)
+        // (y1,y5,y5,y6,y7,y0,y0,y0)
+        // (z1,z5,z5,z6,z7,z0,z0,z0)
+        __m256i permute_output_xyz = _mm256_set_epi32(
+            output_indexes[7], output_indexes[6], output_indexes[5], output_indexes[4],
+            output_indexes[3], output_indexes[2], output_indexes[1], output_indexes[0]);
+        __m256 vx_tmp = _mm256_permutevar8x32_ps(vx_in, permute_output_xyz);
+        __m256 vy_tmp = _mm256_permutevar8x32_ps(vy_in, permute_output_xyz);
+        __m256 vz_tmp = _mm256_permutevar8x32_ps(vz_in, permute_output_xyz);
+        // blend with intersection points
+        // in the example, this yields:
+        // (i0x,i1x,x5,x6,x7,x0,x0,x0)
+        // (i0y,i1y,y5,y6,y7,y0,y0,y0)
+        // (i0z,i1z,z5,z6,z7,z0,z0,z0)
+        __m256i permute_output_intersect_x = _mm256_set_epi32(0, 0, 0, 0, 0, 0, 4, 0);
+        __m256 ix = _mm256_permutevar8x32_ps(i_i, permute_output_intersect_x);
+        vx_in = _mm256_blend_ps(vx_tmp, ix, 0b00000011);
+        __m256i permute_output_intersect_y = _mm256_set_epi32(0, 0, 0, 0, 0, 0, 5, 1);
+        __m256 iy = _mm256_permutevar8x32_ps(i_i, permute_output_intersect_y);
+        vy_in = _mm256_blend_ps(vy_tmp, iy, 0b00000011);
+        __m256i permute_output_intersect_z = _mm256_set_epi32(0, 0, 0, 0, 0, 0, 6, 2);
+        __m256 iz = _mm256_permutevar8x32_ps(i_i, permute_output_intersect_z);
+        vz_in = _mm256_blend_ps(vz_tmp, iz, 0b00000011);
+    }
+
+    // output the poly in non-SIMD format
+    for (u32 i = 0; i < output_poly_count; i++) {
+        poly[i].x = ((const float*)&vx_in)[i];
+        poly[i].y = ((const float*)&vy_in)[i];
+        poly[i].z = ((const float*)&vz_in)[i];
+    }
+    poly_count = output_poly_count;
+}
+#endif
 
 struct Camera {
     float4x4 viewMatrix;
@@ -951,10 +1437,10 @@ struct CameraNode { // Node in camera tree (stored as depth-first)
     float3 pos;
     u32 depth;          // depth of this node in the tree (0 == root)
     u32 siblingIndex;   // next sibling index in the tree
-    u32 parentIndex;   // next sibling index in the tree
+    u32 parentIndex;    // next sibling index in the tree
     u32 sourceId;
     renderer::DrawMesh drawMesh;
-    __PROFILEONLY(char str[256];)      // used in non-debug for GPU markers
+    __PROFILEONLY(char str[256];)   // used in profile for GPU markers
 };
 struct GatherMirrorTreeContext {
     allocator::PagedArena& frameArena;
@@ -965,16 +1451,33 @@ struct GatherMirrorTreeContext {
 };
 u32 gatherMirrorTreeRecursive(GatherMirrorTreeContext& ctx, u32 index, const CameraNode& parent) {
 
+    #if !DISABLE_INTRINSICS
+    m256_4 planes_256[renderer::Frustum::MAX_PLANE_COUNT];
+    for (u32 p = 0; p < parent.frustum.numPlanes; p++) {
+        planes_256[p].vx = _mm256_set1_ps(parent.frustum.planes[p].x);
+        planes_256[p].vy = _mm256_set1_ps(parent.frustum.planes[p].y);
+        planes_256[p].vz = _mm256_set1_ps(parent.frustum.planes[p].z);
+        planes_256[p].vw = _mm256_set1_ps(parent.frustum.planes[p].w);
+    }
+    #endif
+
     bool* mirrorVisibility =
         (bool*)allocator::alloc_arena(
             ctx.scratchArenaRoot, sizeof(bool) * ctx.mirrors.count, alignof(bool));
     memset(mirrorVisibility, 0, ctx.mirrors.count * sizeof(bool));
     if (ctx.mirrors.bvh.nodeCount) {
         memset(mirrorVisibility, 0, ctx.mirrors.count * sizeof(bool));
-        bvh::findTrianglesIntersectingFrustum(
-            ctx.scratchArenaRoot,
-            mirrorVisibility, ctx.mirrors.bvh,
-            parent.frustum.planes, parent.frustum.numPlanes);
+        #if DISABLE_INTRINSICS
+            bvh::findTrianglesIntersectingFrustum(
+                ctx.scratchArenaRoot,
+                mirrorVisibility, ctx.mirrors.bvh,
+                parent.frustum.planes, parent.frustum.numPlanes);
+        #else
+            bvh::findTrianglesIntersectingFrustum(
+                ctx.scratchArenaRoot,
+                mirrorVisibility, ctx.mirrors.bvh,
+                planes_256, parent.frustum.numPlanes);
+        #endif
     } else {
         memset(mirrorVisibility, 1, ctx.mirrors.count * sizeof(bool));
     }
@@ -993,22 +1496,30 @@ u32 gatherMirrorTreeRecursive(GatherMirrorTreeContext& ctx, u32 index, const Cam
         if (math::dot(mirrorGeo.normal, math::subtract(parent.pos, mirrorGeo.v[0])) < 0.f) { continue; }
 
         // copy mirror quad (we'll modify it during clipping)
-        enum { MAX_MIRROR_POLY_VERTICES = 7 };
+        enum { MAX_MIRROR_POLY_VERTICES = 8 };
         static_assert(MAX_MIRROR_POLY_VERTICES <= countof(parent.frustum.planes) + 2,
             "mirror poly has too many vertices, it will generate too many frustum planes");
         float3 poly[MAX_MIRROR_POLY_VERTICES];
         u32 poly_count = ctx.mirrors.polys[i].numPts;
         memcpy(poly, ctx.mirrors.polys[i].v, sizeof(float3) * ctx.mirrors.polys[i].numPts);
-        clip_poly_in_frustum(
-            poly, poly_count, parent.frustum.planes, parent.frustum.numPlanes, countof(poly));
-        if (poly_count < 3) continue; // resulting mirror poly is fully culled
+
+        #if DISABLE_INTRINSICS
+            clip_poly_in_frustum(
+                poly, poly_count, parent.frustum.planes, parent.frustum.numPlanes, countof(poly));
+        #else
+            clip_poly_in_frustum_256(
+                poly, poly_count, planes_256, parent.frustum.numPlanes, countof(poly));
+        #endif
+
+        if (poly_count < 3) { continue; } // resulting mirror poly is fully culled
 
         // acknowledge this mirror as part of the tree
         CameraNode& curr = allocator::push(ctx.cameraTree, ctx.frameArena);
         curr.parentIndex = parentIndex;
         curr.depth = parent.depth + 1;
         curr.sourceId = i;
-        __PROFILEONLY(platform::format(curr.str, sizeof(curr.str), "%s-%d", parent.str, i, curr.depth);)
+        // store mirror id only when using GPU markers
+        __PROFILEONLY(platform::format(curr.str, sizeof(curr.str), "%s-%d", parent.str, i);)
         index++;
 
         // compute mirror matrices

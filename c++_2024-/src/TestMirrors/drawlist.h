@@ -231,7 +231,8 @@ force_inline u32 handle_from_cbuffer(Scene& scene, driver::RscCBuffer& cbuffer) 
 }
 
 struct Frustum {
-    float4 planes[10];
+    enum { MAX_PLANE_COUNT = 10 };
+    float4 planes[MAX_PLANE_COUNT];
     u32 numPlanes;
 };
 struct CullEntry {

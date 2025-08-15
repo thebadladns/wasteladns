@@ -123,5 +123,5 @@ void qsort(void* __restrict elems, s32 low, s32 high, size_t stride, CompFunc cm
         qsort(elems, pi + 1, high, stride, cmp);
     };
 };
-    
+
 #endif // __WASTELADNS_MATH_H__

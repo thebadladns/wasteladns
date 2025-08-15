@@ -4,8 +4,22 @@
 namespace bvh {
 
 struct Node {
+#if DISABLE_INTRINSICS
     float3 min;
     float3 max;
+#else
+    union {
+        struct {
+            float3 min;
+            float3 max;
+        };
+        struct {
+            __m256 xcoords_256;
+            __m256 ycoords_256;
+            __m256 zcoords_256;
+        };
+    };
+#endif
     u16 lchildId;
     u16 firstIndexId;
     u16 sourceId;
@@ -44,15 +58,15 @@ BuildTreeContext& ctx, u16* triangleIds, u32 triangleId_count, const u32 nodeId)
     ctx.nodes.data[nodeId].isLeaf = triangleId_count == 1;
     if (ctx.nodes.data[nodeId].isLeaf) {
         const Triangle& tri = ctx.trianglePool[triangleIds[0]];
-        // node: this has already been set by the parent node
+        // note: this has already been set by the parent node
         //ctx.nodes.data[nodeId].min = tri.min;
         //ctx.nodes.data[nodeId].max = tri.max;
         ctx.nodes.data[nodeId].firstIndexId = triangleIds[0] * 3;
         ctx.nodes.data[nodeId].sourceId = tri.sourceId;
     } else {
         ctx.nodes.data[nodeId].lchildId = (u32)ctx.nodes.len;
-        Node lchild;
-        Node rchild;
+        Node lchild = {};
+        Node rchild = {};
         emptyNode(lchild);
         emptyNode(rchild);
 
@@ -141,7 +155,7 @@ const u32* sourceIds) {
             scratchArena, triangleCount * sizeof(Triangle), alignof(Triangle));
 
     allocator::Buffer<Node> nodes = {};
-    Node root;
+    Node root = {};
     emptyNode(root);
     for (u32 triangleId = 0; triangleId < triangleCount; triangleId++) {
         Triangle tri;
@@ -177,13 +191,29 @@ const u32* sourceIds) {
         indexCount
     };
     buildTreeRecursive(context, triangleIds, triangleCount, 0);
+
+#if !DISABLE_INTRINSICS
+    for (u32 n = 0; n < (u32)nodes.len; n++) {
+        Node& node = nodes.data[n];
+        const float3 n_min = node.min;
+        const float3 n_max = node.max;
+        node.xcoords_256 = _mm256_set_ps(
+            n_min.x, n_max.x, n_min.x, n_max.x, n_min.x, n_max.x, n_min.x, n_max.x);
+        node.ycoords_256 = _mm256_set_ps(
+            n_min.y, n_min.y, n_max.y, n_max.y, n_min.y, n_min.y, n_max.y, n_max.y);
+        node.zcoords_256 = _mm256_set_ps(
+            n_min.z, n_min.z, n_min.z, n_min.z, n_max.z, n_max.z, n_max.z, n_max.z);
+    };
+#endif
+
     bvh.nodes = nodes.data;
     bvh.nodeCount = (u32)nodes.len;
 }
 
 struct FrustumStatus { enum Enum { In, Intersecting, Out }; };
+#if DISABLE_INTRINSICS
 FrustumStatus::Enum queryIsBoxVisibleInFrustum(
-const float4* planes, const u32 numPlanes, const float3& min, const float3& max) {
+    const float4* planes, const u32 numPlanes, const float3& min, const float3& max) {
     const float4 boxPoints[8] = {
         { min.x, min.y, min.z, 1.f },
         { max.x, min.y, min.z, 1.f },
@@ -194,26 +224,126 @@ const float4* planes, const u32 numPlanes, const float3& min, const float3& max)
         { min.x, max.y, max.z, 1.f },
         { max.x, max.y, max.z, 1.f }
     };
+
     FrustumStatus::Enum status = FrustumStatus::In;
     for (u32 p = 0; p < numPlanes; p++) {
         int out = 0;
-        out += (math::dot(planes[p], boxPoints[0]) < 0.f) ? 1 : 0;
-        out += (math::dot(planes[p], boxPoints[1]) < 0.f) ? 1 : 0;
-        out += (math::dot(planes[p], boxPoints[2]) < 0.f) ? 1 : 0;
-        out += (math::dot(planes[p], boxPoints[3]) < 0.f) ? 1 : 0;
-        out += (math::dot(planes[p], boxPoints[4]) < 0.f) ? 1 : 0;
-        out += (math::dot(planes[p], boxPoints[5]) < 0.f) ? 1 : 0;
-        out += (math::dot(planes[p], boxPoints[6]) < 0.f) ? 1 : 0;
-        out += (math::dot(planes[p], boxPoints[7]) < 0.f) ? 1 : 0;
+        // explicitly doing the dot product instead of calling math::dot,
+        // and looping over all 8 points, instead of manually unrolling,
+        // produces better auto-vectorization in MSVC
+        for (u32 i = 0; i < 8; i++) {
+            out += ((planes[p].x * boxPoints[i].x
+                   + planes[p].y * boxPoints[i].y
+                   + planes[p].z * boxPoints[i].z
+                   + planes[p].w) < 0.f) ? 1 : 0;
+        }
         if (out == 8) { status = FrustumStatus::Out; break; }
         else if (out > 0) { status = FrustumStatus::Intersecting; };
     }
     return status;
 }
+#else
+FrustumStatus::Enum queryIsBoxVisibleInFrustum_256(
+    const m256_4* planes, const u32 numPlanes, const __m256 vx, const __m256 vy, const __m256 vz) {
+
+    FrustumStatus::Enum status = FrustumStatus::In;
+    for (u32 p = 0; p < numPlanes; p++) {
+        int out = 0;
+        const __m256 vdotx = _mm256_fmadd_ps(vx, planes[p].vx, planes[p].vw);
+        const __m256 vdotxy = _mm256_fmadd_ps(vy, planes[p].vy, vdotx);
+        const __m256 vdot = _mm256_fmadd_ps(vz, planes[p].vz, vdotxy);
+        const s32 mask = _mm256_movemask_ps(vdot);
+        out += __popcnt(mask);
+        if (out == 8) { status = FrustumStatus::Out; break; }
+        else if (out > 0) { status = FrustumStatus::Intersecting; };
+    }
+    return status;
+}
+#if 0 // for potential future reference
+FrustumStatus::Enum queryIsBoxVisibleInFrustum_FMA(  // this is the second best one
+    const m128_4* planes, const u32 numPlanes,
+    const __m128 xxxx, const __m128 yyyy, const __m128 z0z1z2z3, const __m128 z4z5z6z7) {
+
+    FrustumStatus::Enum status = FrustumStatus::In;
+    for (u32 p = 0; p < numPlanes; p++) {
+        int out = 0;
+        int mask;
+        // compute p[i].x * plane.x + p[i].y * plane.y + plane.w
+        __m128 dotxxxx = _mm_fmadd_ps(xxxx, planes[p].xxxx, planes[p].wwww);
+        // compute p[i] * plane.z, for the lower 4 points of the bounding box:
+        // { min.x, min.y, min.z}, { max.x, min.y, min.z },
+        // { min.x, max.y, min.z } and { max.x, max.y, min.z }
+        __m128 dotxyxyxyxy = _mm_fmadd_ps(yyyy, planes[p].yyyy, dotxxxx);
+        // dot(p[i].xyz, plane.xyz) + plane.w for the lower 4 points of the bounding box
+        __m128 dotp0p1p2p3 = _mm_fmadd_ps(z0z1z2z3, planes[p].zzzz, dotxyxyxyxy);
+        // dot(p[i].xyz, plane.xyz) + plane.w < 0.f for the lower 4 points of the bounding box
+        mask = _mm_movemask_ps(dotp0p1p2p3);
+        // count how many points in the bounding box passed the comparison
+        out += __popcnt(mask);
+        // same thing, for the upper 4 points of the bounding box:
+        // { min.x, min.y, max.z }, { max.x, min.y, max.z },
+        // { min.x, max.y, max.z } and { max.x, max.y, max.z }
+        // note that the x and y components are the same as the upper points, so we'll reuse those
+        __m128 dotz4z5z6z7 = _mm_fmadd_ps(z4z5z6z7, planes[p].zzzz, dotxyxyxyxy);
+        mask = _mm_movemask_ps(dotz4z5z6z7);
+        out += __popcnt(mask);
+        if (out == 8) { status = FrustumStatus::Out; break; }
+        else if (out > 0) { status = FrustumStatus::Intersecting; };
+    }
+    return status;
+}
+FrustumStatus::Enum queryIsBoxVisibleInFrustum_SSE2(// this is the best one if we are not allowed any FMAs (SSE2 only)
+const m128_4* planes, const u32 numPlanes,
+const __m128 xxxx, const __m128 yyyy, const __m128 z0z1z2z3, const __m128 z4z5z6z7) {
+
+    FrustumStatus::Enum status = FrustumStatus::In;
+    for (u32 p = 0; p < numPlanes; p++) {
+        int out = 0;
+        int mask;
+        // compute p[i].x * plane.x + p[i].y * plane.y and p[i] * plane.z, for the
+        // lower 4 points of the bounding box:
+        // { min.x, min.y, min.z}, { max.x, min.y, min.z },
+        // { min.x, max.y, min.z } and { max.x, max.y, min.z }
+        __m128 dotxxxx = _mm_mul_ps(xxxx, planes[p].xxxx);
+        __m128 dotyyyy = _mm_mul_ps(yyyy, planes[p].yyyy);
+        __m128 dotxyxyxyxy = _mm_add_ps(dotxxxx, dotyyyy);
+        __m128 dotz0z1z2z3 = _mm_mul_ps(z0z1z2z3, planes[p].zzzz);
+        // dot(p[i].xyz, plane.xyz) for the lower 4 points of the bounding box
+        __m128 dotp0p1p2p3 = _mm_add_ps(dotxyxyxyxy, dotz0z1z2z3);
+        // dot(p[i].xyz, plane.xyz) < plane.w for the lower 4 points of the bounding box
+        // note that plane.w has to have the right sign for this
+        // plane is given in ax + by + cz - d = 0 form, so we can skip a negation in the comparison
+        __m128 maskp0p1p2p3 = _mm_cmplt_ps(dotp0p1p2p3, planes[p].wwww);
+        // count how many points in the bounding box passed the comparison
+        mask = _mm_movemask_ps(maskp0p1p2p3);
+        out += __popcnt(mask);
+        // same thing, for the upper 4 points of the bounding box:
+        // { min.x, min.y, max.z }, { max.x, min.y, max.z },
+        // { min.x, max.y, max.z } and { max.x, max.y, max.z }
+        // note that the x and y components are the same as the upper points, so we'll reuse those
+        __m128 dotz4z5z6z7 = _mm_mul_ps(z4z5z6z7, planes[p].zzzz);
+        __m128 dotp4p5p6p7 = _mm_add_ps(dotxyxyxyxy, dotz4z5z6z7);
+        __m128 maskp4p5p6p7 = _mm_cmplt_ps(dotp4p5p6p7, planes[p].wwww);
+        mask = _mm_movemask_ps(maskp4p5p6p7);
+        out += __popcnt(mask);
+        if (out == 8) { status = FrustumStatus::Out; break; }
+        else if (out > 0) { status = FrustumStatus::Intersecting; };
+    }
+    return status;
+}
+#endif
+#endif
+#if DISABLE_INTRINSICS
 void findTrianglesIntersectingFrustum(
     allocator::PagedArena scratchArena,
     bool* sourceVisibility, const Tree& bvh,
     const float4* planes, const u32 numPlanes) {
+#else
+void findTrianglesIntersectingFrustum(
+    allocator::PagedArena scratchArena,
+    bool* sourceVisibility, const Tree & bvh,
+    const m256_4* planes_256, const u32 numPlanes) {
+#endif
     struct FrustumQueryNode { u16 nodeId; FrustumStatus::Enum frustumStatus; };
 
     FrustumQueryNode* nodeStack = (FrustumQueryNode*)allocator::alloc_arena(
@@ -240,8 +370,15 @@ void findTrianglesIntersectingFrustum(
                 nodeStack[stackCount++] = { u16(bvh.nodes[n.nodeId].lchildId + 1u), rStatus };
             } else {
                 // test each child against the frustum, cull if fully not visible
-                lStatus = queryIsBoxVisibleInFrustum(planes, numPlanes, lchild.min, lchild.max);
-                rStatus = queryIsBoxVisibleInFrustum(planes, numPlanes, rchild.min, rchild.max);
+                #if DISABLE_INTRINSICS
+                    lStatus = queryIsBoxVisibleInFrustum(planes, numPlanes, lchild.min, lchild.max);
+                    rStatus = queryIsBoxVisibleInFrustum(planes, numPlanes, rchild.min, rchild.max);
+                #else
+                    lStatus = queryIsBoxVisibleInFrustum_256(
+                        planes_256, numPlanes, lchild.xcoords_256, lchild.ycoords_256, lchild.zcoords_256);
+                    rStatus = queryIsBoxVisibleInFrustum_256(
+                        planes_256, numPlanes, rchild.xcoords_256, rchild.ycoords_256, rchild.zcoords_256);
+                #endif
                 if (lStatus != FrustumStatus::Out) {
                     nodeStack[stackCount++] = { bvh.nodes[n.nodeId].lchildId, lStatus };
                 }

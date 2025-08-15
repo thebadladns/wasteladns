@@ -54,6 +54,7 @@
 
 #include <profileapi.h> // QueryPerformance funcs
 #include <debugapi.h> // OutputDebugString
+#include <sysinfoapi.h> // GetSystemInfo and SYSTEM_INFO::dwPageSize
 
 // end of of windows shenanigans ----------------------------------------------------------------------
 

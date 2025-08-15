@@ -768,11 +768,23 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
 
                         renderer::Frustum& frustum =
                             debug::capturedCameras[cameraNode.parentIndex].frustum;
-                        float3 poly[7];
+                        float3 poly[8];
                         u32 poly_count = p.numPts;
                         memcpy(poly, p.v, sizeof(float3) * p.numPts);
-                        clip_poly_in_frustum(
-                            poly, poly_count, frustum.planes, frustum.numPlanes, 7);
+                        #if DISABLE_INTRINSICS
+                            clip_poly_in_frustum(
+                                poly, poly_count, frustum.planes, frustum.numPlanes, countof(poly));
+                        #else
+                            m256_4 planes_256[renderer::Frustum::MAX_PLANE_COUNT];
+                            for (u32 p = 0; p < frustum.numPlanes; p++) {
+                                planes_256[p].vx = _mm256_set1_ps(frustum.planes[p].x);
+                                planes_256[p].vy = _mm256_set1_ps(frustum.planes[p].y);
+                                planes_256[p].vz = _mm256_set1_ps(frustum.planes[p].z);
+                                planes_256[p].vw = _mm256_set1_ps(frustum.planes[p].w);
+                            }
+                            clip_poly_in_frustum_256(
+                                poly, poly_count, planes_256, frustum.numPlanes, countof(poly));
+                        #endif
                         const float2 screenScale(
                             320.f * 3.f * 0.5f,
                             240.f * 3.f * 0.5f);

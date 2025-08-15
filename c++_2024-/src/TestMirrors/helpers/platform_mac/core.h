@@ -27,4 +27,6 @@ void* mem_reserve(size_t size) {
 void mem_commit(void* ptr, size_t size) { /* no-op, OS will commit memory pages as needed */ }
 }
 
+#define __popcnt __builtin_popcount
+
 #endif // __WASTELADNS_CORE_MACOS_H__

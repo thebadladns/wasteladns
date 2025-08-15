@@ -1,4 +1,3 @@
-
 #if __DX11
 bool createRenderContext(HWND hWnd, const platform::State& platform) {
     ID3D11Device1* d3ddev;
@@ -73,7 +72,10 @@ struct LogData {
     u32 indent;
     LogLevel::Enum minLevel;
 };
-void debugMessageCallback(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const GLchar* message, const void* userParam) {
+void debugMessageCallback(
+    GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length,
+    const GLchar* message, const void* userParam) {
+
     LogLevel::Enum logLevel;
     const char* severityStr = "";
     switch (severity) {
@@ -169,7 +171,8 @@ bool createRenderContext(HWND hWnd, const platform::State& platform) {
         DestroyWindow(hWnd_tmp);
     }
 
-    // create the real context on the actual window using wglCreateContextAttribs, so apps like RenderDoc can process it
+    // create the real context on the actual window using wglCreateContextAttribs,
+    // useful to add attributes that can be processed by apps like RenderDoc
     dc = GetDC(hWnd);
     int pixel_format_attribs[] = {
         WGL_DRAW_TO_WINDOW_ARB,     GL_TRUE,
@@ -235,22 +238,28 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPara
 }
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
+
+    //todo: throw_last_error on all windows calls?
+
+    // create and open our window
     platform::State platform = {};
     HWND hWnd;
     {
+        // query any specific config the game wants
+        platform::LaunchConfig config;
+        game::loadLaunchConfig(config);
+
+        // Set up our main window
         WNDCLASSEX wc;
         ZeroMemory(&wc, sizeof(WNDCLASSEX));
         wc.cbSize = sizeof(WNDCLASSEX);
         // Redraw on horizontal or vertical resize
         wc.style = CS_HREDRAW | CS_VREDRAW;
-        wc.lpfnWndProc = WindowProc;
+        wc.lpfnWndProc = WindowProc; // the method called by DispatchMessage()
         wc.hInstance = hInstance;
         wc.hCursor = LoadCursor(NULL, IDC_ARROW);
         wc.lpszClassName = "WindowClass";
         RegisterClassEx(&wc);
-
-        platform::LaunchConfig config;
-        game::loadLaunchConfig(config);
 
         // Adjust window to account for menus
         const DWORD style = WS_OVERLAPPEDWINDOW;
@@ -258,23 +267,18 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 		RECT rect = { 0, 0, (s32)config.window_width, (s32)config.window_height };
         AdjustWindowRectEx(&rect, style, FALSE, exStyle);
 
+        // Actually create the window
         hWnd = CreateWindowEx(
-              exStyle
-            , "WindowClass"
-            , config.title
-            , style
+              exStyle, "WindowClass", config.title, style
             , 0, 0, rect.right- rect.left, rect.bottom-rect.top
-            , NULL /*parent*/
-            , NULL /*menu*/
+            , NULL /*parent*/, NULL /*menu*/
             , hInstance
-            , NULL
+            , NULL /*lpParam*/
         );
-        if (hWnd == NULL) {
-            return 0;
-        }
-
+        if (hWnd == NULL) { return 0; }
         ShowWindow(hWnd, nCmdShow);
 
+        // store all window and config data on the platform layer
         platform.screen.window_width = config.window_width;
         platform.screen.window_height = config.window_height;
         platform.screen.width = config.game_width;
@@ -283,37 +287,52 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         platform.screen.fullscreen = config.fullscreen;
     }
 
-    u64 frequency;
-    if (!QueryPerformanceFrequency((LARGE_INTEGER*)&frequency)) {
-        return 0;
-    }
-
     if (!createRenderContext(hWnd, platform)) {
         return 0;
     }
 
+    // Setup game pads (only raw input for now)
     ::input::gamepad::init_hid_pads_win(hWnd);
 
-    u64 start;
-    QueryPerformanceCounter((LARGE_INTEGER*)&start);
+    // Initialize page size, for virtual memory allocators
+    SYSTEM_INFO systemInfo;
+    GetSystemInfo(&systemInfo);
+    allocator::pagesize = systemInfo.dwPageSize;
+
+    // Configure timers, split in total ticks and ticks per second
+    // We'll also query the minimum timer resolution via timeBeginPeriod, to see with how much
+    // accuracy we can ask the app to sleep after a frame
+    LARGE_INTEGER performanceCounterStart;
+    if (!QueryPerformanceCounter((LARGE_INTEGER*)&performanceCounterStart)) { return 0; }
+    LARGE_INTEGER performanceFrequency;
+    if (!QueryPerformanceFrequency((LARGE_INTEGER*)&performanceFrequency)) { return 0; }
     const u32 desiredSchedulerMS = 1;
-    // we only use one function from Winmm.dll, no need to load the whole lib
+    // we only use one function from Winmm.dll (timeBeginPeriod), no need to load the whole lib
     typedef MMRESULT (*TIMEBEGINPERIODPROC)(_In_ UINT uPeriod);
     HMODULE winmmModule = LoadLibraryA("Winmm.dll");
     TIMEBEGINPERIODPROC timeBeginPeriod = 
         (TIMEBEGINPERIODPROC)GetProcAddress(winmmModule, "timeBeginPeriod");
     bool sleepIsGranular = (timeBeginPeriod(desiredSchedulerMS) == TIMERR_NOERROR);
+    // We need the period to be 1ms for the duration of the application, so we'll purposely not
+    // clean it up with timeEndPeriod, and let Windows handled that part.
+    // According to Bruce Dawson, this is ok. Note that a higher timer frequency results in higher
+    // battery usage:
+    // https://randomascii.wordpress.com/2013/07/08/windows-timer-resolution-megawatts-wasted/
+    FreeLibrary(winmmModule);
     platform.time.running = 0.0;
-    platform.time.now = platform.time.start = start / (f64)frequency;
+    platform.time.now = platform.time.start =
+        performanceCounterStart.QuadPart / (f64)performanceFrequency.QuadPart;
 
+    // let the game initialize all systems
     game::Instance game;
     platform::GameConfig config;
     game::start(game, config, platform);
 
-    MSG msg = {};
+    // frame loop
     do {
         // Input
         {
+        // propage last frame values for pads, keyboard and mouse
         for (u32 i = 0; i < platform.input.padCount; i++)
         { platform.input.pads[i].last_keys = platform.input.pads[i].curr_keys; }
         memcpy(
@@ -323,9 +342,12 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
             platform.input.mouse.last, platform.input.mouse.curr,
             sizeof(u8) * ::input::mouse::Keys::COUNT);
         const f32 mouse_prevx = platform.input.mouse.x, mouse_prevy = platform.input.mouse.y;
+        // clear any deltas (assumes no movement if no input is received)
         platform.input.mouse.dx = platform.input.mouse.dy =
             platform.input.mouse.scrolldx = platform.input.mouse.scrolldy = 0.f;
 
+        // process Windows' message queue
+        MSG msg = {};
         while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
             // Process some messages locally instead of through a callback
             // Keystrokes only need TranslateMessage when handling text
@@ -335,25 +357,27 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
                 }
                 break;
                 case WM_KEYUP:
-                case WM_SYSKEYUP: {
+                case WM_SYSKEYUP: { // clear all keyboard data for keys that are up
                     if (msg.wParam != VK_CONTROL && msg.wParam != VK_PROCESSKEY) {
-                        const ::input::keyboard::Keys::Enum keycode =
-                            (::input::keyboard::Keys::Enum)(HIWORD(msg.lParam) & 0x1FF);
-						platform.input.keyboard.current[keycode] = 0;
+                        const ::input::keyboard::Keys::Enum scancode =
+                            (::input::keyboard::Keys::Enum)(SCANCODE(msg.lParam));
+						platform.input.keyboard.current[scancode] = 0;
                     }
                 }
                 break;
                 case WM_KEYDOWN:
-                case WM_SYSKEYDOWN: {
+                case WM_SYSKEYDOWN: { // set all keyboard data for keys that are down
                     if (msg.wParam != VK_CONTROL && msg.wParam != VK_PROCESSKEY) {
-                        const ::input::keyboard::Keys::Enum keycode =
-                            (::input::keyboard::Keys::Enum)(HIWORD(msg.lParam) & 0x1FF);
-                        platform.input.keyboard.current[keycode] = 1;
+                        const ::input::keyboard::Keys::Enum scancode =
+                            (::input::keyboard::Keys::Enum)(SCANCODE(msg.lParam));
+                        platform.input.keyboard.current[scancode] = 1;
                     }
                 }
                 break;
                 case WM_LBUTTONUP:
                 case WM_RBUTTONUP: {
+                    // Clear all mouse data for buttons that are up.
+                    // Use the third bit to differenciate between right (0x205) or left (0x202).
                     const ::input::mouse::Keys::Enum keycode =
                         (::input::mouse::Keys::Enum) ((msg.message >> 2) & 0x1);
 					platform.input.mouse.curr[keycode] = 0;
@@ -361,15 +385,17 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
                 break;
                 case WM_LBUTTONDOWN:
                 case WM_RBUTTONDOWN: {
+                    // Set all mouse data for buttons that are down.
+                    // Use the third bit to differenciate between right (0x204) or left (0x201).
                     const ::input::mouse::Keys::Enum keycode =
                         (::input::mouse::Keys::Enum) ((msg.message >> 2) & 0x1);
                     platform.input.mouse.curr[keycode] = 1;
                 }
                 break;
                 case WM_MOUSEMOVE: {
-                    LPARAM lParam = msg.lParam;
-                    // avoid using MAKEPOINTS, since it requires undef far
-                    POINTS mouseCoords = (*((POINTS*)&(lParam)));
+                    // Update mouse coordinates and deltas.
+                    // Avoid using MAKEPOINTS, since it requires undef far
+                    POINTS mouseCoords = (*((POINTS*)&(msg.lParam)));
                     platform.input.mouse.x = mouseCoords.x;
                     platform.input.mouse.y = mouseCoords.y;
 					platform.input.mouse.dx = platform.input.mouse.x - mouse_prevx;
@@ -377,7 +403,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
                 }
                 break;
                 case WM_MOUSEWHEEL:
-                case WM_MOUSEHWHEEL: {
+                case WM_MOUSEHWHEEL: { // update mouse scroll deltas
                     short scroll = (short)HIWORD(msg.wParam);
                     platform.input.mouse.scrolldx +=
                         0.01f * scroll * (msg.message == WM_MOUSEHWHEEL);
@@ -385,8 +411,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
                         0.01f * scroll * (msg.message == WM_MOUSEWHEEL);
                 }
                 break;
-                case WM_INPUT: {
-                    u8 mem[2048]; // local arena
+                case WM_INPUT: { // handle Raw Input
+                    u8 mem[2048]; // local 2KB arena
                     allocator::Arena scratchArena = {};
                     allocator::init_arena(scratchArena, mem, sizeof(mem));
                     ::input::gamepad::process_hid_pads_win(
@@ -395,7 +421,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
                         (HRAWINPUT)msg.lParam);
                 }
                 break;
-                default: {
+                default: { // default all other messages to Windows
                     TranslateMessage(&msg);
                     DispatchMessage(&msg);
                 }
@@ -412,9 +438,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
         // frame time handling: sleep a number of Windows scheduler periods until we hit our
         // next target time: https://blog.bearcats.nl/perfect-sleep-function/
-        u64 now;
-        QueryPerformanceCounter((LARGE_INTEGER*)&now);
-        platform.time.now = now / (f64)frequency;
+        LARGE_INTEGER performanceCounterNow;
+        QueryPerformanceCounter((LARGE_INTEGER*)&performanceCounterNow);
+        platform.time.now = performanceCounterNow.QuadPart / (f64)performanceFrequency.QuadPart;
         if (platform.time.now < config.nextFrame) {
             if (sleepIsGranular) { // sleep with 1ms granularity away from the target time
                 const f64 sleepSeconds = config.nextFrame - platform.time.now;
@@ -425,8 +451,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
             }
             do { // spin-lock until the next target time is hit
                 YieldProcessor();
-                QueryPerformanceCounter((LARGE_INTEGER*)&now);
-                platform.time.now = now / (f64)frequency;
+                QueryPerformanceCounter((LARGE_INTEGER*)&performanceCounterNow);
+                platform.time.now =
+                    performanceCounterNow.QuadPart / (f64)performanceFrequency.QuadPart;
             } while (platform.time.now < config.nextFrame);
         }
         platform.time.running = platform.time.now - platform.time.start;
