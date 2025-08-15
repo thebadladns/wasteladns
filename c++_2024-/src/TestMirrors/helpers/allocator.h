@@ -3,7 +3,7 @@
 
 namespace allocator {
 
-ptrdiff_t pagesize = 4 * 1024; // defaults to 4KB // TODO: INIT ON MAC
+ptrdiff_t pagesize = 4 * 1024; // defaults to 4KB
 
 // Simple arena buffer header: only the current offset is stored, as well as the capacity
 // It can be used as a stack allocator by simply copying this header into a scoped variable

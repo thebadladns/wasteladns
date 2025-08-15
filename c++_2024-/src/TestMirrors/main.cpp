@@ -22,7 +22,11 @@
 #define __PROFILEONLY(...)
 #endif
 
-#define DISABLE_INTRINSICS 0
+// intrinsics technically work on Mac, but that's assuming that they are running on an Intel chip,
+// and they don't even provide a ton of performance improvements (the bottleneck on my laptop
+// is mostly GPU rendering anyway). Note that if this were to be enable, AVX2 instructions need to
+// be enabled, for example via -march=haswell
+#define DISABLE_INTRINSICS __MACOS
 
 #define WRITE_SHADERCACHE 0
 #define READ_SHADERCACHE 0
