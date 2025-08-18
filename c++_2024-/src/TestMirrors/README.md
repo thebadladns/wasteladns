@@ -4,6 +4,8 @@
 
 Here is some ugly and dirty code to render a scene with several mirrors, resulting in a number of recursively reflected cameras. Each camera is rendered with the traditional rasterized pipeline, there's no raytracing going on whatsoever. The aim of the test is to see how many mirrored cameras can be handled in one scene.
 
+If you use vim, you can load the .vimrc in this project to set up commands for building and running the project via \<leader>bb and \<leader>rr, respectively.
+
 Mirrors can be loaded from 3D models, for example:
 
 ![](mirrors_breakdown_7.jpg)
