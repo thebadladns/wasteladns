@@ -6,6 +6,8 @@ Here is some ugly and dirty code to render a scene with several mirrors, resulti
 
 If you use vim, you can load the .vimrc in this project to set up commands for building and running the project via \<leader>bb and \<leader>rr, respectively.
 
+For building this project, refer to [this very rough blurb](../../README.md).
+
 Mirrors can be loaded from 3D models, for example:
 
 ![](mirrors_breakdown_7.jpg)
