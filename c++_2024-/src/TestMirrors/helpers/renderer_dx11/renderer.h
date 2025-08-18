@@ -145,10 +145,8 @@ namespace driver {
     }
 
     void create_texture_from_file(RscTexture& t, const TextureFromFileParams& params) {
-        allocator::Allocator_stb_arena = &params.arena;
         s32 w, h, channels;
-        u8* data = stbi_load(params.path, &w, &h, &channels, 4);
-        allocator::Allocator_stb_arena = nullptr;
+        u8* data = stbi_load_arena(params.path, &w, &h, &channels, 4, params.arena);
         if (data) {
             DXGI_FORMAT format = DXGI_FORMAT_R8G8B8A8_UNORM;
             u32 typeSize = 4;

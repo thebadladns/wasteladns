@@ -84,22 +84,6 @@ void free_arena(PagedArena& arena, void* ptr, ptrdiff_t size) {
     }
 }
 
-PagedArena* Allocator_stb_arena = nullptr;
-struct Allocator_stb {
-    static void* malloc(size_t size) {
-        return allocator::alloc_arena(*allocator::Allocator_stb_arena, size, 16);
-    }
-    static void* realloc(void* oldptr, size_t oldsize, size_t newsize) {
-        return allocator::realloc_arena(*allocator::Allocator_stb_arena, oldptr, oldsize, newsize, 16);
-    }
-    static void free(void* ptr) {}
-};
-#define STBI_MALLOC(sz)           allocator::Allocator_stb::malloc(sz)
-#define STBI_REALLOC(p,newsz)     allocator::Allocator_stb::realloc(p,0,newsz)
-#define STBI_FREE(p)              allocator::Allocator_stb::free(p)
-#define STBI_REALLOC_SIZED(p,oldsz,newsz) allocator::Allocator_stb::realloc(p,oldsz,newsz)
-
-
 // Dynamic array. When used with the same arena without any external allocations in between calls
 // to allocator::push, the array will continue to grow in place. Note that, in any other case,
 // calls to allocator::grow will not free the previous array (this is useful if, for example, the

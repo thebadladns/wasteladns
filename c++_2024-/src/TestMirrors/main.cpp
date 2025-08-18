@@ -48,10 +48,36 @@
 #include "helpers/math.h"
 #include "helpers/allocator.h"
 
+// ------------------- STB lib setup BEGIN
+
+allocator::PagedArena* Allocator_stb_arena = nullptr;
+struct Allocator_stb {
+	static void* malloc(size_t size) {
+		return allocator::alloc_arena(*Allocator_stb_arena, size, 16);
+	}
+	static void* realloc(void* oldptr, size_t oldsize, size_t newsize) {
+		return allocator::realloc_arena(*Allocator_stb_arena, oldptr, oldsize, newsize, 16);
+	}
+	static void free(void* ptr) {}
+};
+#define STBI_MALLOC(sz)						Allocator_stb::malloc(sz)
+#define STBI_REALLOC(p,newsz)				Allocator_stb::realloc(p,0,newsz)
+#define STBI_FREE(p)						Allocator_stb::free(p)
+#define STBI_REALLOC_SIZED(p,oldsz,newsz)	Allocator_stb::realloc(p,oldsz,newsz)
+
 #define STB_IMAGE_IMPLEMENTATION
 #include "lib/stb/stb_image.h"
-
 #include "lib/stb/stb_easy_font.h"
+
+force_inline stbi_uc* stbi_load_arena(
+char const* filename, int* x, int* y, int* comp, int req_comp, allocator::PagedArena& arena) {
+	Allocator_stb_arena = &arena;
+	unsigned char* result = stbi_load(filename, x, y, comp, req_comp);
+	Allocator_stb_arena = nullptr;
+	return result;
+}
+
+// ------------------- STB lib setup END
 
 #define UFBX_REAL_IS_FLOAT
 #define UFBX_MINIMAL
