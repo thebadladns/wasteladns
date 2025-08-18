@@ -1,5 +1,0 @@
-#TODO
-
-- figure out fbx proper loading
-- figure out fbx bonuses (texture? animations?)
-- figure out GL matrices (require reverse multiplication in shaders, which break cross compilation)
