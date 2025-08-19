@@ -12,7 +12,7 @@ struct Mirrors { // todo: figure out delete, unhack sizes
 };
 struct GPUCPUMesh {
     renderer::CPUMesh cpuBuffer;
-    renderer::driver::RscIndexedVertexBuffer gpuBuffer;
+    gfx::rhi::RscIndexedVertexBuffer gpuBuffer;
 };
 
 struct Scene {
@@ -41,7 +41,7 @@ struct AssetInMemory {
     u32 clipCount;
 };
 struct Resources {
-    struct MeshesMeta { enum Enum { ToiletLo, ToiletHi, Count }; };
+    struct MeshesMeta { enum Enum { ToiletLo, Count }; };
     struct AssetsMeta { enum Enum { Bird, Boar, Ground, Count }; };
     struct MirrorHallMeta { enum Enum { Count = 8 }; };
     renderer::CoreResources renderCore;
@@ -52,11 +52,11 @@ struct Resources {
     renderer::MeshHandle instancedUnitSphereMesh;
     renderer::MeshHandle groundMesh;
     // UI
-    renderer::driver::RscIndexedVertexBuffer gpuBufferHeaderText;
-    renderer::driver::RscIndexedVertexBuffer gpuBufferOrbitText;
-    renderer::driver::RscIndexedVertexBuffer gpuBufferPanText;
-    renderer::driver::RscIndexedVertexBuffer gpuBufferScaleText;
-    renderer::driver::RscIndexedVertexBuffer gpuBufferCycleRoomText;
+    gfx::rhi::RscIndexedVertexBuffer gpuBufferHeaderText;
+    gfx::rhi::RscIndexedVertexBuffer gpuBufferOrbitText;
+    gfx::rhi::RscIndexedVertexBuffer gpuBufferPanText;
+    gfx::rhi::RscIndexedVertexBuffer gpuBufferScaleText;
+    gfx::rhi::RscIndexedVertexBuffer gpuBufferCycleRoomText;
 };
 struct RoomDefinition {
     Resources::MeshesMeta::Enum mirrorMesh;
@@ -74,11 +74,6 @@ const RoomDefinition roomDefinitions[] = {
       float3(180.f * math::d2r32, 0.f, 180 * math::d2r32), // max camera eulers
       0.3f, 2.f,
       4, false },
-    { Resources::MeshesMeta::ToiletHi,
-      float3(-180.f * math::d2r32, 0.f, -180 * math::d2r32), // min camera eulers
-      float3(180.f * math::d2r32, 0.f, 180 * math::d2r32), // max camera eulers
-      0.2f, 0.5f,
-      2, false },
     { Resources::MeshesMeta::Count,
       float3(-180.f * math::d2r32, 0.f, -180 * math::d2r32), // min camera eulers
       float3(180.f * math::d2r32, 0.f, 180 * math::d2r32), // max camera eulers
@@ -90,11 +85,6 @@ const RoomDefinition roomDefinitions[] = {
       float3(-1.f * math::d2r32, 0.f, 180 * math::d2r32), // max camera eulers
       0.3f, 2.f,
       4, false },
-    { Resources::MeshesMeta::ToiletHi,
-      float3(-30 * math::d2r32, 0.f, -180 * math::d2r32), // min camera eulers
-      float3(-1.f * math::d2r32, 0.f, 180 * math::d2r32), // max camera eulers
-      0.2f, 0.5f,
-      3, false },
     { Resources::MeshesMeta::Count,
       float3(-45 * math::d2r32, 0.f, -180 * math::d2r32), // min camera eulers
       float3(-1.f * math::d2r32, 0.f, 180 * math::d2r32), // max camera eulers
@@ -104,7 +94,7 @@ const RoomDefinition roomDefinitions[] = {
 };
 
 void spawnAsset(
-renderer::DrawNodeHandle& renderHandle, animation::Handle& animationHandle,
+    renderer::DrawNodeHandle& renderHandle, animation::Handle& animationHandle,
 Scene& scene, const AssetInMemory& def, const float3& spawnPos) {
     // render data
     renderer::Scene& renderScene = scene.renderScene;
@@ -117,9 +107,9 @@ Scene& scene, const AssetInMemory& def, const float3& spawnPos) {
     renderNode.min = def.min;
     renderNode.max = def.max;
     memcpy(renderNode.meshHandles, def.meshHandles, sizeof(renderNode.meshHandles));
-    renderer::driver::RscCBuffer& cbuffercore = allocator::alloc_pool(renderScene.cbuffers);
+    gfx::rhi::RscCBuffer& cbuffercore = allocator::alloc_pool(renderScene.cbuffers);
     renderNode.cbuffer_node = handle_from_cbuffer(renderScene, cbuffercore);
-    renderer::driver::create_cbuffer(cbuffercore, { sizeof(renderer::NodeData) });
+    gfx::rhi::create_cbuffer(cbuffercore, { sizeof(renderer::NodeData) });
     if (def.skeleton.jointCount) {
         animation::Scene& animScene = scene.animScene;
         animation::Node& animNode = allocator::alloc_pool(animScene.nodes);
@@ -136,10 +126,10 @@ Scene& scene, const AssetInMemory& def, const float3& spawnPos) {
             math::identity4x4(*(Transform*)&(matrix));
         }
         // skinning data for rendering
-        renderer::driver::RscCBuffer& cbufferskinning =
+        gfx::rhi::RscCBuffer& cbufferskinning =
             allocator::alloc_pool(renderScene.cbuffers);
         renderNode.cbuffer_ext = handle_from_cbuffer(renderScene, cbufferskinning);
-        renderer::driver::create_cbuffer(cbufferskinning,
+        gfx::rhi::create_cbuffer(cbufferskinning,
             { (u32) sizeof(float4x4) * animNode.skeleton.jointCount });
         renderNode.ext_data = animNode.state.skinning;
     }
@@ -153,9 +143,7 @@ void spawn_model_as_mirrors(
     const renderer::CPUMesh& cpuMesh = loadedMesh.cpuBuffer;
     u32* triangleIds;
     if (accelerateBVH) {
-        triangleIds =
-        (u32*)allocator::alloc_arena(
-            scratchArena, sizeof(u32) * (cpuMesh.indexCount / 3), alignof(u32));
+        triangleIds = ALLOC_ARRAY(scratchArena, u32, (cpuMesh.indexCount / 3));
     }
 
     u32 index = 0;
@@ -221,27 +209,27 @@ void load_mesh_cpu_gpu(
     allocator::Buffer<u16> indices = {};
 
     FILE* f;
-    if (platform::fopen(&f, path, "r") == 0) {
+    if (io::fopen(&f, path, "r") == 0) {
         char c;
         do {
-            c = platform::fgetc(f);
+            c = io::fgetc(f);
             if (c == 'v') { // read vertices
                 renderer::VertexLayout_Color_3D& v = allocator::push(vertices, scratchArena);
                 f32 x, y, z, r, g, b;
-                s32 n = platform::fscanf(f, "%f%f%f%f%f%f", &x, &y, &z, &r, &g, &b);
+                s32 n = io::fscanf(f, "%f%f%f%f%f%f", &x, &y, &z, &r, &g, &b);
                 if (n == 6) {
                     v.pos.x = scale * x; v.pos.y = scale * y; v.pos.z = scale * z;
                     v.color = Color32(r, g, b, 0.32f).ABGR();
                 }
             } else if (c == 'f') { // read face indices (can't read any more vertices from now on)
                 int a, b, c;
-                s32 n = platform::fscanf(f, "%d%d%d", &a, &b, &c);
+                s32 n = io::fscanf(f, "%d%d%d", &a, &b, &c);
                 if (n == 3) {
                     allocator::push(indices, scratchArena) = c - 1;
                     allocator::push(indices, scratchArena) = b - 1;
                     allocator::push(indices, scratchArena) = a - 1;
                     int d;
-                    n = platform::fscanf(f, "%d", &d);
+                    n = io::fscanf(f, "%d", &d);
                     if (n > 0) {
                         // read four values: divide quad in two triangles
                         allocator::push(indices, scratchArena) = d - 1;
@@ -251,47 +239,43 @@ void load_mesh_cpu_gpu(
                 }
             }
         } while (c > 0);
-        platform::fclose(f);
+        io::fclose(f);
     }
 
     if (vertices.len) {
         meshToLoad = {};
 
         renderer::CPUMesh& mesh = meshToLoad.cpuBuffer;
-        mesh.vertices = (float3*)allocator::alloc_arena(
-            persistentArena,
-            sizeof(float3) * vertices.len, alignof(float3));
-        mesh.indices = (u16*)allocator::alloc_arena(
-            persistentArena,
-            sizeof(u16) * indices.len, alignof(u16));
+        mesh.vertices = ALLOC_ARRAY(persistentArena, float3, vertices.len);
+        mesh.indices = ALLOC_ARRAY(persistentArena, u16, indices.len);
         for (u32 i = 0; i < vertices.len; i++) { mesh.vertices[i] = vertices.data[i].pos; }
         memcpy(mesh.indices, indices.data, sizeof(u16) * indices.len);
         mesh.indexCount = (u32)indices.len;
         mesh.vertexCount = (u32)vertices.len;
 
         // create the global vertex buffer for all the mirrors
-        renderer::driver::VertexAttribDesc attribs[] = {
-        renderer::driver::make_vertexAttribDesc(
+        gfx::rhi::VertexAttribDesc attribs[] = {
+        gfx::rhi::make_vertexAttribDesc(
             "POSITION", offsetof(renderer::VertexLayout_Color_3D, pos),
             sizeof(renderer::VertexLayout_Color_3D),
-            renderer::driver::BufferAttributeFormat::R32G32B32_FLOAT),
-        renderer::driver::make_vertexAttribDesc(
+            gfx::rhi::BufferAttributeFormat::R32G32B32_FLOAT),
+        gfx::rhi::make_vertexAttribDesc(
             "COLOR", offsetof(renderer::VertexLayout_Color_3D, color),
             sizeof(renderer::VertexLayout_Color_3D),
-            renderer::driver::BufferAttributeFormat::R8G8B8A8_UNORM)
+            gfx::rhi::BufferAttributeFormat::R8G8B8A8_UNORM)
         };
-        renderer::driver::IndexedVertexBufferDesc bufferParams;
+        gfx::rhi::IndexedVertexBufferDesc bufferParams;
         bufferParams.vertexData = vertices.data;
         bufferParams.indexData = indices.data;
         bufferParams.vertexSize = (u32) (sizeof(renderer::VertexLayout_Color_3D) * vertices.len);
         bufferParams.vertexCount = (u32) vertices.len;
         bufferParams.indexSize = (u32)(sizeof(u16)* indices.len);
         bufferParams.indexCount = (u32) indices.len;
-        bufferParams.memoryUsage = renderer::driver::BufferMemoryUsage::GPU;
-        bufferParams.accessType = renderer::driver::BufferAccessType::GPU;
-        bufferParams.indexType = renderer::driver::BufferItemType::U16;
-        bufferParams.type = renderer::driver::BufferTopologyType::Triangles;
-        renderer::driver::create_indexed_vertex_buffer(
+        bufferParams.memoryUsage = gfx::rhi::BufferMemoryUsage::GPU;
+        bufferParams.accessType = gfx::rhi::BufferAccessType::GPU;
+        bufferParams.indexType = gfx::rhi::BufferItemType::U16;
+        bufferParams.type = gfx::rhi::BufferTopologyType::Triangles;
+        gfx::rhi::create_indexed_vertex_buffer(
             meshToLoad.gpuBuffer, bufferParams, attribs, countof(attribs));
     }
 }
@@ -326,24 +310,12 @@ void extract_anim_data(game::AssetInMemory& assetToAdd,
     }
 
     animation::Skeleton& skeleton = assetToAdd.skeleton;
-    u32* node_indices_skeleton =
-        (u32*) allocator::alloc_arena(
-            persistentArena, sizeof(u32) * jointCount, alignof(u32));
-    s8* nodeIdtoJointId =
-        (s8*)allocator::alloc_arena(
-            persistentArena, sizeof(s8) * scene.nodes.count, alignof(s8));
-    skeleton.jointFromGeometry =
-        (float4x4*)allocator::alloc_arena(
-            persistentArena, sizeof(float4x4) * jointCount, alignof(s8));
-    skeleton.parentFromPosedJoint =
-        (float4x4*)allocator::alloc_arena(
-            persistentArena, sizeof(float4x4) * jointCount, alignof(s8));
-    skeleton.geometryFromPosedJoint =
-        (float4x4*)allocator::alloc_arena(
-            persistentArena, sizeof(float4x4) * jointCount, alignof(s8));
-    skeleton.parentIndices =
-        (s8*)allocator::alloc_arena(
-            persistentArena, sizeof(s8) * jointCount, alignof(s8));
+    u32* node_indices_skeleton = ALLOC_ARRAY(persistentArena, u32, jointCount);
+    s8* nodeIdtoJointId = ALLOC_ARRAY(persistentArena, s8, scene.nodes.count);
+    skeleton.jointFromGeometry = ALLOC_ARRAY(persistentArena, float4x4, jointCount);
+    skeleton.parentFromPosedJoint = ALLOC_ARRAY(persistentArena, float4x4, jointCount);
+    skeleton.geometryFromPosedJoint = ALLOC_ARRAY(persistentArena, float4x4, jointCount);
+    skeleton.parentIndices = ALLOC_ARRAY(persistentArena, s8, jointCount);
     skeleton.jointCount = jointCount;
 
     // joints are listed in hierarchical order, first one is the root
@@ -373,11 +345,7 @@ void extract_anim_data(game::AssetInMemory& assetToAdd,
 
     // anim clip
     assetToAdd.clipCount = (u32)scene.anim_stacks.count;
-    assetToAdd.clips =
-        (animation::Clip*)allocator::alloc_arena(
-            persistentArena,
-            sizeof(animation::Clip) * scene.anim_stacks.count,
-            alignof(animation::Clip));
+    assetToAdd.clips = ALLOC_ARRAY(persistentArena, animation::Clip, scene.anim_stacks.count);
     for (size_t i = 0; i < assetToAdd.clipCount; i++) {
         const ufbx_anim_stack& stack = *(scene.anim_stacks.data[i]);
         const f64 targetFramerate = 12.f;
@@ -388,20 +356,13 @@ void extract_anim_data(game::AssetInMemory& assetToAdd,
 
         animation::Clip& clip = assetToAdd.clips[i];
         clip.frameCount = numFrames;
-        clip.joints =
-            (animation::JointKeyframes*)allocator::alloc_arena(
-                persistentArena,
-                sizeof(animation::JointKeyframes) * jointCount,
-                alignof(animation::JointKeyframes));
+        clip.joints = ALLOC_ARRAY(persistentArena, animation::JointKeyframes, jointCount);
         clip.timeEnd = (f32)stack.time_end;
         for (u32 joint_index = 0; joint_index < jointCount; joint_index++) {
             ufbx_node* node = scene.nodes.data[node_indices_skeleton[joint_index]];
 			animation::JointKeyframes& joint = clip.joints[joint_index];
             joint.joint_to_parent_trs =
-                (animation::Joint_TRS*)allocator::alloc_arena(
-                    persistentArena,
-                    sizeof(animation::Joint_TRS) * numFrames,
-                    alignof(animation::Joint_TRS));
+                ALLOC_ARRAY(persistentArena, animation::Joint_TRS, numFrames);
             for (u32 f = 0; f < numFrames; f++) {
                 animation::Joint_TRS& keyframeJoint = joint.joint_to_parent_trs[f];
                 f64 time = stack.time_begin + (double)f / framerate;
@@ -451,7 +412,7 @@ void extract_skinning_attribs(u8* joint_indices, u8* joint_weights,
 struct PipelineAssetContext {
     allocator::PagedArena scratchArena;
     allocator::PagedArena& persistentArena;
-    const renderer::driver::VertexAttribDesc* vertexAttrs[renderer::DrawlistStreams::Count];
+    const gfx::rhi::VertexAttribDesc* vertexAttrs[renderer::DrawlistStreams::Count];
     u32 attr_count[renderer::DrawlistStreams::Count];
 };
 bool load_with_materials(
@@ -468,29 +429,9 @@ bool load_with_materials(
     };
     opts.allow_null_material = true;
     ufbx_error error;
-
-    struct Allocator_ufbx {
-        static void* alloc_fn(void* user, size_t size) {
-            allocator::PagedArena* arena = (allocator::PagedArena*)user;
-            return allocator::alloc_arena(*arena, size, 16);
-        }
-        static void* realloc_fn(void* user, void* old_ptr, size_t old_size, size_t new_size) {
-            allocator::PagedArena* arena = (allocator::PagedArena*)user;
-            return allocator::realloc_arena(*arena, old_ptr, old_size, new_size, 16);
-        }
-        static void free_fn(void* user, void* ptr, size_t size) {
-            allocator::PagedArena* arena = (allocator::PagedArena*)user;
-            allocator::free_arena(*arena, ptr, size);
-        }
-    };
-    opts.temp_allocator.allocator.alloc_fn = &Allocator_ufbx::alloc_fn;
-    opts.temp_allocator.allocator.realloc_fn = &Allocator_ufbx::realloc_fn;
-    opts.temp_allocator.allocator.free_fn = &Allocator_ufbx::free_fn;
-    opts.temp_allocator.allocator.user = &pipelineContext.scratchArena;
-    opts.result_allocator.allocator.alloc_fn = &Allocator_ufbx::alloc_fn;
-    opts.result_allocator.allocator.realloc_fn = &Allocator_ufbx::realloc_fn;
-    opts.result_allocator.allocator.free_fn = &Allocator_ufbx::free_fn;
-    opts.result_allocator.allocator.user = &pipelineContext.scratchArena;
+    
+    setup_fbx_arena(opts.temp_allocator.allocator, pipelineContext.scratchArena);
+    setup_fbx_arena(opts.result_allocator.allocator, pipelineContext.scratchArena);
 
     ufbx_scene* scene = ufbx_load_file(path, &opts, &error);
     if (scene) {
@@ -639,12 +580,12 @@ bool load_with_materials(
             const float3* mesh_vertices = &vertices.data[vertexOffset];
             MaterialVertexBufferContext ctx = {};
 			// tmp buffers to store the mapping between fbx mesh vertices and dest vertex streams
-            ctx.dstvertex_to_fbxvertex = (u32*)allocator::alloc_arena(
-                pipelineContext.scratchArena, sizeof(u32) * mesh_vertices_count, alignof(u32));
-            ctx.dstvertex_to_fbxidx = (u32*)allocator::alloc_arena(
-                pipelineContext.scratchArena, sizeof(u32) * mesh_vertices_count, alignof(u32));
-            ctx.fbxvertex_to_dstvertex = (u32*)allocator::alloc_arena(
-                pipelineContext.scratchArena, sizeof(u32) * mesh_vertices_count, alignof(u32));
+            ctx.dstvertex_to_fbxvertex =
+                ALLOC_ARRAY(pipelineContext.scratchArena, u32, mesh_vertices_count);
+            ctx.dstvertex_to_fbxidx =
+                ALLOC_ARRAY(pipelineContext.scratchArena, u32, mesh_vertices_count);
+            ctx.fbxvertex_to_dstvertex =
+                ALLOC_ARRAY(pipelineContext.scratchArena, u32, mesh_vertices_count);
             for (size_t m = 0; m < mesh.materials.count; m++) {
                 ufbx_mesh_material& mesh_mat = mesh.materials.data[m];
                 if (assetToAdd.skeleton.jointCount) {
@@ -811,17 +752,17 @@ bool load_with_materials(
 			DstStreams& stream = materialVertexBuffer[i];
 			if (!stream.vertex.len) { continue; }
 
-            renderer::driver::IndexedVertexBufferDesc desc = {};
+            gfx::rhi::IndexedVertexBufferDesc desc = {};
             desc.vertexData = stream.vertex.data;
             desc.vertexSize = (u32)stream.vertex.len * stream.vertex_size;
             desc.vertexCount = (u32)stream.vertex.len;
             desc.indexData = stream.index.data;
             desc.indexSize = (u32)stream.index.len * sizeof(u32);
             desc.indexCount = (u32)stream.index.len;
-            desc.memoryUsage = renderer::driver::BufferMemoryUsage::GPU;
-            desc.accessType = renderer::driver::BufferAccessType::GPU;
-            desc.indexType = renderer::driver::BufferItemType::U32;
-            desc.type = renderer::driver::BufferTopologyType::Triangles;
+            desc.memoryUsage = gfx::rhi::BufferMemoryUsage::GPU;
+            desc.accessType = gfx::rhi::BufferAccessType::GPU;
+            desc.indexType = gfx::rhi::BufferItemType::U32;
+            desc.type = gfx::rhi::BufferTopologyType::Triangles;
 
             const renderer::ShaderTechniques::Enum shaderTechnique =
                 shaderTechniques[i];
@@ -829,13 +770,13 @@ bool load_with_materials(
                 renderer::alloc_drawMesh(renderCore);
             mesh = {};
             mesh.shaderTechnique = shaderTechnique;
-            renderer::driver::create_indexed_vertex_buffer(
+            gfx::rhi::create_indexed_vertex_buffer(
                 mesh.vertexBuffer, desc, pipelineContext.vertexAttrs[i],
                 pipelineContext.attr_count[i]);
             if (stream.user) {
                 const char* texturefile =
                     ((ufbx_texture*)stream.user)->filename.data;
-                renderer::driver::create_texture_from_file(
+                gfx::rhi::create_texture_from_file(
                     mesh.texture,
                     { pipelineContext.scratchArena, texturefile });
             }
@@ -848,7 +789,6 @@ bool load_with_materials(
 }
 } // fbx
 
-#if DISABLE_INTRINSICS
 void clip_poly_in_frustum(
     float3* poly, u32& poly_count, const float4* planes, const u32 planeCount, const u32 polyCountCap) {
 
@@ -938,489 +878,6 @@ void clip_poly_in_frustum(
     memcpy(poly, outputQuad, outputPoly_count * sizeof(float3));
     poly_count = outputPoly_count;
 }
-#else
-void clip_poly_in_frustum_256(
-    float3* poly, u32& poly_count, const m256_4* planes, const u32 planeCount, const u32 polyCountCap) {
-
-    assert(polyCountCap <= 8);
-    // cull quad by each frustum plane via Sutherland-Hodgman using AVX2's 256-bit vectors
-    // a lookup-table tells us which edges we should be doing intersection checks on, as well as
-    // handles degenerate cases by picking just 2 intersecting edges
-
-    // duplicate last entry to ensure no new intersections
-    for (u32 i = poly_count; i < 8; i++) { poly[i] = poly[poly_count - 1]; }
-    // expand input:
-    // (x0,x1,x2,x3,x4,x5,x6,x7)
-    // (y0,y1,y2,y3,y4,y5,y6,y7)
-    // (z0,z1,z2,z3,z4,z5,z6,z7)
-    __m256 vx_in, vy_in, vz_in;
-    vx_in = _mm256_set_ps(poly[7].x, poly[6].x, poly[5].x, poly[4].x, poly[3].x, poly[2].x, poly[1].x, poly[0].x);
-    vy_in = _mm256_set_ps(poly[7].y, poly[6].y, poly[5].y, poly[4].y, poly[3].y, poly[2].y, poly[1].y, poly[0].y);
-    vz_in = _mm256_set_ps(poly[7].z, poly[6].z, poly[5].z, poly[4].z, poly[3].z, poly[2].z, poly[1].z, poly[0].z);
-
-    const f32 eps = 0.001f;
-    __m256 veps = _mm256_set1_ps(eps);
-
-    u32 input_poly_count = 0;
-    u32 output_poly_count = poly_count;
-
-    // keep iterating over the culling planes until
-    // we have fully culled the quad, or the previous cut introduced too many cuts
-    for (u32 p = 0; p < planeCount && output_poly_count > 2 && output_poly_count < polyCountCap; p++) {
-
-        input_poly_count = output_poly_count;
-        output_poly_count = 0;
-
-        // compute all clip flags
-        const m256_4& plane = planes[p];
-        __m256 vdotxw = _mm256_fmadd_ps(vx_in, plane.vx, plane.vw);
-        __m256 vdotxyw = _mm256_fmadd_ps(vy_in, plane.vy, vdotxw);
-        __m256 vdot = _mm256_fmadd_ps(vz_in, plane.vz, vdotxyw);
-        __m256 vdoteps = _mm256_sub_ps(vdot, veps);
-        const u32 clipFlags = _mm256_movemask_ps(vdoteps);
-        /*
-        // Code to generate the couple of indices that mark the first intersection from a positive
-        // region (0) into a negative region (1), followed by the reversed intersection, using the
-        // clip flags (whether a vertex is in the positive or negative region) as input
-        printf("const u8 transitionLUT[] = {\n");
-        for (int n = 0; n < 256;n++) {
-            int i, j;
-            if (n == 0)         { i = j = 0; }  // 0b00000000 -> all in positive region: cull none
-            else if (n == 0xff) { i = j = 8; }  // 0b11111111 -> all in negative region: cull all
-            else {
-                // capture start and ends of a group of 1s closest to the least significant bits
-                // i.e.: 0b00001100 -> { 2, 4 }
-                // i.e.: 0b00000111 -> { 0, 3 }
-                // it is important that we select the group of 1s closest to the right,
-                // so the flags work with polygons with less than 8 vertices
-                // i.e.: 0b01100101 -> { 0, 1 }, not { 2, 3 } nor { 5, 7 }
-                int k = 0;
-                if ((n & (1 << k)) == 0) {
-                    // first digit is 0, poly starts in the positive zone
-                    // find the next digit in the negative zone
-                    k = 1;
-                    while (k < 8 && (n & (1 << k)) == 0) { k++; }
-                    i = k;
-                    // next, find the next digit in the positive zone (we may loop to the beginning)
-                    while (k < 8 && (n & (1 << k)) != 0) { k++; }
-                    j = k % 8;
-                } else {
-                    // first digit is 1, poly starts in the negative zone
-                    // find the last digit inside the negative zone, towards the left
-                    k = 1;
-                    while (k < 8 && (n & (1 << k)) != 0) { k++; }
-                    j = k;
-                    // find the next digit on the right from the start inside a positive zone
-                    k = 7;
-                    while (k > 0 && (n & (1 << k)) != 0) { k--; }
-                    i = (k + 1) % 8;
-                }
-            }
-            // generate code
-            printf("    0x%02x,", i << 4 | j);  // actual array byte content, one index in each half
-            printf(" // {%d, %d} : 0b", i, j);  // readable indexes for reference, and clip flags as
-            for (int s = 128; s; s>>=1)         // binary: print each digit separately
-            { printf("%d", (n & s) != 0); }     // print as bool digit (0 or 1)
-            printf(" (%d)\n", n);               // clip flags in base 10
-        };
-        printf("};\n");
-        */
-        static const u8 transitionLUT[] = {
-            0x00, // {0, 0} : 0b00000000 (0)
-            0x01, // {0, 1} : 0b00000001 (1)
-            0x12, // {1, 2} : 0b00000010 (2)
-            0x02, // {0, 2} : 0b00000011 (3)
-            0x23, // {2, 3} : 0b00000100 (4)
-            0x01, // {0, 1} : 0b00000101 (5)
-            0x13, // {1, 3} : 0b00000110 (6)
-            0x03, // {0, 3} : 0b00000111 (7)
-            0x34, // {3, 4} : 0b00001000 (8)
-            0x01, // {0, 1} : 0b00001001 (9)
-            0x12, // {1, 2} : 0b00001010 (10)
-            0x02, // {0, 2} : 0b00001011 (11)
-            0x24, // {2, 4} : 0b00001100 (12)
-            0x01, // {0, 1} : 0b00001101 (13)
-            0x14, // {1, 4} : 0b00001110 (14)
-            0x04, // {0, 4} : 0b00001111 (15)
-            0x45, // {4, 5} : 0b00010000 (16)
-            0x01, // {0, 1} : 0b00010001 (17)
-            0x12, // {1, 2} : 0b00010010 (18)
-            0x02, // {0, 2} : 0b00010011 (19)
-            0x23, // {2, 3} : 0b00010100 (20)
-            0x01, // {0, 1} : 0b00010101 (21)
-            0x13, // {1, 3} : 0b00010110 (22)
-            0x03, // {0, 3} : 0b00010111 (23)
-            0x35, // {3, 5} : 0b00011000 (24)
-            0x01, // {0, 1} : 0b00011001 (25)
-            0x12, // {1, 2} : 0b00011010 (26)
-            0x02, // {0, 2} : 0b00011011 (27)
-            0x25, // {2, 5} : 0b00011100 (28)
-            0x01, // {0, 1} : 0b00011101 (29)
-            0x15, // {1, 5} : 0b00011110 (30)
-            0x05, // {0, 5} : 0b00011111 (31)
-            0x56, // {5, 6} : 0b00100000 (32)
-            0x01, // {0, 1} : 0b00100001 (33)
-            0x12, // {1, 2} : 0b00100010 (34)
-            0x02, // {0, 2} : 0b00100011 (35)
-            0x23, // {2, 3} : 0b00100100 (36)
-            0x01, // {0, 1} : 0b00100101 (37)
-            0x13, // {1, 3} : 0b00100110 (38)
-            0x03, // {0, 3} : 0b00100111 (39)
-            0x34, // {3, 4} : 0b00101000 (40)
-            0x01, // {0, 1} : 0b00101001 (41)
-            0x12, // {1, 2} : 0b00101010 (42)
-            0x02, // {0, 2} : 0b00101011 (43)
-            0x24, // {2, 4} : 0b00101100 (44)
-            0x01, // {0, 1} : 0b00101101 (45)
-            0x14, // {1, 4} : 0b00101110 (46)
-            0x04, // {0, 4} : 0b00101111 (47)
-            0x46, // {4, 6} : 0b00110000 (48)
-            0x01, // {0, 1} : 0b00110001 (49)
-            0x12, // {1, 2} : 0b00110010 (50)
-            0x02, // {0, 2} : 0b00110011 (51)
-            0x23, // {2, 3} : 0b00110100 (52)
-            0x01, // {0, 1} : 0b00110101 (53)
-            0x13, // {1, 3} : 0b00110110 (54)
-            0x03, // {0, 3} : 0b00110111 (55)
-            0x36, // {3, 6} : 0b00111000 (56)
-            0x01, // {0, 1} : 0b00111001 (57)
-            0x12, // {1, 2} : 0b00111010 (58)
-            0x02, // {0, 2} : 0b00111011 (59)
-            0x26, // {2, 6} : 0b00111100 (60)
-            0x01, // {0, 1} : 0b00111101 (61)
-            0x16, // {1, 6} : 0b00111110 (62)
-            0x06, // {0, 6} : 0b00111111 (63)
-            0x67, // {6, 7} : 0b01000000 (64)
-            0x01, // {0, 1} : 0b01000001 (65)
-            0x12, // {1, 2} : 0b01000010 (66)
-            0x02, // {0, 2} : 0b01000011 (67)
-            0x23, // {2, 3} : 0b01000100 (68)
-            0x01, // {0, 1} : 0b01000101 (69)
-            0x13, // {1, 3} : 0b01000110 (70)
-            0x03, // {0, 3} : 0b01000111 (71)
-            0x34, // {3, 4} : 0b01001000 (72)
-            0x01, // {0, 1} : 0b01001001 (73)
-            0x12, // {1, 2} : 0b01001010 (74)
-            0x02, // {0, 2} : 0b01001011 (75)
-            0x24, // {2, 4} : 0b01001100 (76)
-            0x01, // {0, 1} : 0b01001101 (77)
-            0x14, // {1, 4} : 0b01001110 (78)
-            0x04, // {0, 4} : 0b01001111 (79)
-            0x45, // {4, 5} : 0b01010000 (80)
-            0x01, // {0, 1} : 0b01010001 (81)
-            0x12, // {1, 2} : 0b01010010 (82)
-            0x02, // {0, 2} : 0b01010011 (83)
-            0x23, // {2, 3} : 0b01010100 (84)
-            0x01, // {0, 1} : 0b01010101 (85)
-            0x13, // {1, 3} : 0b01010110 (86)
-            0x03, // {0, 3} : 0b01010111 (87)
-            0x35, // {3, 5} : 0b01011000 (88)
-            0x01, // {0, 1} : 0b01011001 (89)
-            0x12, // {1, 2} : 0b01011010 (90)
-            0x02, // {0, 2} : 0b01011011 (91)
-            0x25, // {2, 5} : 0b01011100 (92)
-            0x01, // {0, 1} : 0b01011101 (93)
-            0x15, // {1, 5} : 0b01011110 (94)
-            0x05, // {0, 5} : 0b01011111 (95)
-            0x57, // {5, 7} : 0b01100000 (96)
-            0x01, // {0, 1} : 0b01100001 (97)
-            0x12, // {1, 2} : 0b01100010 (98)
-            0x02, // {0, 2} : 0b01100011 (99)
-            0x23, // {2, 3} : 0b01100100 (100)
-            0x01, // {0, 1} : 0b01100101 (101)
-            0x13, // {1, 3} : 0b01100110 (102)
-            0x03, // {0, 3} : 0b01100111 (103)
-            0x34, // {3, 4} : 0b01101000 (104)
-            0x01, // {0, 1} : 0b01101001 (105)
-            0x12, // {1, 2} : 0b01101010 (106)
-            0x02, // {0, 2} : 0b01101011 (107)
-            0x24, // {2, 4} : 0b01101100 (108)
-            0x01, // {0, 1} : 0b01101101 (109)
-            0x14, // {1, 4} : 0b01101110 (110)
-            0x04, // {0, 4} : 0b01101111 (111)
-            0x47, // {4, 7} : 0b01110000 (112)
-            0x01, // {0, 1} : 0b01110001 (113)
-            0x12, // {1, 2} : 0b01110010 (114)
-            0x02, // {0, 2} : 0b01110011 (115)
-            0x23, // {2, 3} : 0b01110100 (116)
-            0x01, // {0, 1} : 0b01110101 (117)
-            0x13, // {1, 3} : 0b01110110 (118)
-            0x03, // {0, 3} : 0b01110111 (119)
-            0x37, // {3, 7} : 0b01111000 (120)
-            0x01, // {0, 1} : 0b01111001 (121)
-            0x12, // {1, 2} : 0b01111010 (122)
-            0x02, // {0, 2} : 0b01111011 (123)
-            0x27, // {2, 7} : 0b01111100 (124)
-            0x01, // {0, 1} : 0b01111101 (125)
-            0x17, // {1, 7} : 0b01111110 (126)
-            0x07, // {0, 7} : 0b01111111 (127)
-            0x70, // {7, 0} : 0b10000000 (128)
-            0x71, // {7, 1} : 0b10000001 (129)
-            0x12, // {1, 2} : 0b10000010 (130)
-            0x72, // {7, 2} : 0b10000011 (131)
-            0x23, // {2, 3} : 0b10000100 (132)
-            0x71, // {7, 1} : 0b10000101 (133)
-            0x13, // {1, 3} : 0b10000110 (134)
-            0x73, // {7, 3} : 0b10000111 (135)
-            0x34, // {3, 4} : 0b10001000 (136)
-            0x71, // {7, 1} : 0b10001001 (137)
-            0x12, // {1, 2} : 0b10001010 (138)
-            0x72, // {7, 2} : 0b10001011 (139)
-            0x24, // {2, 4} : 0b10001100 (140)
-            0x71, // {7, 1} : 0b10001101 (141)
-            0x14, // {1, 4} : 0b10001110 (142)
-            0x74, // {7, 4} : 0b10001111 (143)
-            0x45, // {4, 5} : 0b10010000 (144)
-            0x71, // {7, 1} : 0b10010001 (145)
-            0x12, // {1, 2} : 0b10010010 (146)
-            0x72, // {7, 2} : 0b10010011 (147)
-            0x23, // {2, 3} : 0b10010100 (148)
-            0x71, // {7, 1} : 0b10010101 (149)
-            0x13, // {1, 3} : 0b10010110 (150)
-            0x73, // {7, 3} : 0b10010111 (151)
-            0x35, // {3, 5} : 0b10011000 (152)
-            0x71, // {7, 1} : 0b10011001 (153)
-            0x12, // {1, 2} : 0b10011010 (154)
-            0x72, // {7, 2} : 0b10011011 (155)
-            0x25, // {2, 5} : 0b10011100 (156)
-            0x71, // {7, 1} : 0b10011101 (157)
-            0x15, // {1, 5} : 0b10011110 (158)
-            0x75, // {7, 5} : 0b10011111 (159)
-            0x56, // {5, 6} : 0b10100000 (160)
-            0x71, // {7, 1} : 0b10100001 (161)
-            0x12, // {1, 2} : 0b10100010 (162)
-            0x72, // {7, 2} : 0b10100011 (163)
-            0x23, // {2, 3} : 0b10100100 (164)
-            0x71, // {7, 1} : 0b10100101 (165)
-            0x13, // {1, 3} : 0b10100110 (166)
-            0x73, // {7, 3} : 0b10100111 (167)
-            0x34, // {3, 4} : 0b10101000 (168)
-            0x71, // {7, 1} : 0b10101001 (169)
-            0x12, // {1, 2} : 0b10101010 (170)
-            0x72, // {7, 2} : 0b10101011 (171)
-            0x24, // {2, 4} : 0b10101100 (172)
-            0x71, // {7, 1} : 0b10101101 (173)
-            0x14, // {1, 4} : 0b10101110 (174)
-            0x74, // {7, 4} : 0b10101111 (175)
-            0x46, // {4, 6} : 0b10110000 (176)
-            0x71, // {7, 1} : 0b10110001 (177)
-            0x12, // {1, 2} : 0b10110010 (178)
-            0x72, // {7, 2} : 0b10110011 (179)
-            0x23, // {2, 3} : 0b10110100 (180)
-            0x71, // {7, 1} : 0b10110101 (181)
-            0x13, // {1, 3} : 0b10110110 (182)
-            0x73, // {7, 3} : 0b10110111 (183)
-            0x36, // {3, 6} : 0b10111000 (184)
-            0x71, // {7, 1} : 0b10111001 (185)
-            0x12, // {1, 2} : 0b10111010 (186)
-            0x72, // {7, 2} : 0b10111011 (187)
-            0x26, // {2, 6} : 0b10111100 (188)
-            0x71, // {7, 1} : 0b10111101 (189)
-            0x16, // {1, 6} : 0b10111110 (190)
-            0x76, // {7, 6} : 0b10111111 (191)
-            0x60, // {6, 0} : 0b11000000 (192)
-            0x61, // {6, 1} : 0b11000001 (193)
-            0x12, // {1, 2} : 0b11000010 (194)
-            0x62, // {6, 2} : 0b11000011 (195)
-            0x23, // {2, 3} : 0b11000100 (196)
-            0x61, // {6, 1} : 0b11000101 (197)
-            0x13, // {1, 3} : 0b11000110 (198)
-            0x63, // {6, 3} : 0b11000111 (199)
-            0x34, // {3, 4} : 0b11001000 (200)
-            0x61, // {6, 1} : 0b11001001 (201)
-            0x12, // {1, 2} : 0b11001010 (202)
-            0x62, // {6, 2} : 0b11001011 (203)
-            0x24, // {2, 4} : 0b11001100 (204)
-            0x61, // {6, 1} : 0b11001101 (205)
-            0x14, // {1, 4} : 0b11001110 (206)
-            0x64, // {6, 4} : 0b11001111 (207)
-            0x45, // {4, 5} : 0b11010000 (208)
-            0x61, // {6, 1} : 0b11010001 (209)
-            0x12, // {1, 2} : 0b11010010 (210)
-            0x62, // {6, 2} : 0b11010011 (211)
-            0x23, // {2, 3} : 0b11010100 (212)
-            0x61, // {6, 1} : 0b11010101 (213)
-            0x13, // {1, 3} : 0b11010110 (214)
-            0x63, // {6, 3} : 0b11010111 (215)
-            0x35, // {3, 5} : 0b11011000 (216)
-            0x61, // {6, 1} : 0b11011001 (217)
-            0x12, // {1, 2} : 0b11011010 (218)
-            0x62, // {6, 2} : 0b11011011 (219)
-            0x25, // {2, 5} : 0b11011100 (220)
-            0x61, // {6, 1} : 0b11011101 (221)
-            0x15, // {1, 5} : 0b11011110 (222)
-            0x65, // {6, 5} : 0b11011111 (223)
-            0x50, // {5, 0} : 0b11100000 (224)
-            0x51, // {5, 1} : 0b11100001 (225)
-            0x12, // {1, 2} : 0b11100010 (226)
-            0x52, // {5, 2} : 0b11100011 (227)
-            0x23, // {2, 3} : 0b11100100 (228)
-            0x51, // {5, 1} : 0b11100101 (229)
-            0x13, // {1, 3} : 0b11100110 (230)
-            0x53, // {5, 3} : 0b11100111 (231)
-            0x34, // {3, 4} : 0b11101000 (232)
-            0x51, // {5, 1} : 0b11101001 (233)
-            0x12, // {1, 2} : 0b11101010 (234)
-            0x52, // {5, 2} : 0b11101011 (235)
-            0x24, // {2, 4} : 0b11101100 (236)
-            0x51, // {5, 1} : 0b11101101 (237)
-            0x14, // {1, 4} : 0b11101110 (238)
-            0x54, // {5, 4} : 0b11101111 (239)
-            0x40, // {4, 0} : 0b11110000 (240)
-            0x41, // {4, 1} : 0b11110001 (241)
-            0x12, // {1, 2} : 0b11110010 (242)
-            0x42, // {4, 2} : 0b11110011 (243)
-            0x23, // {2, 3} : 0b11110100 (244)
-            0x41, // {4, 1} : 0b11110101 (245)
-            0x13, // {1, 3} : 0b11110110 (246)
-            0x43, // {4, 3} : 0b11110111 (247)
-            0x30, // {3, 0} : 0b11111000 (248)
-            0x31, // {3, 1} : 0b11111001 (249)
-            0x12, // {1, 2} : 0b11111010 (250)
-            0x32, // {3, 2} : 0b11111011 (251)
-            0x20, // {2, 0} : 0b11111100 (252)
-            0x21, // {2, 1} : 0b11111101 (253)
-            0x10, // {1, 0} : 0b11111110 (254)
-            0x88, // {8, 8} : 0b11111111 (255)
-        };
-
-        u8 intersection_indexes = transitionLUT[clipFlags];
-        // first index that enters the negative zone
-        u32 first_intersection_curr = 0xf & (intersection_indexes >> 4);
-        // first index that enters the positive zone
-        u32 second_intersection_curr = 0xf & intersection_indexes;
-        u32 clipped_vertices_count = (second_intersection_curr < first_intersection_curr) ?
-            (second_intersection_curr + input_poly_count - first_intersection_curr)
-            : (second_intersection_curr - first_intersection_curr);
-        u32 first_intersection_prev =
-            first_intersection_curr == 0 ? input_poly_count - 1 : first_intersection_curr - 1;
-        u32 second_intersection_prev =
-            second_intersection_curr == 0 ? input_poly_count - 1 : second_intersection_curr - 1;
-        if (intersection_indexes == 0) { // no intersections: keep all vertices
-            output_poly_count = input_poly_count;
-            continue;
-        }
-        else if (intersection_indexes == 0x88) { // all vertices are clipped: keep no vertices
-            output_poly_count = 0;
-            break;
-        }
-
-        // example: first intersection 1, second intersection 5, this is (1,1,0,0,5,5,4,4)
-        __m256i permute_indexes_xy = _mm256_set_epi32(
-            second_intersection_prev, second_intersection_prev,
-            second_intersection_curr, second_intersection_curr,
-            first_intersection_prev, first_intersection_prev,
-            first_intersection_curr, first_intersection_curr);
-        // in the example, this yields:
-        // (x1,x1,x0,x0,x5,x5,x4,x4)
-        // (y1,y1,y0,y0,y5,y5,y4,y4)
-        // (x1,y1,x0,y0,x5,y5,x4,y4)
-        __m256 permuted_x = _mm256_permutevar8x32_ps(vx_in, permute_indexes_xy);
-        __m256 permuted_y = _mm256_permutevar8x32_ps(vy_in, permute_indexes_xy);
-        __m256 permuted_xy = _mm256_blend_ps(permuted_x, permuted_y, 0b10101010);
-        // in the example: (0,0,1,1,4,4,5,5)
-        // (z0,z0,z1,z1,z4,z4,z5,z5)
-        __m256i permute_indexes_z = _mm256_set_epi32(
-            second_intersection_curr, second_intersection_curr,
-            second_intersection_prev, second_intersection_prev,
-            first_intersection_curr, first_intersection_curr,
-            first_intersection_prev, first_intersection_prev);
-        __m256 permuted_z = _mm256_permutevar8x32_ps(vz_in, permute_indexes_z);
-        // in the example, this yields:
-        // (d0,d0,d0,d0,d4,d4,d4,d4)
-        __m256i permute_indexes_dot = _mm256_set_epi32(
-            second_intersection_prev, second_intersection_prev,
-            second_intersection_prev, second_intersection_prev,
-            first_intersection_prev, first_intersection_prev,
-            first_intersection_prev, first_intersection_prev);
-
-        __m256 permuted_dot = _mm256_permutevar8x32_ps(vdoteps, permute_indexes_dot);
-        __m256 permuted_zdot = _mm256_blend_ps(permuted_z, permuted_dot, 0b10101010);
-        // in the example: (x1,y1,z1,d0,x5,y5,z5,d4)
-        __m256 vcurr = _mm256_blend_ps(permuted_xy, permuted_zdot, 0b11001100);
-        // in the example: (z0,d0,x0,y0,z4,d4,x4,y4)
-        __m256 permuted_tmp = _mm256_blend_ps(permuted_xy, permuted_zdot, 0b00110011);
-        __m256i permuted_indexes_prev = _mm256_set_epi32(5, 4, 7, 6, 1, 0, 3, 2);
-        // in the example: (x0,y0,z0,d0,x4,y4,z4,d4)
-        __m256 vprev = _mm256_permutevar8x32_ps(permuted_tmp, permuted_indexes_prev);
-        __m256i permuted_indexes_dot = _mm256_set_epi32(7, 7, 7, 7, 3, 3, 3, 3);
-        // in the example: (d0,d0,d0,d0,d4,d4,d4,d4)
-        __m256 distance_distance = _mm256_permutevar8x32_ps(vprev, permuted_indexes_dot);
-
-        // plane is xxxxxxxx, yyyyyyyy, zzzzzzzz, wwwwwwww
-        // this yields (x,y,x,x,x,y,x,x)
-        __m256 plane_xy = _mm256_blend_ps(plane.vx, plane.vy, 0b10100010);
-        // this yields (z,z,z,w,z,z,z,w)
-        __m256 plane_zw = _mm256_blend_ps(plane.vz, plane.vw, 0b10001000);
-        __m256 plane_plane = _mm256_blend_ps(plane_xy, plane_zw, 0b11001100);
-
-        // (curr-prev)0.xyzw (curr-prev)1.xyzw = ab0 ab1, w component cancels out
-        __m256 ab_ab = _mm256_sub_ps(vcurr, vprev);
-        // ab0*p.xyzw ab1*p.xyzw
-        __m256 planeab_planeab = _mm256_mul_ps(plane_plane, ab_ab);
-        // sum0_0 sum0_1 sum0_0 sum0_1 sum1_0 sum1_1 sum1_0 sum1_1
-        __m256 dottmp = _mm256_hadd_ps(planeab_planeab, planeab_planeab);
-        // dot0 dot0 dot0 dot0 dot1 dot1 dot1 dot1
-        __m256 dot_dot = _mm256_hadd_ps(dottmp, dottmp);
-        __m256 negt_negt = _mm256_div_ps(distance_distance, dot_dot);
-        // two intersection points
-        __m256 i_i = _mm256_fnmadd_ps(ab_ab, negt_negt, vprev);
-
-        // Now that we have the intersection points, we need to reformat the output poly, so we
-        // replace the values outside (o) and keep the ones inside (i), for example:
-        //  i  i  i  o  o  o  i
-        // p0 p1 p2 p3 p4 p5 p6
-        // with the intersection points (x0 and x1), repeating the last vertex so the count stays 8
-        // p0 p1 p2 x0 x1 p6
-        // we'll change the ordering so they start at the intersection points
-        // x0 x1 p6 p0 p1 p2
-        u8 output_indexes[8] = {};
-        output_indexes[output_poly_count++] = first_intersection_curr;
-        output_indexes[output_poly_count++] = second_intersection_curr;
-        u32 remaining = input_poly_count - clipped_vertices_count;
-        for (u32 step = 0; step < remaining; step++) {
-            u32 index = (step + second_intersection_curr) % input_poly_count;
-            output_indexes[output_poly_count++] = index;
-        }
-        for (u32 step = output_poly_count; step < 8; step++) {
-            output_indexes[step] = output_indexes[output_poly_count - 1];
-        }
-
-        // in the example, this yields:
-        // (x1,x5,x5,x6,x7,x0,x0,x0)
-        // (y1,y5,y5,y6,y7,y0,y0,y0)
-        // (z1,z5,z5,z6,z7,z0,z0,z0)
-        __m256i permute_output_xyz = _mm256_set_epi32(
-            output_indexes[7], output_indexes[6], output_indexes[5], output_indexes[4],
-            output_indexes[3], output_indexes[2], output_indexes[1], output_indexes[0]);
-        __m256 vx_tmp = _mm256_permutevar8x32_ps(vx_in, permute_output_xyz);
-        __m256 vy_tmp = _mm256_permutevar8x32_ps(vy_in, permute_output_xyz);
-        __m256 vz_tmp = _mm256_permutevar8x32_ps(vz_in, permute_output_xyz);
-        // blend with intersection points
-        // in the example, this yields:
-        // (i0x,i1x,x5,x6,x7,x0,x0,x0)
-        // (i0y,i1y,y5,y6,y7,y0,y0,y0)
-        // (i0z,i1z,z5,z6,z7,z0,z0,z0)
-        __m256i permute_output_intersect_x = _mm256_set_epi32(0, 0, 0, 0, 0, 0, 4, 0);
-        __m256 ix = _mm256_permutevar8x32_ps(i_i, permute_output_intersect_x);
-        vx_in = _mm256_blend_ps(vx_tmp, ix, 0b00000011);
-        __m256i permute_output_intersect_y = _mm256_set_epi32(0, 0, 0, 0, 0, 0, 5, 1);
-        __m256 iy = _mm256_permutevar8x32_ps(i_i, permute_output_intersect_y);
-        vy_in = _mm256_blend_ps(vy_tmp, iy, 0b00000011);
-        __m256i permute_output_intersect_z = _mm256_set_epi32(0, 0, 0, 0, 0, 0, 6, 2);
-        __m256 iz = _mm256_permutevar8x32_ps(i_i, permute_output_intersect_z);
-        vz_in = _mm256_blend_ps(vz_tmp, iz, 0b00000011);
-    }
-
-    // output the poly in non-SIMD format
-    for (u32 i = 0; i < output_poly_count; i++) {
-        poly[i].x = ((const float*)&vx_in)[i];
-        poly[i].y = ((const float*)&vy_in)[i];
-        poly[i].z = ((const float*)&vz_in)[i];
-    }
-    poly_count = output_poly_count;
-}
-#endif
 
 struct Camera {
     float4x4 viewMatrix;
@@ -1451,33 +908,20 @@ struct GatherMirrorTreeContext {
 };
 u32 gatherMirrorTreeRecursive(GatherMirrorTreeContext& ctx, u32 index, const CameraNode& parent) {
 
-    #if !DISABLE_INTRINSICS
-    m256_4 planes_256[renderer::Frustum::MAX_PLANE_COUNT];
-    for (u32 p = 0; p < parent.frustum.numPlanes; p++) {
-        planes_256[p].vx = _mm256_set1_ps(parent.frustum.planes[p].x);
-        planes_256[p].vy = _mm256_set1_ps(parent.frustum.planes[p].y);
-        planes_256[p].vz = _mm256_set1_ps(parent.frustum.planes[p].z);
-        planes_256[p].vw = _mm256_set1_ps(parent.frustum.planes[p].w);
-    }
-    #endif
-
-    bool* mirrorVisibility =
-        (bool*)allocator::alloc_arena(
-            ctx.scratchArenaRoot, sizeof(bool) * ctx.mirrors.count, alignof(bool));
+    bool* mirrorVisibility = ALLOC_ARRAY(ctx.scratchArenaRoot, bool, ctx.mirrors.count);
     memset(mirrorVisibility, 0, ctx.mirrors.count * sizeof(bool));
     if (ctx.mirrors.bvh.nodeCount) {
         memset(mirrorVisibility, 0, ctx.mirrors.count * sizeof(bool));
-        #if DISABLE_INTRINSICS
-            bvh::findTrianglesIntersectingFrustum(
-                ctx.scratchArenaRoot,
-                mirrorVisibility, ctx.mirrors.bvh,
-                parent.frustum.planes, parent.frustum.numPlanes);
-        #else
-            bvh::findTrianglesIntersectingFrustum(
-                ctx.scratchArenaRoot,
-                mirrorVisibility, ctx.mirrors.bvh,
-                planes_256, parent.frustum.numPlanes);
-        #endif
+        m256_4 planes_256[renderer::Frustum::MAX_PLANE_COUNT];
+        for (u32 p = 0; p < parent.frustum.numPlanes; p++) {
+            planes_256[p].vx = _mm256_set1_ps(parent.frustum.planes[p].x);
+            planes_256[p].vy = _mm256_set1_ps(parent.frustum.planes[p].y);
+            planes_256[p].vz = _mm256_set1_ps(parent.frustum.planes[p].z);
+            planes_256[p].vw = _mm256_set1_ps(parent.frustum.planes[p].w);
+        }
+        bvh::findTrianglesIntersectingFrustum(
+            ctx.scratchArenaRoot,mirrorVisibility, ctx.mirrors.bvh,
+            planes_256, parent.frustum.numPlanes);
     } else {
         memset(mirrorVisibility, 1, ctx.mirrors.count * sizeof(bool));
     }
@@ -1503,13 +947,8 @@ u32 gatherMirrorTreeRecursive(GatherMirrorTreeContext& ctx, u32 index, const Cam
         u32 poly_count = ctx.mirrors.polys[i].numPts;
         memcpy(poly, ctx.mirrors.polys[i].v, sizeof(float3) * ctx.mirrors.polys[i].numPts);
 
-        #if DISABLE_INTRINSICS
-            clip_poly_in_frustum(
-                poly, poly_count, parent.frustum.planes, parent.frustum.numPlanes, countof(poly));
-        #else
-            clip_poly_in_frustum_256(
-                poly, poly_count, planes_256, parent.frustum.numPlanes, countof(poly));
-        #endif
+        clip_poly_in_frustum(
+            poly, poly_count, parent.frustum.planes, parent.frustum.numPlanes, countof(poly));
 
         if (poly_count < 3) { continue; } // resulting mirror poly is fully culled
 
@@ -1519,7 +958,7 @@ u32 gatherMirrorTreeRecursive(GatherMirrorTreeContext& ctx, u32 index, const Cam
         curr.depth = parent.depth + 1;
         curr.sourceId = i;
         // store mirror id only when using GPU markers
-        __PROFILEONLY(platform::format(curr.str, sizeof(curr.str), "%s-%d", parent.str, i);)
+        __PROFILEONLY(io::format(curr.str, sizeof(curr.str), "%s-%d", parent.str, i);)
         index++;
 
         // compute mirror matrices
@@ -1543,7 +982,7 @@ u32 gatherMirrorTreeRecursive(GatherMirrorTreeContext& ctx, u32 index, const Cam
         float3 normalES = math::mult(curr.viewMatrix, float4(mirrorGeo.normal, 0.f)).xyz;
         float3 posES = math::mult(curr.viewMatrix, float4(posWS, 1.f)).xyz;
         float4 planeES(normalES.x, normalES.y, normalES.z, -math::dot(posES, normalES));
-        renderer::add_oblique_plane_to_persp(curr.projectionMatrix, planeES);
+        gfx::add_oblique_plane_to_persp(curr.projectionMatrix, planeES);
         curr.vpMatrix = math::mult(curr.projectionMatrix, curr.viewMatrix);
         // camera position from inverse orthogonal transform
         curr.pos = float3(-math::dot(curr.viewMatrix.col3, curr.viewMatrix.col0),
@@ -1555,7 +994,7 @@ u32 gatherMirrorTreeRecursive(GatherMirrorTreeContext& ctx, u32 index, const Cam
             // the rest come from the poly
             float4x4 transpose = math::transpose(curr.vpMatrix);
             curr.frustum.planes[0] =
-                math::add(math::scale(transpose.col3, -renderer::min_z), transpose.col2);   // near
+                math::add(math::scale(transpose.col3, -gfx::min_z), transpose.col2);   // near
             curr.frustum.planes[1] = math::subtract(transpose.col3, transpose.col2);        // far
             curr.frustum.planes[0] =
                 math::invScale(curr.frustum.planes[0], math::mag(curr.frustum.planes[0].xyz));
@@ -1591,10 +1030,10 @@ struct RenderSceneContext {
     const renderer::VisibleNodes& visibleNodes;
     game::Scene& gameScene;
     renderer::CoreResources& core;
-    renderer::driver::RscDepthStencilState& ds_always;
-    renderer::driver::RscDepthStencilState& ds_opaque;
-    renderer::driver::RscDepthStencilState& ds_alpha;
-    renderer::driver::RscRasterizerState& rs;
+    gfx::rhi::RscDepthStencilState& ds_always;
+    gfx::rhi::RscDepthStencilState& ds_opaque;
+    gfx::rhi::RscDepthStencilState& ds_alpha;
+    gfx::rhi::RscRasterizerState& rs;
     allocator::PagedArena scratchArena;
 };
 void renderBaseScene(RenderSceneContext& sceneCtx) {
@@ -1602,61 +1041,56 @@ void renderBaseScene(RenderSceneContext& sceneCtx) {
     using namespace renderer;
     Scene& scene = sceneCtx.gameScene.renderScene;
     renderer::CoreResources& rsc = sceneCtx.core;
-    driver::Marker_t marker;
 
-    driver::RscCBuffer& scene_cbuffer =
+    gfx::rhi::RscCBuffer& scene_cbuffer =
         rsc.cbuffers[renderer::CoreResources::CBuffersMeta::Scene];
     SceneData cbufferPerScene;
     {
         cbufferPerScene.vpMatrix = 
             math::mult(sceneCtx.camera.projectionMatrix, sceneCtx.camera.viewMatrix);
-        driver::update_cbuffer(scene_cbuffer, &cbufferPerScene);
+        gfx::rhi::update_cbuffer(scene_cbuffer, &cbufferPerScene);
     }
 
-    driver::set_marker_name(marker, "SKY"); driver::start_event(marker);
+    gfx::rhi::start_event("SKY");
     {
-        driver::RscCBuffer& clearColor_cbuffer =
+        gfx::rhi::RscCBuffer& clearColor_cbuffer =
             rsc.cbuffers[renderer::CoreResources::CBuffersMeta::ClearColor];
-        renderer::driver::bind_blend_state(rsc.blendStateBlendOff);
-        driver::bind_DS(sceneCtx.ds_always, sceneCtx.camera.depth);
-        driver::bind_RS(rsc.rasterizerStateFillFrontfaces);
-        driver::bind_cbuffers(
+        gfx::rhi::bind_blend_state(rsc.blendStateBlendOff);
+        gfx::rhi::bind_DS(sceneCtx.ds_always, sceneCtx.camera.depth);
+        gfx::rhi::bind_RS(rsc.rasterizerStateFillFrontfaces);
+        gfx::rhi::bind_cbuffers(
             rsc.shaders[renderer::ShaderTechniques::FullscreenBlitClearColor],
             &clearColor_cbuffer, 1);
-        driver::bind_shader(rsc.shaders[renderer::ShaderTechniques::FullscreenBlitClearColor]);
-        driver::draw_fullscreen();
+        gfx::rhi::bind_shader(rsc.shaders[renderer::ShaderTechniques::FullscreenBlitClearColor]);
+        gfx::rhi::draw_fullscreen();
     }
-    driver::end_event();
+    gfx::rhi::end_event();
 
-    driver::bind_RS(sceneCtx.rs);
+    gfx::rhi::bind_RS(sceneCtx.rs);
     {
         allocator::PagedArena scratchArena = sceneCtx.scratchArena;
         Drawlist dl = {};
         u32 maxDrawCalls =
               (sceneCtx.visibleNodes.visible_nodes_count
             + (u32)scene.instancedDrawNodes.count) * DrawlistStreams::Count;
-        dl.items =
-            (DrawCall_Item*)allocator::alloc_arena(
-                scratchArena, maxDrawCalls * sizeof(DrawCall_Item), alignof(DrawCall_Item));
-        dl.keys =
-            (SortKey*)allocator::alloc_arena(
-                scratchArena, maxDrawCalls * sizeof(SortKey), alignof(SortKey));
+        dl.items = ALLOC_ARRAY(scratchArena, DrawCall_Item, maxDrawCalls);
+        dl.keys = ALLOC_ARRAY(scratchArena, SortKey, maxDrawCalls);
         addNodesToDrawlistSorted(
             dl, sceneCtx.visibleNodes, sceneCtx.camera.pos, scene, rsc,
             0, renderer::DrawlistFilter::Alpha, renderer::SortParams::Type::Default);
         if (dl.count[DrawlistBuckets::Base] + dl.count[DrawlistBuckets::Instanced] > 0) {
-            driver::set_marker_name(marker, "OPAQUE"); driver::start_event(marker);
-            driver::bind_DS(sceneCtx.ds_opaque, sceneCtx.camera.depth);
+            gfx::rhi::start_event("OPAQUE");
+            gfx::rhi::bind_DS(sceneCtx.ds_opaque, sceneCtx.camera.depth);
             Drawlist_Context ctx = {};
             Drawlist_Overrides overrides = {};
             ctx.cbuffers[overrides.forced_cbuffer_count++] = scene_cbuffer;
             draw_drawlist(dl, ctx, overrides);
-            driver::end_event();
+            gfx::rhi::end_event();
         }
     }
     #if __DEBUG
     {
-        im::present3d(sceneCtx.camera.projectionMatrix, sceneCtx.camera.viewMatrix);
+        gfx::im::present3d(sceneCtx.camera.projectionMatrix, sceneCtx.camera.viewMatrix);
     }
     #endif
     {
@@ -1665,26 +1099,22 @@ void renderBaseScene(RenderSceneContext& sceneCtx) {
         u32 maxDrawCalls =
               (sceneCtx.visibleNodes.visible_nodes_count
             + (u32)scene.instancedDrawNodes.count) * DrawlistStreams::Count;
-        dl.items =
-            (DrawCall_Item*)allocator::alloc_arena(
-                scratchArena, maxDrawCalls * sizeof(DrawCall_Item), alignof(DrawCall_Item));
-        dl.keys =
-            (SortKey*)allocator::alloc_arena(
-                scratchArena, maxDrawCalls * sizeof(SortKey), alignof(SortKey));
-        driver::bind_blend_state(rsc.blendStateOn);
+        dl.items = ALLOC_ARRAY(scratchArena, DrawCall_Item, maxDrawCalls);
+        dl.keys = ALLOC_ARRAY(scratchArena, SortKey, maxDrawCalls);
+        gfx::rhi::bind_blend_state(rsc.blendStateOn);
         addNodesToDrawlistSorted(
             dl, sceneCtx.visibleNodes, sceneCtx.camera.pos, scene, rsc,
             renderer::DrawlistFilter::Alpha, 0, renderer::SortParams::Type::BackToFront);
         if (dl.count[DrawlistBuckets::Base] + dl.count[DrawlistBuckets::Instanced] > 0) {
-            driver::bind_DS(sceneCtx.ds_alpha, sceneCtx.camera.depth);
-            driver::set_marker_name(marker, "ALPHA"); driver::start_event(marker);
+            gfx::rhi::bind_DS(sceneCtx.ds_alpha, sceneCtx.camera.depth);
+            gfx::rhi::start_event("ALPHA");
             Drawlist_Context ctx = {};
             Drawlist_Overrides overrides = {};
             overrides.forced_blendState = true;
             ctx.blendState = &rsc.blendStateOn;
             ctx.cbuffers[overrides.forced_cbuffer_count++] = scene_cbuffer;
             draw_drawlist(dl, ctx, overrides);
-            driver::end_event();
+            gfx::rhi::end_event();
         }
     }
 }
@@ -1699,72 +1129,70 @@ void markMirror(RenderMirrorContext& mirrorCtx) {
     using namespace renderer;
     renderer::CoreResources& rsc = mirrorCtx.renderCore;
 
-    driver::RscRasterizerState& rasterizerStateParent =
+    gfx::rhi::RscRasterizerState& rasterizerStateParent =
         (mirrorCtx.camera.depth & 1) != 0 ?
               rsc.rasterizerStateFillFrontfaces
             : rsc.rasterizerStateFillBackfaces;
 
-    driver::RscCBuffer& scene_cbuffer =
+    gfx::rhi::RscCBuffer& scene_cbuffer =
         rsc.cbuffers[renderer::CoreResources::CBuffersMeta::Scene];
-    driver::RscCBuffer& identity_cbuffer =
+    gfx::rhi::RscCBuffer& identity_cbuffer =
         rsc.cbuffers[renderer::CoreResources::CBuffersMeta::NodeIdentity];
-    driver::Marker_t marker;
 
     // mark this mirror on the stencil (using the parent's camera)
-    driver::set_marker_name(marker, "MARK MIRROR"); driver::start_event(marker);
+    gfx::rhi::start_event("MARK MIRROR");
     {
-        driver::bind_DS(rsc.depthStateMarkMirror, mirrorCtx.parent.depth);
-        driver::bind_RS(rasterizerStateParent);
+        gfx::rhi::bind_DS(rsc.depthStateMarkMirror, mirrorCtx.parent.depth);
+        gfx::rhi::bind_RS(rasterizerStateParent);
 
-        driver::bind_blend_state(rsc.blendStateOff);
+        gfx::rhi::bind_blend_state(rsc.blendStateOff);
 
         const renderer::DrawMesh& mesh =
             mirrorCtx.camera.drawMesh;
-        driver::bind_shader(rsc.shaders[mesh.shaderTechnique]);
-        driver::bind_indexed_vertex_buffer(mesh.vertexBuffer);
-        driver::RscCBuffer buffers[] = { scene_cbuffer, identity_cbuffer };
-        driver::bind_cbuffers(rsc.shaders[mesh.shaderTechnique], buffers, 2);
-        driver::draw_indexed_vertex_buffer(mesh.vertexBuffer);
+        gfx::rhi::bind_shader(rsc.shaders[mesh.shaderTechnique]);
+        gfx::rhi::bind_indexed_vertex_buffer(mesh.vertexBuffer);
+        gfx::rhi::RscCBuffer buffers[] = { scene_cbuffer, identity_cbuffer };
+        gfx::rhi::bind_cbuffers(rsc.shaders[mesh.shaderTechnique], buffers, 2);
+        gfx::rhi::draw_indexed_vertex_buffer(mesh.vertexBuffer);
     }
-    driver::end_event();
+    gfx::rhi::end_event();
 }
 void unmarkMirror(RenderMirrorContext& mirrorCtx) {
 
     using namespace renderer;
     renderer::CoreResources& rsc = mirrorCtx.renderCore;
-    driver::RscRasterizerState& rasterizerStateParent =
+    gfx::rhi::RscRasterizerState& rasterizerStateParent =
         (mirrorCtx.camera.depth & 1) != 0 ?
               rsc.rasterizerStateFillFrontfaces
             : rsc.rasterizerStateFillBackfaces;
 
-    driver::RscCBuffer& scene_cbuffer =
+    gfx::rhi::RscCBuffer& scene_cbuffer =
         rsc.cbuffers[renderer::CoreResources::CBuffersMeta::Scene];
-    driver::RscCBuffer& identity_cbuffer =
+    gfx::rhi::RscCBuffer& identity_cbuffer =
         rsc.cbuffers[renderer::CoreResources::CBuffersMeta::NodeIdentity];
 
     {
         renderer::SceneData cbufferPerScene;
         cbufferPerScene.vpMatrix =
             math::mult(mirrorCtx.parent.projectionMatrix, mirrorCtx.parent.viewMatrix);
-        renderer::driver::update_cbuffer(scene_cbuffer, &cbufferPerScene);
+        gfx::rhi::update_cbuffer(scene_cbuffer, &cbufferPerScene);
     }
 
-    driver::Marker_t marker;
-    driver::set_marker_name(marker, "UNMARK MIRROR"); driver::start_event(marker);
+    gfx::rhi::start_event("UNMARK MIRROR");
     {
-        driver::bind_DS(rsc.depthStateUnmarkMirror, mirrorCtx.camera.depth);
-        driver::bind_RS(rasterizerStateParent);
-        driver::bind_blend_state(rsc.blendStateOn);
+        gfx::rhi::bind_DS(rsc.depthStateUnmarkMirror, mirrorCtx.camera.depth);
+        gfx::rhi::bind_RS(rasterizerStateParent);
+        gfx::rhi::bind_blend_state(rsc.blendStateOn);
 
-        renderer::DrawMesh mesh = //renderer::drawMesh_from_handle(rsc, mirrorCtx.camera.meshHandle);
+        renderer::DrawMesh mesh = //gfx::drawMesh_from_handle(rsc, mirrorCtx.camera.meshHandle);
             mirrorCtx.camera.drawMesh;
-        driver::bind_shader(rsc.shaders[mesh.shaderTechnique]);
-        driver::bind_indexed_vertex_buffer(mesh.vertexBuffer);
-        driver::RscCBuffer buffers[] = { scene_cbuffer, identity_cbuffer };
-        driver::bind_cbuffers(rsc.shaders[ShaderTechniques::Color3D], buffers, 2);
-        driver::draw_indexed_vertex_buffer(mesh.vertexBuffer);
+        gfx::rhi::bind_shader(rsc.shaders[mesh.shaderTechnique]);
+        gfx::rhi::bind_indexed_vertex_buffer(mesh.vertexBuffer);
+        gfx::rhi::RscCBuffer buffers[] = { scene_cbuffer, identity_cbuffer };
+        gfx::rhi::bind_cbuffers(rsc.shaders[ShaderTechniques::Color3D], buffers, 2);
+        gfx::rhi::draw_indexed_vertex_buffer(mesh.vertexBuffer);
     }
-    driver::end_event();
+    gfx::rhi::end_event();
 }
 
 void renderMirrorTree(
@@ -1776,10 +1204,7 @@ void renderMirrorTree(
 
     using namespace renderer;
     u32 numCameras = cameraTree[0].siblingIndex;
-    u32* parents =
-        (u32*) allocator::alloc_arena(
-                scratchArena, sizeof(u32) * numCameras,
-                alignof(u32));
+    u32* parents = ALLOC_ARRAY(scratchArena, u32, numCameras);
     u32 parentCount = 0;
     parents[parentCount++] = 0;
     for (u32 index = 1; index < numCameras; index++) {
@@ -1788,10 +1213,8 @@ void renderMirrorTree(
         const CameraNode& parent = cameraTree[parents[parentCount - 1]];
 
         // render this mirror
-        driver::Marker_t marker;
-        __PROFILEONLY(driver::set_marker_name(marker, camera.str); driver::start_event(marker);)
+        __PROFILEONLY(gfx::rhi::start_event(camera.str);)
         
-
         // mark mirror
         RenderMirrorContext mirrorContext {
             camera, parent, gameScene, renderCore
@@ -1799,9 +1222,9 @@ void renderMirrorTree(
         markMirror(mirrorContext);
 
         // render base scene
-        driver::set_marker_name(marker, "REFLECTION SCENE"); driver::start_event(marker);
+        gfx::rhi::start_event("REFLECTION SCENE");
         {
-            driver::RscRasterizerState& rasterizerStateMirror =
+            gfx::rhi::RscRasterizerState& rasterizerStateMirror =
                 (camera.depth & 1) == 0 ?
                       renderCore.rasterizerStateFillFrontfaces
                     : renderCore.rasterizerStateFillBackfaces;
@@ -1814,7 +1237,7 @@ void renderMirrorTree(
                 scratchArena };
             renderBaseScene(renderSceneContext);
         }
-        __PROFILEONLY(driver::end_event();)
+        __PROFILEONLY(gfx::rhi::end_event();)
 
         parents[parentCount++] = index;
         while (parentCount > 1 && index + 1 >= cameraTree[parents[parentCount - 1]].siblingIndex) {
@@ -1825,7 +1248,7 @@ void renderMirrorTree(
                 camera, parent, gameScene, renderCore
             };
             unmarkMirror(mirrorContext);
-            driver::end_event();
+            gfx::rhi::end_event();
             parentCount--;
         }
     }
@@ -1858,8 +1281,7 @@ void load_coreResources(
     };
     // very very hack: number of assets * 4 + 16 (for the meshes we load ourselves)
     const size_t meshArenaSize = (countof(assets) * 4 + 16) * sizeof(renderer::DrawMesh);
-    renderCore.meshes = (renderer::DrawMesh*)allocator::alloc_arena(
-            persistentArena, meshArenaSize, alignof(renderer::DrawMesh));
+    renderCore.meshes = ALLOC_BYTES(persistentArena, renderer::DrawMesh, meshArenaSize);
     renderCore.num_meshes = 0;
 
     camera::WindowProjection::Config& ortho =
@@ -1870,7 +1292,7 @@ void load_coreResources(
     ortho.bottom = -ortho.top;
     ortho.near = 0.f;
     ortho.far = 1000.f;
-    renderer::generate_matrix_ortho(renderCore.windowProjection.matrix, ortho);
+    gfx::generate_matrix_ortho(renderCore.windowProjection.matrix, ortho);
 
     // Todo: consider whether precision needs special handling
     camera::PerspProjection::Config& frustum =
@@ -1879,275 +1301,275 @@ void load_coreResources(
     frustum.aspect = screen.width / (f32)screen.height;
     frustum.near = 1.f;
     frustum.far = 1000.f;
-    renderer::generate_matrix_persp(
+    gfx::generate_matrix_persp(
         renderCore.perspProjection.matrix, frustum);
 
-    renderer::driver::MainRenderTargetParams windowRTparams = {};
+    gfx::rhi::MainRenderTargetParams windowRTparams = {};
     windowRTparams.depth = true;
     windowRTparams.width = screen.window_width;
     windowRTparams.height = screen.window_height;
-    renderer::driver::create_main_RT(
+    gfx::rhi::create_main_RT(
         renderCore.windowRT, windowRTparams);
 
-    renderer::driver::RenderTargetParams gameRTparams;
+    gfx::rhi::RenderTargetParams gameRTparams;
     gameRTparams.depth = true;
     gameRTparams.width = screen.width;
     gameRTparams.height = screen.height;
-    gameRTparams.textureFormat = renderer::driver::TextureFormat::V4_8;
+    gameRTparams.textureFormat = gfx::rhi::TextureFormat::V4_8;
     gameRTparams.textureInternalFormat =
-        renderer::driver::InternalTextureFormat::V4_8;
+        gfx::rhi::InternalTextureFormat::V4_8;
     gameRTparams.textureFormatType =
-        renderer::driver::Type::Float;
+        gfx::rhi::Type::Float;
     gameRTparams.count = 1;
-    renderer::driver::create_RT(renderCore.gameRT, gameRTparams);
+    gfx::rhi::create_RT(renderCore.gameRT, gameRTparams);
 
     {
-        renderer::driver::BlendStateParams blendState_params;
+        gfx::rhi::BlendStateParams blendState_params;
         blendState_params = {};
         blendState_params.renderTargetWriteMask =
-            renderer::driver::RenderTargetWriteMask::All; blendState_params.blendEnable = true;
-        renderer::driver::create_blend_state(renderCore.blendStateOn, blendState_params);
+            gfx::rhi::RenderTargetWriteMask::All; blendState_params.blendEnable = true;
+        gfx::rhi::create_blend_state(renderCore.blendStateOn, blendState_params);
         blendState_params = {};
         blendState_params.renderTargetWriteMask =
-            renderer::driver::RenderTargetWriteMask::All;
-        renderer::driver::create_blend_state(renderCore.blendStateBlendOff, blendState_params);
+            gfx::rhi::RenderTargetWriteMask::All;
+        gfx::rhi::create_blend_state(renderCore.blendStateBlendOff, blendState_params);
         blendState_params = {};
         blendState_params.renderTargetWriteMask =
-            renderer::driver::RenderTargetWriteMask::None;
-        renderer::driver::create_blend_state(renderCore.blendStateOff, blendState_params);
+            gfx::rhi::RenderTargetWriteMask::None;
+        gfx::rhi::create_blend_state(renderCore.blendStateOff, blendState_params);
     }
-    renderer::driver::create_RS(renderCore.rasterizerStateFillFrontfaces,
-            { renderer::driver::RasterizerFillMode::Fill,
-              renderer::driver::RasterizerCullMode::CullBack, false });
-    renderer::driver::create_RS(renderCore.rasterizerStateFillBackfaces,
-            { renderer::driver::RasterizerFillMode::Fill,
-              renderer::driver::RasterizerCullMode::CullFront, false });
-    renderer::driver::create_RS(renderCore.rasterizerStateFillCullNone,
-            { renderer::driver::RasterizerFillMode::Fill,
-              renderer::driver::RasterizerCullMode::CullNone, false });
-    renderer::driver::create_RS(renderCore.rasterizerStateLine,
-            { renderer::driver::RasterizerFillMode::Line,
-              renderer::driver::RasterizerCullMode::CullNone, false });
+    gfx::rhi::create_RS(renderCore.rasterizerStateFillFrontfaces,
+            { gfx::rhi::RasterizerFillMode::Fill,
+              gfx::rhi::RasterizerCullMode::CullBack, false });
+    gfx::rhi::create_RS(renderCore.rasterizerStateFillBackfaces,
+            { gfx::rhi::RasterizerFillMode::Fill,
+              gfx::rhi::RasterizerCullMode::CullFront, false });
+    gfx::rhi::create_RS(renderCore.rasterizerStateFillCullNone,
+            { gfx::rhi::RasterizerFillMode::Fill,
+              gfx::rhi::RasterizerCullMode::CullNone, false });
+    gfx::rhi::create_RS(renderCore.rasterizerStateLine,
+            { gfx::rhi::RasterizerFillMode::Line,
+              gfx::rhi::RasterizerCullMode::CullNone, false });
     {
         // BASE depth states
-        renderer::driver::DepthStencilStateParams dsParams;
+        gfx::rhi::DepthStencilStateParams dsParams;
         dsParams = {};
         dsParams.depth_enable = true;
-        dsParams.depth_func = renderer::driver::CompFunc::Less;
-        dsParams.depth_writemask = renderer::driver::DepthWriteMask::All;
-        renderer::driver::create_DS(renderCore.depthStateOn, dsParams);
+        dsParams.depth_func = gfx::rhi::CompFunc::Less;
+        dsParams.depth_writemask = gfx::rhi::DepthWriteMask::All;
+        gfx::rhi::create_DS(renderCore.depthStateOn, dsParams);
         dsParams = {};
         dsParams.depth_enable = true;
-        dsParams.depth_func = renderer::driver::CompFunc::Less;
-        dsParams.depth_writemask = renderer::driver::DepthWriteMask::Zero;
-        renderer::driver::create_DS(renderCore.depthStateReadOnly, dsParams);
+        dsParams.depth_func = gfx::rhi::CompFunc::Less;
+        dsParams.depth_writemask = gfx::rhi::DepthWriteMask::Zero;
+        gfx::rhi::create_DS(renderCore.depthStateReadOnly, dsParams);
         dsParams = {};
         dsParams.depth_enable = false;
-        renderer::driver::create_DS(renderCore.depthStateOff, dsParams);
+        gfx::rhi::create_DS(renderCore.depthStateOff, dsParams);
         dsParams = {};
         dsParams.depth_enable = true;
-        dsParams.depth_func = renderer::driver::CompFunc::Always;
-        dsParams.depth_writemask = renderer::driver::DepthWriteMask::All;
-        renderer::driver::create_DS(renderCore.depthStateAlways, dsParams);
+        dsParams.depth_func = gfx::rhi::CompFunc::Always;
+        dsParams.depth_writemask = gfx::rhi::DepthWriteMask::All;
+        gfx::rhi::create_DS(renderCore.depthStateAlways, dsParams);
         { // MIRROR depth states
             dsParams = {};
             dsParams.depth_enable = true;
-            dsParams.depth_func = renderer::driver::CompFunc::Less;
-            dsParams.depth_writemask = renderer::driver::DepthWriteMask::All;
+            dsParams.depth_func = gfx::rhi::CompFunc::Less;
+            dsParams.depth_writemask = gfx::rhi::DepthWriteMask::All;
             dsParams.stencil_enable = true;
             dsParams.stencil_readmask = dsParams.stencil_writemask = 0xff;
-            dsParams.stencil_failOp = renderer::driver::StencilOp::Keep;
-            dsParams.stencil_depthFailOp = renderer::driver::StencilOp::Keep;
-            dsParams.stencil_passOp = renderer::driver::StencilOp::Incr;
-            dsParams.stencil_func = renderer::driver::CompFunc::Equal;
-            renderer::driver::create_DS(renderCore.depthStateMarkMirror, dsParams);
+            dsParams.stencil_failOp = gfx::rhi::StencilOp::Keep;
+            dsParams.stencil_depthFailOp = gfx::rhi::StencilOp::Keep;
+            dsParams.stencil_passOp = gfx::rhi::StencilOp::Incr;
+            dsParams.stencil_func = gfx::rhi::CompFunc::Equal;
+            gfx::rhi::create_DS(renderCore.depthStateMarkMirror, dsParams);
             dsParams = {};
             dsParams.depth_enable = true;
-            dsParams.depth_func = renderer::driver::CompFunc::Always;
-            dsParams.depth_writemask = renderer::driver::DepthWriteMask::All;
+            dsParams.depth_func = gfx::rhi::CompFunc::Always;
+            dsParams.depth_writemask = gfx::rhi::DepthWriteMask::All;
             dsParams.stencil_enable = true;
             dsParams.stencil_readmask = dsParams.stencil_writemask = 0xff;
-            dsParams.stencil_failOp = renderer::driver::StencilOp::Keep;
-            dsParams.stencil_depthFailOp = renderer::driver::StencilOp::Keep;
-            dsParams.stencil_passOp = renderer::driver::StencilOp::Decr;
-            dsParams.stencil_func = renderer::driver::CompFunc::Equal;
-            renderer::driver::create_DS(renderCore.depthStateUnmarkMirror, dsParams);
+            dsParams.stencil_failOp = gfx::rhi::StencilOp::Keep;
+            dsParams.stencil_depthFailOp = gfx::rhi::StencilOp::Keep;
+            dsParams.stencil_passOp = gfx::rhi::StencilOp::Decr;
+            dsParams.stencil_func = gfx::rhi::CompFunc::Equal;
+            gfx::rhi::create_DS(renderCore.depthStateUnmarkMirror, dsParams);
             dsParams.depth_enable = true;
-            dsParams.depth_func = renderer::driver::CompFunc::Less;
-            dsParams.depth_writemask = renderer::driver::DepthWriteMask::All;
+            dsParams.depth_func = gfx::rhi::CompFunc::Less;
+            dsParams.depth_writemask = gfx::rhi::DepthWriteMask::All;
             dsParams.stencil_enable = true;
             dsParams.stencil_readmask = 0xff;
             dsParams.stencil_writemask = 0x00;
-            dsParams.stencil_failOp = renderer::driver::StencilOp::Keep;
-            dsParams.stencil_depthFailOp = renderer::driver::StencilOp::Keep;
-            dsParams.stencil_passOp = renderer::driver::StencilOp::Keep;
-            dsParams.stencil_func = renderer::driver::CompFunc::Equal;
-            renderer::driver::create_DS(renderCore.depthStateMirrorReflections, dsParams);
+            dsParams.stencil_failOp = gfx::rhi::StencilOp::Keep;
+            dsParams.stencil_depthFailOp = gfx::rhi::StencilOp::Keep;
+            dsParams.stencil_passOp = gfx::rhi::StencilOp::Keep;
+            dsParams.stencil_func = gfx::rhi::CompFunc::Equal;
+            gfx::rhi::create_DS(renderCore.depthStateMirrorReflections, dsParams);
             dsParams.depth_enable = true;
-            dsParams.depth_func = renderer::driver::CompFunc::Less;
-            dsParams.depth_writemask = renderer::driver::DepthWriteMask::Zero;
+            dsParams.depth_func = gfx::rhi::CompFunc::Less;
+            dsParams.depth_writemask = gfx::rhi::DepthWriteMask::Zero;
             dsParams.stencil_enable = true;
             dsParams.stencil_readmask = 0xff;
             dsParams.stencil_writemask = 0x00;
-            dsParams.stencil_failOp = renderer::driver::StencilOp::Keep;
-            dsParams.stencil_depthFailOp = renderer::driver::StencilOp::Keep;
-            dsParams.stencil_passOp = renderer::driver::StencilOp::Keep;
-            dsParams.stencil_func = renderer::driver::CompFunc::Equal;
-            renderer::driver::create_DS(renderCore.depthStateMirrorReflectionsDepthReadOnly, dsParams);
+            dsParams.stencil_failOp = gfx::rhi::StencilOp::Keep;
+            dsParams.stencil_depthFailOp = gfx::rhi::StencilOp::Keep;
+            dsParams.stencil_passOp = gfx::rhi::StencilOp::Keep;
+            dsParams.stencil_func = gfx::rhi::CompFunc::Equal;
+            gfx::rhi::create_DS(renderCore.depthStateMirrorReflectionsDepthReadOnly, dsParams);
             dsParams.depth_enable = true;
-            dsParams.depth_func = renderer::driver::CompFunc::Always;
-            dsParams.depth_writemask = renderer::driver::DepthWriteMask::All;
+            dsParams.depth_func = gfx::rhi::CompFunc::Always;
+            dsParams.depth_writemask = gfx::rhi::DepthWriteMask::All;
             dsParams.stencil_enable = true;
             dsParams.stencil_readmask = 0xff;
             dsParams.stencil_writemask = 0x00;
-            dsParams.stencil_failOp = renderer::driver::StencilOp::Keep;
-            dsParams.stencil_depthFailOp = renderer::driver::StencilOp::Keep;
-            dsParams.stencil_passOp = renderer::driver::StencilOp::Keep;
-            dsParams.stencil_func = renderer::driver::CompFunc::Equal;
-            renderer::driver::create_DS(renderCore.depthStateMirrorReflectionsDepthAlways, dsParams);
+            dsParams.stencil_failOp = gfx::rhi::StencilOp::Keep;
+            dsParams.stencil_depthFailOp = gfx::rhi::StencilOp::Keep;
+            dsParams.stencil_passOp = gfx::rhi::StencilOp::Keep;
+            dsParams.stencil_func = gfx::rhi::CompFunc::Equal;
+            gfx::rhi::create_DS(renderCore.depthStateMirrorReflectionsDepthAlways, dsParams);
         }
     }
 
     // known cbuffers
-    renderer::driver::RscCBuffer& cbufferclear =
+    gfx::rhi::RscCBuffer& cbufferclear =
         renderCore.cbuffers[renderer::CoreResources::CBuffersMeta::ClearColor];
-    renderer::driver::create_cbuffer(cbufferclear, { sizeof(renderer::BlitColor) });
+    gfx::rhi::create_cbuffer(cbufferclear, { sizeof(renderer::BlitColor) });
     renderer::BlitColor clearColor = { float4(0.2f, 0.344f, 0.59f, 1.f) };
-    renderer::driver::update_cbuffer(cbufferclear, &clearColor);
-    renderer::driver::RscCBuffer& cbufferscene =
+    gfx::rhi::update_cbuffer(cbufferclear, &clearColor);
+    gfx::rhi::RscCBuffer& cbufferscene =
         renderCore.cbuffers[renderer::CoreResources::CBuffersMeta::Scene];
-    renderer::driver::create_cbuffer(cbufferscene, { sizeof(renderer::SceneData) });
-    renderer::driver::RscCBuffer& cbufferNodeIdentity =
+    gfx::rhi::create_cbuffer(cbufferscene, { sizeof(renderer::SceneData) });
+    gfx::rhi::RscCBuffer& cbufferNodeIdentity =
         renderCore.cbuffers[renderer::CoreResources::CBuffersMeta::NodeIdentity];
-    renderer::driver::create_cbuffer(cbufferNodeIdentity, { sizeof(renderer::NodeData) });
+    gfx::rhi::create_cbuffer(cbufferNodeIdentity, { sizeof(renderer::NodeData) });
     renderer::NodeData nodeIdentity = {};
     nodeIdentity.groupColor = float4(1.f, 1.f, 1.f, 1.f);
     math::identity4x4(*(Transform*)&nodeIdentity.worldMatrix);
-    renderer::driver::update_cbuffer(cbufferNodeIdentity, &nodeIdentity);
-    renderer::driver::RscCBuffer& cbufferNodeUItext =
+    gfx::rhi::update_cbuffer(cbufferNodeIdentity, &nodeIdentity);
+    gfx::rhi::RscCBuffer& cbufferNodeUItext =
         renderCore.cbuffers[renderer::CoreResources::CBuffersMeta::UIText];
-    renderer::driver::create_cbuffer(cbufferNodeUItext, { sizeof(renderer::NodeData) });
+    gfx::rhi::create_cbuffer(cbufferNodeUItext, { sizeof(renderer::NodeData) });
     renderer::NodeData noteUItext = {};
     noteUItext.groupColor = float4(1.f, 1.f, 1.f, 1.f);
     math::identity4x4(*(Transform*)&noteUItext.worldMatrix);
-    renderer::driver::update_cbuffer(cbufferNodeUItext, &noteUItext);
-    renderer::driver::RscCBuffer& cbufferinstances64 =
+    gfx::rhi::update_cbuffer(cbufferNodeUItext, &noteUItext);
+    gfx::rhi::RscCBuffer& cbufferinstances64 =
         renderCore.cbuffers[renderer::CoreResources::CBuffersMeta::Instances64];
-    renderer::driver::create_cbuffer(cbufferinstances64, { u32(sizeof(float4x4)) * 64 });
+    gfx::rhi::create_cbuffer(cbufferinstances64, { u32(sizeof(float4x4)) * 64 });
 
     // input layouts
-    const renderer::driver::VertexAttribDesc attribs_2d[] = {
-        renderer::driver::make_vertexAttribDesc(
+    const gfx::rhi::VertexAttribDesc attribs_2d[] = {
+        gfx::rhi::make_vertexAttribDesc(
             "POSITION", offsetof(renderer::VertexLayout_Color_2D, pos),
             sizeof(renderer::VertexLayout_Color_2D),
-            renderer::driver::BufferAttributeFormat::R32G32_FLOAT),
-        renderer::driver::make_vertexAttribDesc(
+            gfx::rhi::BufferAttributeFormat::R32G32_FLOAT),
+        gfx::rhi::make_vertexAttribDesc(
             "COLOR", offsetof(renderer::VertexLayout_Color_2D, color),
             sizeof(renderer::VertexLayout_Color_2D),
-            renderer::driver::BufferAttributeFormat::R8G8B8A8_UNORM) };
-    const renderer::driver::VertexAttribDesc attribs_3d[] = {
-        renderer::driver::make_vertexAttribDesc(
+            gfx::rhi::BufferAttributeFormat::R8G8B8A8_UNORM) };
+    const gfx::rhi::VertexAttribDesc attribs_3d[] = {
+        gfx::rhi::make_vertexAttribDesc(
             "POSITION", 0,
             sizeof(float3),
-            renderer::driver::BufferAttributeFormat::R32G32B32_FLOAT) };
-    const renderer::driver::VertexAttribDesc attribs_color3d[] = {
-        renderer::driver::make_vertexAttribDesc(
+            gfx::rhi::BufferAttributeFormat::R32G32B32_FLOAT) };
+    const gfx::rhi::VertexAttribDesc attribs_color3d[] = {
+        gfx::rhi::make_vertexAttribDesc(
 			"POSITION", offsetof(renderer::VertexLayout_Color_3D, pos),
             sizeof(renderer::VertexLayout_Color_3D),
-            renderer::driver::BufferAttributeFormat::R32G32B32_FLOAT),
-        renderer::driver::make_vertexAttribDesc(
+            gfx::rhi::BufferAttributeFormat::R32G32B32_FLOAT),
+        gfx::rhi::make_vertexAttribDesc(
 			"COLOR", offsetof(renderer::VertexLayout_Color_3D, color),
             sizeof(renderer::VertexLayout_Color_3D),
-            renderer::driver::BufferAttributeFormat::R8G8B8A8_UNORM) };
-    const renderer::driver::VertexAttribDesc attribs_color3d_skinned[] = {
-        renderer::driver::make_vertexAttribDesc(
+            gfx::rhi::BufferAttributeFormat::R8G8B8A8_UNORM) };
+    const gfx::rhi::VertexAttribDesc attribs_color3d_skinned[] = {
+        gfx::rhi::make_vertexAttribDesc(
 			"POSITION", offsetof(renderer::VertexLayout_Color_Skinned_3D, pos),
             sizeof(renderer::VertexLayout_Color_Skinned_3D),
-            renderer::driver::BufferAttributeFormat::R32G32B32_FLOAT),
-        renderer::driver::make_vertexAttribDesc(
+            gfx::rhi::BufferAttributeFormat::R32G32B32_FLOAT),
+        gfx::rhi::make_vertexAttribDesc(
 			"COLOR", offsetof(renderer::VertexLayout_Color_Skinned_3D, color),
             sizeof(renderer::VertexLayout_Color_Skinned_3D),
-            renderer::driver::BufferAttributeFormat::R8G8B8A8_UNORM),
-        renderer::driver::make_vertexAttribDesc(
+            gfx::rhi::BufferAttributeFormat::R8G8B8A8_UNORM),
+        gfx::rhi::make_vertexAttribDesc(
 			"JOINTINDICES", offsetof(renderer::VertexLayout_Color_Skinned_3D, joint_indices),
             sizeof(renderer::VertexLayout_Color_Skinned_3D),
-            renderer::driver::BufferAttributeFormat::R8G8B8A8_SINT),
-        renderer::driver::make_vertexAttribDesc(
+            gfx::rhi::BufferAttributeFormat::R8G8B8A8_SINT),
+        gfx::rhi::make_vertexAttribDesc(
 			"JOINTWEIGHTS", offsetof(renderer::VertexLayout_Color_Skinned_3D, joint_weights),
             sizeof(renderer::VertexLayout_Color_Skinned_3D),
-            renderer::driver::BufferAttributeFormat::R8G8B8A8_UNORM) };
-    const renderer::driver::VertexAttribDesc attribs_textured3d[] = {
-        renderer::driver::make_vertexAttribDesc(
+            gfx::rhi::BufferAttributeFormat::R8G8B8A8_UNORM) };
+    const gfx::rhi::VertexAttribDesc attribs_textured3d[] = {
+        gfx::rhi::make_vertexAttribDesc(
 			"POSITION", offsetof(renderer::VertexLayout_Textured_3D, pos),
             sizeof(renderer::VertexLayout_Textured_3D),
-            renderer::driver::BufferAttributeFormat::R32G32B32_FLOAT),
-        renderer::driver::make_vertexAttribDesc(
+            gfx::rhi::BufferAttributeFormat::R32G32B32_FLOAT),
+        gfx::rhi::make_vertexAttribDesc(
 			"TEXCOORD", offsetof(renderer::VertexLayout_Textured_3D, uv),
             sizeof(renderer::VertexLayout_Textured_3D),
-            renderer::driver::BufferAttributeFormat::R32G32_FLOAT) };
-    const renderer::driver::VertexAttribDesc attribs_textured3d_skinned[] = {
-        renderer::driver::make_vertexAttribDesc(
+            gfx::rhi::BufferAttributeFormat::R32G32_FLOAT) };
+    const gfx::rhi::VertexAttribDesc attribs_textured3d_skinned[] = {
+        gfx::rhi::make_vertexAttribDesc(
 			"POSITION", offsetof(renderer::VertexLayout_Textured_Skinned_3D, pos),
             sizeof(renderer::VertexLayout_Textured_Skinned_3D),
-            renderer::driver::BufferAttributeFormat::R32G32B32_FLOAT),
-        renderer::driver::make_vertexAttribDesc(
+            gfx::rhi::BufferAttributeFormat::R32G32B32_FLOAT),
+        gfx::rhi::make_vertexAttribDesc(
 			"TEXCOORD", offsetof(renderer::VertexLayout_Textured_Skinned_3D, uv),
             sizeof(renderer::VertexLayout_Textured_Skinned_3D),
-            renderer::driver::BufferAttributeFormat::R32G32_FLOAT),
-        renderer::driver::make_vertexAttribDesc(
+            gfx::rhi::BufferAttributeFormat::R32G32_FLOAT),
+        gfx::rhi::make_vertexAttribDesc(
 			"JOINTINDICES", offsetof(renderer::VertexLayout_Textured_Skinned_3D, joint_indices),
             sizeof(renderer::VertexLayout_Textured_Skinned_3D),
-            renderer::driver::BufferAttributeFormat::R8G8B8A8_SINT),
-        renderer::driver::make_vertexAttribDesc(
+            gfx::rhi::BufferAttributeFormat::R8G8B8A8_SINT),
+        gfx::rhi::make_vertexAttribDesc(
 			"JOINTWEIGHTS", offsetof(renderer::VertexLayout_Textured_Skinned_3D, joint_weights),
             sizeof(renderer::VertexLayout_Textured_Skinned_3D),
-            renderer::driver::BufferAttributeFormat::R8G8B8A8_UNORM)
+            gfx::rhi::BufferAttributeFormat::R8G8B8A8_UNORM)
     };
 
     // cbuffer bindings
-    const renderer::driver::CBufferBindingDesc bufferBindings_blit_clear_color[] = {
-        { "type_BlitColor", renderer::driver::CBufferStageMask::PS }
+    const gfx::rhi::CBufferBindingDesc bufferBindings_blit_clear_color[] = {
+        { "type_BlitColor", gfx::rhi::CBufferStageMask::PS }
     };
-    const renderer::driver::CBufferBindingDesc bufferBindings_untextured_base[] = {
-        { "type_PerScene", renderer::driver::CBufferStageMask::VS },
-        { "type_PerGroup", renderer::driver::CBufferStageMask::VS }
+    const gfx::rhi::CBufferBindingDesc bufferBindings_untextured_base[] = {
+        { "type_PerScene", gfx::rhi::CBufferStageMask::VS },
+        { "type_PerGroup", gfx::rhi::CBufferStageMask::VS }
     };
-    const renderer::driver::CBufferBindingDesc bufferBindings_skinned_untextured_base[] = {
-        { "type_PerScene", renderer::driver::CBufferStageMask::VS },
-        { "type_PerGroup", renderer::driver::CBufferStageMask::VS },
-        { "type_PerJoint", renderer::driver::CBufferStageMask::VS }
+    const gfx::rhi::CBufferBindingDesc bufferBindings_skinned_untextured_base[] = {
+        { "type_PerScene", gfx::rhi::CBufferStageMask::VS },
+        { "type_PerGroup", gfx::rhi::CBufferStageMask::VS },
+        { "type_PerJoint", gfx::rhi::CBufferStageMask::VS }
     };
-    const renderer::driver::CBufferBindingDesc bufferBindings_textured_base[] = {
-        { "type_PerScene", renderer::driver::CBufferStageMask::VS },
+    const gfx::rhi::CBufferBindingDesc bufferBindings_textured_base[] = {
+        { "type_PerScene", gfx::rhi::CBufferStageMask::VS },
         { "type_PerGroup",
-            renderer::driver::CBufferStageMask::VS | renderer::driver::CBufferStageMask::PS }
+            gfx::rhi::CBufferStageMask::VS | gfx::rhi::CBufferStageMask::PS }
     };
-    const renderer::driver::CBufferBindingDesc bufferBindings_skinned_textured_base[] = {
-        { "type_PerScene", renderer::driver::CBufferStageMask::VS },
+    const gfx::rhi::CBufferBindingDesc bufferBindings_skinned_textured_base[] = {
+        { "type_PerScene", gfx::rhi::CBufferStageMask::VS },
         { "type_PerGroup",
-            renderer::driver::CBufferStageMask::VS | renderer::driver::CBufferStageMask::PS },
-        { "type_PerJoint", renderer::driver::CBufferStageMask::VS }
+            gfx::rhi::CBufferStageMask::VS | gfx::rhi::CBufferStageMask::PS },
+        { "type_PerJoint", gfx::rhi::CBufferStageMask::VS }
     };
-    const renderer::driver::CBufferBindingDesc bufferBindings_instanced_base[] = {
-        { "type_PerScene", renderer::driver::CBufferStageMask::VS },
-        { "type_PerGroup", renderer::driver::CBufferStageMask::VS },
-        { "type_PerInstance", renderer::driver::CBufferStageMask::VS }
+    const gfx::rhi::CBufferBindingDesc bufferBindings_instanced_base[] = {
+        { "type_PerScene", gfx::rhi::CBufferStageMask::VS },
+        { "type_PerGroup", gfx::rhi::CBufferStageMask::VS },
+        { "type_PerInstance", gfx::rhi::CBufferStageMask::VS }
     };
 
     // texture bindings
-    const renderer::driver::TextureBindingDesc textureBindings_base[] = { { "texDiffuse" } };
-    const renderer::driver::TextureBindingDesc textureBindings_fullscreenblit[] = {{ "texSrc" }};
+    const gfx::rhi::TextureBindingDesc textureBindings_base[] = { { "texDiffuse" } };
+    const gfx::rhi::TextureBindingDesc textureBindings_fullscreenblit[] = {{ "texSrc" }};
 
     // shaders
     {
         allocator::PagedArena scratchArena = memory.scratchArena; // explicit copy
         // Initialize cache with room for a VS and PS shader of each technique
-        renderer::driver::ShaderCache shader_cache = {};
-        renderer::driver::load_shader_cache(
-            shader_cache, "assets/data/shaderCache_mirrors.bin", &scratchArena,
+        gfx::rhi::ShaderCache shader_cache = {};
+        gfx::rhi::load_shader_cache(
+            shader_cache, "assets/data/shaderCache_physics.bin", &scratchArena,
             renderer::ShaderTechniques::Count * 2);
         {
-            renderer::ShaderDesc desc = {};
+            gfx::ShaderDesc desc = {};
             desc.vertexAttrs = attribs_3d;
             desc.vertexAttr_count = countof(attribs_3d);
             desc.textureBindings = nullptr;
@@ -2155,16 +1577,16 @@ void load_coreResources(
             desc.bufferBindings = bufferBindings_blit_clear_color;
             desc.bufferBinding_count = countof(bufferBindings_blit_clear_color);
             // reuse 3d shaders
-            desc.vs_name = renderer::shaders::vs_fullscreen_bufferless_clear_blit.name;
-            desc.vs_src = renderer::shaders::vs_fullscreen_bufferless_clear_blit.src;
-            desc.ps_name = renderer::shaders::ps_fullscreen_blit_clear_colored.name;
-            desc.ps_src = renderer::shaders::ps_fullscreen_blit_clear_colored.src;
+            desc.vs_name = gfx::shaders::vs_fullscreen_bufferless_clear_blit.name;
+            desc.vs_src = gfx::shaders::vs_fullscreen_bufferless_clear_blit.src;
+            desc.ps_name = gfx::shaders::ps_fullscreen_blit_clear_colored.name;
+            desc.ps_src = gfx::shaders::ps_fullscreen_blit_clear_colored.src;
             desc.shader_cache = &shader_cache;
-            renderer::compile_shader(
+            gfx::compile_shader(
                 renderCore.shaders[renderer::ShaderTechniques::FullscreenBlitClearColor], desc);
         }
         {
-            renderer::ShaderDesc desc = {};
+            gfx::ShaderDesc desc = {};
             desc.vertexAttrs = attribs_textured3d;
             desc.vertexAttr_count = countof(attribs_textured3d);
             desc.textureBindings = textureBindings_fullscreenblit;
@@ -2172,170 +1594,170 @@ void load_coreResources(
             desc.bufferBindings = nullptr;
             desc.bufferBinding_count = 0;
             // reuse 3d shaders
-            desc.vs_name = renderer::shaders::vs_fullscreen_bufferless_textured_blit.name;
-            desc.vs_src = renderer::shaders::vs_fullscreen_bufferless_textured_blit.src;
-            desc.ps_name = renderer::shaders::ps_fullscreen_blit_textured.name;
-            desc.ps_src = renderer::shaders::ps_fullscreen_blit_textured.src;
+            desc.vs_name = gfx::shaders::vs_fullscreen_bufferless_textured_blit.name;
+            desc.vs_src = gfx::shaders::vs_fullscreen_bufferless_textured_blit.src;
+            desc.ps_name = gfx::shaders::ps_fullscreen_blit_textured.name;
+            desc.ps_src = gfx::shaders::ps_fullscreen_blit_textured.src;
             desc.shader_cache = &shader_cache;
-            renderer::compile_shader(
+            gfx::compile_shader(
                 renderCore.shaders[renderer::ShaderTechniques::FullscreenBlitTextured], desc);
         }
         {
-            renderer::ShaderDesc desc = {};
+            gfx::ShaderDesc desc = {};
             desc.vertexAttrs = attribs_2d;
             desc.vertexAttr_count = countof(attribs_2d);
             desc.textureBindings = nullptr;
             desc.textureBinding_count = 0;
             desc.bufferBindings = bufferBindings_untextured_base;
             desc.bufferBinding_count = countof(bufferBindings_untextured_base);
-            desc.vs_name = renderer::shaders::vs_color2d_base.name;
-            desc.vs_src = renderer::shaders::vs_color2d_base.src;
-            desc.ps_name = renderer::shaders::ps_color3d_unlit.name;
-            desc.ps_src = renderer::shaders::ps_color3d_unlit.src;
+            desc.vs_name = gfx::shaders::vs_color2d_base.name;
+            desc.vs_src = gfx::shaders::vs_color2d_base.src;
+            desc.ps_name = gfx::shaders::ps_color3d_unlit.name;
+            desc.ps_src = gfx::shaders::ps_color3d_unlit.src;
             desc.shader_cache = &shader_cache;
-            renderer::compile_shader(
+            gfx::compile_shader(
                 renderCore.shaders[renderer::ShaderTechniques::Color2D], desc);
         }
         {
-            renderer::ShaderDesc desc = {};
+            gfx::ShaderDesc desc = {};
             desc.vertexAttrs = attribs_3d;
             desc.vertexAttr_count = countof(attribs_3d);
             desc.textureBindings = nullptr;
             desc.textureBinding_count = 0;
             desc.bufferBindings = bufferBindings_instanced_base;
             desc.bufferBinding_count = countof(bufferBindings_instanced_base);
-            desc.vs_name = renderer::shaders::vs_3d_instanced_base.name;
-            desc.vs_src = renderer::shaders::vs_3d_instanced_base.src;
-            desc.ps_name = renderer::shaders::ps_color3d_unlit.name;
-            desc.ps_src = renderer::shaders::ps_color3d_unlit.src;
+            desc.vs_name = gfx::shaders::vs_3d_instanced_base.name;
+            desc.vs_src = gfx::shaders::vs_3d_instanced_base.src;
+            desc.ps_name = gfx::shaders::ps_color3d_unlit.name;
+            desc.ps_src = gfx::shaders::ps_color3d_unlit.src;
             desc.shader_cache = &shader_cache;
-            renderer::compile_shader(
+            gfx::compile_shader(
                 renderCore.shaders[renderer::ShaderTechniques::Instanced3D], desc);
         }
         {
-            renderer::ShaderDesc desc = {};
+            gfx::ShaderDesc desc = {};
             desc.vertexAttrs = attribs_color3d;
             desc.vertexAttr_count = countof(attribs_color3d);
             desc.textureBindings = nullptr;
             desc.textureBinding_count = 0;
             desc.bufferBindings = bufferBindings_untextured_base;
             desc.bufferBinding_count = countof(bufferBindings_untextured_base);
-            desc.vs_name = renderer::shaders::vs_color3d_base.name;
-            desc.vs_src = renderer::shaders::vs_color3d_base.src;
-            desc.ps_name = renderer::shaders::ps_color3d_unlit.name;
-            desc.ps_src = renderer::shaders::ps_color3d_unlit.src;
+            desc.vs_name = gfx::shaders::vs_color3d_base.name;
+            desc.vs_src = gfx::shaders::vs_color3d_base.src;
+            desc.ps_name = gfx::shaders::ps_color3d_unlit.name;
+            desc.ps_src = gfx::shaders::ps_color3d_unlit.src;
             desc.shader_cache = &shader_cache;
-            renderer::compile_shader(renderCore.shaders[renderer::ShaderTechniques::Color3D], desc);
+            gfx::compile_shader(renderCore.shaders[renderer::ShaderTechniques::Color3D], desc);
         }
         {
-            renderer::ShaderDesc desc = {};
+            gfx::ShaderDesc desc = {};
             desc.vertexAttrs = attribs_color3d_skinned;
             desc.vertexAttr_count = countof(attribs_color3d_skinned);
             desc.textureBindings = nullptr;
             desc.textureBinding_count = 0;
             desc.bufferBindings = bufferBindings_skinned_untextured_base;
             desc.bufferBinding_count = countof(bufferBindings_skinned_untextured_base);
-            desc.vs_name = renderer::shaders::vs_color3d_skinned_base.name;
-            desc.vs_src = renderer::shaders::vs_color3d_skinned_base.src;
-            desc.ps_name = renderer::shaders::ps_color3d_unlit.name;
-            desc.ps_src = renderer::shaders::ps_color3d_unlit.src;
+            desc.vs_name = gfx::shaders::vs_color3d_skinned_base.name;
+            desc.vs_src = gfx::shaders::vs_color3d_skinned_base.src;
+            desc.ps_name = gfx::shaders::ps_color3d_unlit.name;
+            desc.ps_src = gfx::shaders::ps_color3d_unlit.src;
             desc.shader_cache = &shader_cache;
-            renderer::compile_shader(
+            gfx::compile_shader(
                 renderCore.shaders[renderer::ShaderTechniques::Color3DSkinned], desc);
         }
         {
-            renderer::ShaderDesc desc = {};
+            gfx::ShaderDesc desc = {};
             desc.vertexAttrs = attribs_textured3d;
             desc.vertexAttr_count = countof(attribs_textured3d);
             desc.textureBindings = textureBindings_base;
             desc.textureBinding_count = countof(textureBindings_base);
             desc.bufferBindings = bufferBindings_textured_base;
             desc.bufferBinding_count = countof(bufferBindings_textured_base);
-            desc.vs_name = renderer::shaders::vs_textured3d_base.name;
-            desc.vs_src = renderer::shaders::vs_textured3d_base.src;
-            desc.ps_name = renderer::shaders::ps_textured3d_base.name;
-            desc.ps_src = renderer::shaders::ps_textured3d_base.src;
+            desc.vs_name = gfx::shaders::vs_textured3d_base.name;
+            desc.vs_src = gfx::shaders::vs_textured3d_base.src;
+            desc.ps_name = gfx::shaders::ps_textured3d_base.name;
+            desc.ps_src = gfx::shaders::ps_textured3d_base.src;
             desc.shader_cache = &shader_cache;
-            renderer::compile_shader(
+            gfx::compile_shader(
                 renderCore.shaders[renderer::ShaderTechniques::Textured3D], desc);
         }
         {
-            renderer::ShaderDesc desc = {};
+            gfx::ShaderDesc desc = {};
             desc.vertexAttrs = attribs_textured3d;
             desc.vertexAttr_count = countof(attribs_textured3d);
             desc.textureBindings = textureBindings_base;
             desc.textureBinding_count = countof(textureBindings_base);
             desc.bufferBindings = bufferBindings_textured_base;
             desc.bufferBinding_count = countof(bufferBindings_textured_base);
-            desc.vs_name = renderer::shaders::vs_textured3d_base.name;
-            desc.vs_src = renderer::shaders::vs_textured3d_base.src;
-            desc.ps_name = renderer::shaders::ps_textured3dalphaclip_base.name;
-            desc.ps_src = renderer::shaders::ps_textured3dalphaclip_base.src;
+            desc.vs_name = gfx::shaders::vs_textured3d_base.name;
+            desc.vs_src = gfx::shaders::vs_textured3d_base.src;
+            desc.ps_name = gfx::shaders::ps_textured3dalphaclip_base.name;
+            desc.ps_src = gfx::shaders::ps_textured3dalphaclip_base.src;
             desc.shader_cache = &shader_cache;
-            renderer::compile_shader(
+            gfx::compile_shader(
                 renderCore.shaders[renderer::ShaderTechniques::Textured3DAlphaClip], desc);
         }
         {
-            renderer::ShaderDesc desc = {};
+            gfx::ShaderDesc desc = {};
             desc.vertexAttrs = attribs_textured3d_skinned;
             desc.vertexAttr_count = countof(attribs_textured3d_skinned);
             desc.textureBindings = textureBindings_base;
             desc.textureBinding_count = countof(textureBindings_base);
             desc.bufferBindings = bufferBindings_skinned_textured_base;
             desc.bufferBinding_count = countof(bufferBindings_skinned_textured_base);
-            desc.vs_name = renderer::shaders::vs_textured3d_skinned_base.name;
-            desc.vs_src = renderer::shaders::vs_textured3d_skinned_base.src;
-            desc.ps_name = renderer::shaders::ps_textured3d_base.name;
-            desc.ps_src = renderer::shaders::ps_textured3d_base.src;
+            desc.vs_name = gfx::shaders::vs_textured3d_skinned_base.name;
+            desc.vs_src = gfx::shaders::vs_textured3d_skinned_base.src;
+            desc.ps_name = gfx::shaders::ps_textured3d_base.name;
+            desc.ps_src = gfx::shaders::ps_textured3d_base.src;
             desc.shader_cache = &shader_cache;
-            renderer::compile_shader(
+            gfx::compile_shader(
                 renderCore.shaders[renderer::ShaderTechniques::Textured3DSkinned], desc);
         }
         {
-            renderer::ShaderDesc desc = {};
+            gfx::ShaderDesc desc = {};
             desc.vertexAttrs = attribs_textured3d_skinned;
             desc.vertexAttr_count = countof(attribs_textured3d_skinned);
             desc.textureBindings = textureBindings_base;
             desc.textureBinding_count = countof(textureBindings_base);
             desc.bufferBindings = bufferBindings_skinned_textured_base;
             desc.bufferBinding_count = countof(bufferBindings_skinned_textured_base);
-            desc.vs_name = renderer::shaders::vs_textured3d_skinned_base.name;
-            desc.vs_src = renderer::shaders::vs_textured3d_skinned_base.src;
-            desc.ps_name = renderer::shaders::ps_textured3dalphaclip_base.name;
-            desc.ps_src = renderer::shaders::ps_textured3dalphaclip_base.src;
+            desc.vs_name = gfx::shaders::vs_textured3d_skinned_base.name;
+            desc.vs_src = gfx::shaders::vs_textured3d_skinned_base.src;
+            desc.ps_name = gfx::shaders::ps_textured3dalphaclip_base.name;
+            desc.ps_src = gfx::shaders::ps_textured3dalphaclip_base.src;
             desc.shader_cache = &shader_cache;
-            renderer::compile_shader(
+            gfx::compile_shader(
                 renderCore.shaders[renderer::ShaderTechniques::Textured3DAlphaClipSkinned], desc);
         }
-        renderer::driver::write_shader_cache(shader_cache);
+        gfx::rhi::write_shader_cache(shader_cache);
     }
 
     allocator::PagedArena scratchArena = memory.scratchArena; // explicit copy
 
     fbx::PipelineAssetContext ctx = { scratchArena, persistentArena };
-    ctx.vertexAttrs[renderer::DrawlistStreams::Color3D] 
+    ctx.vertexAttrs[renderer::DrawlistStreams::Color3D]
 		= attribs_color3d;
-    ctx.attr_count[renderer::DrawlistStreams::Color3D] 
+    ctx.attr_count[renderer::DrawlistStreams::Color3D]
 		= countof(attribs_color3d);
-    ctx.vertexAttrs[renderer::DrawlistStreams::Color3DSkinned] 
+    ctx.vertexAttrs[renderer::DrawlistStreams::Color3DSkinned]
 		= attribs_color3d_skinned;
-    ctx.attr_count[renderer::DrawlistStreams::Color3DSkinned] 
+    ctx.attr_count[renderer::DrawlistStreams::Color3DSkinned]
 		= countof(attribs_color3d_skinned);
-    ctx.vertexAttrs[renderer::DrawlistStreams::Textured3D] 
+    ctx.vertexAttrs[renderer::DrawlistStreams::Textured3D]
 		= attribs_textured3d;
-    ctx.attr_count[renderer::DrawlistStreams::Textured3D] 
+    ctx.attr_count[renderer::DrawlistStreams::Textured3D]
 		= countof(attribs_textured3d);
-    ctx.vertexAttrs[renderer::DrawlistStreams::Textured3DAlphaClip] 
+    ctx.vertexAttrs[renderer::DrawlistStreams::Textured3DAlphaClip]
 		= attribs_textured3d;
-    ctx.attr_count[renderer::DrawlistStreams::Textured3DAlphaClip] 
+    ctx.attr_count[renderer::DrawlistStreams::Textured3DAlphaClip]
 		= countof(attribs_textured3d);
-    ctx.vertexAttrs[renderer::DrawlistStreams::Textured3DSkinned] 
+    ctx.vertexAttrs[renderer::DrawlistStreams::Textured3DSkinned]
 		= attribs_textured3d_skinned;
-    ctx.attr_count[renderer::DrawlistStreams::Textured3DSkinned] 
+    ctx.attr_count[renderer::DrawlistStreams::Textured3DSkinned]
 		= countof(attribs_textured3d_skinned);
-    ctx.vertexAttrs[renderer::DrawlistStreams::Textured3DAlphaClipSkinned] 
+    ctx.vertexAttrs[renderer::DrawlistStreams::Textured3DAlphaClipSkinned]
 		= attribs_textured3d_skinned;
-    ctx.attr_count[renderer::DrawlistStreams::Textured3DAlphaClipSkinned] 
+    ctx.attr_count[renderer::DrawlistStreams::Textured3DAlphaClipSkinned]
 		= countof(attribs_textured3d_skinned);
     for (u32 asset_idx = 0; asset_idx < countof(assets); asset_idx++) {
 		ctx.scratchArena = scratchArena; // explicit copy
@@ -2349,11 +1771,11 @@ void load_coreResources(
         renderer::DrawMesh& mesh = renderer::alloc_drawMesh(renderCore);
         mesh = {};
         mesh.shaderTechnique = renderer::ShaderTechniques::Instanced3D;
-        renderer::UntexturedCube cube;
-        renderer::create_cube_coords(
+        gfx::UntexturedCube cube;
+        gfx::create_cube_coords(
             (uintptr_t)cube.vertices, sizeof(cube.vertices[0]),
             cube.indices, float3(1.f, 1.f, 1.f), float3(0.f, 0.f, 0.f));
-        renderer::create_indexed_vertex_buffer_from_untextured_mesh(
+        gfx::create_indexed_vertex_buffer_from_untextured_mesh(
             mesh.vertexBuffer, cube.vertices, countof(cube.vertices),
             cube.indices, countof(cube.indices));
         core.instancedUnitCubeMesh = renderer::handle_from_drawMesh(renderCore, mesh);
@@ -2364,11 +1786,11 @@ void load_coreResources(
         renderer::DrawMesh& mesh = renderer::alloc_drawMesh(renderCore);
         mesh = {};
         mesh.shaderTechnique = renderer::ShaderTechniques::Instanced3D;
-        renderer::UntexturedSphere sphere;
-        renderer::create_sphere_coords(
+        gfx::UntexturedSphere sphere;
+        gfx::create_sphere_coords(
             (uintptr_t)sphere.vertices, sizeof(sphere.vertices[0]),
             sphere.indices, 1.f);
-        renderer::create_indexed_vertex_buffer_from_untextured_mesh(
+        gfx::create_indexed_vertex_buffer_from_untextured_mesh(
             mesh.vertexBuffer, sphere.vertices, countof(sphere.vertices),
             sphere.indices, countof(sphere.indices));
         core.instancedUnitSphereMesh = renderer::handle_from_drawMesh(renderCore, mesh);
@@ -2393,28 +1815,28 @@ void load_coreResources(
         };
 
         u16 i[] = { 0, 2, 1, 0, 3, 2, 0, 4, 3, 0, 5, 4, 0, 6, 5, 0, 7, 6 };
-        renderer::driver::IndexedVertexBufferDesc bufferParams;
+        gfx::rhi::IndexedVertexBufferDesc bufferParams;
         bufferParams.vertexData = v;
         bufferParams.indexData = i;
         bufferParams.vertexSize = sizeof(v);
         bufferParams.vertexCount = countof(v);
         bufferParams.indexSize = sizeof(i);
         bufferParams.indexCount = countof(i);
-        bufferParams.memoryUsage = renderer::driver::BufferMemoryUsage::GPU;
-        bufferParams.accessType = renderer::driver::BufferAccessType::GPU;
-        bufferParams.indexType = renderer::driver::BufferItemType::U16;
-        bufferParams.type = renderer::driver::BufferTopologyType::Triangles;
-        renderer::driver::VertexAttribDesc attribs[] = {
-            renderer::driver::make_vertexAttribDesc(
+        bufferParams.memoryUsage = gfx::rhi::BufferMemoryUsage::GPU;
+        bufferParams.accessType = gfx::rhi::BufferAccessType::GPU;
+        bufferParams.indexType = gfx::rhi::BufferItemType::U16;
+        bufferParams.type = gfx::rhi::BufferTopologyType::Triangles;
+        gfx::rhi::VertexAttribDesc attribs[] = {
+            gfx::rhi::make_vertexAttribDesc(
                     "POSITION", offsetof(renderer::VertexLayout_Color_3D, pos),
                     sizeof(renderer::VertexLayout_Color_3D),
-                    renderer::driver::BufferAttributeFormat::R32G32B32_FLOAT),
-            renderer::driver::make_vertexAttribDesc(
+                    gfx::rhi::BufferAttributeFormat::R32G32B32_FLOAT),
+            gfx::rhi::make_vertexAttribDesc(
                     "COLOR", offsetof(renderer::VertexLayout_Color_3D, color),
                     sizeof(renderer::VertexLayout_Color_3D),
-                    renderer::driver::BufferAttributeFormat::R8G8B8A8_UNORM)
+                    gfx::rhi::BufferAttributeFormat::R8G8B8A8_UNORM)
         };
-        renderer::driver::create_indexed_vertex_buffer(
+        gfx::rhi::create_indexed_vertex_buffer(
             mesh.vertexBuffer, bufferParams, attribs, countof(attribs));
 
         game::AssetInMemory& ground = core.assets[game::Resources::AssetsMeta::Ground];
@@ -2429,9 +1851,6 @@ void load_coreResources(
     obj::load_mesh_cpu_gpu(
         core.meshes[game::Resources::MeshesMeta::ToiletLo], renderCore,
         scratchArena, persistentArena, "assets/meshes/throne.obj", 1.f);
-    obj::load_mesh_cpu_gpu(
-        core.meshes[game::Resources::MeshesMeta::ToiletHi], renderCore,
-        scratchArena, persistentArena, "assets/meshes/mid-smooth.obj", 1.5f);
 
     // Hall of mirrors
     for (u32 m = 0; m < game::Resources::MirrorHallMeta::Count; m++) {
@@ -2455,37 +1874,33 @@ void load_coreResources(
         }
         // clock-wise indices
         u16 i[] = { 2, 1, 0, 3, 2, 0 }; // todo: start of second tri needs to be the last vertex, fix this weird restriction
-        renderer::driver::IndexedVertexBufferDesc bufferParams;
+        gfx::rhi::IndexedVertexBufferDesc bufferParams;
         bufferParams.vertexData = v;
         bufferParams.indexData = i;
         bufferParams.vertexSize = sizeof(v);
         bufferParams.vertexCount = countof(v);
         bufferParams.indexSize = sizeof(i);
         bufferParams.indexCount = countof(i);
-        bufferParams.memoryUsage = renderer::driver::BufferMemoryUsage::GPU;
-        bufferParams.accessType = renderer::driver::BufferAccessType::GPU;
-        bufferParams.indexType = renderer::driver::BufferItemType::U16;
-        bufferParams.type = renderer::driver::BufferTopologyType::Triangles;
-        renderer::driver::VertexAttribDesc attribs[] = {
-            renderer::driver::make_vertexAttribDesc(
+        bufferParams.memoryUsage = gfx::rhi::BufferMemoryUsage::GPU;
+        bufferParams.accessType = gfx::rhi::BufferAccessType::GPU;
+        bufferParams.indexType = gfx::rhi::BufferItemType::U16;
+        bufferParams.type = gfx::rhi::BufferTopologyType::Triangles;
+        gfx::rhi::VertexAttribDesc attribs[] = {
+            gfx::rhi::make_vertexAttribDesc(
                     "POSITION", offsetof(renderer::VertexLayout_Color_3D, pos),
                     sizeof(renderer::VertexLayout_Color_3D),
-                    renderer::driver::BufferAttributeFormat::R32G32B32_FLOAT),
-            renderer::driver::make_vertexAttribDesc(
+                    gfx::rhi::BufferAttributeFormat::R32G32B32_FLOAT),
+            gfx::rhi::make_vertexAttribDesc(
                     "COLOR", offsetof(renderer::VertexLayout_Color_3D, color),
                     sizeof(renderer::VertexLayout_Color_3D),
-                    renderer::driver::BufferAttributeFormat::R8G8B8A8_UNORM)
+                    gfx::rhi::BufferAttributeFormat::R8G8B8A8_UNORM)
         };
-        renderer::driver::create_indexed_vertex_buffer(
+        gfx::rhi::create_indexed_vertex_buffer(
             meshToLoad.gpuBuffer, bufferParams, attribs, countof(attribs));
 
         renderer::CPUMesh& mesh = meshToLoad.cpuBuffer;
-        mesh.vertices = (float3*)allocator::alloc_arena(
-            persistentArena,
-            sizeof(float3) * countof(v), alignof(float3));
-        mesh.indices = (u16*)allocator::alloc_arena(
-            persistentArena,
-            sizeof(u16) * countof(i), alignof(u16));
+        mesh.vertices = ALLOC_ARRAY(persistentArena, float3, countof(v));
+        mesh.indices = ALLOC_ARRAY(persistentArena, u16, countof(i));
         for (u32 i = 0; i < countof(v); i++) { mesh.vertices[i] = v[i].pos; }
         memcpy(mesh.indices, i, sizeof(u16) * countof(i));
         mesh.indexCount = countof(i);
@@ -2508,7 +1923,7 @@ void load_coreResources(
         auto text2d = [](Buffer2D& buffer, const Text2DParams& params, const char* str) {
 
             char text[256];
-            platform::strncpy(text, str, 256);
+            io::strncpy(text, str, 256);
 
             const u32 vertexCount = buffer.vertexCount;
             const u32 indexCount = 3 * vertexCount / 2; // every 4 vertices form a 6 index quad
@@ -2542,35 +1957,31 @@ void load_coreResources(
         };
 
         auto commit2d = [](
-            renderer::driver::RscIndexedVertexBuffer& gpuBuffer, Buffer2D& buffer,
-            const renderer::driver::VertexAttribDesc* attribs, const u32 attribs_count){
+            gfx::rhi::RscIndexedVertexBuffer& gpuBuffer, Buffer2D& buffer,
+            const gfx::rhi::VertexAttribDesc* attribs, const u32 attribs_count){
             const u32 vertexCount = buffer.vertexCount;
             const u32 indexCount = 3 * vertexCount / 2; // every 4 vertices form a 6 index quad
-            renderer::driver::IndexedVertexBufferDesc bufferParams;
+            gfx::rhi::IndexedVertexBufferDesc bufferParams;
             bufferParams.vertexData = buffer.vertices;
             bufferParams.indexData = buffer.indices;
             bufferParams.vertexSize = vertexCount * sizeof(renderer::VertexLayout_Color_2D);
             bufferParams.vertexCount = vertexCount;
             bufferParams.indexSize = indexCount * sizeof(u32);
             bufferParams.indexCount = indexCount;
-            bufferParams.memoryUsage = renderer::driver::BufferMemoryUsage::GPU;
-            bufferParams.accessType = renderer::driver::BufferAccessType::GPU;
-            bufferParams.indexType = renderer::driver::BufferItemType::U32;
-            bufferParams.type = renderer::driver::BufferTopologyType::Triangles;
-            renderer::driver::create_indexed_vertex_buffer(
+            bufferParams.memoryUsage = gfx::rhi::BufferMemoryUsage::GPU;
+            bufferParams.accessType = gfx::rhi::BufferAccessType::GPU;
+            bufferParams.indexType = gfx::rhi::BufferItemType::U32;
+            bufferParams.type = gfx::rhi::BufferTopologyType::Triangles;
+            gfx::rhi::create_indexed_vertex_buffer(
                 gpuBuffer, bufferParams, attribs, attribs_count);
             buffer.vertexCount = 0;
         };
 
         enum { MAX_VERTICES2D_COUNT = 1024 };
         Buffer2D buffer2D = {};
-        buffer2D.vertices = (renderer::VertexLayout_Color_2D*)allocator::alloc_arena(
-            scratchArena, MAX_VERTICES2D_COUNT * sizeof(renderer::VertexLayout_Color_2D),
-            alignof(renderer::VertexLayout_Color_2D));
+        buffer2D.vertices = ALLOC_ARRAY(scratchArena, renderer::VertexLayout_Color_2D, MAX_VERTICES2D_COUNT);
         buffer2D.vertexCap = MAX_VERTICES2D_COUNT;
-        buffer2D.indices = (u32*)allocator::alloc_arena(
-            scratchArena, (MAX_VERTICES2D_COUNT * 3 / 2) * sizeof(u32),
-            alignof(u32));
+        buffer2D.indices = ALLOC_ARRAY(scratchArena, u32, MAX_VERTICES2D_COUNT * 3 / 2);
 
         const f32 lineheight = 15.f * screen.window_scale;
         Text2DParams textParams;
@@ -2600,7 +2011,7 @@ void load_coreResources(
     }
 
     // debug renderer
-    __DEBUGDEF(renderer::im::init(memory.debugArena);)
+    __DEBUGDEF(gfx::im::init(memory.debugArena);)
 }
 void spawn_scene_mirrorRoom(
     game::Scene& scene, allocator::PagedArena& sceneArena, allocator::PagedArena scratchArena,
@@ -2677,14 +2088,14 @@ void spawn_scene_mirrorRoom(
         math::identity4x4(*(Transform*)&(node.nodeData.worldMatrix));
         node.nodeData.groupColor = Color32(0.72f, 0.74f, 0.12f, 1.f).RGBAv4();
         node.instanceCount = physicsScene.ball_count;
-        renderer::driver::RscCBuffer& cbuffercore = allocator::alloc_pool(renderScene.cbuffers);
+        gfx::rhi::RscCBuffer& cbuffercore = allocator::alloc_pool(renderScene.cbuffers);
         node.cbuffer_node = handle_from_cbuffer(renderScene, cbuffercore);
-        renderer::driver::create_cbuffer(cbuffercore, { sizeof(renderer::NodeData) });
-        renderer::driver::RscCBuffer& cbufferinstances =
+        gfx::rhi::create_cbuffer(cbuffercore, { sizeof(renderer::NodeData) });
+        gfx::rhi::RscCBuffer& cbufferinstances =
             allocator::alloc_pool(renderScene.cbuffers);
         node.cbuffer_instances =
             handle_from_cbuffer(renderScene, cbufferinstances);
-        renderer::driver::create_cbuffer(
+        gfx::rhi::create_cbuffer(
             cbufferinstances, { u32(sizeof(float4x4)) * physicsScene.ball_count });
         for (u32 m = 0; m < countof(node.instanceMatrices.data); m++) {
             float4x4& matrix = node.instanceMatrices.data[m];
@@ -2748,13 +2159,13 @@ void spawn_scene_mirrorRoom(
         math::identity4x4(*(Transform*)&(node.nodeData.worldMatrix));
         node.nodeData.groupColor = Color32(0.68f, 0.69f, 0.71f, 1.f).RGBAv4();
         node.instanceCount = 4;
-        renderer::driver::RscCBuffer& cbuffercore = allocator::alloc_pool(renderScene.cbuffers);
+        gfx::rhi::RscCBuffer& cbuffercore = allocator::alloc_pool(renderScene.cbuffers);
         node.cbuffer_node = handle_from_cbuffer(renderScene, cbuffercore);
-        renderer::driver::create_cbuffer(cbuffercore, { sizeof(renderer::NodeData) });
-        renderer::driver::RscCBuffer& cbufferinstances =
+        gfx::rhi::create_cbuffer(cbuffercore, { sizeof(renderer::NodeData) });
+        gfx::rhi::RscCBuffer& cbufferinstances =
             allocator::alloc_pool(renderScene.cbuffers);
         node.cbuffer_instances = handle_from_cbuffer(renderScene, cbufferinstances);
-        renderer::driver::create_cbuffer(
+        gfx::rhi::create_cbuffer(
             cbufferinstances,
             { (u32) sizeof(float4x4) * node.instanceCount });
         for (u32 m = 0; m < countof(node.instanceMatrices.data); m++) {
@@ -2766,32 +2177,16 @@ void spawn_scene_mirrorRoom(
     }
 
     if (roomDef.mirrorMesh < game::Resources::MeshesMeta::Count) {
-        const u32 numMirrors = 1024 * 1024;
-        scene.mirrors.polys = (game::Mirrors::Poly*)
-            allocator::alloc_arena(
-                sceneArena,
-                sizeof(game::Mirrors::Poly) * numMirrors,
-                alignof(game::Mirrors::Poly));
-        scene.mirrors.drawMeshes = (renderer::DrawMesh*)
-            allocator::alloc_arena(
-                sceneArena,
-                sizeof(renderer::DrawMesh) * numMirrors,
-                alignof(renderer::DrawMesh));
+        const u32 numMirrors = 1024 * 1024; // todo: hack
+        scene.mirrors.polys = ALLOC_ARRAY(sceneArena, game::Mirrors::Poly, numMirrors);
+        scene.mirrors.drawMeshes = ALLOC_ARRAY(sceneArena, renderer::DrawMesh, numMirrors);
         scene.mirrors.bvh = {};
         game::spawn_model_as_mirrors(
             scene.mirrors, core.meshes[roomDef.mirrorMesh], scratchArena, sceneArena, true);
     } else { // hall of mirrors
         const u32 numMirrors = game::Resources::MirrorHallMeta::Count * 2;
-        scene.mirrors.polys = (game::Mirrors::Poly*)
-            allocator::alloc_arena(
-                sceneArena,
-                sizeof(game::Mirrors::Poly) * numMirrors,
-                alignof(game::Mirrors::Poly));
-        scene.mirrors.drawMeshes = (renderer::DrawMesh*)
-            allocator::alloc_arena(
-                sceneArena,
-                sizeof(renderer::DrawMesh) * numMirrors,
-                alignof(renderer::DrawMesh));
+        scene.mirrors.polys = ALLOC_ARRAY(sceneArena, game::Mirrors::Poly, numMirrors);
+        scene.mirrors.drawMeshes = ALLOC_ARRAY(sceneArena, renderer::DrawMesh, numMirrors);
         scene.mirrors.bvh = {};
         for (u32 m = 0; m < game::Resources::MirrorHallMeta::Count; m++) {
             const game::GPUCPUMesh& mirrorMesh = core.mirrorHallMeshes[m];

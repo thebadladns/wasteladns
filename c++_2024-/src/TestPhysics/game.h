@@ -32,7 +32,7 @@ EventText eventLabel = {};
 
 #include "gameplay.h"
 #include "shaders.h"
-#include "drawlist.h"
+#include "renderer.h"
 #include "animation.h"
 #include "physics.h"
 #include "scene.h"
@@ -113,9 +113,9 @@ void loadLaunchConfig(platform::LaunchConfig& config) {
     config.game_width = 320 * 1;
     config.game_height = 240 * 1;
     config.fullscreen = false;
-    config.title = "Mirror Test";
+    config.title = "Physics Test";
     config.arena_size = persistentArenaSize + sceneArenaSize + frameArenaSize + scratchArenaSize;
-    __DEBUGDEF(config.arena_size += renderer::im::arena_size;)
+    __DEBUGDEF(config.arena_size += gfx::im::arena_size;)
 }
 void start(Instance& game, platform::GameConfig& config, platform::State& platform) {
 
@@ -128,14 +128,13 @@ void start(Instance& game, platform::GameConfig& config, platform::State& platfo
     config.nextFrame = platform.time.now;
 
     {
-        allocator::init_arena(
-            game.memory.persistentArena, persistentArenaSize);
+        allocator::init_arena(game.memory.persistentArena, persistentArenaSize);
         __DEBUGDEF(game.memory.persistentArenaBuffer = game.memory.persistentArena.curr;)
-        allocator::init_arena(
-            game.memory.sceneArena, sceneArenaSize);
+        allocator::init_arena(game.memory.sceneArena, sceneArenaSize);
         game.memory.sceneArenaBuffer = game.memory.sceneArena.curr;
         allocator::init_arena(game.memory.scratchArenaRoot, scratchArenaSize);
-        __DEBUGDEF(game.memory.scratchArenaHighmark =
+        __DEBUGDEF(
+            game.memory.scratchArenaHighmark =
                 (uintptr_t)game.memory.scratchArenaRoot.curr;
             game.memory.scratchArenaRoot.highmark = &game.memory.scratchArenaHighmark;)
         allocator::init_arena(
@@ -144,15 +143,14 @@ void start(Instance& game, platform::GameConfig& config, platform::State& platfo
         __DEBUGDEF(game.memory.frameArenaHighmark =
                 (uintptr_t)game.memory.frameArena.curr;
             game.memory.frameArena.highmark = &game.memory.frameArenaHighmark;)
-        __DEBUGDEF(allocator::init_arena(
-                game.memory.debugArena, renderer::im::arena_size);)
+        __DEBUGDEF(allocator::init_arena(game.memory.debugArena, gfx::im::arena_size);)
     }
     {
         game.scene = {};
         game.roomId = 0;
         SceneMemory arenas = {
-            game.memory.persistentArena,
-            game.memory.scratchArenaRoot
+              game.memory.persistentArena
+            , game.memory.scratchArenaRoot
             __DEBUGDEF(, game.memory.debugArena)
         };
         load_coreResources(game.resources, arenas, platform.screen);
@@ -444,14 +442,14 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
 
         {
             {
-                driver::ViewportParams vpParams;
+                gfx::rhi::ViewportParams vpParams;
                 vpParams.topLeftX = 0;
                 vpParams.topLeftY = 0;
                 vpParams.width = (f32)platform.screen.width;
                 vpParams.height = (f32)platform.screen.height;
                 vpParams.minDepth = 0.f;
                 vpParams.maxDepth = 1.f;
-                driver::set_VP(vpParams);
+                gfx::rhi::set_VP(vpParams);
             }
         
             renderer::VisibleNodes* visibleNodesTree = nullptr;
@@ -470,8 +468,8 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
                     mainCameraRoot.pos = mainCamera.pos;
                     mainCameraRoot.sourceId = mainCameraRoot.parentIndex = 0xffffffff;
                     mainCameraRoot.depth = 0;
-                    __PROFILEONLY(platform::format(mainCameraRoot.str, sizeof(mainCameraRoot.str), "_");)
-                    renderer::extract_frustum_planes_from_vp(
+                    __PROFILEONLY(io::format(mainCameraRoot.str, sizeof(mainCameraRoot.str), "_");)
+                    gfx::extract_frustum_planes_from_vp(
                         mainCameraRoot.frustum.planes, mainCamera.vpMatrix);
                     mainCameraRoot.frustum.numPlanes = 6;
                     // the buffer will copy this data into it's allocated region as
@@ -497,18 +495,12 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
 
                 // figure out which nodes are visible among all of the visibility lists
                 u32* isEachNodeVisible =
-                    (u32*)allocator::alloc_arena(
-                        game.memory.frameArena,
-                        scene.drawNodes.count * sizeof(u32), alignof(u32));
+                    ALLOC_ARRAY(game.memory.frameArena, u32, scene.drawNodes.count);
                 memset(isEachNodeVisible, 0, scene.drawNodes.count * sizeof(bool));
                 visibleNodesTree = // todo: in function??
-                    (VisibleNodes*)allocator::alloc_arena(
-                        game.memory.frameArena,
-                        numCameras * sizeof(VisibleNodes), alignof(VisibleNodes));
+                    ALLOC_ARRAY(game.memory.frameArena, VisibleNodes, numCameras);
                 visibleNodesTree[0].visible_nodes =
-                    (u32*)allocator::alloc_arena(
-                            game.memory.frameArena,
-                        scene.drawNodes.count * sizeof(u32), alignof(u32));
+                    ALLOC_ARRAY(game.memory.frameArena, u32, scene.drawNodes.count);
                 visibleNodesTree[0].visible_nodes_count = 0;
                 renderer::CullEntries cullEntries = {};
                 allocCullEntries(scratchArena, cullEntries, scene);
@@ -526,11 +518,11 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
                     count++;
                     if (!isEachNodeVisible[n]) { continue; }
                     const DrawNode& node = scene.drawNodes.data[n].state.live;
-                    driver::update_cbuffer(
+                    gfx::rhi::update_cbuffer(
                             cbuffer_from_handle(scene, node.cbuffer_node),
                             &node.nodeData);
                     if (node.cbuffer_ext) {
-                        driver::update_cbuffer(
+                        gfx::rhi::update_cbuffer(
                                 cbuffer_from_handle(scene, node.cbuffer_ext),
                                 node.ext_data);
                     }
@@ -539,24 +531,24 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
                     if (scene.instancedDrawNodes.data[n].alive == 0) { continue; }
                     count++;
                     const DrawNodeInstanced& node = scene.instancedDrawNodes.data[n].state.live;
-                    driver::update_cbuffer(
+                    gfx::rhi::update_cbuffer(
                             cbuffer_from_handle(scene, node.cbuffer_node),
                             &node.nodeData);
-                    driver::update_cbuffer(
+                    gfx::rhi::update_cbuffer(
                             cbuffer_from_handle(scene, node.cbuffer_instances),
                             &node.instanceMatrices);
                 }
             }
 
             // render main camera
-            driver::bind_RT(renderCore.gameRT);
+            gfx::rhi::bind_RT(renderCore.gameRT);
             // TODO: figure out whether this is needed
-            driver::clear_RT(renderCore.gameRT,
-                driver::RenderTargetClearFlags::Stencil);
+            gfx::rhi::clear_RT(renderCore.gameRT,
+                gfx::rhi::RenderTargetClearFlags::Stencil);
 
-            driver::Marker_t marker;
-            driver::set_marker_name(marker, "BASE SCENE"); driver::start_event(marker);
             {
+                gfx::rhi::start_event("BASE SCENE");
+
                 RenderSceneContext renderSceneContext = {
                     cameraTree[0], visibleNodesTree[0], game.scene, renderCore,
                     renderCore.depthStateAlways,
@@ -565,8 +557,9 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
                     renderCore.rasterizerStateFillFrontfaces,
                     game.memory.scratchArenaRoot };
                 renderBaseScene(renderSceneContext);
+
+                gfx::rhi::end_event();
             }
-            driver::end_event();
 
             // render camera tree
             if (cameraTree[0].siblingIndex > 1) {
@@ -579,7 +572,6 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
     {
         // render update wrap up
         renderer::Scene& scene = game.scene.renderScene;
-        using namespace renderer;
 
         #if __DEBUG
         // Immediate mode debug, to be rendered along with the 3D scene on the next frame
@@ -591,23 +583,23 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
             const f32 axisSize = 7.f;
             const float3 pos(0.f, 0.f, 0.1f);
 
-            im::segment(pos, math::add(pos, math::scale(float3(1.f, 0.f, 0.f), axisSize)), axisX);
-            im::segment(pos, math::add(pos, math::scale(float3(0.f, 1.f, 0.f), axisSize)), axisY);
-            im::segment(pos, math::add(pos, math::scale(float3(0.f, 0.f, 1.f), axisSize)), axisZ);
+            gfx::im::segment(pos, math::add(pos, math::scale(float3(1.f, 0.f, 0.f), axisSize)), axisX);
+            gfx::im::segment(pos, math::add(pos, math::scale(float3(0.f, 1.f, 0.f), axisSize)), axisY);
+            gfx::im::segment(pos, math::add(pos, math::scale(float3(0.f, 0.f, 1.f), axisSize)), axisZ);
 
             const f32 thickness = 0.1f;
             const u32 steps = 10;
             const f32 spacing = 1.f / (f32)steps;
             for (int i = 1; i <= steps; i++) {
-                im::segment(
+                gfx::im::segment(
                       math::add(pos, float3(spacing * i, 0.f, -thickness))
                     , math::add(pos, float3(spacing * i, 0.f, thickness))
                     , axisX);
-                im::segment(
+                gfx::im::segment(
                       math::add(pos, float3(0.f, spacing * i, -thickness))
                     , math::add(pos, float3(0.f, spacing * i, thickness))
                     , axisY);
-                im::segment(
+                gfx::im::segment(
                       math::add(pos, float3(-thickness, thickness, spacing * i))
                     , math::add(pos, float3(thickness, -thickness, spacing * i))
                     , axisZ);
@@ -621,16 +613,14 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
                 renderer::CoreResources& renderCore = game.resources.renderCore;
                 bvh::Tree& bvh = game.scene.mirrors.bvh;
 
-                driver::Marker_t marker;
-                driver::set_marker_name(marker, "BVH"); driver::start_event(marker);
+                gfx::rhi::start_event("BVH");
                 if (bvh.nodeCount > 0) {
 
                     struct DrawNode {
                         u16 nodeid;
                         u16 depth;
                     };
-                    DrawNode* nodeStack = (DrawNode*)allocator::alloc_arena(
-                        scratchArena, bvh.nodeCount * sizeof(DrawNode), alignof(DrawNode));
+                    DrawNode* nodeStack = ALLOC_ARRAY(scratchArena, DrawNode, bvh.nodeCount);
                     u32 stackCount = 0;
                     nodeStack[stackCount++] = { 0, 0 };
                     struct AABB {
@@ -640,51 +630,43 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
                     allocator::Buffer<AABB> aabbs = {};
                     const Color32 boxColor(0.1f, 0.8f, 0.8f, 0.7f);
                     while (stackCount > 0) {
-                        DrawNode n = nodeStack[--stackCount];
-                        if (!bvh.nodes[n.nodeid].isLeaf) {
-                            if (n.depth == debug::bvhDepth) {
-                                float3 center =
-                                    math::scale(
-                                        math::add(bvh.nodes[n.nodeid].min,
-                                            bvh.nodes[n.nodeid].max), 0.5f);
-                                float3 scale =
-                                    math::scale(
-                                        math::subtract(
-                                            bvh.nodes[n.nodeid].max, bvh.nodes[n.nodeid].min),
-                                        0.5f);
-                                allocator::push(aabbs, scratchArena) = { center, scale };
-                            } else {
-                                nodeStack[stackCount++] =
-                                    DrawNode{ bvh.nodes[n.nodeid].lchildId, u16(n.depth + 1u) };
-                                nodeStack[stackCount++] =
-                                    DrawNode{ u16(bvh.nodes[n.nodeid].lchildId + 1u), u16(n.depth + 1u) };
-                            }
+                        const DrawNode n = nodeStack[--stackCount];
+                        const bvh::Node& node = bvh.nodes[n.nodeid];
+                        if (n.depth == debug::bvhDepth || node.isLeaf) {
+                            float3 center = math::scale(math::add(node.min, node.max), 0.5f);
+                            float3 scale = math::scale(math::subtract(node.max, node.min), 0.5f);
+                            allocator::push(aabbs, scratchArena) = { center, scale };
+                        } else if (!node.isLeaf) {
+                            nodeStack[stackCount++] =
+                                DrawNode{ node.lchildId, u16(n.depth + 1u) };
+                            nodeStack[stackCount++] =
+                                DrawNode{ u16(node.lchildId + 1u), u16(n.depth + 1u) };
                         }
                     }
 
-                    driver::RscCBuffer& scene_cbuffer =
+                    gfx::rhi::RscCBuffer& scene_cbuffer =
                         renderCore.cbuffers[renderer::CoreResources::CBuffersMeta::Scene];
-                    driver::RscCBuffer& node_cbuffer =
+                    gfx::rhi::RscCBuffer& node_cbuffer =
                         renderCore.cbuffers[renderer::CoreResources::CBuffersMeta::NodeIdentity];
-                    driver::RscCBuffer& instanced_cbuffer =
+                    gfx::rhi::RscCBuffer& instanced_cbuffer =
                         renderCore.cbuffers[renderer::CoreResources::CBuffersMeta::Instances64];
 
                     renderer::NodeData nodeColor = {};
                     math::identity4x4(*(Transform*)&nodeColor.worldMatrix);
                     nodeColor.groupColor = Color32(0.4f, 0.54f, 1.f, 0.3f).RGBAv4();
-                    driver::update_cbuffer(node_cbuffer, &nodeColor);
+                    gfx::rhi::update_cbuffer(node_cbuffer, &nodeColor);
 
-                    driver::RscCBuffer cbuffers[] =
+                    gfx::rhi::RscCBuffer cbuffers[] =
                     { scene_cbuffer, node_cbuffer, instanced_cbuffer };
                     renderer::DrawMesh& drawMesh =
                         renderer::drawMesh_from_handle(
                             renderCore, game.resources.instancedUnitCubeMesh);
 
-                    renderer::driver::bind_DS(renderCore.depthStateOn);
-                    renderer::driver::bind_shader(renderCore.shaders[drawMesh.shaderTechnique]);
-                    renderer::driver::bind_RS(renderCore.rasterizerStateLine);
-                    renderer::driver::bind_indexed_vertex_buffer(drawMesh.vertexBuffer);
-                    driver::bind_cbuffers(
+                    gfx::rhi::bind_DS(renderCore.depthStateOn);
+                    gfx::rhi::bind_shader(renderCore.shaders[drawMesh.shaderTechnique]);
+                    gfx::rhi::bind_RS(renderCore.rasterizerStateLine);
+                    gfx::rhi::bind_indexed_vertex_buffer(drawMesh.vertexBuffer);
+                    gfx::rhi::bind_cbuffers(
                         renderCore.shaders[drawMesh.shaderTechnique], cbuffers, countof(cbuffers));
 
                     // round up, the last block will have less than or equal max elems
@@ -694,7 +676,7 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
                         u32 end = math::min(begin + 64, (u32)aabbs.len);
 
                         u32 bufferId = 0;
-                        Matrices64 matrices = {};
+                        renderer::Matrices64 matrices = {};
                         for (u32 i = begin; i < end; i++) {
                             Transform t;
                             math::identity4x4(t);
@@ -704,16 +686,16 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
                             t.matrix.col2.z = aabbs.data[i].scale.z;
                             matrices.data[bufferId++] = t.matrix;
                         }
-                        driver::update_cbuffer(instanced_cbuffer, &matrices);
-                        driver::draw_instances_indexed_vertex_buffer(
+                        gfx::rhi::update_cbuffer(instanced_cbuffer, &matrices);
+                        gfx::rhi::draw_instances_indexed_vertex_buffer(
                             drawMesh.vertexBuffer, end - begin);
                     }
 
                     // clean up identity node
                     nodeColor.groupColor = Color32(1.f, 1.f, 1.f, 1.f).RGBAv4();
-                    driver::update_cbuffer(node_cbuffer, &nodeColor);
+                    gfx::rhi::update_cbuffer(node_cbuffer, &nodeColor);
                 }
-                renderer::driver::end_event();
+                gfx::rhi::end_event();
             }
 
             
@@ -721,10 +703,10 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
              || debug::debug3Dmode == debug::Debug3DView::Physics) {
                 physics::Scene& pScene = game.scene.physicsScene;
                 for (u32 i = 0; i < pScene.wall_count; i++) {
-                    renderer::im::segment(pScene.walls[i].start, pScene.walls[i].end, Color32(1.f, 1.f, 1.f, 1.f));
+                    gfx::im::segment(pScene.walls[i].start, pScene.walls[i].end, Color32(1.f, 1.f, 1.f, 1.f));
                 }
                 for (u32 i = 0; i < pScene.obstacle_count; i++) {
-                    renderer::im::sphere(pScene.obstacles[i].pos, pScene.obstacles[i].radius, Color32(1.f, 1.f, 1.f, 1.f));
+                    gfx::im::sphere(pScene.obstacles[i].pos, pScene.obstacles[i].radius, Color32(1.f, 1.f, 1.f, 1.f));
                 }
             }
 
@@ -735,26 +717,20 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
                 
                 if (debug::capturedCameras) {
                     allocator::PagedArena scratchArena = game.memory.scratchArenaRoot; // explicit copy
-                    u32* isEachNodeVisible =
-                        (u32*)allocator::alloc_arena(
-                            scratchArena,
-                            scene.drawNodes.count * sizeof(u32), alignof(u32));
+                    u32* isEachNodeVisible = ALLOC_ARRAY(scratchArena, u32, scene.drawNodes.count);
                     memset(isEachNodeVisible, 0, scene.drawNodes.count * sizeof(bool));
                     renderer::VisibleNodes visibleNodesDebug = {};
                     CameraNode& cameraNode = debug::capturedCameras[debug::debugCameraStage];
                     if (debug::debugCameraStage == 0) {
                         // render culled nodes
-                        visibleNodesDebug.visible_nodes =
-                            (u32*)allocator::alloc_arena(
-                                scratchArena,
-                                scene.drawNodes.count * sizeof(u32), alignof(u32));
+                        visibleNodesDebug.visible_nodes = ALLOC_ARRAY(scratchArena, u32, scene.drawNodes.count);
                         visibleNodesDebug.visible_nodes_count = 0;
                         float4x4 vpMatrix =
                             math::mult(cameraNode.projectionMatrix, cameraNode.viewMatrix);
                         renderer::computeVisibilityCS(
                             visibleNodesDebug, isEachNodeVisible, vpMatrix, scene);
                         const Color32 color(0.25f, 0.8f, 0.15f, 0.7f);
-                        im::frustum(vpMatrix, color);
+                        gfx::im::frustum(vpMatrix, color);
                     } else {
                         // render mirror with normal
                         const game::Mirrors::Poly& p = game.scene.mirrors.polys[cameraNode.sourceId];
@@ -764,27 +740,15 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
                                 math::subtract(p.v[2], p.v[0]), math::subtract(p.v[1], p.v[0])));
                         float4 planeWS(
                             normalWS.x, normalWS.y, normalWS.z,-math::dot(p.v[0], normalWS));
-                        im::plane(planeWS, Color32(1.f, 1.f, 1.f, 1.f));
+                        gfx::im::plane(planeWS, Color32(1.f, 1.f, 1.f, 1.f));
 
                         renderer::Frustum& frustum =
                             debug::capturedCameras[cameraNode.parentIndex].frustum;
                         float3 poly[8];
                         u32 poly_count = p.numPts;
                         memcpy(poly, p.v, sizeof(float3) * p.numPts);
-                        #if DISABLE_INTRINSICS
-                            clip_poly_in_frustum(
-                                poly, poly_count, frustum.planes, frustum.numPlanes, countof(poly));
-                        #else
-                            m256_4 planes_256[renderer::Frustum::MAX_PLANE_COUNT];
-                            for (u32 p = 0; p < frustum.numPlanes; p++) {
-                                planes_256[p].vx = _mm256_set1_ps(frustum.planes[p].x);
-                                planes_256[p].vy = _mm256_set1_ps(frustum.planes[p].y);
-                                planes_256[p].vz = _mm256_set1_ps(frustum.planes[p].z);
-                                planes_256[p].vw = _mm256_set1_ps(frustum.planes[p].w);
-                            }
-                            clip_poly_in_frustum_256(
-                                poly, poly_count, planes_256, frustum.numPlanes, countof(poly));
-                        #endif
+                        clip_poly_in_frustum(
+                            poly, poly_count, frustum.planes, frustum.numPlanes, countof(poly));
                         const float2 screenScale(
                             320.f * 3.f * 0.5f,
                             240.f * 3.f * 0.5f);
@@ -792,13 +756,13 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
                         for (u32 i = 0; i < poly_count; i++) {
                             float4 pCS = math::mult(mainCamera.vpMatrix, float4(poly[i], 1.f));
                             polyScreen[i] = math::scale(math::invScale(pCS.xy, pCS.w), screenScale);
-                            renderer::im::Text2DParams textParams;
+                            gfx::im::Text2DParams textParams;
                             textParams.scale = 1;
                             textParams.pos = polyScreen[i];
                             textParams.color = Color32(1.f, 1.f, 1.f, 1.f);
-                            renderer::im::text2d(textParams, "%d", i);
+                            gfx::im::text2d(textParams, "%d", i);
                         }
-                        renderer::im::poly2d(polyScreen, poly_count, Color32(1.f, 1.f, 1.f, 0.3f));
+                        gfx::im::poly2d(polyScreen, poly_count, Color32(1.f, 1.f, 1.f, 0.3f));
 
                         // render culled nodes
                         renderer::CullEntries cullEntries = {};
@@ -807,17 +771,17 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
                             scratchArena, visibleNodesDebug, isEachNodeVisible,
                             cameraNode.frustum, cullEntries);
                         const Color32 color(0.25f, 0.8f, 0.15f, 0.7f);
-                        im::frustum(cameraNode.frustum.planes, cameraNode.frustum.numPlanes, color);
+                        gfx::im::frustum(cameraNode.frustum.planes, cameraNode.frustum.numPlanes, color);
                     }
                     for (u32 i = 0; i < visibleNodesDebug.visible_nodes_count; i++) {
                         u32 n = visibleNodesDebug.visible_nodes[i];
-                        const DrawNode& node = scene.drawNodes.data[n].state.live;
-                        im::obb(node.nodeData.worldMatrix, node.min, node.max, bbColor);
+                        const renderer::DrawNode& node = scene.drawNodes.data[n].state.live;
+                        gfx::im::obb(node.nodeData.worldMatrix, node.min, node.max, bbColor);
                     }
                 }
             }
 
-            im::commit3d();
+            gfx::im::commit3d();
         }
         #endif
         
@@ -838,7 +802,7 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
                 char text[256];
                 f64 time;
             };
-            renderer::im::Text2DParams textParamsLeft, textParamsRight, textParamsCenter;
+            gfx::im::Text2DParams textParamsLeft, textParamsRight, textParamsCenter;
             textParamsLeft.scale = (u8)textscale;
             textParamsLeft.pos =float2(
                 game.resources.renderCore.windowProjection.config.left + 10.f * textscale,
@@ -855,7 +819,7 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
             textParamsCenter.color = defaultCol;
 
             if (keyboard.pressed(input::TOGGLE_OVERLAY)) {
-                platform::format(
+                io::format(
                     debug::eventLabel.text, sizeof(debug::eventLabel.text),
                     "Overlays: %s", debug::overlaynames[debug::overlaymode]);
                 debug::eventLabel.time = platform.time.now;
@@ -865,12 +829,12 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
                 textParamsLeft.color = defaultCol;
             }
 
-            renderer::im::text2d(
+            gfx::im::text2d(
                 textParamsLeft, "H to toggle overlays: %s", debug::overlaynames[debug::overlaymode]);
             textParamsLeft.pos.y -= lineheight;
 
             if (keyboard.pressed(input::TOGGLE_PAUSE_SCENE_RENDER)) {
-                platform::format(
+                io::format(
                     debug::eventLabel.text, sizeof(debug::eventLabel.text), "Paused scene render");
                 debug::eventLabel.time = platform.time.now;
                 textParamsLeft.color = activeCol;
@@ -878,11 +842,11 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
             else {
                 textParamsLeft.color = defaultCol;
             }
-            renderer::im::text2d(textParamsLeft, "SPACE to toggle scene rendering pause");
+            gfx::im::text2d(textParamsLeft, "SPACE to toggle scene rendering pause");
             textParamsLeft.pos.y -= lineheight;
 
             if (keyboard.pressed(input::TOGGLE_DEBUG3D)) {
-                platform::format(
+                io::format(
                     debug::eventLabel.text, sizeof(debug::eventLabel.text),
                     "Visualization mode: %s", debug::visualizationModes[debug::debug3Dmode]);
                 debug::eventLabel.time = platform.time.now;
@@ -891,7 +855,7 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
             else {
                 textParamsLeft.color = defaultCol;
             }
-            renderer::im::text2d(
+            gfx::im::text2d(
                 textParamsLeft, "V to toggle 3D visualization modes: %s",
                 debug::visualizationModes[debug::debug3Dmode]);
             textParamsLeft.pos.y -= lineheight;
@@ -899,7 +863,7 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
             if (debug::debug3Dmode == debug::Debug3DView::BVH) {
 
                 if (keyboard.pressed(input::TOGGLE_BVH_LEVEL)) {
-                    platform::format(
+                    io::format(
                         debug::eventLabel.text, sizeof(debug::eventLabel.text),
                         "BVH level: %d", debug::bvhDepth);
                     debug::eventLabel.time = platform.time.now;
@@ -908,7 +872,7 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
                 else {
                     textParamsLeft.color = defaultCol;
                 }
-                renderer::im::text2d(textParamsLeft,
+                gfx::im::text2d(textParamsLeft,
                     "C to increase bvh depth level (+shift to decrease): %d", debug::bvhDepth);
                 textParamsLeft.color = defaultCol;
                 textParamsLeft.pos.y -= lineheight;
@@ -916,7 +880,7 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
 
             if (debug::debug3Dmode == debug::Debug3DView::Culling) {
                 if (keyboard.pressed(input::CAPTURE_CAMERAS)) {
-                    platform::format(
+                    io::format(
                         debug::eventLabel.text, sizeof(debug::eventLabel.text), "Capture cameras");
                     debug::eventLabel.time = platform.time.now;
                     textParamsLeft.color = activeCol;
@@ -924,19 +888,19 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
                 else {
                     textParamsLeft.color = defaultCol;
                 }
-                renderer::im::text2d(textParamsLeft, "P to capture cameras in scene");
+                gfx::im::text2d(textParamsLeft, "P to capture cameras in scene");
                 textParamsLeft.color = defaultCol;
                 textParamsLeft.pos.y -= lineheight;
 
                 if (keyboard.pressed(input::TOGGLE_CAPTURED_CAMERA)) {
-                    platform::format(
+                    io::format(
                         debug::eventLabel.text,sizeof(debug::eventLabel.text), "Camera #%d/#%d", debug::debugCameraStage + 1, debug::capturedCameras ? debug::capturedCameras[0].siblingIndex : 0);
                     debug::eventLabel.time = platform.time.now;
                     textParamsLeft.color = activeCol;
                 } else {
                     textParamsLeft.color = defaultCol;
                 }
-                renderer::im::text2d(textParamsLeft, "C to toggle camera capture stages (+shift to go back): #%d/#%d", debug::debugCameraStage + 1, debug::capturedCameras ? debug::capturedCameras[0].siblingIndex : 0);
+                gfx::im::text2d(textParamsLeft, "C to toggle camera capture stages (+shift to go back): #%d/#%d", debug::debugCameraStage + 1, debug::capturedCameras ? debug::capturedCameras[0].siblingIndex : 0);
                 textParamsLeft.color = defaultCol;
                 textParamsLeft.pos.y -= lineheight;
 
@@ -946,7 +910,7 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
                     const u32 maxidx = debug::debugCameraStage + 10 < numCameras ? debug::debugCameraStage + 10 : numCameras;
                     for (u32 i = minidx; i < maxidx; i++) {
                         if (i == debug::debugCameraStage) { textParamsLeft.color = activeCol; }
-                        renderer::im::text2d(textParamsLeft, "%*d: %s", debug::capturedCameras[i].depth, i, debug::capturedCameras[i].str);
+                        gfx::im::text2d(textParamsLeft, "%*d: %s", debug::capturedCameras[i].depth, i, debug::capturedCameras[i].str);
                         textParamsLeft.color = defaultCol;
                         textParamsLeft.pos.y -= lineheight;
                     }
@@ -955,29 +919,29 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
                 {
                     if (platform.input.keyboard.pressed(input::TOGGLE_FRUSTUM_CUT)) { textParamsLeft.color = activeCol; }
                     else { textParamsLeft.color = defaultCol; }
-                    platform::StrBuilder frustumStr { appendBuff, sizeof(appendBuff) };
+                    io::StrBuilder frustumStr { appendBuff, sizeof(appendBuff) };
                     constexpr ::input::keyboard::Keys::Enum keys[] = {
                         input::TOGGLE_FRUSTUM_NEAR, input::TOGGLE_FRUSTUM_FAR,
                         input::TOGGLE_FRUSTUM_LEFT, input::TOGGLE_FRUSTUM_RIGHT,
                         input::TOGGLE_FRUSTUM_BOTTOM, input::TOGGLE_FRUSTUM_TOP };
-                    platform::append(
+                    io::append(
                         frustumStr.curr, frustumStr.last,
                         "%sFrustum planes: ", debug::force_cut_frustum ? "[forced cut] " : "");
                     for (s32 i = 0; i < countof(debug::frustum_planes_off) && !frustumStr.full(); i++) {
                         if (!debug::frustum_planes_off[i]) {
-                            platform::append(
+                            io::append(
                                 frustumStr.curr,
                                 frustumStr.last, "%s ", debug::frustum_planes_names[i]);
                         }
                         if (platform.input.keyboard.pressed(::input::keyboard::Keys::Enum(keys[i]))) {
                             textParamsLeft.color = activeCol;
-                            platform::format(debug::eventLabel.text, sizeof(debug::eventLabel.text), debug::frustum_planes_off[i] ? "%s frustum plane off" : "%s frustum plane on", debug::frustum_planes_names[i]);
+                            io::format(debug::eventLabel.text, sizeof(debug::eventLabel.text), debug::frustum_planes_off[i] ? "%s frustum plane off" : "%s frustum plane on", debug::frustum_planes_names[i]);
                             debug::eventLabel.time = platform.time.now;
                         }
                     };
-                    renderer::im::text2d(textParamsLeft, "[0] to force frustum cut, [1-6] to toggle frustum planes");
+                    gfx::im::text2d(textParamsLeft, "[0] to force frustum cut, [1-6] to toggle frustum planes");
                     textParamsLeft.pos.y -= lineheight;
-                    renderer::im::text2d(textParamsLeft, frustumStr.str);
+                    gfx::im::text2d(textParamsLeft, frustumStr.str);
                     textParamsLeft.color = defaultCol;
                     textParamsLeft.pos.y -= lineheight;
                 }
@@ -986,26 +950,26 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
             if (debug::overlaymode == debug::OverlayMode::All
                 || debug::overlaymode == debug::OverlayMode::HelpOnly) {
                 textParamsLeft.color = platform.input.mouse.down(::input::mouse::Keys::BUTTON_LEFT) ? activeCol : defaultCol;
-                renderer::im::text2d(textParamsLeft, "Mouse (%.3f,%.3f)", platform.input.mouse.x, platform.input.mouse.y);
+                gfx::im::text2d(textParamsLeft, "Mouse (%.3f,%.3f)", platform.input.mouse.x, platform.input.mouse.y);
                 textParamsLeft.pos.y -= lineheight;
                 textParamsLeft.color = defaultCol;
                 const float3 mousepos_WS = camera::screenPosToWorldPos(
                     platform.input.mouse.x, platform.input.mouse.y,
                     platform.screen.window_width, platform.screen.window_height,
                     game.resources.renderCore.perspProjection.config, game.scene.camera.viewMatrix);
-                renderer::im::text2d(textParamsLeft, "Mouse 3D (%.3f,%.3f,%.3f)",mousepos_WS.x, mousepos_WS.y, mousepos_WS.z);
+                gfx::im::text2d(textParamsLeft, "Mouse 3D (%.3f,%.3f,%.3f)",mousepos_WS.x, mousepos_WS.y, mousepos_WS.z);
                 textParamsLeft.pos.y -= lineheight;
                 {
                     float3 eulers_deg = math::scale(game.scene.orbitCamera.eulers, math::r2d32);
-                    renderer::im::text2d(textParamsLeft, "Camera eulers: " FLOAT3_FORMAT("% .3f"), FLOAT3_PARAMS(eulers_deg));
+                    gfx::im::text2d(textParamsLeft, "Camera eulers: " FLOAT3_FORMAT("% .3f"), FLOAT3_PARAMS(eulers_deg));
                     textParamsLeft.pos.y -= lineheight;
                 }
                 for (u32 i = 0; i < platform.input.padCount; i++)
                 {
                     const ::input::gamepad::State& pad = platform.input.pads[i];
-                    renderer::im::text2d(textParamsLeft, "Pad: %s", pad.name);
+                    gfx::im::text2d(textParamsLeft, "Pad: %s", pad.name);
                     textParamsLeft.pos.y -= lineheight;
-                    renderer::im::text2d(textParamsLeft
+                    gfx::im::text2d(textParamsLeft
                         , "Pad: L:(%.3f,%.3f) R:(%.3f,%.3f) L2:%.3f R2:%.3f"
                         , pad.sliders[::input::gamepad::Sliders::AXIS_X_LEFT], pad.sliders[::input::gamepad::Sliders::AXIS_Y_LEFT]
                         , pad.sliders[::input::gamepad::Sliders::AXIS_X_RIGHT], pad.sliders[::input::gamepad::Sliders::AXIS_Y_RIGHT]
@@ -1013,9 +977,9 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
                     );
 
                     {
-                        platform::StrBuilder padStr{ appendBuff, sizeof(appendBuff) };
+                        io::StrBuilder padStr{ appendBuff, sizeof(appendBuff) };
                         textParamsLeft.pos.y -= lineheight;
-                        platform::append(padStr.curr, padStr.last, "Keys: ");
+                        io::append(padStr.curr, padStr.last, "Keys: ");
                         const char* key_names[] = {
                               "BUTTON_N", "BUTTON_S", "BUTTON_W", "BUTTON_E"
                             , "DPAD_UP", "DPAD_DOWN", "DPAD_LEFT", "DPAD_RIGHT"
@@ -1025,27 +989,27 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
                         };
                         for (u32 key = 0; key < ::input::gamepad::KeyMask::COUNT && !padStr.full(); key++) {
                             if (pad.down((::input::gamepad::KeyMask::Enum)(1 << key))) {
-                                platform::append(
+                                io::append(
                                     padStr.curr, padStr.last, "%s ", key_names[key]);
                             }
                         }
-                        renderer::im::text2d(textParamsLeft, padStr.str);
+                        gfx::im::text2d(textParamsLeft, padStr.str);
                         textParamsLeft.pos.y -= lineheight;
                     }
                 }
 
                 textParamsRight.color = defaultCol;
                 textParamsRight.pos.x -= 30.f * textscale;
-                renderer::im::text2d(textParamsRight, "%s", platform::name);
+                gfx::im::text2d(textParamsRight, "%s", platform::name);
                 textParamsRight.pos.y -= lineheight;
-                renderer::im::text2d(textParamsRight, "%.3lf fps", 1. / debug::frameAvg);
+                gfx::im::text2d(textParamsRight, "%.3lf fps", 1. / debug::frameAvg);
                 textParamsRight.pos.y -= lineheight;
             }
 
             if (debug::overlaymode == debug::OverlayMode::All
              || debug::overlaymode == debug::OverlayMode::ArenaOnly)
             {
-                auto renderArena = [](renderer::im::Text2DParams& textCfg, u8* arenaEnd,
+                auto renderArena = [](gfx::im::Text2DParams& textCfg, u8* arenaEnd,
                                         u8* arenaStart, uintptr_t arenaHighmark,
                                         const char* arenaName, const Color32 defaultCol,
                                         const Color32 baseCol, const Color32 highmarkCol,
@@ -1060,17 +1024,17 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
                     const f32 arenaHighmark_barwidth = barwidth * occupancy;
                     textCfg.color = highmarkCol;
                     if (arenaHighmarkBytes > 1024 * 1024) {
-                        renderer::im::text2d(
+                        gfx::im::text2d(
                             textCfg, "%s highmark: %lu bytes (%.3fMB) / %.3f%%",
                             arenaName, arenaHighmarkBytes, arenaHighmarkBytes / (1024.f * 1024.f),
                             occupancy * 100.f);
                     } else if (arenaHighmarkBytes > 1024) {
-                        renderer::im::text2d(
+                        gfx::im::text2d(
                             textCfg, "%s highmark: %lu bytes (%.3fKB) / %.3f%%",
                             arenaName, arenaHighmarkBytes, arenaHighmarkBytes / (1024.f),
                             occupancy * 100.f);
                     } else {
-                        renderer::im::text2d(
+                        gfx::im::text2d(
                             textCfg, "%s highmark: %lu bytes / %.3f%%",
                             arenaName, arenaHighmarkBytes,
                             occupancy * 100.f);
@@ -1078,11 +1042,11 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
                     textCfg.pos.y -= lineheight;
                     textCfg.color = defaultCol;
 
-                    renderer::im::box_2d(
+                    gfx::im::box_2d(
                         float2(textCfg.pos.x, textCfg.pos.y - barheight),
                         float2(textCfg.pos.x + barwidth, textCfg.pos.y), baseCol);
                     if (arenaHighmarkBytes) {
-                        renderer::im::box_2d(
+                        gfx::im::box_2d(
                             float2(textCfg.pos.x, textCfg.pos.y - barheight),
                             float2(textCfg.pos.x + arenaHighmark_barwidth, textCfg.pos.y),
                             highmarkCol);
@@ -1142,19 +1106,19 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
                     const Color32 used2didxCol(0.8f, 0.95f, 0.8f, 1.f);
 
                     const ptrdiff_t memory_size =
-                        (ptrdiff_t)game.memory.debugArena.curr - (ptrdiff_t)debug::ctx.vertices_3d;
+                        (ptrdiff_t)game.memory.debugArena.curr - (ptrdiff_t)gfx::im::ctx.vertices_3d;
                     const ptrdiff_t vertices_3d_start =
-                        (ptrdiff_t)debug::ctx.vertices_3d - (ptrdiff_t)debug::ctx.vertices_3d;
+                        (ptrdiff_t)gfx::im::ctx.vertices_3d - (ptrdiff_t)gfx::im::ctx.vertices_3d;
                     const ptrdiff_t vertices_3d_size =
-                        (ptrdiff_t)debug::vertices_3d_head_last_frame * sizeof(im::Vertex3D);
+                        (ptrdiff_t)debug::vertices_3d_head_last_frame * sizeof(gfx::im::Vertex3D);
                     const ptrdiff_t vertices_2d_start =
-                        (ptrdiff_t)debug::ctx.vertices_2d - (ptrdiff_t)debug::ctx.vertices_3d;
+                        (ptrdiff_t)gfx::im::ctx.vertices_2d - (ptrdiff_t)gfx::im::ctx.vertices_3d;
                     const ptrdiff_t vertices_2d_size =
-                        (ptrdiff_t)debug::vertices_2d_head_last_frame * sizeof(im::Vertex2D);
+                        (ptrdiff_t)debug::vertices_2d_head_last_frame * sizeof(gfx::im::Vertex2D);
                     const ptrdiff_t indices_2d_start =
-                        (ptrdiff_t)debug::ctx.indices_2d - (ptrdiff_t)debug::ctx.vertices_3d;
+                        (ptrdiff_t)gfx::im::ctx.indices_2d - (ptrdiff_t)gfx::im::ctx.vertices_3d;
                     const ptrdiff_t indices_2d_size =
-                        (ptrdiff_t)(debug::ctx.vertices_2d_head * 3 / 2) * sizeof(u32);
+                        (ptrdiff_t)(gfx::im::ctx.vertices_2d_head * 3 / 2) * sizeof(u32);
                     const f32 v3d_barstart = barwidth * vertices_3d_start / (f32)memory_size;
                     const f32 v3d_barwidth = barwidth * vertices_3d_size / (f32)memory_size;
                     const f32 v2d_barstart = barwidth * vertices_2d_start / (f32)memory_size;
@@ -1163,29 +1127,29 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
                     const f32 i2d_barwidth = barwidth * indices_2d_size / (f32)memory_size;
 
                     textParamsCenter.color = used3dCol;
-                    renderer::im::text2d(textParamsCenter, "im 3d: %lu bytes", vertices_3d_size);
+                    gfx::im::text2d(textParamsCenter, "im 3d: %lu bytes", vertices_3d_size);
                     textParamsCenter.pos.y -= lineheight;
                     textParamsCenter.color = used2dCol;
-                    renderer::im::text2d(textParamsCenter, "im 2d: %lu bytes", vertices_2d_size);
+                    gfx::im::text2d(textParamsCenter, "im 2d: %lu bytes", vertices_2d_size);
                     textParamsCenter.pos.y -= lineheight;
                     textParamsCenter.color = used2didxCol;
-                    renderer::im::text2d(textParamsCenter, "im 2d indices: %lu bytes", indices_2d_size);
+                    gfx::im::text2d(textParamsCenter, "im 2d indices: %lu bytes", indices_2d_size);
                     textParamsCenter.pos.y -= lineheight;
                     textParamsCenter.color = defaultCol;
 
-                    renderer::im::box_2d(
+                    gfx::im::box_2d(
                         float2(textParamsCenter.pos.x, textParamsCenter.pos.y - barheight),
                         float2(textParamsCenter.pos.x + barwidth, textParamsCenter.pos.y),
                         baseCol);
-                    renderer::im::box_2d(
+                    gfx::im::box_2d(
                         float2(textParamsCenter.pos.x + v3d_barstart, textParamsCenter.pos.y - barheight),
                         float2(textParamsCenter.pos.x + v3d_barwidth, textParamsCenter.pos.y),
                         used3dCol);
-                    renderer::im::box_2d(
+                    gfx::im::box_2d(
                         float2(textParamsCenter.pos.x + v2d_barstart, textParamsCenter.pos.y - barheight),
                         float2(textParamsCenter.pos.x + v2d_barstart + v2d_barwidth, textParamsCenter.pos.y),
                         used2dCol);
-                    renderer::im::box_2d(
+                    gfx::im::box_2d(
                         float2(textParamsCenter.pos.x + i2d_barstart, textParamsCenter.pos.y - barheight),
                         float2(textParamsCenter.pos.x + i2d_barstart + i2d_barwidth, textParamsCenter.pos.y),
                         used2didxCol);
@@ -1204,7 +1168,7 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
                     u8 oldScale = textParamsCenter.scale;
                     textParamsCenter.color = Color32(1.0f, 0.2f, 0.1f, 1.f - t);
                     textParamsCenter.scale *= 2;
-                    renderer::im::text2d(textParamsCenter, debug::eventLabel.text);
+                    gfx::im::text2d(textParamsCenter, debug::eventLabel.text);
                     textParamsCenter.pos.y -= textParamsCenter.scale * 12.f;
                     textParamsCenter.color = defaultCol;
                     textParamsCenter.scale = oldScale;
@@ -1215,66 +1179,62 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
 
         // copy backbuffer to window (upscale from game resolution to window resolution)
         {
-            driver::Marker_t marker;
-            driver::set_marker_name(marker, "UPSCALE TO WINDOW");
-            renderer::driver::start_event(marker);
+            gfx::rhi::start_event("UPSCALE TO WINDOW");
             {
                 {
-                    renderer::driver::ViewportParams vpParams;
+                    gfx::rhi::ViewportParams vpParams;
                     vpParams.topLeftX = 0;
                     vpParams.topLeftY = 0;
                     vpParams.width = (f32)platform.screen.window_width;
                     vpParams.height = (f32)platform.screen.window_height;
-                    renderer::driver::set_VP(vpParams);
+                    gfx::rhi::set_VP(vpParams);
                 }
 
-                renderer::driver::bind_blend_state(game.resources.renderCore.blendStateBlendOff);
-                renderer::driver::bind_DS( game.resources.renderCore.depthStateOff);
-                renderer::driver::bind_RS( game.resources.renderCore.rasterizerStateFillFrontfaces);
-                renderer::driver::bind_main_RT(game.resources.renderCore.windowRT);
+                gfx::rhi::bind_blend_state(game.resources.renderCore.blendStateBlendOff);
+                gfx::rhi::bind_DS( game.resources.renderCore.depthStateOff);
+                gfx::rhi::bind_RS( game.resources.renderCore.rasterizerStateFillFrontfaces);
+                gfx::rhi::bind_main_RT(game.resources.renderCore.windowRT);
 
-                driver::bind_shader(game.resources.renderCore.shaders[renderer::ShaderTechniques::FullscreenBlitTextured]);
-                driver::bind_textures(&game.resources.renderCore.gameRT.textures[0], 1);
-                driver::draw_fullscreen();
-                renderer::driver::RscTexture nullTex = {};
-                driver::bind_textures(&nullTex, 1); // unbind gameRT
+                gfx::rhi::bind_shader(game.resources.renderCore.shaders[renderer::ShaderTechniques::FullscreenBlitTextured]);
+                gfx::rhi::bind_textures(&game.resources.renderCore.gameRT.textures[0], 1);
+                gfx::rhi::draw_fullscreen();
+                gfx::rhi::RscTexture nullTex = {};
+                gfx::rhi::bind_textures(&nullTex, 1); // unbind gameRT
             }
-            renderer::driver::end_event();
+            gfx::rhi::end_event();
         }
         // from now we should have
-        // driver::bind_main_RT(game.resources.renderCore.windowRT);
+        // rhi::bind_main_RT(game.resources.renderCore.windowRT);
         // UI
         {
-            driver::bind_blend_state(game.resources.renderCore.blendStateOn);
-            driver::Marker_t marker;
-            driver::set_marker_name(marker, "UI");
-            driver::start_event(marker);
+            gfx::rhi::bind_blend_state(game.resources.renderCore.blendStateOn);
+            gfx::rhi::start_event("UI");
             {
                 renderer::CoreResources& rsc = game.resources.renderCore;
-                driver::RscCBuffer& scene_cbuffer =
+                gfx::rhi::RscCBuffer& scene_cbuffer =
                     rsc.cbuffers[renderer::CoreResources::CBuffersMeta::Scene];
-                driver::RscCBuffer& uitext_cbuffer =
+                gfx::rhi::RscCBuffer& uitext_cbuffer =
                     rsc.cbuffers[renderer::CoreResources::CBuffersMeta::UIText];
 
                 renderer::SceneData cbufferPerScene;
                 cbufferPerScene.vpMatrix = rsc.windowProjection.matrix;
-                renderer::driver::update_cbuffer(scene_cbuffer, &cbufferPerScene);
+                gfx::rhi::update_cbuffer(scene_cbuffer, &cbufferPerScene);
 
-                renderer::driver::bind_RS(game.resources.renderCore.rasterizerStateFillFrontfaces);
-                renderer::driver::bind_DS(game.resources.renderCore.depthStateOff);
+                gfx::rhi::bind_RS(game.resources.renderCore.rasterizerStateFillFrontfaces);
+                gfx::rhi::bind_DS(game.resources.renderCore.depthStateOff);
 
-                driver::bind_shader(rsc.shaders[renderer::ShaderTechniques::Color2D]);
-                driver::RscCBuffer cbuffers[] = { scene_cbuffer, uitext_cbuffer };
-                driver::bind_cbuffers(rsc.shaders[renderer::ShaderTechniques::Color2D], cbuffers, 2);
+                gfx::rhi::bind_shader(rsc.shaders[renderer::ShaderTechniques::Color2D]);
+                gfx::rhi::RscCBuffer cbuffers[] = { scene_cbuffer, uitext_cbuffer };
+                gfx::rhi::bind_cbuffers(rsc.shaders[renderer::ShaderTechniques::Color2D], cbuffers, 2);
                 
                 {
                     renderer::NodeData noteUItext = {};
                     noteUItext.groupColor = float4(1.f, 1.f, 1.f, 1.f);
                     math::identity4x4(*(Transform*)&noteUItext.worldMatrix);
-                    renderer::driver::update_cbuffer(uitext_cbuffer, &noteUItext);
+                    gfx::rhi::update_cbuffer(uitext_cbuffer, &noteUItext);
 
-                    driver::bind_indexed_vertex_buffer(game.resources.gpuBufferHeaderText);
-                    driver::draw_indexed_vertex_buffer(game.resources.gpuBufferHeaderText);
+                    gfx::rhi::bind_indexed_vertex_buffer(game.resources.gpuBufferHeaderText);
+                    gfx::rhi::draw_indexed_vertex_buffer(game.resources.gpuBufferHeaderText);
                 }
 
                 {
@@ -1284,10 +1244,10 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
                             float4(1.f, 0.f, 0.f, 1.f)
                           : float4(1.f, 1.f, 1.f, 1.f);
                     math::identity4x4(*(Transform*)&noteUItext.worldMatrix);
-                    renderer::driver::update_cbuffer(uitext_cbuffer, &noteUItext);
+                    gfx::rhi::update_cbuffer(uitext_cbuffer, &noteUItext);
 
-                    driver::bind_indexed_vertex_buffer(game.resources.gpuBufferCycleRoomText);
-                    driver::draw_indexed_vertex_buffer(game.resources.gpuBufferCycleRoomText);
+                    gfx::rhi::bind_indexed_vertex_buffer(game.resources.gpuBufferCycleRoomText);
+                    gfx::rhi::draw_indexed_vertex_buffer(game.resources.gpuBufferCycleRoomText);
                 }
                 {
                     renderer::NodeData noteUItext = {};
@@ -1296,10 +1256,10 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
                             float4(1.f, 0.f, 0.f, 1.f)
                           : float4(1.f, 1.f, 1.f, 1.f);
                     math::identity4x4(*(Transform*)&noteUItext.worldMatrix);
-                    renderer::driver::update_cbuffer(uitext_cbuffer, &noteUItext);
+                    gfx::rhi::update_cbuffer(uitext_cbuffer, &noteUItext);
 
-                    driver::bind_indexed_vertex_buffer(game.resources.gpuBufferScaleText);
-                    driver::draw_indexed_vertex_buffer(game.resources.gpuBufferScaleText);
+                    gfx::rhi::bind_indexed_vertex_buffer(game.resources.gpuBufferScaleText);
+                    gfx::rhi::draw_indexed_vertex_buffer(game.resources.gpuBufferScaleText);
                 }
                 {
                     renderer::NodeData noteUItext = {};
@@ -1308,10 +1268,10 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
                             float4(1.f, 0.f, 0.f, 1.f)
                           : float4(1.f, 1.f, 1.f, 1.f);
                     math::identity4x4(*(Transform*)&noteUItext.worldMatrix);
-                    renderer::driver::update_cbuffer(uitext_cbuffer, &noteUItext);
+                    gfx::rhi::update_cbuffer(uitext_cbuffer, &noteUItext);
 
-                    driver::bind_indexed_vertex_buffer(game.resources.gpuBufferPanText);
-                    driver::draw_indexed_vertex_buffer(game.resources.gpuBufferPanText);
+                    gfx::rhi::bind_indexed_vertex_buffer(game.resources.gpuBufferPanText);
+                    gfx::rhi::draw_indexed_vertex_buffer(game.resources.gpuBufferPanText);
                 }
                 {
                     renderer::NodeData noteUItext = {};
@@ -1320,20 +1280,20 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
                             float4(1.f, 0.f, 0.f, 1.f)
                           : float4(1.f, 1.f, 1.f, 1.f);
                     math::identity4x4(*(Transform*)&noteUItext.worldMatrix);
-                    renderer::driver::update_cbuffer(uitext_cbuffer, &noteUItext);
+                    gfx::rhi::update_cbuffer(uitext_cbuffer, &noteUItext);
 
-                    driver::bind_indexed_vertex_buffer(game.resources.gpuBufferOrbitText);
-                    driver::draw_indexed_vertex_buffer(game.resources.gpuBufferOrbitText);
+                    gfx::rhi::bind_indexed_vertex_buffer(game.resources.gpuBufferOrbitText);
+                    gfx::rhi::draw_indexed_vertex_buffer(game.resources.gpuBufferOrbitText);
                 }
             }
-            driver::end_event();
+            gfx::rhi::end_event();
         }
         // Batched 2d debug (clear cpu buffers onto the screen)
         #if __DEBUG
         {
-            driver::bind_blend_state(game.resources.renderCore.blendStateOn);
-            im::commit2d();
-            im::present2d(game.resources.renderCore.windowProjection.matrix);
+            gfx::rhi::bind_blend_state(game.resources.renderCore.blendStateOn);
+            gfx::im::commit2d();
+            gfx::im::present2d(game.resources.renderCore.windowProjection.matrix);
         }
         #endif
 
