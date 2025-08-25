@@ -1,3 +1,4 @@
+// crljmb @20250821 stb_easy_font_height now has a tighter fit on the bottom line
 // crljmb @20181211 switched to xy+color layout, flipped y axis
 // crljmb @20181028 added scale support
 
@@ -260,7 +261,7 @@ int stb_easy_font_height(char *text)
         }
         ++text;
     }
-    return (int) ceil(y + (nonempty_line ? 12 : 0));
+    return (int) ceil(y + (nonempty_line ? 9 : 0)); // do not add the full line height on the last line, 9 is a tighter fit
 }
 #endif
 

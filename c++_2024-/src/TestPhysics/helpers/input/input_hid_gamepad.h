@@ -333,7 +333,7 @@ void init_hid_pads_win(HWND hWnd) {
 
 void process_hid_pads_mac(void* context, IOReturn result, void* sender, IOHIDReportType type, uint32_t reportID, uint8_t* report, CFIndex reportLength) {
 
-    ::platform::State& ctx = *(::platform::State*)context;
+    ::platform::State& ctx = ::platform::state;
     ::platform::Input& input = ctx.input;
 
     IOHIDDeviceRef device = (IOHIDDeviceRef)sender;
@@ -497,11 +497,11 @@ void process_hid_pads_mac(void* context, IOReturn result, void* sender, IOHIDRep
         }
     }
 }
-void init_hid_pads_mac(platform::State& platform) {
+void init_hid_pads_mac() {
     @autoreleasepool{
         // todo: custom allocators?
         IOHIDManagerRef HIDManager = IOHIDManagerCreate(kCFAllocatorDefault, kIOHIDOptionsTypeNone);
-        IOHIDManagerRegisterInputReportCallback(HIDManager, &process_hid_pads_mac, &platform);
+        IOHIDManagerRegisterInputReportCallback(HIDManager, &process_hid_pads_mac);
         IOHIDManagerOpen(HIDManager, kIOHIDOptionsTypeNone);
         IOHIDManagerSetDeviceMatchingMultiple(HIDManager, (__bridge CFArrayRef)@[
             @{@(kIOHIDDeviceUsagePageKey) : @(kHIDPage_GenericDesktop), @(kIOHIDDeviceUsageKey) : @(kHIDUsage_GD_GamePad)},

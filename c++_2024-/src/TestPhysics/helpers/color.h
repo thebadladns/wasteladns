@@ -5,6 +5,7 @@
 
 struct Color32 {
     Color32() = default;
+    explicit Color32(u32 rgb) { c = (rgb << 8) | 255; }
     Color32(const f32 fR, const f32 fG, const f32 fB, const f32 fA = 1.f) { set(fR, fG, fB, fA); }
     Color32(const u8 uR, const u8 uG, const u8 uB, const u8 uA = 255) { set(uR, uG, uB, uA); }
 

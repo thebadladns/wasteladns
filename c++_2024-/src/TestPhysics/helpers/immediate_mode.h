@@ -1,7 +1,7 @@
-#ifndef __WASTELADNS_IM_GRAPHICS_H__
-#define __WASTELADNS_IM_GRAPHICS_H__
+#ifndef __WASTELADNS_IM_H__
+#define __WASTELADNS_IM_H__
 
-namespace gfx { namespace im {
+namespace im {
 
 struct Vertex2D {
     float2 pos;
@@ -19,19 +19,19 @@ const size_t arena_size =                       // 3.125MB
     + max_2d_vertices * sizeof(Vertex2D)        // 2^16 * 12 = 768KB
     + (max_2d_vertices * 3 / 2) * sizeof(u32);  // ((2^16 * 3) / 2) * 4 = 384KB (at worst we use 6 indices per quad)
 
-struct Context {
+struct GraphicsContext {
 
     Vertex3D* vertices_3d;
     Vertex2D* vertices_2d;
     u32* indices_2d;
 
-    rhi::RscVertexBuffer buffer_3d;
-    rhi::RscIndexedVertexBuffer buffer_2d;
-    rhi::RscShaderSet shader_3d;
-    rhi::RscShaderSet shader_2d;
-    rhi::RscCBuffer cbuffer;
-    rhi::RscRasterizerState rasterizerState;
-    rhi::RscDepthStencilState orthoDepthState;
+    gfx::rhi::RscVertexBuffer buffer_3d;
+    gfx::rhi::RscIndexedVertexBuffer buffer_2d;
+    gfx::rhi::RscShaderSet shader_3d;
+    gfx::rhi::RscShaderSet shader_2d;
+    gfx::rhi::RscCBuffer cbuffer;
+    gfx::rhi::RscRasterizerState rasterizerState;
+    gfx::rhi::RscDepthStencilState orthoDepthState;
 
     u32 vertices_3d_head;
     u32 vertices_2d_head;
@@ -42,7 +42,7 @@ struct Context {
     u32 shader;
 };
 
-} } // gfx::im
+} // im
 
 namespace debug {
 
@@ -55,9 +55,9 @@ u32 vertices_2d_head_last_frame = 0;
 
 }
 
-namespace gfx { namespace im {
+namespace im {
 
-Context ctx;
+GraphicsContext ctx;
 
 void segment(const float3& v1, const float3& v2, const Color32 color) {
 
@@ -542,14 +542,14 @@ void init(allocator::PagedArena& arena) {
         ctx.indices_2d = ALLOC_ARRAY(arena, u32, indices_2d_size);
         ctx.indices_2d_head = 0;
 
-        rhi::create_cbuffer(ctx.cbuffer, { sizeof(float4x4) });
-        const gfx::rhi::CBufferBindingDesc bufferBindings_MVP[] = {{ "type_PerGroup", rhi::CBufferStageMask::VS }};
+        gfx::rhi::create_cbuffer(ctx.cbuffer, { sizeof(float4x4) });
+        const gfx::rhi::CBufferBindingDesc bufferBindings_MVP[] = {{ "type_PerGroup", gfx::rhi::CBufferStageMask::VS }};
 
         // 2d
         {
-            const rhi::VertexAttribDesc attribs_color2d[] = {
-                rhi::make_vertexAttribDesc("POSITION", offsetof(Vertex2D, pos), sizeof(Vertex2D), rhi::BufferAttributeFormat::R32G32_FLOAT),
-                rhi::make_vertexAttribDesc("COLOR", offsetof(Vertex2D, color), sizeof(Vertex2D), rhi::BufferAttributeFormat::R8G8B8A8_UNORM)
+            const gfx::rhi::VertexAttribDesc attribs_color2d[] = {
+                gfx::rhi::make_vertexAttribDesc("POSITION", offsetof(Vertex2D, pos), sizeof(Vertex2D), gfx::rhi::BufferAttributeFormat::R32G32_FLOAT),
+                gfx::rhi::make_vertexAttribDesc("COLOR", offsetof(Vertex2D, color), sizeof(Vertex2D), gfx::rhi::BufferAttributeFormat::R8G8B8A8_UNORM)
             };
             gfx::ShaderDesc desc = {};
             desc.vertexAttrs = attribs_color2d;
@@ -559,10 +559,10 @@ void init(allocator::PagedArena& arena) {
             desc.bufferBindings = bufferBindings_MVP;
             desc.bufferBinding_count = countof(bufferBindings_MVP);
             // reuse 3d shaders
-            desc.vs_name = shaders::vs_color3d_unlit.name;
-            desc.vs_src = shaders::vs_color3d_unlit.src;
-            desc.ps_name = shaders::ps_color3d_unlit.name;
-            desc.ps_src = shaders::ps_color3d_unlit.src;
+            desc.vs_name = gfx::shaders::vs_color3d_unlit.name;
+            desc.vs_src = gfx::shaders::vs_color3d_unlit.src;
+            desc.ps_name = gfx::shaders::ps_color3d_unlit.name;
+            desc.ps_src = gfx::shaders::ps_color3d_unlit.src;
             gfx::compile_shader(ctx.shader_2d, desc);
 
             gfx::rhi::IndexedVertexBufferDesc bufferParams;
@@ -576,13 +576,13 @@ void init(allocator::PagedArena& arena) {
             bufferParams.indexType = gfx::rhi::BufferItemType::U32;
             bufferParams.type = gfx::rhi::BufferTopologyType::Triangles;
             bufferParams.indexCount = 0;
-            rhi::create_indexed_vertex_buffer(ctx.buffer_2d, bufferParams, attribs_color2d, countof(attribs_color2d));
+            gfx::rhi::create_indexed_vertex_buffer(ctx.buffer_2d, bufferParams, attribs_color2d, countof(attribs_color2d));
         }
         // 3d
         {
-            const rhi::VertexAttribDesc attribs_color3d[] = {
-                rhi::make_vertexAttribDesc("POSITION", offsetof(Vertex3D, pos), sizeof(Vertex3D), rhi::BufferAttributeFormat::R32G32B32_FLOAT),
-                rhi::make_vertexAttribDesc("COLOR", offsetof(Vertex3D, color), sizeof(Vertex3D), rhi::BufferAttributeFormat::R8G8B8A8_UNORM)
+            const gfx::rhi::VertexAttribDesc attribs_color3d[] = {
+                gfx::rhi::make_vertexAttribDesc("POSITION", offsetof(Vertex3D, pos), sizeof(Vertex3D), gfx::rhi::BufferAttributeFormat::R32G32B32_FLOAT),
+                gfx::rhi::make_vertexAttribDesc("COLOR", offsetof(Vertex3D, color), sizeof(Vertex3D), gfx::rhi::BufferAttributeFormat::R8G8B8A8_UNORM)
             };
             gfx::ShaderDesc desc = {};
             desc.vertexAttrs = attribs_color3d;
@@ -591,10 +591,10 @@ void init(allocator::PagedArena& arena) {
             desc.textureBinding_count = 0;
             desc.bufferBindings = bufferBindings_MVP;
             desc.bufferBinding_count = countof(bufferBindings_MVP);
-            desc.vs_name = shaders::vs_color3d_unlit.name;
-            desc.vs_src = shaders::vs_color3d_unlit.src;
-            desc.ps_name = shaders::ps_color3d_unlit.name;
-            desc.ps_src = shaders::ps_color3d_unlit.src;
+            desc.vs_name = gfx::shaders::vs_color3d_unlit.name;
+            desc.vs_src = gfx::shaders::vs_color3d_unlit.src;
+            desc.ps_name = gfx::shaders::ps_color3d_unlit.name;
+            desc.ps_src = gfx::shaders::ps_color3d_unlit.src;
             gfx::compile_shader(ctx.shader_3d, desc);
 
             gfx::rhi::VertexBufferDesc bufferParams;
@@ -604,7 +604,7 @@ void init(allocator::PagedArena& arena) {
             bufferParams.memoryUsage = gfx::rhi::BufferMemoryUsage::CPU;
             bufferParams.accessType = gfx::rhi::BufferAccessType::CPU;
             bufferParams.type = gfx::rhi::BufferTopologyType::Lines;
-            rhi::create_vertex_buffer(ctx.buffer_3d, bufferParams, attribs_color3d, countof(attribs_color3d));
+            gfx::rhi::create_vertex_buffer(ctx.buffer_3d, bufferParams, attribs_color3d, countof(attribs_color3d));
         }
     }
         
@@ -621,63 +621,551 @@ void init(allocator::PagedArena& arena) {
     }
 }
 void commit3d() {
-    rhi::BufferUpdateParams bufferUpdateParams;
+    gfx::rhi::BufferUpdateParams bufferUpdateParams;
     bufferUpdateParams.vertexData = ctx.vertices_3d;
     bufferUpdateParams.vertexSize = sizeof(Vertex3D) * ctx.vertices_3d_head;
     bufferUpdateParams.vertexCount = ctx.vertices_3d_head;
-    rhi::update_vertex_buffer(ctx.buffer_3d, bufferUpdateParams);
+    gfx::rhi::update_vertex_buffer(ctx.buffer_3d, bufferUpdateParams);
     debug::vertices_3d_head_last_frame = ctx.vertices_3d_head;
     ctx.vertices_3d_head = 0;
 }
 void present3d(const float4x4& projMatrix, const float4x4& viewMatrix) {
-    rhi::start_event("DEBUG 3D");
+    gfx::rhi::start_event("DEBUG 3D");
     {
         // depth state needs to be set by the caller
         gfx::rhi::bind_RS(ctx.rasterizerState);
 
         float4x4 mvp = math::mult(projMatrix, viewMatrix);
-        rhi::update_cbuffer(ctx.cbuffer, &mvp);
+        gfx::rhi::update_cbuffer(ctx.cbuffer, &mvp);
 
-        rhi::bind_shader(ctx.shader_3d);
-        rhi::RscCBuffer cbuffers[] = { ctx.cbuffer };
-        rhi::bind_cbuffers(ctx.shader_3d, cbuffers, 1);
-        rhi::bind_vertex_buffer(ctx.buffer_3d);
-        rhi::draw_vertex_buffer(ctx.buffer_3d);
+        gfx::rhi::bind_shader(ctx.shader_3d);
+        gfx::rhi::RscCBuffer cbuffers[] = { ctx.cbuffer };
+        gfx::rhi::bind_cbuffers(ctx.shader_3d, cbuffers, 1);
+        gfx::rhi::bind_vertex_buffer(ctx.buffer_3d);
+        gfx::rhi::draw_vertex_buffer(ctx.buffer_3d);
     }
-    rhi::end_event();
+    gfx::rhi::end_event();
 }
 
 void commit2d() {
     //u32 indexCount = vertexSizeToIndexCount(ctx.vertices_2d_head);
-    rhi::IndexedBufferUpdateParams bufferUpdateParams;
+    gfx::rhi::IndexedBufferUpdateParams bufferUpdateParams;
     bufferUpdateParams.vertexData = ctx.vertices_2d;
     bufferUpdateParams.vertexSize = sizeof(Vertex2D) * ctx.vertices_2d_head;
     bufferUpdateParams.indexData = ctx.indices_2d;
     bufferUpdateParams.indexSize = ctx.indices_2d_head * sizeof(u32);
     bufferUpdateParams.indexCount = ctx.indices_2d_head;
-    rhi::update_indexed_vertex_buffer(ctx.buffer_2d, bufferUpdateParams);
+    gfx::rhi::update_indexed_vertex_buffer(ctx.buffer_2d, bufferUpdateParams);
     debug::vertices_2d_head_last_frame = ctx.vertices_2d_head;
     ctx.vertices_2d_head = 0;
     ctx.indices_2d_head = 0;
 }
 void present2d(const float4x4& projMatrix) {
 
-    rhi::start_event("DEBUG 2D");
+    gfx::rhi::start_event("DEBUG 2D");
     {
         gfx::rhi::bind_RS(ctx.rasterizerState);
         gfx::rhi::bind_DS(ctx.orthoDepthState);
 
-        rhi::update_cbuffer(ctx.cbuffer, &projMatrix);
+        gfx::rhi::update_cbuffer(ctx.cbuffer, &projMatrix);
 
-        rhi::bind_shader(ctx.shader_2d);
-        rhi::RscCBuffer cbuffers[] = { ctx.cbuffer };
-        rhi::bind_cbuffers(ctx.shader_2d, cbuffers, 1);
-        rhi::bind_indexed_vertex_buffer(ctx.buffer_2d);
-        rhi::draw_indexed_vertex_buffer(ctx.buffer_2d);
+        gfx::rhi::bind_shader(ctx.shader_2d);
+        gfx::rhi::RscCBuffer cbuffers[] = { ctx.cbuffer };
+        gfx::rhi::bind_cbuffers(ctx.shader_2d, cbuffers, 1);
+        gfx::rhi::bind_indexed_vertex_buffer(ctx.buffer_2d);
+        gfx::rhi::draw_indexed_vertex_buffer(ctx.buffer_2d);
     }
-    rhi::end_event();
+    gfx::rhi::end_event();
 }
     
-} } // gfx::im
+} // im
 
-#endif // __WASTELADNS_IM_GRAPHICS_H__
+
+namespace im {
+
+typedef u32 uiid;
+struct Layout { enum Enum { None = -1, VerticalStack = 0, HorizontalStack }; };
+const Color32 color_highlight(0xff3319);
+const Color32 color_bright(0xffffff);
+const Color32 color_lighter(0x8e8ba6);
+const Color32 color_light(0x535074);
+const Color32 color_default(0x353464);
+const Color32 color_dark(0x192020);
+const Color32 color_middark(0x222229);
+
+struct Pane {
+    const char* text;
+    // start coordinates for the next ui element in the pane
+    float2 content_origin_WS;
+    float2 content_cursor_WS;
+    float2 content_extents;
+};
+struct WindowContext {
+    // current parent pane
+    Pane* parent_pane;
+    // start coordinates for the next ui element, if there's no active pane
+    float2 cursor_WS;
+    // start coordinates for the next vertical ui element (works without an active pane too)
+    float2 block_cursor_WS;
+    // keep track of the currently pressed UI element
+    uiid pressed_id;
+    // keep track of the currently hovered UI element
+    uiid hovered_id;
+    // element to be considered hovered next frame
+    uiid queued_hovered_id;
+    // determines how the elements should be placed one after the other
+    Layout::Enum layout;
+    Layout::Enum prevlayout;
+    // scale for the UI elements
+    u8 scale = 1;
+    // keeps track of how many frames the currently pressed UI element has been pressed
+    u8 frames_active;
+};
+WindowContext ui = {};
+
+void reset_frame() {
+    ui.hovered_id = ui.queued_hovered_id;
+    ui.queued_hovered_id = 0;
+    ui.cursor_WS = {};
+    ui.prevlayout = Layout::None;
+    ui.layout = Layout::VerticalStack;
+}
+
+// mouse space (origin at top left, down is positive)
+// to immediate window space (origin is center, down is negative)
+force_inline float2 get_mouse_WS() {
+    return float2(
+          platform::state.input.mouse.x - platform::state.screen.window_width / 2.f,
+        -(platform::state.input.mouse.y - platform::state.screen.window_height / 2.f)
+    );
+}
+force_inline bool mousedown() {
+    return platform::state.input.mouse.down(::input::mouse::Keys::BUTTON_LEFT);
+}
+force_inline bool mousepressed() {
+    return platform::state.input.mouse.pressed(::input::mouse::Keys::BUTTON_LEFT);
+}
+force_inline bool mouseup() {
+    return platform::state.input.mouse.released(::input::mouse::Keys::BUTTON_LEFT);
+}
+force_inline bool is_mouse_captured() { return ui.hovered_id || ui.pressed_id; }
+
+force_inline f32 element_padding() { return ui.scale * 5.f; }
+
+namespace impl {
+
+u32 fnv(const char* name) { // todo: understand this
+    const u8* data = (const u8*)name;
+    u32 val = 3759247821;
+    while (*data) {
+        val ^= *data++;
+        val *= 0x01000193;
+    }
+    val &= 0x7fffffff;
+    val |= val == 0;
+    return val;
+};
+
+force_inline bool in_rect(const float2& p, const float2& min, const float2& max) {
+    return ((p.x > min.x && p.x < max.x) && (p.y > min.y && p.y < max.y));
+}
+
+force_inline void adjust_bounds_in_parent(float2& origin_WS, float2& extents, bool match_parent_width) {
+
+    const f32 padding = element_padding();
+
+    float2* cursor_WS = &ui.cursor_WS;
+    if (ui.parent_pane) {
+
+        cursor_WS = &ui.parent_pane->content_cursor_WS;
+
+        // if the element's width needs to match the parents, do so now
+        if (ui.layout == Layout::VerticalStack && match_parent_width) {
+            extents.x = math::max(ui.parent_pane->content_extents.x, extents.x);
+        }
+
+        // update parent's pane for next frame
+        float2 paneExtents(
+            (ui.parent_pane->content_cursor_WS.x - ui.parent_pane->content_origin_WS.x) + extents.x,
+            (ui.parent_pane->content_origin_WS.y - ui.parent_pane->content_cursor_WS.y) + extents.y);
+        ui.parent_pane->content_extents = math::max(ui.parent_pane->content_extents, paneExtents);
+    }
+
+    // place element at the expected cursor
+    origin_WS = *cursor_WS;
+
+    if (ui.layout == Layout::HorizontalStack) {
+        // update cursor horizontally
+        cursor_WS->x = cursor_WS->x + extents.x + padding;
+        // update the block's vertical coordinate
+        ui.block_cursor_WS.y =
+            math::min(ui.block_cursor_WS.y, cursor_WS->y - extents.y - padding);
+    } else {
+        // update cursor vertically
+        cursor_WS->y = cursor_WS->y - extents.y - padding;
+    }
+}
+
+// compute maximum extents of a given label and its possible range of values
+template<typename _type>
+force_inline float2 get_label_dimensions(char* text, const char* format, _type min, _type max) {
+    char formatted[256];
+    float2 extents;
+    extents.y = ui.scale * (f32)stb_easy_font_height(text);
+
+    io::format(formatted, sizeof(formatted), format, text, max);
+    extents.x = ui.scale * (f32)stb_easy_font_width(formatted);
+    io::format(formatted, sizeof(formatted), format, text, min);
+    extents.x = ui.scale * math::max(extents.x, (f32)stb_easy_font_width(formatted));
+
+    return extents;
+}
+
+force_inline u32 make_hash(char* text) {
+    char str[256];
+    io::StrBuilder padStr{ str, sizeof(str) };
+    if (ui.parent_pane) { io::append(padStr.curr, padStr.last, ui.parent_pane->text); }
+    io::append(padStr.curr, padStr.last, text);
+    uiid hash = fnv(padStr.str);
+    return hash;
+}
+
+force_inline void set_active(u32 hash) { ui.pressed_id = hash; }
+force_inline void keep_active(u32) { ui.frames_active++; }
+force_inline void clear_active(u32) { ui.pressed_id = 0; ui.frames_active = 0; }
+
+} // impl
+
+void make_pane(Pane& pane, const char* text, float2 origin_WS) {
+    pane = {};
+    pane.text = text;
+    pane.content_origin_WS = origin_WS;
+}
+
+void pane_start(Pane& pane) {
+    ui.parent_pane = &pane;
+
+    const f32 padding = ui.scale * 10.f;
+    const f32 headerHeight = ui.scale * 15.f;
+    const f32 headerPadding = ui.scale * 4.f;
+
+    // mouse coords in window space
+    float2 mouse_WS = get_mouse_WS();
+
+    // text-based id for this pane
+    uiid hash = impl::fnv(pane.text);
+
+    // Drag when hovering and using the left click
+    if (ui.pressed_id == 0) {
+        if (ui.hovered_id == hash && mousepressed()) {
+            impl::set_active(hash);
+        }
+    }
+    // Finish dragging when releasing the left click
+    if (ui.pressed_id == hash) {
+        impl::keep_active(hash);
+        pane.content_origin_WS =
+            math::add(
+                pane.content_origin_WS,
+                float2(platform::state.input.mouse.dx, -platform::state.input.mouse.dy));
+        if (mouseup()) { impl::clear_active(hash); }
+    }
+
+    // update dragged position and bounding boxes
+    pane.content_cursor_WS = pane.content_origin_WS;
+    float2 origin = float2(pane.content_origin_WS.x - padding, pane.content_origin_WS.y + padding);
+    float2 extents = math::add(pane.content_extents, float2(2.f * padding));
+    float2 bbox_min_WS(origin.x, origin.y - extents.y);
+    float2 bbox_max_WS(origin.x + extents.x, origin.y);
+    float2 header_bbox_min_WS(origin.x, origin.y);
+    float2 header_bbox_max_WS(origin.x + extents.x, origin.y + headerHeight);
+
+    // override the last hovered object with this one, including the header, if it's now hovered
+    if (impl::in_rect(
+            mouse_WS,
+            math::min(bbox_min_WS, header_bbox_min_WS),
+            math::max(bbox_max_WS, header_bbox_max_WS))) {
+        ui.queued_hovered_id = hash;
+    }
+
+    // zero out extents, to be recomputed again this frame
+    pane.content_extents = {};
+
+    // draw background elements
+    im::box_2d(
+        bbox_min_WS,
+        bbox_max_WS,
+        color_middark);
+    im::box_2d(
+        header_bbox_min_WS,
+        header_bbox_max_WS,
+        color_lighter);
+    // draw text label
+    im::Text2DParams params;
+    params.pos = float2(header_bbox_min_WS.x + headerPadding, header_bbox_max_WS.y - headerPadding);
+    params.color = color_bright;
+    params.scale = ui.scale;
+    im::text2d(params, pane.text);
+}
+
+void pane_end() {
+    ui.parent_pane = nullptr;
+}
+
+void horizontal_layout_start() {
+    ui.prevlayout = ui.layout;
+    ui.layout = Layout::HorizontalStack;
+    if (ui.prevlayout != Layout::HorizontalStack) {
+        if (ui.parent_pane) {
+            ui.block_cursor_WS = ui.parent_pane->content_cursor_WS;
+        } else {
+            ui.block_cursor_WS = ui.cursor_WS;
+        }
+    }
+}
+void horizontal_layout_end() {
+    ui.layout = ui.prevlayout;
+    if (ui.prevlayout != Layout::HorizontalStack) {
+        if (ui.parent_pane) {
+            ui.parent_pane->content_cursor_WS = ui.block_cursor_WS;
+        } else {
+            ui.cursor_WS = ui.block_cursor_WS;
+        }
+    }
+    ui.prevlayout = Layout::None;
+}
+
+void label(
+    char* text,
+    Color32 textColor, float2 min_dimensions) {
+    
+    // calculate extents of the text to be displayed
+    const f32 padding = ui.scale * 5.f;
+    float2 text_extents;
+    text_extents.x = math::max(ui.scale * (f32)stb_easy_font_width(text), min_dimensions.x);
+    text_extents.y = math::max(ui.scale * (f32)stb_easy_font_height(text), min_dimensions.y);
+
+    // calculate origin in window space, as well as extents
+    float2 extents(text_extents.x + 2 * padding, text_extents.y + 2 * padding);
+    float2 origin_WS;
+    impl::adjust_bounds_in_parent(origin_WS, extents, /* match_parent_width */ false);
+
+    // draw label
+    im::Text2DParams params;
+    params.pos = float2(origin_WS.x + padding, origin_WS.y - padding);
+    params.color = textColor;
+    params.scale = ui.scale;
+    im::text2d(params, text);
+}
+void label_va(
+    Color32 textColor, 
+    float2 min_dimensions,
+    const char* format, va_list argList) {
+    char text[256];
+    io::format_va(text, sizeof(text), format, argList);
+    label(text, textColor, min_dimensions);
+}
+void label(const char* format, ...) {
+    va_list va;
+    va_start(va, format);
+    label_va(color_bright, float2(0.f), format, va);
+    va_end(va);
+}
+void label(Color32 textColor, const char* format, ...) {
+    va_list va;
+    va_start(va, format);
+    label_va(textColor, float2(0.f), format, va);
+    va_end(va);
+}
+
+bool button(
+    char* text,
+    bool repeat_enabled = false, char* id = nullptr, float2 dimensions = float2(0.f)) {
+
+    // text extents
+    const f32 padding = ui.scale * 5.f;
+    float2 text_extents;
+    if (math::isZeroAll(dimensions)) {
+        text_extents.x = ui.scale * (f32)stb_easy_font_width(text);
+        text_extents.y = ui.scale * (f32)stb_easy_font_height(text);
+    } else {
+        text_extents = dimensions;
+    }
+
+    // calculate origin in window space, as well as element extents
+    float2 extents(text_extents.x + 2 * padding, text_extents.y + 2 * padding);
+    float2 origin_WS;
+    impl::adjust_bounds_in_parent(origin_WS, extents, /* match_parent_width */ false);
+
+    // bounding box in window space
+    float2 bb_min_WS(origin_WS.x, origin_WS.y - extents.y);
+    float2 bb_max_WS(origin_WS.x + extents.x, origin_WS.y);
+
+    // mouse in window space
+    float2 mouse_WS = get_mouse_WS();
+
+    // make hash from hierarchical name
+    uiid hash = impl::make_hash(id ? id : text);
+
+    // process mouse click
+    bool result = false;
+    // mouse unpressed: press when hovered and left button is down
+    if (ui.pressed_id == 0) {
+        // override the last queued object with this one, if it's now hovered
+        if (impl::in_rect(mouse_WS, bb_min_WS, bb_max_WS)) { ui.queued_hovered_id = hash; }
+
+        if (ui.hovered_id == hash && mousedown()) { impl::set_active(hash); }
+    }
+    // mouse pressed: handle release
+    if (ui.pressed_id == hash) {
+        impl::keep_active(hash);
+
+        // override the last queued object with this one, if it's now hovered
+        if (impl::in_rect(mouse_WS, bb_min_WS, bb_max_WS)) { ui.queued_hovered_id = hash; }
+
+        // mouse moved outside of box, release button
+        if (ui.hovered_id != hash) { ui.pressed_id = 0; }
+        // mouse released within button, button press has been completed
+        else if (mouseup()) {
+            result = true;
+            impl::clear_active(hash);
+        } else if (repeat_enabled && ui.frames_active > 16) { // todo: timeframe independent?
+            result = true;
+        }
+    }
+
+    // draw background
+    Color32 bgColor = color_default;
+    if (ui.pressed_id == hash) { bgColor = color_dark;
+    } else if (ui.hovered_id == hash) { bgColor = color_light; }
+    im::box_2d(bb_min_WS, bb_max_WS, bgColor);
+    
+    // draw text label
+    im::Text2DParams params;
+    params.pos = float2(origin_WS.x + padding, origin_WS.y - padding);
+    params.color = color_bright;
+    params.scale = ui.scale;
+    im::text2d(params, text);
+
+    return result;
+};
+
+void slider(char* text, f32* v, const f32 min, const f32 max) {
+
+    const float textPadding = ui.scale * 5.f;
+    const float slider_width = ui.scale * 10.f;
+
+    // compute extents of the text label
+    const char* format = "%s: %.3f";
+    float2 label_extents = impl::get_label_dimensions(text, format, min, max);
+
+    // compute extents of the element, as well as the slider offset 
+    float2 extents(label_extents.x + 2.f * textPadding, label_extents.y + 2.f * textPadding);
+    float2 extents_slider(slider_width, extents.y);
+    f32 sliderRatio = math::clamp(((*v - min) / (max - min)), 0.f, 1.f);
+    float2 origin_WS;
+    impl::adjust_bounds_in_parent(origin_WS, extents, /* match_parent_width */ true);
+    f32 sliderOffset = sliderRatio * extents.x - slider_width / 2.f;
+    sliderOffset = math::clamp(sliderOffset, 0.f, extents.x - extents_slider.x);
+
+    // mouse coords in window space
+    float2 mouse_WS = get_mouse_WS();
+
+    // make hash from hierarchical name
+    uiid hash = impl::make_hash(text);
+
+    // Drag when hovering and using the left click
+    if (ui.pressed_id == 0) {
+        if (ui.hovered_id == hash && mousepressed()) { impl::set_active(hash); }
+    }
+    // Finish dragging when releasing the left click
+    if (ui.pressed_id == hash) {
+        impl::keep_active(hash);
+        float mouse_relativex = mouse_WS.x - origin_WS.x;
+        sliderRatio = mouse_relativex / extents.x;
+        *v = math::clamp(sliderRatio * (max - min), min, max);
+        sliderOffset = mouse_relativex - extents_slider.x * 0.5f;
+        sliderOffset = math::clamp(sliderOffset, 0.f, extents.x - extents_slider.x);
+        if (mouseup()) { impl::clear_active(hash); }
+    }
+
+    // now that we know the drag position, make the bounding boxes for this frame's element position
+    float2 bb_min_WS(origin_WS.x, origin_WS.y - extents.y);
+    float2 bb_max_WS(origin_WS.x + extents.x, origin_WS.y);
+    float2 slider_bb_min_WS(origin_WS.x + sliderOffset, origin_WS.y - extents_slider.y);
+    float2 slider_bb_max_WS(origin_WS.x + sliderOffset + extents_slider.x, origin_WS.y);
+
+    // override the last hovered object with the slider picker, if it's now hovered
+    if (impl::in_rect(
+        mouse_WS,
+        slider_bb_min_WS,
+        slider_bb_max_WS)) {
+        ui.queued_hovered_id = hash;
+    }
+
+    // draw background
+    im::box_2d(bb_min_WS, bb_max_WS, color_dark);
+    // draw slider picker
+    im::box_2d(slider_bb_min_WS, slider_bb_max_WS, ui.pressed_id == hash ? color_light : color_default);
+    // draw centered text
+    char text_with_value[256];
+    io::format(text_with_value, sizeof(text_with_value), "%s: %.3f", text, *v);
+    im::Text2DParams params;
+    params.pos = float2(
+        origin_WS.x + extents.x * 0.5f - label_extents.x * 0.5f,
+        origin_WS.y - extents.y * 0.5f + label_extents.y * 0.5f);
+    params.color = Color32(0xFFFFFF);
+    params.scale = ui.scale;
+    im::text2d(params, text_with_value);
+}
+
+template<typename _type>
+void input_step(char* text, _type* v, const _type min, const _type max, bool wrap = false) {
+
+    // compute max extents of the text label
+    const char* format = "%s: %d";
+    float2 label_extents = impl::get_label_dimensions(text, format, min, max);
+
+    // draw element
+    char text_with_value[256];
+    io::format(text_with_value, sizeof(text_with_value), format, text, *v);
+    horizontal_layout_start();
+    {
+        char text_id[256];
+        io::format(text_id, sizeof(text_id), "inputstepminus_%s", text);
+        if (button("-", /* repeat_enabled */ true, text_id)) {
+            if (*v > min) { (*v)--; }
+            else if (wrap) { (*v) = max; }
+        }
+        label(text_with_value, color_bright, label_extents);
+        io::format(text_id, sizeof(text_id), "inputstepplus_%s", text);
+        if (button("+", /* repeat_enabled */ true, text_id)) {
+            if (*v < max) { (*v)++; }
+            else if (wrap) { (*v) = min; }
+        }
+    }
+    horizontal_layout_end();
+}
+
+bool checkbox(char* text, bool* v) {
+
+    bool result = false;
+
+    horizontal_layout_start();
+    {
+        char text_id[256];
+        io::format(text_id, sizeof(text_id), "checkbox_%s", text);
+        float2 extents(ui.scale * 5.f, ui.scale * 8.f);
+        if (button(*v ? "X" : " ", /* repeat_enabled */ false, text_id, extents)) {
+            *v = !*v;
+            result = true;
+        }
+        label(text);
+    }
+    horizontal_layout_end();
+
+    return result;
+}
+} // im
+
+#endif // __WASTELADNS_IM_H__

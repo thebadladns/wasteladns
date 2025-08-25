@@ -46,12 +46,14 @@ struct State {
     Time time;
     Input input;
 };
+
+State state;
     
 void loadLaunchConfig(LaunchConfig& config);
 
 // define this two methods before including main.h
-//void start(_GameData& game, platform::GameConfig& config, platform::State& platform);
-//void update(_GameData& game, platform::GameConfig& config, platform::State& platform);
+//void start(_GameData& game, platform::GameConfig& config);
+//void update(_GameData& game, platform::GameConfig& config);
 
 } // platform
 

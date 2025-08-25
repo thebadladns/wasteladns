@@ -6,7 +6,7 @@ cd /D "%~dp0"
 set t0=%time: =0%
 
 :: usage
-:: build.bat [dx11|gl33|] [debug|release] [assets|]
+:: build.bat [dx11|gl33|] [debug|release|] [assets|]
 :: defaults to dx11 debug no assets
 set debug=0
 set release=0

@@ -31,7 +31,7 @@
 int main(int , char** ) {
 @autoreleasepool {
     
-    platform::State platform = {};
+    platform::state = {};
 
     [NSApplication sharedApplication];
     AppDelegate* appDelegate = [[AppDelegate alloc] init];
@@ -110,24 +110,24 @@ int main(int , char** ) {
         NSSize windowSize = [contentView frame].size;
         
         windowScale = [contentView convertSizeToBacking:CGSizeMake(1,1)].width;
-        platform.screen.window_width = windowSize.width * windowScale;
-        platform.screen.window_height = windowSize.height * windowScale;
-        platform.screen.width = config.game_width;
-        platform.screen.height = config.game_height;
-        platform.screen.desiredRatio = platform.screen.width / (f32)platform.screen.height;
-        platform.screen.fullscreen = config.fullscreen;
-        platform.screen.window_scale = windowScale;
+        platform::state.screen.window_width = windowSize.width * windowScale;
+        platform::state.screen.window_height = windowSize.height * windowScale;
+        platform::state.screen.width = config.game_width;
+        platform::state.screen.height = config.game_height;
+        platform::state.screen.desiredRatio = platform::state.screen.width / (f32)platform::state.screen.height;
+        platform::state.screen.fullscreen = config.fullscreen;
+        platform::state.screen.window_scale = windowScale;
     }
     
     const int hotkeyMask = NSEventModifierFlagCommand | NSEventModifierFlagOption | NSEventModifierFlagControl | NSEventModifierFlagCapsLock;
     const f32 actualWindowHeight = [[window contentView] frame].size.height;
     {   // init mouse pos so we don't get a big delta movement on the first click
         NSPoint pos = [window  mouseLocationOutsideOfEventStream];
-        platform.input.mouse.x = pos.x * windowScale;
-        platform.input.mouse.y = (actualWindowHeight-pos.y) * windowScale;
+        platform::state.input.mouse.x = pos.x * windowScale;
+        platform::state.input.mouse.y = (actualWindowHeight-pos.y) * windowScale;
     }
     // gamepad
-    ::input::gamepad::init_hid_pads_mac(platform);
+    ::input::gamepad::init_hid_pads_mac();
 
     // Initialize page size, for virtual memory allocators
     allocator::pagesize = getpagesize();
@@ -138,12 +138,12 @@ int main(int , char** ) {
     // todo: this is empirical, (1./sysconf(_SC_CLK_TCK)) is too coarse to be useful
     const f64 timerResolutionMs = 1.;
     
-    platform.time.running = 0.0;
-    platform.time.now = platform.time.start = mach_absolute_time() / frequency;
+    platform::state.time.running = 0.0;
+    platform::state.time.now = platform::state.time.start = mach_absolute_time() / frequency;
     
     game::Instance game;
     platform::GameConfig config;
-    game::start(game, config, platform);
+    game::start(game, config);
     
     do
     {
@@ -151,27 +151,28 @@ int main(int , char** ) {
         // Input
         {
         // propagate last state
-        for (u32 i = 0; i < platform.input.padCount; i++)
-        { platform.input.pads[i].last_keys = platform.input.pads[i].curr_keys; }
+        for (u32 i = 0; i < platform::state.input.padCount; i++)
+        { platform::state.input.pads[i].last_keys = platform::state.input.pads[i].curr_keys; }
         memcpy(
-            platform.input.keyboard.last, platform.input.keyboard.current,
+            platform::state.input.keyboard.last, platform::state.input.keyboard.current,
             sizeof(u8)* ::input::keyboard::Keys::COUNT);
         memcpy(
-            platform.input.mouse.last, platform.input.mouse.curr,
+            platform::state.input.mouse.last, platform::state.input.mouse.curr,
             sizeof(u8) * ::input::mouse::Keys::COUNT);
-        const f32 mouse_prevx = platform.input.mouse.x, mouse_prevy = platform.input.mouse.y;
-        platform.input.mouse.dx = platform.input.mouse.dy =
-            platform.input.mouse.scrolldx = platform.input.mouse.scrolldy = 0.f;
+        const f32 mouse_prevx = platform::state.input.mouse.x;
+        const f32 mouse_prevy = platform::state.input.mouse.y;
+        platform::state.input.mouse.dx = platform::state.input.mouse.dy =
+            platform::state.input.mouse.scrolldx = platform::state.input.mouse.scrolldy = 0.f;
         // gather current state
         NSUInteger modifierFlags = NSEvent.modifierFlags; // calls NSEventTypeFlagsChanged
-        platform.input.keyboard.current[::input::keyboard::Keys::LEFT_SHIFT] =
-            platform.input.keyboard.current[::input::keyboard::Keys::RIGHT_SHIFT] =
+        platform::state.input.keyboard.current[::input::keyboard::Keys::LEFT_SHIFT] =
+            platform::state.input.keyboard.current[::input::keyboard::Keys::RIGHT_SHIFT] =
                 (modifierFlags & NSEventModifierFlagShift) != 0;
-        platform.input.keyboard.current[::input::keyboard::Keys::LEFT_ALT] =
-            platform.input.keyboard.current[::input::keyboard::Keys::RIGHT_SHIFT] =
+        platform::state.input.keyboard.current[::input::keyboard::Keys::LEFT_ALT] =
+            platform::state.input.keyboard.current[::input::keyboard::Keys::RIGHT_SHIFT] =
                 (modifierFlags & NSEventModifierFlagOption) != 0;
-        platform.input.keyboard.current[::input::keyboard::Keys::LEFT_CONTROL] =
-            platform.input.keyboard.current[::input::keyboard::Keys::RIGHT_CONTROL] =
+        platform::state.input.keyboard.current[::input::keyboard::Keys::LEFT_CONTROL] =
+            platform::state.input.keyboard.current[::input::keyboard::Keys::RIGHT_CONTROL] =
                 (modifierFlags & NSEventModifierFlagControl) != 0;
         // consume events
         NSEvent *event = nil;
@@ -185,12 +186,12 @@ int main(int , char** ) {
             switch (eventType) {
                 case NSEventTypeKeyUp: {
                     if ([event modifierFlags] & hotkeyMask) { break; } // Handle events like cmd+q etc
-                    platform.input.keyboard.current[(::input::keyboard::Keys::Enum)[event keyCode]] = 0;
+                    platform::state.input.keyboard.current[(::input::keyboard::Keys::Enum)[event keyCode]] = 0;
                     event_passthrough = false; // disable key error sound
                 } break;
                 case NSEventTypeKeyDown: {
                     if ([event modifierFlags] & hotkeyMask) { break; } // Handle events like cmd+q etc
-                    platform.input.keyboard.current[(::input::keyboard::Keys::Enum)[event keyCode]] = 1;
+                    platform::state.input.keyboard.current[(::input::keyboard::Keys::Enum)[event keyCode]] = 1;
                     event_passthrough = false; // disable key error sound
                 } break;
                 case NSEventTypeMouseMoved:
@@ -199,28 +200,28 @@ int main(int , char** ) {
                 case NSEventTypeOtherMouseDragged: {
                     // todo: won't work when hiding cursor
                     NSPoint pos = [event locationInWindow];
-                    platform.input.mouse.x = pos.x * windowScale;
-                    platform.input.mouse.y = (actualWindowHeight-pos.y) * windowScale;
-                    platform.input.mouse.dx = platform.input.mouse.x - mouse_prevx;
-                    platform.input.mouse.dy = platform.input.mouse.y - mouse_prevy;
+                    platform::state.input.mouse.x = pos.x * windowScale;
+                    platform::state.input.mouse.y = (actualWindowHeight-pos.y) * windowScale;
+                    platform::state.input.mouse.dx = platform::state.input.mouse.x - mouse_prevx;
+                    platform::state.input.mouse.dy = platform::state.input.mouse.y - mouse_prevy;
                 } break;
                 case NSEventTypeLeftMouseDown:
                 case NSEventTypeRightMouseDown: {
                     ::input::mouse::Keys::Enum keycode =
                     (::input::mouse::Keys::Enum)((eventType >> 1) & 0x1);
-                    platform.input.mouse.curr[keycode] = 1;
+                    platform::state.input.mouse.curr[keycode] = 1;
                 } break;
                 case NSEventTypeLeftMouseUp:
                 case NSEventTypeRightMouseUp: {
                     ::input::mouse::Keys::Enum keycode =
                     (::input::mouse::Keys::Enum)((eventType >> 2) & 0x1);
-                    platform.input.mouse.curr[keycode] = 0;
+                    platform::state.input.mouse.curr[keycode] = 0;
                 } break;
                 case NSEventTypeScrollWheel: {
                     float scrollx = [event deltaX];
                     float scrolly = [event deltaY];
-                    platform.input.mouse.scrolldx += scrollx;
-                    platform.input.mouse.scrolldy += scrolly;
+                    platform::state.input.mouse.scrolldx += scrollx;
+                    platform::state.input.mouse.scrolldy += scrolly;
                 } break;
                 default: break;
             }
@@ -234,16 +235,16 @@ int main(int , char** ) {
         
         // update and render game
         [openGLContext makeCurrentContext];
-        game::update(game, config, platform);
+        game::update(game, config);
         [openGLContext flushBuffer];
             
         // frame time handling: sleep a number of OS timer periods until we hit our
         // next target time: https://blog.bearcats.nl/perfect-sleep-function/
         u64 now = mach_absolute_time();
-        platform.time.now = now / frequency;
-        if (platform.time.now < config.nextFrame) {
+        platform::state.time.now = now / frequency;
+        if (platform::state.time.now < config.nextFrame) {
             // sleep with 1ms granularity away from the target time
-            const f64 sleepSeconds = config.nextFrame - platform.time.now;
+            const f64 sleepSeconds = config.nextFrame - platform::state.time.now;
             // round up desired sleep time, to compensate for any rounding up the scheduler may do
             const f64 sleepMs = sleepSeconds * 1000. - (timerResolutionMs + 0.02);
             s32 sleepPeriodCount = s32(sleepMs / timerResolutionMs);
@@ -254,10 +255,10 @@ int main(int , char** ) {
             }
             do { // spin-lock until the next target time is hit
                 u64 now = mach_absolute_time();
-                platform.time.now = now / frequency;
-            } while (platform.time.now < config.nextFrame);
+                platform::state.time.now = now / frequency;
+            } while (platform::state.time.now < config.nextFrame);
         }
-        platform.time.running = platform.time.now - platform.time.start;
+        platform::state.time.running = platform::state.time.now - platform::state.time.start;
         } // autorelease pool
     } while (!config.quit);
     

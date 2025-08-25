@@ -10,6 +10,7 @@
 
 struct float2 {
     float2() : x{}, y{} {}
+    explicit float2(const f32 v) : x(v), y(v) {}
     float2(const f32 x, const f32 y) : x(x), y(y) {}
     union {
         struct { f32 x, y; };
@@ -19,6 +20,7 @@ struct float2 {
 
 struct float3 {
     float3() : x{}, y{}, z{} {}
+    explicit float3(const f32 v) : x(v), y(v), z(v) {}
     float3(const f32 x, const f32 y, const f32 z) : x(x), y(y), z(z) {}
     float3(const f32 x, const float2& yz) : x(x), y(yz.x), z(yz.y) {}
     float3(const float2& xy, const f32 z) : x(xy.x), y(xy.y), z(z) {}
@@ -32,6 +34,7 @@ struct float3 {
 
 struct float4 {
     float4() : x{}, y{}, z{}, w{} {}
+    explicit float4(const f32 v) : x(v), y(v), z(v), w(v) {}
     float4(const f32 x, const f32 y, const f32 z, const f32 w) : x(x), y(y), z(z), w(w) {}
     float4(const f32 x, const float3& yzw) : x(x), y(yzw.x), z(yzw.y), w(yzw.z) {}
     float4(const float3& xyz, const f32 w) : x(xyz.x), y(xyz.y), z(xyz.z), w(w) {}

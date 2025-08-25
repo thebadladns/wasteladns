@@ -20,6 +20,26 @@ struct Node {
     u16 sourceId;
     bool isLeaf;
 };
+
+// todo: having to do these because of the union is atrocious
+force_inline void ymm_to_minmax(
+    float3& min, float3& max, const __m256 xcoords, const __m256 ycoords, const __m256 zcoords) {
+    f32* vx = (f32*)&(xcoords);
+    f32* vy = (f32*)&(ycoords);
+    f32* vz = (f32*)&(zcoords);
+    min = float3(vx[7], vy[7], vz[7]);
+    max = float3(vx[0], vy[0], vz[0]);
+}
+force_inline void minmax_to_ymm(
+    __m256& xcoords, __m256& ycoords, __m256& zcoords, const float3 min, const float3 max) {
+    xcoords = _mm256_set_ps(
+        min.x, max.x, min.x, max.x, min.x, max.x, min.x, max.x);
+    ycoords = _mm256_set_ps(
+        min.y, min.y, max.y, max.y, min.y, min.y, max.y, max.y);
+    zcoords = _mm256_set_ps(
+        min.z, min.z, min.z, min.z, max.z, max.z, max.z, max.z);
+
+}
     
 struct Triangle {
     float3 min;
@@ -183,14 +203,9 @@ const u32* sourceIds) {
     // Now that the bounds are set, load them into 256 registers so the queries run faster
     for (u32 n = 0; n < (u32)nodes.len; n++) {
         Node& node = nodes.data[n];
-        const float3 n_min = node.min;
-        const float3 n_max = node.max;
-        node.xcoords_256 = _mm256_set_ps(
-            n_min.x, n_max.x, n_min.x, n_max.x, n_min.x, n_max.x, n_min.x, n_max.x);
-        node.ycoords_256 = _mm256_set_ps(
-            n_min.y, n_min.y, n_max.y, n_max.y, n_min.y, n_min.y, n_max.y, n_max.y);
-        node.zcoords_256 = _mm256_set_ps(
-            n_min.z, n_min.z, n_min.z, n_min.z, n_max.z, n_max.z, n_max.z, n_max.z);
+        minmax_to_ymm(
+            node.xcoords_256, node.ycoords_256, node.zcoords_256,
+            node.min, node.max);
     };
 
     bvh.nodes = nodes.data;

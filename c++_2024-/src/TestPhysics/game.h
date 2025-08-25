@@ -12,20 +12,20 @@ namespace debug {
 struct OverlayMode { enum Enum { All, HelpOnly, ArenaOnly, None, Count }; };
 const char* overlaynames[] = { "All", "Help Only", "Arenas only", "None" };
 static_assert(countof(overlaynames) == debug::OverlayMode::Count, "check");
-struct Debug3DView { enum Enum { Physics, Culling, BVH, All, None, Count }; };
-const char* visualizationModes[] = { "Physics", "Culling", "BVH", "All", "None" };
-static_assert(countof(visualizationModes) == debug::Debug3DView::Count, "check");
+struct VisualizationModes { enum Enum { Physics, Culling, BVH, Count }; };
+bool visualizationModes[VisualizationModes::Count];
 struct EventText { char text[256]; f64 time; };
 
 f64 frameHistory[60];
 f64 frameAvg = 0;
 u64 frameHistoryIdx = 0;
 OverlayMode::Enum overlaymode = OverlayMode::Enum::All;
-Debug3DView::Enum debug3Dmode = Debug3DView::Enum::None;
 u32 debugCameraStage = 0;
 u32 bvhDepth = 0;
 CameraNode* capturedCameras = nullptr;
 EventText eventLabel = {};
+bool capture_cameras_next_frame = false;
+im::Pane debugPane;
 
 }
 #endif
@@ -68,17 +68,6 @@ namespace input
         , CYCLE_ROOM = ::input::keyboard::Keys::N
         #if __DEBUG
         , TOGGLE_OVERLAY = ::input::keyboard::Keys::H
-        , TOGGLE_DEBUG3D = ::input::keyboard::Keys::V
-        , CAPTURE_CAMERAS = ::input::keyboard::Keys::P
-        , TOGGLE_CAPTURED_CAMERA = ::input::keyboard::Keys::C
-        , TOGGLE_FRUSTUM_CUT = ::input::keyboard::Keys::NUM0
-        , TOGGLE_FRUSTUM_NEAR = ::input::keyboard::Keys::NUM1
-        , TOGGLE_FRUSTUM_FAR = ::input::keyboard::Keys::NUM2
-        , TOGGLE_FRUSTUM_LEFT = ::input::keyboard::Keys::NUM3
-        , TOGGLE_FRUSTUM_RIGHT = ::input::keyboard::Keys::NUM4
-        , TOGGLE_FRUSTUM_BOTTOM = ::input::keyboard::Keys::NUM5
-        , TOGGLE_FRUSTUM_TOP = ::input::keyboard::Keys::NUM6
-        , TOGGLE_BVH_LEVEL = ::input::keyboard::Keys::C
         #endif
         ;
 };
@@ -115,17 +104,17 @@ void loadLaunchConfig(platform::LaunchConfig& config) {
     config.fullscreen = false;
     config.title = "Physics Test";
     config.arena_size = persistentArenaSize + sceneArenaSize + frameArenaSize + scratchArenaSize;
-    __DEBUGDEF(config.arena_size += gfx::im::arena_size;)
+    __DEBUGDEF(config.arena_size += im::arena_size;)
 }
-void start(Instance& game, platform::GameConfig& config, platform::State& platform) {
+void start(Instance& game, platform::GameConfig& config) {
 
     game.time = {};
     game.time.config.maxFrameLength = 0.1;
     game.time.config.targetFramerate = 1.0 / 60.0;
-    game.time.lastFrame = platform.time.now;
+    game.time.lastFrame = platform::state.time.now;
 
     config = {};
-    config.nextFrame = platform.time.now;
+    config.nextFrame = platform::state.time.now;
 
     {
         allocator::init_arena(game.memory.persistentArena, persistentArenaSize);
@@ -143,7 +132,7 @@ void start(Instance& game, platform::GameConfig& config, platform::State& platfo
         __DEBUGDEF(game.memory.frameArenaHighmark =
                 (uintptr_t)game.memory.frameArena.curr;
             game.memory.frameArena.highmark = &game.memory.frameArenaHighmark;)
-        __DEBUGDEF(allocator::init_arena(game.memory.debugArena, gfx::im::arena_size);)
+        __DEBUGDEF(allocator::init_arena(game.memory.debugArena, im::arena_size);)
     }
     {
         game.scene = {};
@@ -153,26 +142,33 @@ void start(Instance& game, platform::GameConfig& config, platform::State& platfo
             , game.memory.scratchArenaRoot
             __DEBUGDEF(, game.memory.debugArena)
         };
-        load_coreResources(game.resources, arenas, platform.screen);
+        load_coreResources(game.resources, arenas, platform::state.screen);
         spawn_scene_mirrorRoom(
             game.scene, game.memory.sceneArena, game.memory.scratchArenaRoot,
-            game.resources, platform.screen,
+            game.resources, platform::state.screen,
             roomDefinitions[game.roomId]);
 
     }
+
+#if __DEBUG
+    im::make_pane(
+        debug::debugPane, "DEBUG MENU",
+        float2(game.resources.renderCore.windowProjection.config.left + 30,
+               game.resources.renderCore.windowProjection.config.top - 50));
+#endif
 }
 
-void update(Instance& game, platform::GameConfig& config, platform::State& platform) {
+void update(Instance& game, platform::GameConfig& config) {
 
     // frame arena reset
     game.memory.frameArena.curr = game.memory.frameArenaBuffer;
 
     // frame timing calculations
     {
-        f64 raw_dt = platform.time.now - game.time.lastFrame;
+        f64 raw_dt = platform::state.time.now - game.time.lastFrame;
         game.time.lastFrameDelta = math::min(raw_dt, game.time.config.maxFrameLength);
-        game.time.lastFrame = platform.time.now;
-        config.nextFrame = platform.time.now + game.time.config.targetFramerate;
+        game.time.lastFrame = platform::state.time.now;
+        config.nextFrame = platform::state.time.now + game.time.config.targetFramerate;
 
         #if __DEBUG
         {
@@ -192,10 +188,10 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
     }
 
     // meta input checks
-    const ::input::keyboard::State& keyboard = platform.input.keyboard;
+    const ::input::keyboard::State& keyboard = platform::state.input.keyboard;
     const u32 prevRoomId = game.roomId;
     bool step = true;
-    __DEBUGDEF(bool captureCameras = false;)
+    __DEBUGDEF(bool captureCameras = debug::capture_cameras_next_frame; debug::capture_cameras_next_frame = false;)
     {
         if (keyboard.released(input::EXIT)) {
             config.quit = true;
@@ -203,60 +199,10 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
         if (keyboard.pressed(input::CYCLE_ROOM)) {
             game.roomId = (game.roomId + 1) % countof(roomDefinitions);
         }
-        if (keyboard.pressed(input::TOGGLE_PAUSE_SCENE_RENDER)) {
-            game.time.pausedRender = !game.time.pausedRender;
-        }
         #if __DEBUG
         if (keyboard.pressed(input::TOGGLE_OVERLAY)) {
             debug::overlaymode =
                 (debug::OverlayMode::Enum)((debug::overlaymode + 1) % debug::OverlayMode::Count);
-        }
-        if (keyboard.pressed(input::TOGGLE_DEBUG3D)) {
-            debug::debug3Dmode =
-                (debug::Debug3DView::Enum)((debug::debug3Dmode + 1) % debug::Debug3DView::Count);
-        }
-        if (debug::debug3Dmode == debug::Debug3DView::Culling) {
-            if (keyboard.pressed(input::TOGGLE_CAPTURED_CAMERA)) {
-                if (debug::capturedCameras) {
-                    if (keyboard.down(::input::keyboard::Keys::LEFT_SHIFT)) {
-                        if (debug::debugCameraStage == 0) {
-                            debug::debugCameraStage = debug::capturedCameras[0].siblingIndex - 1;
-                        } else { debug::debugCameraStage--; }
-                    } else {
-                        if (debug::debugCameraStage == debug::capturedCameras[0].siblingIndex - 1) {
-                            debug::debugCameraStage = 0;
-                        } else { debug::debugCameraStage++; }
-                    }
-                }
-            }
-            if (keyboard.pressed(input::CAPTURE_CAMERAS)) { captureCameras = true; }
-            if (keyboard.pressed(input::TOGGLE_FRUSTUM_CUT)) {
-                debug::force_cut_frustum = !debug::force_cut_frustum;
-            }
-            if (keyboard.pressed(input::TOGGLE_FRUSTUM_NEAR)) {
-                debug::frustum_planes_off[0] = !debug::frustum_planes_off[0];
-            }
-            if (keyboard.pressed(input::TOGGLE_FRUSTUM_FAR)) {
-                debug::frustum_planes_off[1] = !debug::frustum_planes_off[1];
-            }
-            if (keyboard.pressed(input::TOGGLE_FRUSTUM_LEFT)) {
-                debug::frustum_planes_off[2] = !debug::frustum_planes_off[2];
-            }
-            if (keyboard.pressed(input::TOGGLE_FRUSTUM_RIGHT)) {
-                debug::frustum_planes_off[3] = !debug::frustum_planes_off[3];
-            }
-            if (keyboard.pressed(input::TOGGLE_FRUSTUM_BOTTOM)) {
-                debug::frustum_planes_off[4] = !debug::frustum_planes_off[4];
-            }
-            if (keyboard.pressed(input::TOGGLE_FRUSTUM_TOP)) {
-                debug::frustum_planes_off[5] = !debug::frustum_planes_off[5];
-            }
-        } else if (debug::debug3Dmode == debug::Debug3DView::BVH) {
-            if (keyboard.pressed(input::TOGGLE_BVH_LEVEL)) {
-                if (keyboard.down(::input::keyboard::Keys::LEFT_SHIFT)) {
-                    if (debug::bvhDepth > 0) { debug::bvhDepth--; }
-                } else { debug::bvhDepth++; }
-            }
         }
         #endif
     }
@@ -266,7 +212,7 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
         game.scene = {};
         spawn_scene_mirrorRoom(
             game.scene, game.memory.sceneArena, game.memory.scratchArenaRoot,
-            game.resources, platform.screen,
+            game.resources, platform::state.screen,
             roomDefinitions[game.roomId]);
     }
 
@@ -280,7 +226,7 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
         {
             game::MovementInput controlpad = game.scene.player.control, controlkeyboard = game.scene.player.control;
             game::movementInputFromKeys(controlpad, keyboard, { input::UP, input::DOWN, input::LEFT, input::RIGHT });
-            game::movementInputFromPad(controlkeyboard, platform.input.pads[0]);
+            game::movementInputFromPad(controlkeyboard, platform::state.input.pads[0]);
             game.scene.player.control.localInput = math::add(controlpad.localInput, controlkeyboard.localInput);
             game.scene.player.control.mag = math::mag(game.scene.player.control.localInput);
             if (game.scene.player.control.mag > math::eps32) {
@@ -374,7 +320,7 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
                         math::scale(game.scene.player.transform.front, offsety + scaley * (i + 2)));
                     t.pos.z = t.pos.z
                             + offsetz
-                            + scalez * (math::cos((f32)platform.time.now * 10.f + i * 2.f) - 1.5f);
+                            + scalez * (math::cos((f32)platform::state.time.now * 10.f + i * 2.f) - 1.5f);
                     t.matrix.col0.x = 0.2f;
                     t.matrix.col1.y = 0.2f;
                     t.matrix.col2.z = 0.2f;
@@ -416,8 +362,12 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
 
         // camera update
         {
-            game::orbitInputFromPad(game.scene.orbitCamera, platform.input.pads[0]);
-            game::orbitInputFromMouse(game.scene.orbitCamera, platform.input.mouse);
+            bool mousecontrols = true;
+            __DEBUGDEF(mousecontrols = !im::is_mouse_captured();)
+            if (mousecontrols) {
+                game::orbitInputFromPad(game.scene.orbitCamera, platform::state.input.pads[0]);
+                game::orbitInputFromMouse(game.scene.orbitCamera, platform::state.input.mouse);
+            }
             game::updateOrbit(game.scene.camera.transform, game.scene.orbitCamera);
 
             // compute the camera render matrix
@@ -445,8 +395,8 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
                 gfx::rhi::ViewportParams vpParams;
                 vpParams.topLeftX = 0;
                 vpParams.topLeftY = 0;
-                vpParams.width = (f32)platform.screen.width;
-                vpParams.height = (f32)platform.screen.height;
+                vpParams.width = (f32)platform::state.screen.width;
+                vpParams.height = (f32)platform::state.screen.height;
                 vpParams.minDepth = 0.f;
                 vpParams.maxDepth = 1.f;
                 gfx::rhi::set_VP(vpParams);
@@ -583,31 +533,30 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
             const f32 axisSize = 7.f;
             const float3 pos(0.f, 0.f, 0.1f);
 
-            gfx::im::segment(pos, math::add(pos, math::scale(float3(1.f, 0.f, 0.f), axisSize)), axisX);
-            gfx::im::segment(pos, math::add(pos, math::scale(float3(0.f, 1.f, 0.f), axisSize)), axisY);
-            gfx::im::segment(pos, math::add(pos, math::scale(float3(0.f, 0.f, 1.f), axisSize)), axisZ);
+            im::segment(pos, math::add(pos, math::scale(float3(1.f, 0.f, 0.f), axisSize)), axisX);
+            im::segment(pos, math::add(pos, math::scale(float3(0.f, 1.f, 0.f), axisSize)), axisY);
+            im::segment(pos, math::add(pos, math::scale(float3(0.f, 0.f, 1.f), axisSize)), axisZ);
 
             const f32 thickness = 0.1f;
             const u32 steps = 10;
             const f32 spacing = 1.f / (f32)steps;
             for (int i = 1; i <= steps; i++) {
-                gfx::im::segment(
+                im::segment(
                       math::add(pos, float3(spacing * i, 0.f, -thickness))
                     , math::add(pos, float3(spacing * i, 0.f, thickness))
                     , axisX);
-                gfx::im::segment(
+                im::segment(
                       math::add(pos, float3(0.f, spacing * i, -thickness))
                     , math::add(pos, float3(0.f, spacing * i, thickness))
                     , axisY);
-                gfx::im::segment(
+                im::segment(
                       math::add(pos, float3(-thickness, thickness, spacing * i))
                     , math::add(pos, float3(thickness, -thickness, spacing * i))
                     , axisZ);
             }
 
 
-            if (debug::debug3Dmode == debug::Debug3DView::All
-                || debug::debug3Dmode == debug::Debug3DView::BVH) {
+            if (debug::visualizationModes[debug::VisualizationModes::BVH]) {
 
                 allocator::PagedArena scratchArena = game.memory.scratchArenaRoot; // explicit copy
                 renderer::CoreResources& renderCore = game.resources.renderCore;
@@ -633,8 +582,11 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
                         const DrawNode n = nodeStack[--stackCount];
                         const bvh::Node& node = bvh.nodes[n.nodeid];
                         if (n.depth == debug::bvhDepth || node.isLeaf) {
-                            float3 center = math::scale(math::add(node.min, node.max), 0.5f);
-                            float3 scale = math::scale(math::subtract(node.max, node.min), 0.5f);
+                            float3 min, max;
+                            bvh::ymm_to_minmax(
+                                min, max, node.xcoords_256, node.ycoords_256, node.zcoords_256);
+                            float3 center = math::scale(math::add(min, max), 0.5f);
+                            float3 scale = math::scale(math::subtract(max, min), 0.5f);
                             allocator::push(aabbs, scratchArena) = { center, scale };
                         } else if (!node.isLeaf) {
                             nodeStack[stackCount++] =
@@ -699,19 +651,17 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
             }
 
             
-            if (debug::debug3Dmode == debug::Debug3DView::All
-             || debug::debug3Dmode == debug::Debug3DView::Physics) {
+            if (debug::visualizationModes[debug::VisualizationModes::Physics]) {
                 physics::Scene& pScene = game.scene.physicsScene;
                 for (u32 i = 0; i < pScene.wall_count; i++) {
-                    gfx::im::segment(pScene.walls[i].start, pScene.walls[i].end, Color32(1.f, 1.f, 1.f, 1.f));
+                    im::segment(pScene.walls[i].start, pScene.walls[i].end, Color32(1.f, 1.f, 1.f, 1.f));
                 }
                 for (u32 i = 0; i < pScene.obstacle_count; i++) {
-                    gfx::im::sphere(pScene.obstacles[i].pos, pScene.obstacles[i].radius, Color32(1.f, 1.f, 1.f, 1.f));
+                    im::sphere(pScene.obstacles[i].pos, pScene.obstacles[i].radius, Color32(1.f, 1.f, 1.f, 1.f));
                 }
             }
 
-            if (debug::debug3Dmode == debug::Debug3DView::All
-             || debug::debug3Dmode == debug::Debug3DView::Culling) {
+            if (debug::visualizationModes[debug::VisualizationModes::Culling]) {
                 const Color32 bbColor(0.8f, 0.15f, 0.25f, 0.7f);
                 const Color32 ceColor(0.2f, 0.85f, 0.85f, 0.7f);
                 
@@ -730,7 +680,7 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
                         renderer::computeVisibilityCS(
                             visibleNodesDebug, isEachNodeVisible, vpMatrix, scene);
                         const Color32 color(0.25f, 0.8f, 0.15f, 0.7f);
-                        gfx::im::frustum(vpMatrix, color);
+                        im::frustum(vpMatrix, color);
                     } else {
                         // render mirror with normal
                         const game::Mirrors::Poly& p = game.scene.mirrors.polys[cameraNode.sourceId];
@@ -740,7 +690,7 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
                                 math::subtract(p.v[2], p.v[0]), math::subtract(p.v[1], p.v[0])));
                         float4 planeWS(
                             normalWS.x, normalWS.y, normalWS.z,-math::dot(p.v[0], normalWS));
-                        gfx::im::plane(planeWS, Color32(1.f, 1.f, 1.f, 1.f));
+                        im::plane(planeWS, Color32(1.f, 1.f, 1.f, 1.f));
 
                         renderer::Frustum& frustum =
                             debug::capturedCameras[cameraNode.parentIndex].frustum;
@@ -756,13 +706,13 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
                         for (u32 i = 0; i < poly_count; i++) {
                             float4 pCS = math::mult(mainCamera.vpMatrix, float4(poly[i], 1.f));
                             polyScreen[i] = math::scale(math::invScale(pCS.xy, pCS.w), screenScale);
-                            gfx::im::Text2DParams textParams;
+                            im::Text2DParams textParams;
                             textParams.scale = 1;
                             textParams.pos = polyScreen[i];
                             textParams.color = Color32(1.f, 1.f, 1.f, 1.f);
-                            gfx::im::text2d(textParams, "%d", i);
+                            im::text2d(textParams, "%d", i);
                         }
-                        gfx::im::poly2d(polyScreen, poly_count, Color32(1.f, 1.f, 1.f, 0.3f));
+                        im::poly2d(polyScreen, poly_count, Color32(1.f, 1.f, 1.f, 0.3f));
 
                         // render culled nodes
                         renderer::CullEntries cullEntries = {};
@@ -771,17 +721,17 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
                             scratchArena, visibleNodesDebug, isEachNodeVisible,
                             cameraNode.frustum, cullEntries);
                         const Color32 color(0.25f, 0.8f, 0.15f, 0.7f);
-                        gfx::im::frustum(cameraNode.frustum.planes, cameraNode.frustum.numPlanes, color);
+                        im::frustum(cameraNode.frustum.planes, cameraNode.frustum.numPlanes, color);
                     }
                     for (u32 i = 0; i < visibleNodesDebug.visible_nodes_count; i++) {
                         u32 n = visibleNodesDebug.visible_nodes[i];
                         const renderer::DrawNode& node = scene.drawNodes.data[n].state.live;
-                        gfx::im::obb(node.nodeData.worldMatrix, node.min, node.max, bbColor);
+                        im::obb(node.nodeData.worldMatrix, node.min, node.max, bbColor);
                     }
                 }
             }
 
-            gfx::im::commit3d();
+            im::commit3d();
         }
         #endif
         
@@ -793,7 +743,7 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
             Color32 defaultCol(0.7f, 0.8f, 0.15f, 1.0f);
             Color32 activeCol(1.0f, 0.2f, 0.1f, 1.0f);
                 
-            f32 textscale = platform.screen.window_scale;
+            f32 textscale = platform::state.screen.window_scale;
             f32 lineheight = 15.f * textscale;
 
             char appendBuff[128];
@@ -802,7 +752,7 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
                 char text[256];
                 f64 time;
             };
-            gfx::im::Text2DParams textParamsLeft, textParamsRight, textParamsCenter;
+            im::Text2DParams textParamsLeft, textParamsRight, textParamsCenter;
             textParamsLeft.scale = (u8)textscale;
             textParamsLeft.pos =float2(
                 game.resources.renderCore.windowProjection.config.left + 10.f * textscale,
@@ -822,154 +772,101 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
                 io::format(
                     debug::eventLabel.text, sizeof(debug::eventLabel.text),
                     "Overlays: %s", debug::overlaynames[debug::overlaymode]);
-                debug::eventLabel.time = platform.time.now;
+                debug::eventLabel.time = platform::state.time.now;
                 textParamsLeft.color = activeCol;
             }
             else {
                 textParamsLeft.color = defaultCol;
-            }
-
-            gfx::im::text2d(
-                textParamsLeft, "H to toggle overlays: %s", debug::overlaynames[debug::overlaymode]);
-            textParamsLeft.pos.y -= lineheight;
-
-            if (keyboard.pressed(input::TOGGLE_PAUSE_SCENE_RENDER)) {
-                io::format(
-                    debug::eventLabel.text, sizeof(debug::eventLabel.text), "Paused scene render");
-                debug::eventLabel.time = platform.time.now;
-                textParamsLeft.color = activeCol;
-            }
-            else {
-                textParamsLeft.color = defaultCol;
-            }
-            gfx::im::text2d(textParamsLeft, "SPACE to toggle scene rendering pause");
-            textParamsLeft.pos.y -= lineheight;
-
-            if (keyboard.pressed(input::TOGGLE_DEBUG3D)) {
-                io::format(
-                    debug::eventLabel.text, sizeof(debug::eventLabel.text),
-                    "Visualization mode: %s", debug::visualizationModes[debug::debug3Dmode]);
-                debug::eventLabel.time = platform.time.now;
-                textParamsLeft.color = activeCol;
-            }
-            else {
-                textParamsLeft.color = defaultCol;
-            }
-            gfx::im::text2d(
-                textParamsLeft, "V to toggle 3D visualization modes: %s",
-                debug::visualizationModes[debug::debug3Dmode]);
-            textParamsLeft.pos.y -= lineheight;
-
-            if (debug::debug3Dmode == debug::Debug3DView::BVH) {
-
-                if (keyboard.pressed(input::TOGGLE_BVH_LEVEL)) {
-                    io::format(
-                        debug::eventLabel.text, sizeof(debug::eventLabel.text),
-                        "BVH level: %d", debug::bvhDepth);
-                    debug::eventLabel.time = platform.time.now;
-                    textParamsLeft.color = activeCol;
-                }
-                else {
-                    textParamsLeft.color = defaultCol;
-                }
-                gfx::im::text2d(textParamsLeft,
-                    "C to increase bvh depth level (+shift to decrease): %d", debug::bvhDepth);
-                textParamsLeft.color = defaultCol;
-                textParamsLeft.pos.y -= lineheight;
-            }
-
-            if (debug::debug3Dmode == debug::Debug3DView::Culling) {
-                if (keyboard.pressed(input::CAPTURE_CAMERAS)) {
-                    io::format(
-                        debug::eventLabel.text, sizeof(debug::eventLabel.text), "Capture cameras");
-                    debug::eventLabel.time = platform.time.now;
-                    textParamsLeft.color = activeCol;
-                }
-                else {
-                    textParamsLeft.color = defaultCol;
-                }
-                gfx::im::text2d(textParamsLeft, "P to capture cameras in scene");
-                textParamsLeft.color = defaultCol;
-                textParamsLeft.pos.y -= lineheight;
-
-                if (keyboard.pressed(input::TOGGLE_CAPTURED_CAMERA)) {
-                    io::format(
-                        debug::eventLabel.text,sizeof(debug::eventLabel.text), "Camera #%d/#%d", debug::debugCameraStage + 1, debug::capturedCameras ? debug::capturedCameras[0].siblingIndex : 0);
-                    debug::eventLabel.time = platform.time.now;
-                    textParamsLeft.color = activeCol;
-                } else {
-                    textParamsLeft.color = defaultCol;
-                }
-                gfx::im::text2d(textParamsLeft, "C to toggle camera capture stages (+shift to go back): #%d/#%d", debug::debugCameraStage + 1, debug::capturedCameras ? debug::capturedCameras[0].siblingIndex : 0);
-                textParamsLeft.color = defaultCol;
-                textParamsLeft.pos.y -= lineheight;
-
-                if (debug::capturedCameras) {
-                    const u32 numCameras = debug::capturedCameras[0].siblingIndex;
-                    const u32 minidx = debug::debugCameraStage > 10 ? debug::debugCameraStage - 10 : 0;
-                    const u32 maxidx = debug::debugCameraStage + 10 < numCameras ? debug::debugCameraStage + 10 : numCameras;
-                    for (u32 i = minidx; i < maxidx; i++) {
-                        if (i == debug::debugCameraStage) { textParamsLeft.color = activeCol; }
-                        gfx::im::text2d(textParamsLeft, "%*d: %s", debug::capturedCameras[i].depth, i, debug::capturedCameras[i].str);
-                        textParamsLeft.color = defaultCol;
-                        textParamsLeft.pos.y -= lineheight;
-                    }
-                }
-               
-                {
-                    if (platform.input.keyboard.pressed(input::TOGGLE_FRUSTUM_CUT)) { textParamsLeft.color = activeCol; }
-                    else { textParamsLeft.color = defaultCol; }
-                    io::StrBuilder frustumStr { appendBuff, sizeof(appendBuff) };
-                    constexpr ::input::keyboard::Keys::Enum keys[] = {
-                        input::TOGGLE_FRUSTUM_NEAR, input::TOGGLE_FRUSTUM_FAR,
-                        input::TOGGLE_FRUSTUM_LEFT, input::TOGGLE_FRUSTUM_RIGHT,
-                        input::TOGGLE_FRUSTUM_BOTTOM, input::TOGGLE_FRUSTUM_TOP };
-                    io::append(
-                        frustumStr.curr, frustumStr.last,
-                        "%sFrustum planes: ", debug::force_cut_frustum ? "[forced cut] " : "");
-                    for (s32 i = 0; i < countof(debug::frustum_planes_off) && !frustumStr.full(); i++) {
-                        if (!debug::frustum_planes_off[i]) {
-                            io::append(
-                                frustumStr.curr,
-                                frustumStr.last, "%s ", debug::frustum_planes_names[i]);
-                        }
-                        if (platform.input.keyboard.pressed(::input::keyboard::Keys::Enum(keys[i]))) {
-                            textParamsLeft.color = activeCol;
-                            io::format(debug::eventLabel.text, sizeof(debug::eventLabel.text), debug::frustum_planes_off[i] ? "%s frustum plane off" : "%s frustum plane on", debug::frustum_planes_names[i]);
-                            debug::eventLabel.time = platform.time.now;
-                        }
-                    };
-                    gfx::im::text2d(textParamsLeft, "[0] to force frustum cut, [1-6] to toggle frustum planes");
-                    textParamsLeft.pos.y -= lineheight;
-                    gfx::im::text2d(textParamsLeft, frustumStr.str);
-                    textParamsLeft.color = defaultCol;
-                    textParamsLeft.pos.y -= lineheight;
-                }
             }
 
             if (debug::overlaymode == debug::OverlayMode::All
                 || debug::overlaymode == debug::OverlayMode::HelpOnly) {
-                textParamsLeft.color = platform.input.mouse.down(::input::mouse::Keys::BUTTON_LEFT) ? activeCol : defaultCol;
-                gfx::im::text2d(textParamsLeft, "Mouse (%.3f,%.3f)", platform.input.mouse.x, platform.input.mouse.y);
-                textParamsLeft.pos.y -= lineheight;
-                textParamsLeft.color = defaultCol;
-                const float3 mousepos_WS = camera::screenPosToWorldPos(
-                    platform.input.mouse.x, platform.input.mouse.y,
-                    platform.screen.window_width, platform.screen.window_height,
-                    game.resources.renderCore.perspProjection.config, game.scene.camera.viewMatrix);
-                gfx::im::text2d(textParamsLeft, "Mouse 3D (%.3f,%.3f,%.3f)",mousepos_WS.x, mousepos_WS.y, mousepos_WS.z);
-                textParamsLeft.pos.y -= lineheight;
+                im::pane_start(debug::debugPane);
                 {
+                    //im::box_2d(math::subtract(mouseWS, float2(2.f)), math::add(mouseWS, float2(2.f)), activeCol);
+                    float2 mouseWS = im::get_mouse_WS();
+                    const float3 mousepos_WS = camera::screenPosToWorldPos(
+                        platform::state.input.mouse.x, platform::state.input.mouse.y,
+                        platform::state.screen.window_width, platform::state.screen.window_height,
+                        game.resources.renderCore.perspProjection.config, game.scene.camera.viewMatrix);
                     float3 eulers_deg = math::scale(game.scene.orbitCamera.eulers, math::r2d32);
-                    gfx::im::text2d(textParamsLeft, "Camera eulers: " FLOAT3_FORMAT("% .3f"), FLOAT3_PARAMS(eulers_deg));
-                    textParamsLeft.pos.y -= lineheight;
+                    im::label("mouse (%.3f, %.3f)"
+                              "\nmouse in scene (%.3f,%.3f,%.3f)"
+                              "\nCamera eulers: " FLOAT3_FORMAT("% .3f"),
+                        mouseWS.x, mouseWS.y,
+                        mousepos_WS.x, mousepos_WS.y, mousepos_WS.z,
+                        FLOAT3_PARAMS(eulers_deg));
+
+
+                    if (im::checkbox("Pause render", &game.time.pausedRender)) {
+                        io::format(
+                            debug::eventLabel.text, sizeof(debug::eventLabel.text),
+                            "Pause scene render: %s", game.time.pausedRender ? "true" : "false");
+                        debug::eventLabel.time = platform::state.time.now;
+                    }
+                    im::checkbox(
+                        "Toggle BVH debugging",
+                        &debug::visualizationModes[debug::VisualizationModes::BVH]);
+                    if (debug::visualizationModes[debug::VisualizationModes::BVH]) {
+                        im::input_step("BVH depth", &debug::bvhDepth, 0u, 10000u);
+                    }
+
+                    im::checkbox(
+                        "Toggle Culling debugging",
+                        &debug::visualizationModes[debug::VisualizationModes::Culling]);
+                    if (debug::visualizationModes[debug::VisualizationModes::Culling]) {
+                        im::horizontal_layout_start();
+                        if (im::button("Capture cameras")) {
+                            debug::capture_cameras_next_frame = true;
+                        }
+                        u32 numCameras = 0;
+                        if (debug::capturedCameras) {
+                            numCameras = debug::capturedCameras[0].siblingIndex;
+                            im::label("%d cameras", numCameras);
+                        }
+                        im::horizontal_layout_end();
+                        if (debug::capturedCameras) {
+                            im::input_step("Toggle camera", 
+                                &debug::debugCameraStage, 0u, numCameras - 1,
+                                /* wrap */ true);
+
+                            const u32 minidx = debug::debugCameraStage > 10 ? debug::debugCameraStage - 10 : 0;
+                            const u32 maxidx = debug::debugCameraStage + 10 < numCameras ? debug::debugCameraStage + 10 : numCameras;
+                            for (u32 i = minidx; i < maxidx; i++) {
+                                Color32 color =
+                                    i == debug::debugCameraStage ? im::color_highlight : im::color_bright;
+                                im::label(
+                                    color, "%*d: %s",
+                                    debug::capturedCameras[i].depth, i, debug::capturedCameras[i].str);
+                            }
+                            im::checkbox("force cut frustum visualization", &debug::force_cut_frustum);
+                            if (debug::force_cut_frustum) {
+                                im::label("Disable frustum planes:");
+                                im::checkbox("near", &debug::frustum_planes_off[0]);
+                                im::checkbox("far", &debug::frustum_planes_off[1]);
+                                im::checkbox("left", &debug::frustum_planes_off[2]);
+                                im::checkbox("right", &debug::frustum_planes_off[3]);
+                                im::checkbox("bottom", &debug::frustum_planes_off[4]);
+                                im::checkbox("top", &debug::frustum_planes_off[5]);
+                            }
+                        }
+                    }
+                    im::checkbox(
+                        "Toggle Physics debugging",
+                        &debug::visualizationModes[debug::VisualizationModes::Physics]);
                 }
-                for (u32 i = 0; i < platform.input.padCount; i++)
+                im::pane_end();
+            }
+            im::reset_frame();
+
+            if (debug::overlaymode == debug::OverlayMode::All
+                || debug::overlaymode == debug::OverlayMode::HelpOnly) {
+                for (u32 i = 0; i < platform::state.input.padCount; i++)
                 {
-                    const ::input::gamepad::State& pad = platform.input.pads[i];
-                    gfx::im::text2d(textParamsLeft, "Pad: %s", pad.name);
+                    const ::input::gamepad::State& pad = platform::state.input.pads[i];
+                    im::text2d(textParamsLeft, "Pad: %s", pad.name);
                     textParamsLeft.pos.y -= lineheight;
-                    gfx::im::text2d(textParamsLeft
+                    im::text2d(textParamsLeft
                         , "Pad: L:(%.3f,%.3f) R:(%.3f,%.3f) L2:%.3f R2:%.3f"
                         , pad.sliders[::input::gamepad::Sliders::AXIS_X_LEFT], pad.sliders[::input::gamepad::Sliders::AXIS_Y_LEFT]
                         , pad.sliders[::input::gamepad::Sliders::AXIS_X_RIGHT], pad.sliders[::input::gamepad::Sliders::AXIS_Y_RIGHT]
@@ -993,23 +890,48 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
                                     padStr.curr, padStr.last, "%s ", key_names[key]);
                             }
                         }
-                        gfx::im::text2d(textParamsLeft, padStr.str);
+                        im::text2d(textParamsLeft, padStr.str);
                         textParamsLeft.pos.y -= lineheight;
                     }
                 }
 
                 textParamsRight.color = defaultCol;
                 textParamsRight.pos.x -= 30.f * textscale;
-                gfx::im::text2d(textParamsRight, "%s", platform::name);
+                im::text2d(textParamsRight, "%s", platform::name);
                 textParamsRight.pos.y -= lineheight;
-                gfx::im::text2d(textParamsRight, "%.3lf fps", 1. / debug::frameAvg);
+                im::text2d(textParamsRight, "%.3lf fps", 1. / debug::frameAvg);
                 textParamsRight.pos.y -= lineheight;
+                {
+                    char formatted[256];
+                    io::format(formatted, sizeof(formatted), "H to toggle overlays: %s", debug::overlaynames[debug::overlaymode]);
+                    textParamsRight.pos.x += 57.f - stb_easy_font_width(formatted);
+                    im::text2d(
+                        textParamsRight, "H to toggle overlays: %s", debug::overlaynames[debug::overlaymode]);
+                    textParamsRight.pos.y -= lineheight;
+                }
+            }
+
+            {
+                Color32 bg(0.2f, 0.2f, 0.2f, 1.f);
+                Color32 frame(0.2f, 0.9f, 0.2f, 1.f);
+                float2 pos(game.resources.renderCore.windowProjection.config.right - 5.f, game.resources.renderCore.windowProjection.config.bottom + 5.f);
+                const float height = 60.f;
+                const float width = 5.f;
+                im::box_2d(
+                    float2(pos.x - width * countof(debug::frameHistory), pos.y),
+                    float2(pos.x, pos.y + height), bg);
+                for (u32 i = 0; i < countof(debug::frameHistory); i++) {
+                    f32 h = height * 1.f / (60.f * (f32)debug::frameHistory[i]);
+                    im::box_2d(
+                        float2(pos.x - width * (i + 1), pos.y),
+                        float2(pos.x - width * (i), pos.y + h), frame);
+                }
             }
 
             if (debug::overlaymode == debug::OverlayMode::All
              || debug::overlaymode == debug::OverlayMode::ArenaOnly)
             {
-                auto renderArena = [](gfx::im::Text2DParams& textCfg, u8* arenaEnd,
+                auto renderArena = [](im::Text2DParams& textCfg, u8* arenaEnd,
                                         u8* arenaStart, uintptr_t arenaHighmark,
                                         const char* arenaName, const Color32 defaultCol,
                                         const Color32 baseCol, const Color32 highmarkCol,
@@ -1024,17 +946,17 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
                     const f32 arenaHighmark_barwidth = barwidth * occupancy;
                     textCfg.color = highmarkCol;
                     if (arenaHighmarkBytes > 1024 * 1024) {
-                        gfx::im::text2d(
+                        im::text2d(
                             textCfg, "%s highmark: %lu bytes (%.3fMB) / %.3f%%",
                             arenaName, arenaHighmarkBytes, arenaHighmarkBytes / (1024.f * 1024.f),
                             occupancy * 100.f);
                     } else if (arenaHighmarkBytes > 1024) {
-                        gfx::im::text2d(
+                        im::text2d(
                             textCfg, "%s highmark: %lu bytes (%.3fKB) / %.3f%%",
                             arenaName, arenaHighmarkBytes, arenaHighmarkBytes / (1024.f),
                             occupancy * 100.f);
                     } else {
-                        gfx::im::text2d(
+                        im::text2d(
                             textCfg, "%s highmark: %lu bytes / %.3f%%",
                             arenaName, arenaHighmarkBytes,
                             occupancy * 100.f);
@@ -1042,11 +964,11 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
                     textCfg.pos.y -= lineheight;
                     textCfg.color = defaultCol;
 
-                    gfx::im::box_2d(
+                    im::box_2d(
                         float2(textCfg.pos.x, textCfg.pos.y - barheight),
                         float2(textCfg.pos.x + barwidth, textCfg.pos.y), baseCol);
                     if (arenaHighmarkBytes) {
-                        gfx::im::box_2d(
+                        im::box_2d(
                             float2(textCfg.pos.x, textCfg.pos.y - barheight),
                             float2(textCfg.pos.x + arenaHighmark_barwidth, textCfg.pos.y),
                             highmarkCol);
@@ -1106,19 +1028,19 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
                     const Color32 used2didxCol(0.8f, 0.95f, 0.8f, 1.f);
 
                     const ptrdiff_t memory_size =
-                        (ptrdiff_t)game.memory.debugArena.curr - (ptrdiff_t)gfx::im::ctx.vertices_3d;
+                        (ptrdiff_t)game.memory.debugArena.curr - (ptrdiff_t)im::ctx.vertices_3d;
                     const ptrdiff_t vertices_3d_start =
-                        (ptrdiff_t)gfx::im::ctx.vertices_3d - (ptrdiff_t)gfx::im::ctx.vertices_3d;
+                        (ptrdiff_t)im::ctx.vertices_3d - (ptrdiff_t)im::ctx.vertices_3d;
                     const ptrdiff_t vertices_3d_size =
-                        (ptrdiff_t)debug::vertices_3d_head_last_frame * sizeof(gfx::im::Vertex3D);
+                        (ptrdiff_t)debug::vertices_3d_head_last_frame * sizeof(im::Vertex3D);
                     const ptrdiff_t vertices_2d_start =
-                        (ptrdiff_t)gfx::im::ctx.vertices_2d - (ptrdiff_t)gfx::im::ctx.vertices_3d;
+                        (ptrdiff_t)im::ctx.vertices_2d - (ptrdiff_t)im::ctx.vertices_3d;
                     const ptrdiff_t vertices_2d_size =
-                        (ptrdiff_t)debug::vertices_2d_head_last_frame * sizeof(gfx::im::Vertex2D);
+                        (ptrdiff_t)debug::vertices_2d_head_last_frame * sizeof(im::Vertex2D);
                     const ptrdiff_t indices_2d_start =
-                        (ptrdiff_t)gfx::im::ctx.indices_2d - (ptrdiff_t)gfx::im::ctx.vertices_3d;
+                        (ptrdiff_t)im::ctx.indices_2d - (ptrdiff_t)im::ctx.vertices_3d;
                     const ptrdiff_t indices_2d_size =
-                        (ptrdiff_t)(gfx::im::ctx.vertices_2d_head * 3 / 2) * sizeof(u32);
+                        (ptrdiff_t)(im::ctx.vertices_2d_head * 3 / 2) * sizeof(u32);
                     const f32 v3d_barstart = barwidth * vertices_3d_start / (f32)memory_size;
                     const f32 v3d_barwidth = barwidth * vertices_3d_size / (f32)memory_size;
                     const f32 v2d_barstart = barwidth * vertices_2d_start / (f32)memory_size;
@@ -1127,29 +1049,29 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
                     const f32 i2d_barwidth = barwidth * indices_2d_size / (f32)memory_size;
 
                     textParamsCenter.color = used3dCol;
-                    gfx::im::text2d(textParamsCenter, "im 3d: %lu bytes", vertices_3d_size);
+                    im::text2d(textParamsCenter, "im 3d: %lu bytes", vertices_3d_size);
                     textParamsCenter.pos.y -= lineheight;
                     textParamsCenter.color = used2dCol;
-                    gfx::im::text2d(textParamsCenter, "im 2d: %lu bytes", vertices_2d_size);
+                    im::text2d(textParamsCenter, "im 2d: %lu bytes", vertices_2d_size);
                     textParamsCenter.pos.y -= lineheight;
                     textParamsCenter.color = used2didxCol;
-                    gfx::im::text2d(textParamsCenter, "im 2d indices: %lu bytes", indices_2d_size);
+                    im::text2d(textParamsCenter, "im 2d indices: %lu bytes", indices_2d_size);
                     textParamsCenter.pos.y -= lineheight;
                     textParamsCenter.color = defaultCol;
 
-                    gfx::im::box_2d(
+                    im::box_2d(
                         float2(textParamsCenter.pos.x, textParamsCenter.pos.y - barheight),
                         float2(textParamsCenter.pos.x + barwidth, textParamsCenter.pos.y),
                         baseCol);
-                    gfx::im::box_2d(
+                    im::box_2d(
                         float2(textParamsCenter.pos.x + v3d_barstart, textParamsCenter.pos.y - barheight),
                         float2(textParamsCenter.pos.x + v3d_barwidth, textParamsCenter.pos.y),
                         used3dCol);
-                    gfx::im::box_2d(
+                    im::box_2d(
                         float2(textParamsCenter.pos.x + v2d_barstart, textParamsCenter.pos.y - barheight),
                         float2(textParamsCenter.pos.x + v2d_barstart + v2d_barwidth, textParamsCenter.pos.y),
                         used2dCol);
-                    gfx::im::box_2d(
+                    im::box_2d(
                         float2(textParamsCenter.pos.x + i2d_barstart, textParamsCenter.pos.y - barheight),
                         float2(textParamsCenter.pos.x + i2d_barstart + i2d_barwidth, textParamsCenter.pos.y),
                         used2didxCol);
@@ -1161,14 +1083,14 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
 
             // event label
             if (debug::eventLabel.time != 0.f) {
-                f32 timeRunning = f32(platform.time.now - debug::eventLabel.time);
+                f32 timeRunning = f32(platform::state.time.now - debug::eventLabel.time);
                 f32 t = timeRunning / 2.f;
                 if (t > 1.f) { debug::eventLabel.time = 0.f; }
                 else {
                     u8 oldScale = textParamsCenter.scale;
                     textParamsCenter.color = Color32(1.0f, 0.2f, 0.1f, 1.f - t);
                     textParamsCenter.scale *= 2;
-                    gfx::im::text2d(textParamsCenter, debug::eventLabel.text);
+                    im::text2d(textParamsCenter, debug::eventLabel.text);
                     textParamsCenter.pos.y -= textParamsCenter.scale * 12.f;
                     textParamsCenter.color = defaultCol;
                     textParamsCenter.scale = oldScale;
@@ -1185,8 +1107,8 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
                     gfx::rhi::ViewportParams vpParams;
                     vpParams.topLeftX = 0;
                     vpParams.topLeftY = 0;
-                    vpParams.width = (f32)platform.screen.window_width;
-                    vpParams.height = (f32)platform.screen.window_height;
+                    vpParams.width = (f32)platform::state.screen.window_width;
+                    vpParams.height = (f32)platform::state.screen.window_height;
                     gfx::rhi::set_VP(vpParams);
                 }
 
@@ -1240,7 +1162,7 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
                 {
                     renderer::NodeData noteUItext = {};
                     noteUItext.groupColor =
-                        platform.input.keyboard.pressed(input::CYCLE_ROOM) ?
+                        platform::state.input.keyboard.pressed(input::CYCLE_ROOM) ?
                             float4(1.f, 0.f, 0.f, 1.f)
                           : float4(1.f, 1.f, 1.f, 1.f);
                     math::identity4x4(*(Transform*)&noteUItext.worldMatrix);
@@ -1252,7 +1174,7 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
                 {
                     renderer::NodeData noteUItext = {};
                     noteUItext.groupColor =
-                        (platform.input.mouse.scrolldy != 0) ?
+                        (platform::state.input.mouse.scrolldy != 0) ?
                             float4(1.f, 0.f, 0.f, 1.f)
                           : float4(1.f, 1.f, 1.f, 1.f);
                     math::identity4x4(*(Transform*)&noteUItext.worldMatrix);
@@ -1264,7 +1186,7 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
                 {
                     renderer::NodeData noteUItext = {};
                     noteUItext.groupColor =
-                        platform.input.mouse.down(::input::mouse::Keys::BUTTON_RIGHT) ?
+                        platform::state.input.mouse.down(::input::mouse::Keys::BUTTON_RIGHT) ?
                             float4(1.f, 0.f, 0.f, 1.f)
                           : float4(1.f, 1.f, 1.f, 1.f);
                     math::identity4x4(*(Transform*)&noteUItext.worldMatrix);
@@ -1276,7 +1198,7 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
                 {
                     renderer::NodeData noteUItext = {};
                     noteUItext.groupColor =
-                        platform.input.mouse.down(::input::mouse::Keys::BUTTON_LEFT) ?
+                        platform::state.input.mouse.down(::input::mouse::Keys::BUTTON_LEFT) ?
                             float4(1.f, 0.f, 0.f, 1.f)
                           : float4(1.f, 1.f, 1.f, 1.f);
                     math::identity4x4(*(Transform*)&noteUItext.worldMatrix);
@@ -1292,8 +1214,8 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
         #if __DEBUG
         {
             gfx::rhi::bind_blend_state(game.resources.renderCore.blendStateOn);
-            gfx::im::commit2d();
-            gfx::im::present2d(game.resources.renderCore.windowProjection.matrix);
+            im::commit2d();
+            im::present2d(game.resources.renderCore.windowProjection.matrix);
         }
         #endif
 

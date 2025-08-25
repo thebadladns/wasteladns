@@ -330,8 +330,4 @@ void compile_shader(rhi::RscShaderSet& shader, const ShaderDesc& desc) {
 
 } // gfx
 
-#if __DEBUG
-#include "immediate_mode_graphics.h"
-#endif
-
 #endif // __WASTELADNS_GFX_H__

@@ -46,5 +46,9 @@
 #include "helpers/easing.h"
 #include "helpers/gfx/graphics.h"
 
+#if __DEBUG
+#include "helpers/immediate_mode.h"
+#endif
+
 #include "game.h"
 #include "helpers/main.h"

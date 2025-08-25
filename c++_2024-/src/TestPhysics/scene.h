@@ -1090,7 +1090,7 @@ void renderBaseScene(RenderSceneContext& sceneCtx) {
     }
     #if __DEBUG
     {
-        gfx::im::present3d(sceneCtx.camera.projectionMatrix, sceneCtx.camera.viewMatrix);
+        im::present3d(sceneCtx.camera.projectionMatrix, sceneCtx.camera.viewMatrix);
     }
     #endif
     {
@@ -2011,7 +2011,7 @@ void load_coreResources(
     }
 
     // debug renderer
-    __DEBUGDEF(gfx::im::init(memory.debugArena);)
+    __DEBUGDEF(im::init(memory.debugArena);)
 }
 void spawn_scene_mirrorRoom(
     game::Scene& scene, allocator::PagedArena& sceneArena, allocator::PagedArena scratchArena,
