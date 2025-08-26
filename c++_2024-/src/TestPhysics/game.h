@@ -18,7 +18,7 @@ struct EventText { char text[256]; f64 time; };
 
 f64 frameHistory[60];
 f64 frameAvg = 0;
-u64 frameHistoryIdx = 0;
+u32 frameHistoryIdx = 0;
 OverlayMode::Enum overlaymode = OverlayMode::Enum::All;
 u32 debugCameraStage = 0;
 u32 bvhDepth = 0;
@@ -151,7 +151,7 @@ void start(Instance& game, platform::GameConfig& config) {
     }
 
 #if __DEBUG
-    im::ui.scale = platform::state.screen.window_scale;
+    im::ui.scale = (u8)platform::state.screen.window_scale;
     im::make_pane(
         debug::debugPane, "DEBUG MENU",
         float2(game.resources.renderCore.windowProjection.config.left + im::ui.scale * 30,
@@ -174,8 +174,8 @@ void update(Instance& game, platform::GameConfig& config) {
         #if __DEBUG
         {
             f64 frameAvg = 0.;
-            constexpr u64 frameHistoryCount =
-                (sizeof(debug::frameHistory) / sizeof(debug::frameHistory[0]));
+            constexpr u32 frameHistoryCount =
+                u32(sizeof(debug::frameHistory) / sizeof(debug::frameHistory[0]));
             debug::frameHistory[debug::frameHistoryIdx] = raw_dt;
             debug::frameHistoryIdx = (debug::frameHistoryIdx + 1) % frameHistoryCount;
             for (f64 dt : debug::frameHistory) {
@@ -761,7 +761,7 @@ void update(Instance& game, platform::GameConfig& config) {
             textParamsLeft.color = defaultCol;
             textParamsRight.scale = (u8)textscale;
             textParamsRight.pos = float2(
-                 game.resources.renderCore.windowProjection.config.right - 60.f * textscale,
+                 game.resources.renderCore.windowProjection.config.right - 10.f * textscale,
                  game.resources.renderCore.windowProjection.config.top - 10.f * textscale);
             textParamsRight.color = defaultCol;
             textParamsCenter.scale = (u8)textscale;
@@ -784,6 +784,31 @@ void update(Instance& game, platform::GameConfig& config) {
                 || debug::overlaymode == debug::OverlayMode::HelpOnly) {
                 im::pane_start(debug::debugPane);
                 {
+                    {
+                        im::label("%s: %.lf fps", platform::name, 1. / debug::frameAvg);
+
+                        Color32 green(0.2f, 0.9f, 0.2f, 1.f);
+                        const u32 frameCount = countof(debug::frameHistory);
+                        const float barHeight = textscale * 30.f;
+                        float barWidth = textscale * 5.f;
+                        float2 originWS;
+                        float2 extents(barWidth * frameCount, barHeight);
+                        im::impl::adjust_bounds_in_parent(originWS, extents, /* match parent width */ true);
+                        barWidth = extents.x / frameCount;
+                        im::box_2d(
+                            float2(originWS.x, originWS.y - extents.y),
+                            float2(originWS.x + extents.x, originWS.y), im::color_dark);
+                        for (u32 i = 0; i < frameCount; i++) {
+                            u32 next_i = (i + 1) % frameCount;
+                            u32 idx = (debug::frameHistoryIdx + i) % frameCount;
+                            f32 h = barHeight * 1.f / (60.f * (f32)debug::frameHistory[idx]);
+                            im::box_2d(
+                                float2(originWS.x + barWidth * i, originWS.y - extents.y),
+                                float2(originWS.x + barWidth * (i + 1), originWS.y - extents.y + h),
+                                green);
+                        }
+                    }
+
                     //im::box_2d(math::subtract(mouseWS, float2(2.f)), math::add(mouseWS, float2(2.f)), activeCol);
                     float2 mouseWS = im::get_mouse_WS();
                     const float3 mousepos_WS = camera::screenPosToWorldPos(
@@ -797,7 +822,6 @@ void update(Instance& game, platform::GameConfig& config) {
                         mouseWS.x, mouseWS.y,
                         mousepos_WS.x, mousepos_WS.y, mousepos_WS.z,
                         FLOAT3_PARAMS(eulers_deg));
-
 
                     if (im::checkbox("Pause render", &game.time.pausedRender)) {
                         io::format(
@@ -896,16 +920,10 @@ void update(Instance& game, platform::GameConfig& config) {
                     }
                 }
 
-                textParamsRight.color = defaultCol;
-                textParamsRight.pos.x -= 30.f * textscale;
-                im::text2d(textParamsRight, "%s", platform::name);
-                textParamsRight.pos.y -= lineheight;
-                im::text2d(textParamsRight, "%.3lf fps", 1. / debug::frameAvg);
-                textParamsRight.pos.y -= lineheight;
                 {
                     char formatted[256];
                     io::format(formatted, sizeof(formatted), "H to toggle overlays: %s", debug::overlaynames[debug::overlaymode]);
-                    textParamsRight.pos.x += textscale * 57.f - textscale * stb_easy_font_width(formatted);
+                    textParamsRight.pos.x -= textscale * stb_easy_font_width(formatted);
                     im::text2d(
                         textParamsRight, "H to toggle overlays: %s", debug::overlaynames[debug::overlaymode]);
                     textParamsRight.pos.y -= lineheight;
@@ -913,20 +931,6 @@ void update(Instance& game, platform::GameConfig& config) {
             }
 
             {
-                Color32 bg(0.2f, 0.2f, 0.2f, 1.f);
-                Color32 frame(0.2f, 0.9f, 0.2f, 1.f);
-                float2 pos(game.resources.renderCore.windowProjection.config.right - 5.f * textscale, game.resources.renderCore.windowProjection.config.bottom + 5.f * textscale);
-                const float height = textscale * 60.f;
-                const float width = textscale * 5.f;
-                im::box_2d(
-                    float2(pos.x - width * countof(debug::frameHistory), pos.y),
-                    float2(pos.x, pos.y + height), bg);
-                for (u32 i = 0; i < countof(debug::frameHistory); i++) {
-                    f32 h = height * 1.f / (60.f * (f32)debug::frameHistory[i]);
-                    im::box_2d(
-                        float2(pos.x - width * (i + 1), pos.y),
-                        float2(pos.x - width * (i), pos.y + h), frame);
-                }
             }
 
             if (debug::overlaymode == debug::OverlayMode::All
