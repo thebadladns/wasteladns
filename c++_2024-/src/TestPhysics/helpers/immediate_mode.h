@@ -808,7 +808,7 @@ force_inline void adjust_bounds_in_parent(float2& origin_WS, float2& extents, bo
 
 // compute maximum extents of a given label and its possible range of values
 template<typename _type>
-force_inline float2 get_label_dimensions(char* text, const char* format, _type min, _type max) {
+force_inline float2 get_label_dimensions(const char* text, const char* format, _type min, _type max) {
     char formatted[256];
     float2 extents;
     extents.y = ui.scale * (f32)stb_easy_font_height(text);
@@ -821,7 +821,7 @@ force_inline float2 get_label_dimensions(char* text, const char* format, _type m
     return extents;
 }
 
-force_inline u32 make_hash(char* text) {
+force_inline u32 make_hash(const char* text) {
     char str[256];
     io::StrBuilder padStr{ str, sizeof(str) };
     if (ui.parent_pane) { io::append(padStr.curr, padStr.last, ui.parent_pane->text); }
@@ -936,7 +936,7 @@ void horizontal_layout_end() {
 }
 
 void label(
-    char* text,
+    const char* text,
     Color32 textColor, float2 min_dimensions) {
     
     // calculate extents of the text to be displayed
@@ -979,7 +979,7 @@ void label(Color32 textColor, const char* format, ...) {
 }
 
 bool button(
-    char* text,
+    const char* text,
     bool repeat_enabled = false, char* id = nullptr, float2 dimensions = float2(0.f)) {
 
     // text extents
@@ -1050,7 +1050,7 @@ bool button(
     return result;
 };
 
-void slider(char* text, f32* v, const f32 min, const f32 max) {
+void slider(const char* text, f32* v, const f32 min, const f32 max) {
 
     const float textPadding = ui.scale * 5.f;
     const float slider_width = ui.scale * 10.f;
@@ -1120,7 +1120,7 @@ void slider(char* text, f32* v, const f32 min, const f32 max) {
 }
 
 template<typename _type>
-void input_step(char* text, _type* v, const _type min, const _type max, bool wrap = false) {
+void input_step(const char* text, _type* v, const _type min, const _type max, bool wrap = false) {
 
     // compute max extents of the text label
     const char* format = "%s: %d";
@@ -1147,7 +1147,7 @@ void input_step(char* text, _type* v, const _type min, const _type max, bool wra
     horizontal_layout_end();
 }
 
-bool checkbox(char* text, bool* v) {
+bool checkbox(const char* text, bool* v) {
 
     bool result = false;
 

@@ -331,34 +331,38 @@ void init_hid_pads_win(HWND hWnd) {
 }
 #elif __MACOS
 
+struct Pads {
+    ::input::gamepad::State* pads;
+    u32* padCount;
+};
 void process_hid_pads_mac(void* context, IOReturn result, void* sender, IOHIDReportType type, uint32_t reportID, uint8_t* report, CFIndex reportLength) {
-
-    ::platform::State& ctx = ::platform::state;
-    ::platform::Input& input = ctx.input;
-
+    
+    Pads& pads = *(Pads*)context;
+    
     IOHIDDeviceRef device = (IOHIDDeviceRef)sender;
-
-    u32 padToUpdate = input.padCount;
-    for (u32 padidx = 0; padidx < input.padCount; padidx++) {
-        if ((DeviceHandle)(input.pads[padidx].deviceHandle) == device) {
+    
+    u32 padToUpdate = *(pads.padCount);
+    for (u32 padidx = 0; padidx < *(pads.padCount); padidx++) {
+        if ((DeviceHandle)(pads.pads[padidx].deviceHandle) == device) {
             padToUpdate = padidx;
             break;
         }
     }
-
-    if (padToUpdate >= countof(input.pads)) return;
-    State& pad = input.pads[padToUpdate];
-
+    
+    // todo: unhardcode
+    if (padToUpdate >= 4) return;
+    State& pad = pads.pads[padToUpdate];
+    
     // this will be a new pad, check the type
-    if (padToUpdate == input.padCount) {
+    if (padToUpdate == *(pads.padCount)) {
         pad = {};
-
+        
         u64 vendorID = [(__bridge NSNumber*)IOHIDDeviceGetProperty(device, CFSTR(kIOHIDVendorIDKey)) unsignedIntegerValue];
         u64 productID = [(__bridge NSNumber*)IOHIDDeviceGetProperty(device, CFSTR(kIOHIDProductIDKey)) unsignedIntegerValue];
-
+        
         pad.type = ComputeControllerType(vendorID, productID);
     }
-
+    
     // handle Dualshock4 separately, since it doesn't always specify HID gamepad usages in the report
     // see https://chromium-review.googlesource.com/c/chromium/src/+/1478406
     if (pad.type == Type::DUALSHOCK4) {
@@ -366,19 +370,19 @@ void process_hid_pads_mac(void* context, IOReturn result, void* sender, IOHIDRep
     }
     else {
         Mapping& mapping = mappings[pad.type];
-
+        
         if (!mapping.deviceInfo.loaded) {
             CFArrayRef elements = IOHIDDeviceCopyMatchingElements(device, NULL, kIOHIDOptionsTypeNone);
             for (CFIndex i = 0; i < CFArrayGetCount(elements); i++) {
                 IOHIDElementRef native = (IOHIDElementRef)CFArrayGetValueAtIndex(elements, i);
                 if (CFGetTypeID(native) != IOHIDElementGetTypeID())
                     continue;
-
+                
                 const IOHIDElementType type = IOHIDElementGetType(native);
                 if ((type != kIOHIDElementTypeInput_Axis) && (type != kIOHIDElementTypeInput_Button) && (type != kIOHIDElementTypeInput_Misc)) {
                     continue;
                 }
-
+                
                 const uint32_t usage = IOHIDElementGetUsage(native);
                 const uint32_t page = IOHIDElementGetUsagePage(native);
                 if (page == kHIDPage_GenericDesktop) {
@@ -396,7 +400,7 @@ void process_hid_pads_mac(void* context, IOReturn result, void* sender, IOHIDRep
                             SliderInfo& sliderInfo = mapping.deviceInfo.sliders_info[mapping.deviceInfo.sliders_count++];
                             sliderInfo.native = native;
                             sliderInfo.usage = usage;
-
+                            
                             sliderInfo.min = IOHIDElementGetLogicalMin(native);
                             sliderInfo.max = IOHIDElementGetLogicalMax(native);
                         }
@@ -411,20 +415,20 @@ void process_hid_pads_mac(void* context, IOReturn result, void* sender, IOHIDRep
                         break;
                         // todo: figure out mappings with pads that use kHIDUsage_GD_DPadUp to kHIDUsage_GD_Start
                         /*case kHIDUsage_GD_DPadUp:
-                        case kHIDUsage_GD_DPadRight:
-                        case kHIDUsage_GD_DPadDown:
-                        case kHIDUsage_GD_DPadLeft:
-                        case kHIDUsage_GD_SystemMainMenu:
-                        case kHIDUsage_GD_Select:
-                        case kHIDUsage_GD_Start: {
-                            if (mapping.deviceInfo.keys_count >= countof(mapping.deviceInfo.keys_info)) break;
-                            KeyInfo& keyInfo = mapping.deviceInfo.keys_info[mapping.deviceInfo.keys_count++];
-                            keyInfo.native = native;
-                            keyInfo.usage = usage;
-                            keyInfo.min = IOHIDElementGetLogicalMin(native);
-                            keyInfo.max = IOHIDElementGetLogicalMax(native);
-                        }
-                        break;
+                         case kHIDUsage_GD_DPadRight:
+                         case kHIDUsage_GD_DPadDown:
+                         case kHIDUsage_GD_DPadLeft:
+                         case kHIDUsage_GD_SystemMainMenu:
+                         case kHIDUsage_GD_Select:
+                         case kHIDUsage_GD_Start: {
+                         if (mapping.deviceInfo.keys_count >= countof(mapping.deviceInfo.keys_info)) break;
+                         KeyInfo& keyInfo = mapping.deviceInfo.keys_info[mapping.deviceInfo.keys_count++];
+                         keyInfo.native = native;
+                         keyInfo.usage = usage;
+                         keyInfo.min = IOHIDElementGetLogicalMin(native);
+                         keyInfo.max = IOHIDElementGetLogicalMax(native);
+                         }
+                         break;
                          */
                     }
                 }
@@ -440,7 +444,7 @@ void process_hid_pads_mac(void* context, IOReturn result, void* sender, IOHIDRep
             CFRelease(elements);
             mapping.deviceInfo.loaded = true;
         }
-
+        
         memset(pad.sliders, 0, sizeof(pad.sliders));
         // Buttons
         u16 keys = 0;
@@ -480,16 +484,16 @@ void process_hid_pads_mac(void* context, IOReturn result, void* sender, IOHIDRep
         }
         pad.curr_keys = keys;
     }
-
+    
     // If the pad is new, and we got button input from it, finish creation
-    if (padToUpdate == input.padCount) {
+    if (padToUpdate == *(pads.padCount)) {
         bool validpad = hasValidInput(pad);
         if (validpad) {
-            input.padCount++; // acknowledge the current pad
+            *(pads.padCount) = *(pads.padCount) + 1; // acknowledge the current pad
             pad.deviceHandle = (u64)device;
-
+            
             #if __DEBUG
-            platform::strncpy(pad.name, names[pad.type], sizeof(pad.name));
+            io::strncpy(pad.name, names[pad.type], sizeof(pad.name));
             u64 vendorID = [(__bridge NSNumber*)IOHIDDeviceGetProperty(device, CFSTR(kIOHIDVendorIDKey)) unsignedIntegerValue];
             u64 productID = [(__bridge NSNumber*)IOHIDDeviceGetProperty(device, CFSTR(kIOHIDProductIDKey)) unsignedIntegerValue];
             io::debuglog("Registered new pad 0x%lx 0x%lx\n", vendorID, productID);
@@ -497,11 +501,12 @@ void process_hid_pads_mac(void* context, IOReturn result, void* sender, IOHIDRep
         }
     }
 }
-void init_hid_pads_mac() {
+void init_hid_pads_mac(::input::gamepad::State* pads, u32* padCount) {
     @autoreleasepool{
         // todo: custom allocators?
+        Pads padContext = { pads, padCount };
         IOHIDManagerRef HIDManager = IOHIDManagerCreate(kCFAllocatorDefault, kIOHIDOptionsTypeNone);
-        IOHIDManagerRegisterInputReportCallback(HIDManager, &process_hid_pads_mac);
+        IOHIDManagerRegisterInputReportCallback(HIDManager, &process_hid_pads_mac, &padContext);
         IOHIDManagerOpen(HIDManager, kIOHIDOptionsTypeNone);
         IOHIDManagerSetDeviceMatchingMultiple(HIDManager, (__bridge CFArrayRef)@[
             @{@(kIOHIDDeviceUsagePageKey) : @(kHIDPage_GenericDesktop), @(kIOHIDDeviceUsageKey) : @(kHIDUsage_GD_GamePad)},

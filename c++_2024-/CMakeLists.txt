@@ -37,6 +37,9 @@ if(WIN32)
                        COMMAND ${CMAKE_COMMAND} -E copy_directory
                        ${CMAKE_SOURCE_DIR}/assets $<TARGET_FILE_DIR:app-gl33>/assets)
 elseif(APPLE) # mac currently only has an opengl 3.3 renderer
+	# ensure the project compiles with the appropiate AVX2 and FMA intrinsics
+	set_source_files_properties("src/main.cpp" PROPERTIES COMPILE_OPTIONS "-march=haswell")
+	# macos target using opengl 3.3 renderer
 	add_executable(app-macos ${SOURCES})
 	target_compile_definitions(app-macos PUBLIC __MACOS=1 __GL33=1)
 	find_library(COCOA_LIBRARY Cocoa)

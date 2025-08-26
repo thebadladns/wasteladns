@@ -100,7 +100,7 @@ int main(int , char** ) {
         [openGLContext setView:contentView];
         [openGLContext makeCurrentContext];
         
-        renderer::driver::loadGLExtensions();
+        gfx::rhi::loadGLExtensions();
         
         [(NSWindow*)window center];
         [window orderFrontRegardless];
@@ -127,7 +127,8 @@ int main(int , char** ) {
         platform::state.input.mouse.y = (actualWindowHeight-pos.y) * windowScale;
     }
     // gamepad
-    ::input::gamepad::init_hid_pads_mac();
+    ::input::gamepad::init_hid_pads_mac(
+        ::platform::state.input.pads, &::platform::state.input.padCount);
 
     // Initialize page size, for virtual memory allocators
     allocator::pagesize = getpagesize();

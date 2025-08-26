@@ -16,7 +16,7 @@ if [ ${debug} ]; then unset release; fi
 if [ ${release} ]; then unset debug; fi
 
 # figure out compile args (-fdiagnostics-absolute-flags is necessary so that tools such as vim can find the error file, regardless of their working t directory)
-common="-x objective-c++ -std=gnu++14 -fobjc-arc -D__MACOS=1 -D__GL33=1 -framework Cocoa -framework IOKit -fdiagnostics-absolute-paths"
+common="-x objective-c++ -std=gnu++14 -fobjc-arc -D__MACOS=1 -D__GL33=1 -framework Cocoa -framework IOKit -fdiagnostics-absolute-paths -march=haswell"
 compileoutdir="./app-macos.dir"
 cl_debug="clang++ -g -O0 ${common}"
 cl_release="clang++ -g -O2 -DNDEBUG ${common}"

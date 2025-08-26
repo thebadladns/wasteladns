@@ -136,7 +136,7 @@ void start(Instance& game, platform::GameConfig& config) {
     }
     {
         game.scene = {};
-        game.roomId = 0;
+        game.roomId = 1;
         SceneMemory arenas = {
               game.memory.persistentArena
             , game.memory.scratchArenaRoot
@@ -151,10 +151,11 @@ void start(Instance& game, platform::GameConfig& config) {
     }
 
 #if __DEBUG
+    im::ui.scale = platform::state.screen.window_scale;
     im::make_pane(
         debug::debugPane, "DEBUG MENU",
-        float2(game.resources.renderCore.windowProjection.config.left + 30,
-               game.resources.renderCore.windowProjection.config.top - 50));
+        float2(game.resources.renderCore.windowProjection.config.left + im::ui.scale * 30,
+               game.resources.renderCore.windowProjection.config.top - im::ui.scale * 50));
 #endif
 }
 
@@ -904,7 +905,7 @@ void update(Instance& game, platform::GameConfig& config) {
                 {
                     char formatted[256];
                     io::format(formatted, sizeof(formatted), "H to toggle overlays: %s", debug::overlaynames[debug::overlaymode]);
-                    textParamsRight.pos.x += 57.f - stb_easy_font_width(formatted);
+                    textParamsRight.pos.x += textscale * 57.f - textscale * stb_easy_font_width(formatted);
                     im::text2d(
                         textParamsRight, "H to toggle overlays: %s", debug::overlaynames[debug::overlaymode]);
                     textParamsRight.pos.y -= lineheight;
@@ -914,9 +915,9 @@ void update(Instance& game, platform::GameConfig& config) {
             {
                 Color32 bg(0.2f, 0.2f, 0.2f, 1.f);
                 Color32 frame(0.2f, 0.9f, 0.2f, 1.f);
-                float2 pos(game.resources.renderCore.windowProjection.config.right - 5.f, game.resources.renderCore.windowProjection.config.bottom + 5.f);
-                const float height = 60.f;
-                const float width = 5.f;
+                float2 pos(game.resources.renderCore.windowProjection.config.right - 5.f * textscale, game.resources.renderCore.windowProjection.config.bottom + 5.f * textscale);
+                const float height = textscale * 60.f;
+                const float width = textscale * 5.f;
                 im::box_2d(
                     float2(pos.x - width * countof(debug::frameHistory), pos.y),
                     float2(pos.x, pos.y + height), bg);

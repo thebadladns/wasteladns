@@ -1,3 +1,4 @@
+// crljmb @20250825 stb_easy_font_width and stb_easy_font_height now accept const char* inputs
 // crljmb @20250821 stb_easy_font_height now has a tighter fit on the bottom line
 // crljmb @20181211 switched to xy+color layout, flipped y axis
 // crljmb @20181028 added scale support
@@ -230,7 +231,7 @@ static int stb_easy_font_print(float x, float y, float scale, char *text, unsign
     return (unsigned) offset/48;
 }
 
-int stb_easy_font_width(char *text)
+int stb_easy_font_width(const char *text)
 {
     float len = 0;
     float max_len = 0;
@@ -248,7 +249,7 @@ int stb_easy_font_width(char *text)
     return (int) ceil(max_len);
 }
 
-int stb_easy_font_height(char *text)
+int stb_easy_font_height(const char *text)
 {
     float y = 0;
     int nonempty_line=0;
