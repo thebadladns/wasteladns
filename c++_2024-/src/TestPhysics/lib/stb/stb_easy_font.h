@@ -1,3 +1,4 @@
+// crljmb @20250826 switch to xy layout, no color
 // crljmb @20250825 stb_easy_font_width and stb_easy_font_height now accept const char* inputs
 // crljmb @20250821 stb_easy_font_height now has a tighter fit on the bottom line
 // crljmb @20181211 switched to xy+color layout, flipped y axis
@@ -173,19 +174,18 @@ typedef struct
    unsigned char c[4];
 } stb_easy_font_color;
 
-static int stb_easy_font_draw_segs(float x, float y, unsigned char *segs, int num_segs, int vertical, stb_easy_font_color c, char *vbuf, int vbuf_size, int offset, float scale)
+static int stb_easy_font_draw_segs(float x, float y, unsigned char *segs, int num_segs, int vertical, char *vbuf, int vbuf_size, int offset, float scale)
 {
     int i,j;
     for (i=0; i < num_segs; ++i) {
         float len = (segs[i] & 7) * scale;
         x += (float) ((segs[i] >> 3) & 1) * scale;
-        if (len && offset+48 <= vbuf_size) {
+        if (len && offset+32 <= vbuf_size) {
             float y0 = y + (float) (segs[i]>>4) * scale;
             for (j=0; j < 4; ++j) {
                 * (float *) (vbuf+offset+0) = x + (j==1 || j==2 ? (vertical ? scale : len) : 0);
                 * (float *) (vbuf+offset+4) = -(y0 + (j >= 2   ? (vertical ? len : scale) : 0));
-                * (stb_easy_font_color *) (vbuf+offset+8) = c;
-                offset += 12;
+                offset += 8;
             }
         }
     }
@@ -198,14 +198,11 @@ void stb_easy_font_spacing(float spacing)
    stb_easy_font_spacing_val = spacing;
 }
 
-static int stb_easy_font_print(float x, float y, float scale, char *text, unsigned char color[4], void *vertex_buffer, int vbuf_size)
+static int stb_easy_font_print(float x, float y, float scale, char *text, void *vertex_buffer, int vbuf_size)
 {
     char *vbuf = (char *) vertex_buffer;
     float start_x = x;
     int offset = 0;
-
-    stb_easy_font_color c = { { 255,255,255,255 } }; // use structure copying to avoid needing depending on memcpy()
-    if (color) { c.c[0] = color[0]; c.c[1] = color[1]; c.c[2] = color[2]; c.c[3] = color[3]; }
 
     float line_yspacing = 12.f * scale;
     float char_xspacing = stb_easy_font_spacing_val * scale;
@@ -221,14 +218,14 @@ static int stb_easy_font_print(float x, float y, float scale, char *text, unsign
             v_seg = stb_easy_font_charinfo[*text-32  ].v_seg;
             num_h = stb_easy_font_charinfo[*text-32+1].h_seg - h_seg;
             num_v = stb_easy_font_charinfo[*text-32+1].v_seg - v_seg;
-            offset = stb_easy_font_draw_segs(x, y_ch, &stb_easy_font_hseg[h_seg], num_h, 0, c, vbuf, vbuf_size, offset, scale);
-            offset = stb_easy_font_draw_segs(x, y_ch, &stb_easy_font_vseg[v_seg], num_v, 1, c, vbuf, vbuf_size, offset, scale);
+            offset = stb_easy_font_draw_segs(x, y_ch, &stb_easy_font_hseg[h_seg], num_h, 0, vbuf, vbuf_size, offset, scale);
+            offset = stb_easy_font_draw_segs(x, y_ch, &stb_easy_font_vseg[v_seg], num_v, 1, vbuf, vbuf_size, offset, scale);
             x += (advance & 15) * scale;
             x += char_xspacing;
         }
         ++text;
     }
-    return (unsigned) offset/48;
+    return (unsigned) offset/32;
 }
 
 int stb_easy_font_width(const char *text)

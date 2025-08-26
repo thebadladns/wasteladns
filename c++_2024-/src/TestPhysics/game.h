@@ -809,7 +809,6 @@ void update(Instance& game, platform::GameConfig& config) {
                         }
                     }
 
-                    //im::box_2d(math::subtract(mouseWS, float2(2.f)), math::add(mouseWS, float2(2.f)), activeCol);
                     float2 mouseWS = im::get_mouse_WS();
                     const float3 mousepos_WS = camera::screenPosToWorldPos(
                         platform::state.input.mouse.x, platform::state.input.mouse.y,
@@ -845,6 +844,11 @@ void update(Instance& game, platform::GameConfig& config) {
                             debug::capture_cameras_next_frame = true;
                         }
                         u32 numCameras = 0;
+                        if (debug::capturedCameras) {
+                            if (im::button("Clear")) {
+                                debug::capturedCameras = nullptr;
+                            }
+                        }
                         if (debug::capturedCameras) {
                             numCameras = debug::capturedCameras[0].siblingIndex;
                             im::label("%d cameras", numCameras);

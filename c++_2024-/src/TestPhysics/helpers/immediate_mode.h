@@ -33,6 +33,9 @@ struct GraphicsContext {
     gfx::rhi::RscRasterizerState rasterizerState;
     gfx::rhi::RscDepthStencilState orthoDepthState;
 
+    float2 clip_bb_min;
+    float2 clip_bb_max;
+
     u32 vertices_3d_head;
     u32 vertices_2d_head;
     u32 indices_2d_head;
@@ -58,6 +61,10 @@ u32 vertices_2d_head_last_frame = 0;
 namespace im {
 
 GraphicsContext ctx;
+
+force_inline bool valid_boundingbox_2d(const float2 min, const float2 max) {
+    return (min.x < max.x) && (min.y < max.y);
+}
 
 void segment(const float3& v1, const float3& v2, const Color32 color) {
 
@@ -418,15 +425,25 @@ void plane(const float4& plane, Color32 color) { // xyz = normal, z = - distance
 
 void box_2d(const float2 min, const float2 max, Color32 color) {
 
+    float2 clipped_min = min;
+    float2 clipped_max = max;
+    if (valid_boundingbox_2d(ctx.clip_bb_min, ctx.clip_bb_max)) {
+        clipped_min = math::max(min, ctx.clip_bb_min);
+        clipped_max = math::min(max, ctx.clip_bb_max);
+    }
+    if (!valid_boundingbox_2d(clipped_min, clipped_max)) {
+        return;
+    }
+
     u32 vertexStart = ctx.vertices_2d_head;
     Vertex2D& bottomLeft = ctx.vertices_2d[vertexStart];
-    bottomLeft.pos = { min.x, max.y };
+    bottomLeft.pos = { clipped_min.x, clipped_max.y };
     Vertex2D& topLeft = ctx.vertices_2d[vertexStart + 1];
-    topLeft.pos = { min.x, min.y };
+    topLeft.pos = { clipped_min.x, clipped_min.y };
     Vertex2D& topRight = ctx.vertices_2d[vertexStart + 2];
-    topRight.pos = { max.x, min.y };
+    topRight.pos = { clipped_max.x, clipped_min.y };
     Vertex2D& bottomRigth = ctx.vertices_2d[vertexStart + 3];
-    bottomRigth.pos = { max.x, max.y };
+    bottomRigth.pos = { clipped_max.x, clipped_max.y };
         
     u32 indexStart = ctx.indices_2d_head;
     ctx.indices_2d[indexStart + 0] = vertexStart + 2;
@@ -446,15 +463,77 @@ void box_2d(const float2 min, const float2 max, Color32 color) {
 }
 void poly2d(const float2* vertices, const u8 count, Color32 color) {
     u32 colorv4 = color.ABGR();
+
+    const float2* clipped_vertices = vertices;
+    u32 clipped_vertices_count = count;
+
+    float2 vertices_buffer[32];
+    if (valid_boundingbox_2d(ctx.clip_bb_min, ctx.clip_bb_max)) {
+        // temporary storage for clipped vertices in each iteration
+        float2 tmp_vertices[countof(vertices_buffer)];
+        assert(countof(vertices_buffer) > count + 4); // too many vertices in poly!
+        memcpy(vertices_buffer, vertices, sizeof(float2) * count);
+        // start off populating the output (we'll swap input and outputs every iteration)
+        float2* input_vertices = tmp_vertices; u32 input_count = 0;
+        float2* output_vertices = vertices_buffer; u32 output_count = count;
+        // note that this uses the normalize plane equation ax + by + cz + w = 0
+        // w as such represents -n*p, that is, the plane's negative distance along the normal
+        // we do this so the distance check can be just a dot product (w * 1.f becomes -n*p)
+        float3 planes[4] = {
+            /* left */ float3(1.f, 0, -ctx.clip_bb_min.x), /* top */ float3(0, -1.f, ctx.clip_bb_max.y),
+            /* right */ float3(-1.f, 0, ctx.clip_bb_max.x), /* bottom */ float3(0.f, 1.f, -ctx.clip_bb_min.y),
+        };
+        // 2D Sutherland-Hodgman for each 4 planes
+        const float eps = 0.0001f;
+        for (u32 plane_idx = 0; output_count > 2 && plane_idx < 4; plane_idx++) {
+            // swap inputs and outputs
+            float2* tmp = input_vertices; input_vertices = output_vertices; output_vertices = tmp;
+            input_count = output_count; output_count = 0;
+            // check which vertex is on which side of the plane
+            u32 prev_v = input_count - 1;
+            f32 prev_d = math::dot(float3(input_vertices[prev_v], 1.f), planes[plane_idx]);
+            for (u32 curr_v = 0; curr_v < input_count; curr_v++) {
+                f32 d = math::dot(float3(input_vertices[curr_v], 1.f), planes[plane_idx]);
+                if (d > eps) { // current vertex on positive zone
+                    if (prev_d < -eps) { // previous vertex on negative zone
+                        // add intersection
+                        float2 ab = math::subtract(input_vertices[curr_v], input_vertices[prev_v]);
+                        f32 t = -prev_d / math::dot(planes[plane_idx].xy, ab);
+                        float2 intersection = math::add(input_vertices[prev_v], math::scale(ab, t));
+                        output_vertices[output_count++] = intersection;
+                    }
+                    output_vertices[output_count++] = input_vertices[curr_v];
+                } else if (d < -eps) { // current vertex on negative zone
+                    if (prev_d > eps) { // previous vertex on positive zone
+                        // add intersection
+                        float2 ab = math::subtract(input_vertices[curr_v], input_vertices[prev_v]);
+                        f32 t = -prev_d / math::dot(planes[plane_idx].xy, ab);
+                        float2 intersection = math::add(input_vertices[prev_v], math::scale(ab, t));
+                        output_vertices[output_count++] = intersection;
+                    }
+                } else { // current vertex on plane
+                    output_vertices[output_count++] = input_vertices[curr_v];
+                }
+                // update previous vertex data
+                prev_v = curr_v; prev_d = d;
+            }
+        }
+        // skip clipped polys
+        if (output_count < 3) return;
+        clipped_vertices = output_vertices;
+        clipped_vertices_count = output_count;
+    }
+
     // add vertices as a triangle fan from the first vertex
-    for (u32 i = 1; i < count; i++) {
+    assert(ctx.vertices_2d_head + clipped_vertices_count  < max_2d_vertices); // increase max_2d_vertices
+    for (u32 i = 1; i < clipped_vertices_count; i++) {
         u32 vertexStart = ctx.vertices_2d_head;
         Vertex2D& v_out_0 = ctx.vertices_2d[vertexStart];
         Vertex2D& v_out_1 = ctx.vertices_2d[vertexStart + 1];
         Vertex2D& v_out_2 = ctx.vertices_2d[vertexStart + 2];
-        v_out_0.pos = vertices[0];
-        v_out_1.pos = vertices[i - 1];
-        v_out_2.pos = vertices[i];
+        v_out_0.pos = clipped_vertices[0];
+        v_out_1.pos = clipped_vertices[i - 1];
+        v_out_2.pos = clipped_vertices[i];
         v_out_0.color = colorv4;
         v_out_1.color = colorv4;
         v_out_2.color = colorv4;
@@ -478,35 +557,20 @@ void text2d_va(const Text2DParams& params, const char* format, va_list argList) 
     char text[256];
     io::format_va(text, sizeof(text), format, argList);
         
-    u32 vertexCount = ctx.vertices_2d_head;
-    u32 indexCount = ctx.indices_2d_head;
+    // output to a temporary buffer, so we can clip before pushing to our vertex array
+    float2 textpoly_buffer[2048];
         
-    unsigned char color[4];
-    color[0] = params.color.getRu();
-    color[1] = params.color.getGu();
-    color[2] = params.color.getBu();
-    color[3] = params.color.getAu();
-    u8* vertexBuffer = (u8*) &ctx.vertices_2d[ctx.vertices_2d_head];
-    s32 vertexBufferSize = (max_2d_vertices - ctx.vertices_2d_head) * sizeof(Vertex2D);
     // negate y, since our (0,0) is the center of the screen, stb's is bottom left
-    u32 quadCount = stb_easy_font_print(params.pos.x, -params.pos.y, params.scale, text, color, vertexBuffer, vertexBufferSize);
-    ctx.vertices_2d_head += quadCount * 4;
-
-    assert(ctx.vertices_2d_head < max_2d_vertices); // increase max_2d_vertices
+    u32 quadCount =
+        stb_easy_font_print(
+            params.pos.x, -params.pos.y, params.scale,
+            text, textpoly_buffer, sizeof(textpoly_buffer));
 
     // stb uses ccw winding, but we are negating the y, so it matches our cw winding
+    float2* v = textpoly_buffer;
     for(u32 i = 0; i < quadCount; i++) {
-        const u32 vertexIndex = vertexCount + i * 4;
-        const u32 indexIndex = indexCount + i * 6;
-        ctx.indices_2d[indexIndex] = vertexIndex + 1;
-        ctx.indices_2d[indexIndex+1] = vertexIndex + 2;
-        ctx.indices_2d[indexIndex+2] = vertexIndex + 3;
-
-        ctx.indices_2d[indexIndex+3] = vertexIndex + 3;
-        ctx.indices_2d[indexIndex+4] = vertexIndex + 0;
-        ctx.indices_2d[indexIndex+5] = vertexIndex + 1;
-
-        ctx.indices_2d_head += 6;
+        poly2d(v, 4, params.color);
+        v += 4;
     }
 }
 
@@ -699,6 +763,7 @@ struct Pane {
     float2 content_origin_WS;
     float2 content_cursor_WS;
     float2 content_extents;
+    float2 content_offset;
 };
 struct WindowContext {
     // current parent pane
@@ -748,6 +813,9 @@ force_inline bool mousepressed() {
 force_inline bool mouseup() {
     return platform::state.input.mouse.released(::input::mouse::Keys::BUTTON_LEFT);
 }
+force_inline float2 mousescroll() {
+    return float2(platform::state.input.mouse.scrolldx, platform::state.input.mouse.scrolldy);
+}
 force_inline bool is_mouse_captured() { return ui.hovered_id || ui.pressed_id; }
 
 force_inline f32 element_padding() { return ui.scale * 5.f; }
@@ -775,9 +843,11 @@ force_inline void adjust_bounds_in_parent(float2& origin_WS, float2& extents, bo
     const f32 padding = element_padding();
 
     float2* cursor_WS = &ui.cursor_WS;
+    float2 offset(0.f);
     if (ui.parent_pane) {
 
         cursor_WS = &ui.parent_pane->content_cursor_WS;
+        offset = ui.parent_pane->content_offset;
 
         // if the element's width needs to match the parents, do so now
         if (ui.layout == Layout::VerticalStack && match_parent_width) {
@@ -793,6 +863,7 @@ force_inline void adjust_bounds_in_parent(float2& origin_WS, float2& extents, bo
 
     // place element at the expected cursor
     origin_WS = *cursor_WS;
+    origin_WS = math::subtract(origin_WS, offset);
 
     if (ui.layout == Layout::HorizontalStack) {
         // update cursor horizontally
@@ -872,9 +943,15 @@ void pane_start(Pane& pane) {
     }
 
     // update dragged position and bounding boxes
+    const f32 screenw = (f32)platform::state.screen.window_width;
+    const f32 screenh = (f32)platform::state.screen.window_height;
     pane.content_cursor_WS = pane.content_origin_WS;
     float2 origin = float2(pane.content_origin_WS.x - padding, pane.content_origin_WS.y + padding);
-    float2 extents = math::add(pane.content_extents, float2(2.f * padding));
+    const float2 raw_extents = math::add(pane.content_extents, float2(2.f * padding));
+    const float2 available_extents(
+        (f32)screenw - (origin.x + screenw * 0.5f),
+        (f32)screenh + (origin.y - screenh * 0.5f));
+    float2 extents = math::min(raw_extents, available_extents);
     float2 bbox_min_WS(origin.x, origin.y - extents.y);
     float2 bbox_max_WS(origin.x + extents.x, origin.y);
     float2 header_bbox_min_WS(origin.x, origin.y);
@@ -888,28 +965,43 @@ void pane_start(Pane& pane) {
         ui.queued_hovered_id = hash;
     }
 
-    // zero out extents, to be recomputed again this frame
-    pane.content_extents = {};
-
-    // draw background elements
-    im::box_2d(
-        bbox_min_WS,
-        bbox_max_WS,
-        color_middark);
+    // draw header before we set up the clip box
     im::box_2d(
         header_bbox_min_WS,
         header_bbox_max_WS,
         color_lighter);
-    // draw text label
     im::Text2DParams params;
     params.pos = float2(header_bbox_min_WS.x + headerPadding, header_bbox_max_WS.y - headerPadding);
     params.color = color_bright;
     params.scale = ui.scale;
     im::text2d(params, pane.text);
+
+    // handle scrolling
+    float2 scroll = mousescroll();
+    if (ui.hovered_id == hash) {
+        const float2 zero(0.f);
+        float2 available_offset = math::max(math::subtract(raw_extents, available_extents), zero);
+        pane.content_offset = math::add(pane.content_offset, math::scale(float2(5.f), scroll));
+        pane.content_offset.x = math::clamp(pane.content_offset.x, 0.f, available_offset.x);
+        pane.content_offset.y = math::clamp(pane.content_offset.y, -available_offset.y, 0.f);
+    }
+    ctx.clip_bb_min = bbox_min_WS;
+    ctx.clip_bb_max = bbox_max_WS;
+
+    // zero out extents, to be recomputed again this frame
+    pane.content_extents = {};
+
+    // draw background
+    im::box_2d(
+        bbox_min_WS,
+        bbox_max_WS,
+        color_middark);
 }
 
 void pane_end() {
     ui.parent_pane = nullptr;
+    ctx.clip_bb_min = float2(FLT_MAX);
+    ctx.clip_bb_max = float2(-FLT_MAX);
 }
 
 void horizontal_layout_start() {

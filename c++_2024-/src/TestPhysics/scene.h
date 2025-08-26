@@ -1925,25 +1925,28 @@ void load_coreResources(
             char text[256];
             io::strncpy(text, str, 256);
 
-            const u32 vertexCount = buffer.vertexCount;
+            u32 vertexCount = buffer.vertexCount;
             const u32 indexCount = 3 * vertexCount / 2; // every 4 vertices form a 6 index quad
+            const u32 color = params.color.ABGR();
 
-            unsigned char color[4];
-            color[0] = params.color.getRu();
-            color[1] = params.color.getGu();
-            color[2] = params.color.getBu();
-            color[3] = params.color.getAu();
-            u8* vertexBuffer = (u8*)&buffer.vertices[vertexCount];
-            s32 vertexBufferSize =
-                (buffer.vertexCap - vertexCount) * sizeof(renderer::VertexLayout_Color_2D);
+            // output to a temporary buffer
+            float2 textpoly_buffer[1024];
+
             // negate y, since our (0,0) is the center of the screen, stb's is bottom left
             u32 quadCount = stb_easy_font_print(
                 params.pos.x, -params.pos.y, params.scale, text,
-                color, vertexBuffer, vertexBufferSize);
-            buffer.vertexCount += quadCount * 4;
+                textpoly_buffer, sizeof(textpoly_buffer));
 
             // stb uses ccw winding, but we are negating the y, so it matches our cw winding
+            renderer::VertexLayout_Color_2D* v_dst = &buffer.vertices[buffer.vertexCount];
+            float2* v_src = textpoly_buffer;
             for (u32 i = 0; i < quadCount; i++) {
+
+                v_dst[0] = { v_src[0], color }; v_dst[1] = { v_src[1], color };
+                v_dst[2] = { v_src[2], color }; v_dst[3] = { v_src[3], color };
+                v_dst += 4;
+                v_src += 4;
+
                 const u32 vertexIndex = vertexCount + i * 4;
                 const u32 indexIndex = indexCount + i * 6;
                 buffer.indices[indexIndex] = vertexIndex + 1;
@@ -1954,6 +1957,7 @@ void load_coreResources(
                 buffer.indices[indexIndex + 4] = vertexIndex + 0;
                 buffer.indices[indexIndex + 5] = vertexIndex + 1;
             }
+            buffer.vertexCount += quadCount * 4;
         };
 
         auto commit2d = [](
