@@ -133,7 +133,7 @@ void start(Instance& game, platform::GameConfig& config) {
     }
     {
         game.scene = {};
-        game.roomId = 1;
+        game.roomId = 0;
         SceneMemory arenas = {
               game.memory.persistentArena
             , game.memory.scratchArenaRoot

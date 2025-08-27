@@ -41,13 +41,11 @@ struct AssetInMemory {
     u32 clipCount;
 };
 struct Resources {
-    struct MeshesMeta { enum Enum { ToiletLo, Count }; };
     struct AssetsMeta { enum Enum { Bird, Boar, Ground, Count }; };
     struct MirrorHallMeta { enum Enum { Count = 8 }; };
     renderer::CoreResources renderCore;
     AssetInMemory assets[AssetsMeta::Count];
-    GPUCPUMesh meshes[MeshesMeta::Count];
-    GPUCPUMesh mirrorHallMeshes[MirrorHallMeta::Count];
+    GPUCPUMesh mirrorHallMesh;
     renderer::MeshHandle instancedUnitCubeMesh;
     renderer::MeshHandle instancedUnitSphereMesh;
     renderer::MeshHandle groundMesh;
@@ -60,7 +58,6 @@ struct Resources {
     gfx::rhi::RscIndexedVertexBuffer gpuBufferCycleRoomText;
 };
 struct RoomDefinition {
-    Resources::MeshesMeta::Enum mirrorMesh;
     float3 minCameraEulers;
     float3 maxCameraEulers;
     f32 minCameraZoom;
@@ -69,29 +66,10 @@ struct RoomDefinition {
     bool physicsBalls;
 };
 const RoomDefinition roomDefinitions[] = {
-#if __DEBUG
-    { Resources::MeshesMeta::ToiletLo,
-      float3(-180.f * math::d2r32, 0.f, -180 * math::d2r32), // min camera eulers
-      float3(180.f * math::d2r32, 0.f, 180 * math::d2r32), // max camera eulers
-      0.3f, 2.f,
-      4, false },
-    { Resources::MeshesMeta::Count,
-      float3(-180.f * math::d2r32, 0.f, -180 * math::d2r32), // min camera eulers
+    { float3(-180.f * math::d2r32, 0.f, -180 * math::d2r32), // min camera eulers
       float3(180.f * math::d2r32, 0.f, 180 * math::d2r32), // max camera eulers
       0.3f, 2.f,
       8, true }
-#else
-    { Resources::MeshesMeta::ToiletLo,
-      float3(-45 * math::d2r32, 0.f, -180 * math::d2r32), // min camera eulers
-      float3(-1.f * math::d2r32, 0.f, 180 * math::d2r32), // max camera eulers
-      0.3f, 2.f,
-      4, false },
-    { Resources::MeshesMeta::Count,
-      float3(-45 * math::d2r32, 0.f, -180 * math::d2r32), // min camera eulers
-      float3(-1.f * math::d2r32, 0.f, 180 * math::d2r32), // max camera eulers
-      0.3f, 2.f,
-      8, true }
-#endif
 };
 
 void spawnAsset(
@@ -194,90 +172,6 @@ void spawn_model_as_mirrors(
         bvh::buildTree(
             sceneArena, scratchArena, mirrors.bvh, &(loadedMesh.cpuBuffer.vertices[0].x),
             loadedMesh.cpuBuffer.indices, loadedMesh.cpuBuffer.indexCount, triangleIds);
-    }
-}
-}
-
-
-namespace obj {
-
-void load_mesh_cpu_gpu(
-    game::GPUCPUMesh& meshToLoad, renderer::CoreResources& renderCore,
-    allocator::PagedArena scratchArena, allocator::PagedArena& persistentArena,
-    const char* path, const f32 scale) {
-
-    allocator::Buffer<renderer::VertexLayout_Color_3D> vertices = {};
-    allocator::Buffer<u16> indices = {};
-
-    FILE* f;
-    if (io::fopen(&f, path, "r") == 0) {
-        char c;
-        do {
-            c = io::fgetc(f);
-            if (c == 'v') { // read vertices
-                renderer::VertexLayout_Color_3D& v = allocator::push(vertices, scratchArena);
-                f32 x, y, z, r, g, b;
-                s32 n = io::fscanf(f, "%f%f%f%f%f%f", &x, &y, &z, &r, &g, &b);
-                if (n == 6) {
-                    v.pos.x = scale * x; v.pos.y = scale * y; v.pos.z = scale * z;
-                    v.color = Color32(r, g, b, 0.32f).ABGR();
-                }
-            } else if (c == 'f') { // read face indices (can't read any more vertices from now on)
-                int a, b, c;
-                s32 n = io::fscanf(f, "%d%d%d", &a, &b, &c);
-                if (n == 3) {
-                    allocator::push(indices, scratchArena) = c - 1;
-                    allocator::push(indices, scratchArena) = b - 1;
-                    allocator::push(indices, scratchArena) = a - 1;
-                    int d;
-                    n = io::fscanf(f, "%d", &d);
-                    if (n > 0) {
-                        // read four values: divide quad in two triangles
-                        allocator::push(indices, scratchArena) = d - 1;
-                        allocator::push(indices, scratchArena) = c - 1;
-                        allocator::push(indices, scratchArena) = a - 1;
-                    }
-                }
-            }
-        } while (c > 0);
-        io::fclose(f);
-    }
-
-    if (vertices.len) {
-        meshToLoad = {};
-
-        renderer::CPUMesh& mesh = meshToLoad.cpuBuffer;
-        mesh.vertices = ALLOC_ARRAY(persistentArena, float3, vertices.len);
-        mesh.indices = ALLOC_ARRAY(persistentArena, u16, indices.len);
-        for (u32 i = 0; i < vertices.len; i++) { mesh.vertices[i] = vertices.data[i].pos; }
-        memcpy(mesh.indices, indices.data, sizeof(u16) * indices.len);
-        mesh.indexCount = (u32)indices.len;
-        mesh.vertexCount = (u32)vertices.len;
-
-        // create the global vertex buffer for all the mirrors
-        gfx::rhi::VertexAttribDesc attribs[] = {
-        gfx::rhi::make_vertexAttribDesc(
-            "POSITION", offsetof(renderer::VertexLayout_Color_3D, pos),
-            sizeof(renderer::VertexLayout_Color_3D),
-            gfx::rhi::BufferAttributeFormat::R32G32B32_FLOAT),
-        gfx::rhi::make_vertexAttribDesc(
-            "COLOR", offsetof(renderer::VertexLayout_Color_3D, color),
-            sizeof(renderer::VertexLayout_Color_3D),
-            gfx::rhi::BufferAttributeFormat::R8G8B8A8_UNORM)
-        };
-        gfx::rhi::IndexedVertexBufferDesc bufferParams;
-        bufferParams.vertexData = vertices.data;
-        bufferParams.indexData = indices.data;
-        bufferParams.vertexSize = (u32) (sizeof(renderer::VertexLayout_Color_3D) * vertices.len);
-        bufferParams.vertexCount = (u32) vertices.len;
-        bufferParams.indexSize = (u32)(sizeof(u16)* indices.len);
-        bufferParams.indexCount = (u32) indices.len;
-        bufferParams.memoryUsage = gfx::rhi::BufferMemoryUsage::GPU;
-        bufferParams.accessType = gfx::rhi::BufferAccessType::GPU;
-        bufferParams.indexType = gfx::rhi::BufferItemType::U16;
-        bufferParams.type = gfx::rhi::BufferTopologyType::Triangles;
-        gfx::rhi::create_indexed_vertex_buffer(
-            meshToLoad.gpuBuffer, bufferParams, attribs, countof(attribs));
     }
 }
 }
@@ -1848,40 +1742,51 @@ void load_coreResources(
         ground.skeleton.jointCount = 0;
     }
 
-    // Mirror models
-    obj::load_mesh_cpu_gpu(
-        core.meshes[game::Resources::MeshesMeta::ToiletLo], renderCore,
-        scratchArena, persistentArena, "assets/meshes/throne.obj", 1.f);
-
     // Hall of mirrors
-    for (u32 m = 0; m < game::Resources::MirrorHallMeta::Count; m++) {
-        game::GPUCPUMesh& meshToLoad = core.mirrorHallMeshes[m];
-        f32 w = 12.4f, h = 10.f;
-        u32 c = Color32(0.01f, 0.19f, 0.3f, 0.32f).ABGR();
-        renderer::VertexLayout_Color_3D v[] = {
-            { { 1.f, 0.f, -1.f }, c }, { { -1.f, 0.f, -1.f }, c },
-            { { -1.f, 0.f, 1.f }, c }, { { 1.f, 0.f, 1.f }, c } };
-        Transform t;
-        Transform rot = math::fromOffsetAndOrbit(
-            float3(0.f, 0.f, 0.f), float3(0.f, 0.f, f32(m) * math::twopi32 / f32(8)));
-        Transform translate = {};
-        math::identity4x4(translate);
-        translate.pos = float3(0.f, -30.f, 0.f);
-        t.matrix = math::mult(rot.matrix, translate.matrix);
-        t.matrix.col0.xyz = math::scale(t.matrix.col0.xyz, w);
-        t.matrix.col2.xyz = math::scale(t.matrix.col2.xyz, h);
-        for (u32 i = 0; i < countof(v); i++) {
-            v[i].pos = math::mult(t.matrix, float4(v[i].pos, 1.f)).xyz;
+    {
+        const u32 mirrorCount = 8;
+        renderer::VertexLayout_Color_3D vertices[4 * mirrorCount];
+        u16 indices[4 * mirrorCount * 3 / 2]; // 6 indices per quad
+        const float3 v0(1.f, 0.f, -1.f);
+        const float3 v1(-1.f, 0.f, -1.f);
+        const float3 v2(-1.f, 0.f, 1.f);
+        const float3 v3(1.f, 0.f, 1.f);
+        for (u32 m = 0; m < mirrorCount; m++) {
+            f32 w = 12.4f, h = 10.f;
+            u32 c = Color32(0.01f, 0.19f, 0.3f, 0.32f).ABGR();
+            u32 vertex_idx = m * 4;
+            Transform t;
+            Transform rot = math::fromOffsetAndOrbit(
+                float3(0.f, 0.f, 0.f), float3(0.f, 0.f, f32(m) * math::twopi32 / f32(8)));
+            Transform translate = {};
+            math::identity4x4(translate);
+            translate.pos = float3(0.f, -30.f, 0.f);
+            t.matrix = math::mult(rot.matrix, translate.matrix);
+            t.matrix.col0.xyz = math::scale(t.matrix.col0.xyz, w);
+            t.matrix.col2.xyz = math::scale(t.matrix.col2.xyz, h);
+            vertices[vertex_idx + 0] = { math::mult(t.matrix, float4(v0, 1.f)).xyz, c };
+            vertices[vertex_idx + 1] = { math::mult(t.matrix, float4(v1, 1.f)).xyz, c };
+            vertices[vertex_idx + 2] = { math::mult(t.matrix, float4(v2, 1.f)).xyz, c };
+            vertices[vertex_idx + 3] = { math::mult(t.matrix, float4(v3, 1.f)).xyz, c };
+
+            // clock-wise indices
+            u32 index_idx = vertex_idx * 3 / 2;
+            // todo: start of second tri needs to be the last vertex, fix this weird restriction
+            indices[index_idx + 0] = vertex_idx + 2;
+            indices[index_idx + 1] = vertex_idx + 1;
+            indices[index_idx + 2] = vertex_idx + 0;
+            indices[index_idx + 3] = vertex_idx + 3;
+            indices[index_idx + 4] = vertex_idx + 2;
+            indices[index_idx + 5] = vertex_idx + 0;
         }
-        // clock-wise indices
-        u16 i[] = { 2, 1, 0, 3, 2, 0 }; // todo: start of second tri needs to be the last vertex, fix this weird restriction
+        game::GPUCPUMesh& meshToLoad = core.mirrorHallMesh;
         gfx::rhi::IndexedVertexBufferDesc bufferParams;
-        bufferParams.vertexData = v;
-        bufferParams.indexData = i;
-        bufferParams.vertexSize = sizeof(v);
-        bufferParams.vertexCount = countof(v);
-        bufferParams.indexSize = sizeof(i);
-        bufferParams.indexCount = countof(i);
+        bufferParams.vertexData = vertices;
+        bufferParams.indexData = indices;
+        bufferParams.vertexSize = sizeof(vertices);
+        bufferParams.vertexCount = countof(vertices);
+        bufferParams.indexSize = sizeof(indices);
+        bufferParams.indexCount = countof(indices);
         bufferParams.memoryUsage = gfx::rhi::BufferMemoryUsage::GPU;
         bufferParams.accessType = gfx::rhi::BufferAccessType::GPU;
         bufferParams.indexType = gfx::rhi::BufferItemType::U16;
@@ -1899,13 +1804,13 @@ void load_coreResources(
         gfx::rhi::create_indexed_vertex_buffer(
             meshToLoad.gpuBuffer, bufferParams, attribs, countof(attribs));
 
-        renderer::CPUMesh& mesh = meshToLoad.cpuBuffer;
-        mesh.vertices = ALLOC_ARRAY(persistentArena, float3, countof(v));
-        mesh.indices = ALLOC_ARRAY(persistentArena, u16, countof(i));
-        for (u32 i = 0; i < countof(v); i++) { mesh.vertices[i] = v[i].pos; }
-        memcpy(mesh.indices, i, sizeof(u16) * countof(i));
-        mesh.indexCount = countof(i);
-        mesh.vertexCount = countof(v);
+        renderer::CPUMesh& cpuBuffer = meshToLoad.cpuBuffer;
+        cpuBuffer.vertices = ALLOC_ARRAY(persistentArena, float3, countof(vertices));
+        cpuBuffer.indices = ALLOC_ARRAY(persistentArena, u16, countof(indices));
+        for (u32 i = 0; i < countof(vertices); i++) { cpuBuffer.vertices[i] = vertices[i].pos; }
+        memcpy(cpuBuffer.indices, indices, sizeof(u16) * countof(indices));
+        cpuBuffer.indexCount = countof(indices);
+        cpuBuffer.vertexCount = countof(vertices);
     }
 
     // UI text
@@ -1923,15 +1828,15 @@ void load_coreResources(
         };
         auto text2d = [](Buffer2D& buffer, const Text2DParams& params, const char* str) {
 
-            char text[256];
-            io::strncpy(text, str, 256);
+            char text[512];
+            io::strncpy(text, str, sizeof(text));
 
             u32 vertexCount = buffer.vertexCount;
             const u32 indexCount = 3 * vertexCount / 2; // every 4 vertices form a 6 index quad
             const u32 color = params.color.ABGR();
 
             // output to a temporary buffer
-            float2 textpoly_buffer[1024];
+            float2 textpoly_buffer[2048];
 
             // negate y, since our (0,0) is the center of the screen, stb's is bottom left
             u32 quadCount = stb_easy_font_print(
@@ -1982,7 +1887,7 @@ void load_coreResources(
             buffer.vertexCount = 0;
         };
 
-        enum { MAX_VERTICES2D_COUNT = 1024 };
+        enum { MAX_VERTICES2D_COUNT = 2048 };
         Buffer2D buffer2D = {};
         buffer2D.vertices = ALLOC_ARRAY(scratchArena, renderer::VertexLayout_Color_2D, MAX_VERTICES2D_COUNT);
         buffer2D.vertexCap = MAX_VERTICES2D_COUNT;
@@ -2005,12 +1910,12 @@ void load_coreResources(
         text2d(buffer2D, textParams, "Mouse wheel to scale");
         textParams.pos.y += lineheight;
         commit2d(core.gpuBufferScaleText, buffer2D, attribs_2d, countof(attribs_2d));
-        text2d(buffer2D, textParams, "Press N to cycle through the three different rooms");
+        text2d(buffer2D, textParams, "[todo: implement more rooms, toggle with N?]");
         textParams.pos.y += lineheight;
         commit2d(core.gpuBufferCycleRoomText, buffer2D, attribs_2d, countof(attribs_2d));
-        text2d(buffer2D, textParams, "Please enjoy your mirrors");
+        text2d(buffer2D, textParams, "There's some mirrors");
         textParams.pos.y += lineheight;
-        text2d(buffer2D, textParams, "Welcome to the mirror room");
+        text2d(buffer2D, textParams, "Welcome to the physics room");
         textParams.pos.y += lineheight;
         commit2d(core.gpuBufferHeaderText, buffer2D, attribs_2d, countof(attribs_2d));
         #if __DEBUG
@@ -2186,23 +2091,15 @@ void spawn_scene_mirrorRoom(
             handle_from_instanced_node(renderScene, node);
     }
 
-    if (roomDef.mirrorMesh < game::Resources::MeshesMeta::Count) {
-        const u32 numMirrors = 1024 * 1024; // todo: hack
-        scene.mirrors.polys = ALLOC_ARRAY(sceneArena, game::Mirrors::Poly, numMirrors);
-        scene.mirrors.drawMeshes = ALLOC_ARRAY(sceneArena, renderer::DrawMesh, numMirrors);
-        scene.mirrors.bvh = {};
-        game::spawn_model_as_mirrors(
-            scene.mirrors, core.meshes[roomDef.mirrorMesh], scratchArena, sceneArena, true);
-    } else { // hall of mirrors
+    // hall of mirrors
+    {
         const u32 numMirrors = game::Resources::MirrorHallMeta::Count * 2;
         scene.mirrors.polys = ALLOC_ARRAY(sceneArena, game::Mirrors::Poly, numMirrors);
         scene.mirrors.drawMeshes = ALLOC_ARRAY(sceneArena, renderer::DrawMesh, numMirrors);
         scene.mirrors.bvh = {};
-        for (u32 m = 0; m < game::Resources::MirrorHallMeta::Count; m++) {
-            const game::GPUCPUMesh& mirrorMesh = core.mirrorHallMeshes[m];
-            game::spawn_model_as_mirrors(
-                scene.mirrors, mirrorMesh, scratchArena, sceneArena, false);
-        }
+        const game::GPUCPUMesh& mirrorMesh = core.mirrorHallMesh;
+        game::spawn_model_as_mirrors(scene.mirrors, mirrorMesh, scratchArena, sceneArena, true);
+        // add mirrors to physics sim
         for (u32 i = 0; i < scene.mirrors.count; i++) {
             game::Mirrors::Poly& p = scene.mirrors.polys[i];
             physics::StaticObject_Line& wall = physicsScene.walls[physicsScene.wall_count++];
@@ -2216,18 +2113,20 @@ void spawn_scene_mirrorRoom(
             wall.start.z = 0.f;
             wall.end.z = 0.f;
         }
+        scene.maxMirrorBounces = roomDef.maxMirrorBounces;
     }
-    scene.maxMirrorBounces = roomDef.maxMirrorBounces;
 
     // camera
-    scene.orbitCamera.offset = float3(0.f, -100.f, 0.f);
-    scene.orbitCamera.eulers = float3(-25.f * math::d2r32, 0.f, 135.f * math::d2r32);
-    scene.orbitCamera.minEulers = roomDef.minCameraEulers;
-    scene.orbitCamera.maxEulers = roomDef.maxCameraEulers;
-    scene.orbitCamera.scale = 1.f;
-    scene.orbitCamera.origin = float3(0.f, 0.f, 0.f);
-    scene.orbitCamera.minScale = roomDef.minCameraZoom;
-    scene.orbitCamera.maxScale = roomDef.maxCameraZoom;
+    {
+        scene.orbitCamera.offset = float3(0.f, -100.f, 0.f);
+        scene.orbitCamera.eulers = float3(-25.f * math::d2r32, 0.f, 135.f * math::d2r32);
+        scene.orbitCamera.minEulers = roomDef.minCameraEulers;
+        scene.orbitCamera.maxEulers = roomDef.maxCameraEulers;
+        scene.orbitCamera.scale = 1.f;
+        scene.orbitCamera.origin = float3(0.f, 0.f, 0.f);
+        scene.orbitCamera.minScale = roomDef.minCameraZoom;
+        scene.orbitCamera.maxScale = roomDef.maxCameraZoom;
+    }
 }
 
 #endif // __WASTELADNS_SCENE_H__
