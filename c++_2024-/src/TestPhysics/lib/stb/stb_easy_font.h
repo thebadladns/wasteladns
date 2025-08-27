@@ -1,3 +1,4 @@
+// crljmb @20250827 const char* support
 // crljmb @20250826 switch to xy layout, no color
 // crljmb @20250825 stb_easy_font_width and stb_easy_font_height now accept const char* inputs
 // crljmb @20250821 stb_easy_font_height now has a tighter fit on the bottom line
@@ -198,7 +199,7 @@ void stb_easy_font_spacing(float spacing)
    stb_easy_font_spacing_val = spacing;
 }
 
-static int stb_easy_font_print(float x, float y, float scale, char *text, void *vertex_buffer, int vbuf_size)
+static int stb_easy_font_print(float x, float y, float scale, const char *text, void *vertex_buffer, int vbuf_size)
 {
     char *vbuf = (char *) vertex_buffer;
     float start_x = x;

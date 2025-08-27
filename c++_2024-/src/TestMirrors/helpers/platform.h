@@ -5,7 +5,6 @@ namespace platform
 {
     struct LaunchConfig {
         const char* title;
-        size_t arena_size;
         u32 window_width;
         u32 window_height;
         u32 game_width;

@@ -50,7 +50,6 @@ struct Time {
     f64 lastFrameDelta;
     f64 nextFrame;
     f64 updateOverspeed;
-    s64 frameCount;
     bool pausedRender;
 };
 
@@ -114,8 +113,6 @@ void loadLaunchConfig(platform::LaunchConfig& config) {
     config.game_height = 240 * 1;
     config.fullscreen = false;
     config.title = "Mirror Test";
-    config.arena_size = persistentArenaSize + sceneArenaSize + frameArenaSize + scratchArenaSize;
-    __DEBUGDEF(config.arena_size += renderer::im::arena_size;)
 }
 void start(Instance& game, platform::GameConfig& config, platform::State& platform) {
 

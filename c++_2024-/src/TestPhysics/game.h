@@ -9,23 +9,22 @@ const size_t scratchArenaSize = 4 * 1024 * 1024;
 #if __DEBUG
 struct CameraNode;
 namespace debug {
-struct OverlayMode { enum Enum { All, HelpOnly, ArenaOnly, None, Count }; };
-const char* overlaynames[] = { "All", "Help Only", "Arenas only", "None" };
-static_assert(countof(overlaynames) == debug::OverlayMode::Count, "check");
+struct DebugMenus { enum Enum { Main, Arenas, Count }; };
 struct VisualizationModes { enum Enum { Physics, Culling, BVH, Count }; };
-bool visualizationModes[VisualizationModes::Count];
+bool visualizationModes[VisualizationModes::Count] = {};
+bool debugMenus[DebugMenus::Count] = { true, false };
 struct EventText { char text[256]; f64 time; };
 
 f64 frameHistory[60];
 f64 frameAvg = 0;
 u32 frameHistoryIdx = 0;
-OverlayMode::Enum overlaymode = OverlayMode::Enum::All;
 u32 debugCameraStage = 0;
 u32 bvhDepth = 0;
 CameraNode* capturedCameras = nullptr;
 EventText eventLabel = {};
 bool capture_cameras_next_frame = false;
 im::Pane debugPane;
+im::Pane arenasPane;
 
 }
 #endif
@@ -50,7 +49,7 @@ struct Time {
     f64 lastFrameDelta;
     f64 nextFrame;
     f64 updateOverspeed;
-    s64 frameCount;
+    u64 frameCount;
     bool pausedRender;
 };
 
@@ -67,7 +66,7 @@ namespace input
           EXIT = ::input::keyboard::Keys::ESCAPE
         , CYCLE_ROOM = ::input::keyboard::Keys::N
         #if __DEBUG
-        , TOGGLE_OVERLAY = ::input::keyboard::Keys::H
+        , TOGGLE_DEBUG = ::input::keyboard::Keys::H
         #endif
         ;
 };
@@ -103,8 +102,6 @@ void loadLaunchConfig(platform::LaunchConfig& config) {
     config.game_height = 240 * 1;
     config.fullscreen = false;
     config.title = "Physics Test";
-    config.arena_size = persistentArenaSize + sceneArenaSize + frameArenaSize + scratchArenaSize;
-    __DEBUGDEF(config.arena_size += im::arena_size;)
 }
 void start(Instance& game, platform::GameConfig& config) {
 
@@ -154,8 +151,11 @@ void start(Instance& game, platform::GameConfig& config) {
     im::ui.scale = (u8)platform::state.screen.window_scale;
     im::make_pane(
         debug::debugPane, "DEBUG MENU",
-        float2(game.resources.renderCore.windowProjection.config.left + im::ui.scale * 30,
-               game.resources.renderCore.windowProjection.config.top - im::ui.scale * 50));
+        float2(game.resources.renderCore.windowProjection.config.left + im::ui.scale * 20,
+               game.resources.renderCore.windowProjection.config.top - im::ui.scale * 35));
+    im::make_pane(
+        debug::arenasPane, "ARENAS MENU",
+        float2(0.f, game.resources.renderCore.windowProjection.config.top - im::ui.scale * 35));
 #endif
 }
 
@@ -170,8 +170,10 @@ void update(Instance& game, platform::GameConfig& config) {
         game.time.lastFrameDelta = math::min(raw_dt, game.time.config.maxFrameLength);
         game.time.lastFrame = platform::state.time.now;
         config.nextFrame = platform::state.time.now + game.time.config.targetFramerate;
+        game.time.frameCount++;
 
         #if __DEBUG
+        if (game.time.frameCount > 1) // ignore first frame, which has a frame time of 0
         {
             f64 frameAvg = 0.;
             constexpr u32 frameHistoryCount =
@@ -201,9 +203,8 @@ void update(Instance& game, platform::GameConfig& config) {
             game.roomId = (game.roomId + 1) % countof(roomDefinitions);
         }
         #if __DEBUG
-        if (keyboard.pressed(input::TOGGLE_OVERLAY)) {
-            debug::overlaymode =
-                (debug::OverlayMode::Enum)((debug::overlaymode + 1) % debug::OverlayMode::Count);
+        if (keyboard.pressed(input::TOGGLE_DEBUG)) {
+            debug::debugMenus[debug::DebugMenus::Main] = !debug::debugMenus[debug::DebugMenus::Main];
         }
         #endif
     }
@@ -538,25 +539,6 @@ void update(Instance& game, platform::GameConfig& config) {
             im::segment(pos, math::add(pos, math::scale(float3(0.f, 1.f, 0.f), axisSize)), axisY);
             im::segment(pos, math::add(pos, math::scale(float3(0.f, 0.f, 1.f), axisSize)), axisZ);
 
-            const f32 thickness = 0.1f;
-            const u32 steps = 10;
-            const f32 spacing = 1.f / (f32)steps;
-            for (int i = 1; i <= steps; i++) {
-                im::segment(
-                      math::add(pos, float3(spacing * i, 0.f, -thickness))
-                    , math::add(pos, float3(spacing * i, 0.f, thickness))
-                    , axisX);
-                im::segment(
-                      math::add(pos, float3(0.f, spacing * i, -thickness))
-                    , math::add(pos, float3(0.f, spacing * i, thickness))
-                    , axisY);
-                im::segment(
-                      math::add(pos, float3(-thickness, thickness, spacing * i))
-                    , math::add(pos, float3(thickness, -thickness, spacing * i))
-                    , axisZ);
-            }
-
-
             if (debug::visualizationModes[debug::VisualizationModes::BVH]) {
 
                 allocator::PagedArena scratchArena = game.memory.scratchArenaRoot; // explicit copy
@@ -711,7 +693,7 @@ void update(Instance& game, platform::GameConfig& config) {
                             textParams.scale = 1;
                             textParams.pos = polyScreen[i];
                             textParams.color = Color32(1.f, 1.f, 1.f, 1.f);
-                            im::text2d(textParams, "%d", i);
+                            im::text2d_format(textParams, "%d", i);
                         }
                         im::poly2d(polyScreen, poly_count, Color32(1.f, 1.f, 1.f, 0.3f));
 
@@ -739,68 +721,39 @@ void update(Instance& game, platform::GameConfig& config) {
         // Immediate-mode debug in 2D
         // Can be moved out of the render update, it only pushes data to cpu buffers
         #if __DEBUG
-        if (debug::overlaymode != debug::OverlayMode::None)
         {
             Color32 defaultCol(0.7f, 0.8f, 0.15f, 1.0f);
             Color32 activeCol(1.0f, 0.2f, 0.1f, 1.0f);
                 
-            f32 textscale = platform::state.screen.window_scale;
-            f32 lineheight = 15.f * textscale;
-
-            char appendBuff[128];
-
             struct EventText {
                 char text[256];
                 f64 time;
             };
-            im::Text2DParams textParamsLeft, textParamsRight, textParamsCenter;
-            textParamsLeft.scale = (u8)textscale;
-            textParamsLeft.pos =float2(
-                game.resources.renderCore.windowProjection.config.left + 10.f * textscale,
-                game.resources.renderCore.windowProjection.config.top - 10.f * textscale);
-            textParamsLeft.color = defaultCol;
-            textParamsRight.scale = (u8)textscale;
-            textParamsRight.pos = float2(
-                 game.resources.renderCore.windowProjection.config.right - 10.f * textscale,
-                 game.resources.renderCore.windowProjection.config.top - 10.f * textscale);
-            textParamsRight.color = defaultCol;
-            textParamsCenter.scale = (u8)textscale;
-            textParamsCenter.pos = float2(
-                0.f, game.resources.renderCore.windowProjection.config.top - 10.f * textscale);
-            textParamsCenter.color = defaultCol;
 
-            if (keyboard.pressed(input::TOGGLE_OVERLAY)) {
-                io::format(
-                    debug::eventLabel.text, sizeof(debug::eventLabel.text),
-                    "Overlays: %s", debug::overlaynames[debug::overlaymode]);
-                debug::eventLabel.time = platform::state.time.now;
-                textParamsLeft.color = activeCol;
-            }
-            else {
-                textParamsLeft.color = defaultCol;
-            }
-
-            if (debug::overlaymode == debug::OverlayMode::All
-                || debug::overlaymode == debug::OverlayMode::HelpOnly) {
+            if (debug::debugMenus[debug::DebugMenus::Main]) {
                 im::pane_start(debug::debugPane);
                 {
+                    // FPS widget
                     {
-                        im::label("%s: %.lf fps", platform::name, 1. / debug::frameAvg);
+                        im::label_format("%s: %.lf fps", platform::name, 1. / debug::frameAvg);
 
                         Color32 green(0.2f, 0.9f, 0.2f, 1.f);
-                        const u32 frameCount = countof(debug::frameHistory);
-                        const float barHeight = textscale * 30.f;
-                        float barWidth = textscale * 5.f;
+                        const u32 maxHistoryCount = countof(debug::frameHistory);
+                        const float barHeight = im::ui.scale * 30.f;
+                        float barWidth = im::ui.scale * 4.f;
                         float2 originWS;
-                        float2 extents(barWidth * frameCount, barHeight);
-                        im::impl::adjust_bounds_in_parent(originWS, extents, /* match parent width */ true);
-                        barWidth = extents.x / frameCount;
+                        float2 extents(barWidth * maxHistoryCount, barHeight);
+                        im::impl::adjust_bounds_in_parent(
+                            originWS, extents, /* match parent width */ true);
+                        barWidth = extents.x / maxHistoryCount;
                         im::box_2d(
                             float2(originWS.x, originWS.y - extents.y),
                             float2(originWS.x + extents.x, originWS.y), im::color_dark);
-                        for (u32 i = 0; i < frameCount; i++) {
-                            u32 next_i = (i + 1) % frameCount;
-                            u32 idx = (debug::frameHistoryIdx + i) % frameCount;
+                        for (u32 i = 0; i < maxHistoryCount; i++) {
+                            // skip initial frames
+                            if (game.time.frameCount < (maxHistoryCount - i + 1)) { continue; }
+
+                            u32 idx = (debug::frameHistoryIdx + i) % maxHistoryCount;
                             f32 h = barHeight * 1.f / (60.f * (f32)debug::frameHistory[idx]);
                             im::box_2d(
                                 float2(originWS.x + barWidth * i, originWS.y - extents.y),
@@ -815,19 +768,22 @@ void update(Instance& game, platform::GameConfig& config) {
                         platform::state.screen.window_width, platform::state.screen.window_height,
                         game.resources.renderCore.perspProjection.config, game.scene.camera.viewMatrix);
                     float3 eulers_deg = math::scale(game.scene.orbitCamera.eulers, math::r2d32);
-                    im::label("mouse (%.3f, %.3f)"
+                    im::label_format("mouse (%.3f, %.3f)"
                               "\nmouse in scene (%.3f,%.3f,%.3f)"
                               "\nCamera eulers: " FLOAT3_FORMAT("% .3f"),
                         mouseWS.x, mouseWS.y,
                         mousepos_WS.x, mousepos_WS.y, mousepos_WS.z,
                         FLOAT3_PARAMS(eulers_deg));
 
+                        
                     if (im::checkbox("Pause render", &game.time.pausedRender)) {
                         io::format(
                             debug::eventLabel.text, sizeof(debug::eventLabel.text),
                             "Pause scene render: %s", game.time.pausedRender ? "true" : "false");
                         debug::eventLabel.time = platform::state.time.now;
                     }
+                    im::checkbox(
+                        "Toggle memory arenas menu", &debug::debugMenus[debug::DebugMenus::Arenas]);
                     im::checkbox(
                         "Toggle BVH debugging",
                         &debug::visualizationModes[debug::VisualizationModes::BVH]);
@@ -851,23 +807,21 @@ void update(Instance& game, platform::GameConfig& config) {
                         }
                         if (debug::capturedCameras) {
                             numCameras = debug::capturedCameras[0].siblingIndex;
-                            im::label("%d cameras", numCameras);
+                            im::label_format("%d cameras", numCameras);
                         }
                         im::horizontal_layout_end();
                         if (debug::capturedCameras) {
-                            im::input_step("Toggle camera", 
-                                &debug::debugCameraStage, 0u, numCameras - 1,
-                                /* wrap */ true);
+                            im::input_step("Toggle camera", &debug::debugCameraStage, 0u, numCameras - 1, /* wrap */ true);
 
+                            // camera list
                             const u32 minidx = debug::debugCameraStage > 10 ? debug::debugCameraStage - 10 : 0;
                             const u32 maxidx = debug::debugCameraStage + 10 < numCameras ? debug::debugCameraStage + 10 : numCameras;
                             for (u32 i = minidx; i < maxidx; i++) {
-                                Color32 color =
-                                    i == debug::debugCameraStage ? im::color_highlight : im::color_bright;
-                                im::label(
-                                    color, "%*d: %s",
-                                    debug::capturedCameras[i].depth, i, debug::capturedCameras[i].str);
+                                Color32 color = (i == debug::debugCameraStage) ? im::color_highlight : im::color_bright;
+                                im::label_format(color, "%*d: %s", debug::capturedCameras[i].depth, i, debug::capturedCameras[i].str);
                             }
+
+                            // camera frustum debug
                             im::checkbox("force cut frustum visualization", &debug::force_cut_frustum);
                             if (debug::force_cut_frustum) {
                                 im::label("Disable frustum planes:");
@@ -888,221 +842,204 @@ void update(Instance& game, platform::GameConfig& config) {
             }
             im::reset_frame();
 
-            if (debug::overlaymode == debug::OverlayMode::All
-                || debug::overlaymode == debug::OverlayMode::HelpOnly) {
-                for (u32 i = 0; i < platform::state.input.padCount; i++)
-                {
-                    const ::input::gamepad::State& pad = platform::state.input.pads[i];
-                    im::text2d(textParamsLeft, "Pad: %s", pad.name);
-                    textParamsLeft.pos.y -= lineheight;
-                    im::text2d(textParamsLeft
-                        , "Pad: L:(%.3f,%.3f) R:(%.3f,%.3f) L2:%.3f R2:%.3f"
-                        , pad.sliders[::input::gamepad::Sliders::AXIS_X_LEFT], pad.sliders[::input::gamepad::Sliders::AXIS_Y_LEFT]
-                        , pad.sliders[::input::gamepad::Sliders::AXIS_X_RIGHT], pad.sliders[::input::gamepad::Sliders::AXIS_Y_RIGHT]
-                        , pad.sliders[::input::gamepad::Sliders::TRIGGER_LEFT], pad.sliders[::input::gamepad::Sliders::TRIGGER_RIGHT]
-                    );
+            // todo: retest with a pad
+            //if (debug::overlaymode == debug::OverlayMode::All
+            //    || debug::overlaymode == debug::OverlayMode::HelpOnly) {
+            //    for (u32 i = 0; i < platform::state.input.padCount; i++)
+            //    {
+            //        const ::input::gamepad::State& pad = platform::state.input.pads[i];
+            //        im::text2d(textParamsLeft, "Pad: %s", pad.name);
+            //        textParamsLeft.pos.y -= lineheight;
+            //        im::text2d(textParamsLeft
+            //            , "Pad: L:(%.3f,%.3f) R:(%.3f,%.3f) L2:%.3f R2:%.3f"
+            //            , pad.sliders[::input::gamepad::Sliders::AXIS_X_LEFT], pad.sliders[::input::gamepad::Sliders::AXIS_Y_LEFT]
+            //            , pad.sliders[::input::gamepad::Sliders::AXIS_X_RIGHT], pad.sliders[::input::gamepad::Sliders::AXIS_Y_RIGHT]
+            //            , pad.sliders[::input::gamepad::Sliders::TRIGGER_LEFT], pad.sliders[::input::gamepad::Sliders::TRIGGER_RIGHT]
+            //        );
 
-                    {
-                        io::StrBuilder padStr{ appendBuff, sizeof(appendBuff) };
-                        textParamsLeft.pos.y -= lineheight;
-                        io::append(padStr.curr, padStr.last, "Keys: ");
-                        const char* key_names[] = {
-                              "BUTTON_N", "BUTTON_S", "BUTTON_W", "BUTTON_E"
-                            , "DPAD_UP", "DPAD_DOWN", "DPAD_LEFT", "DPAD_RIGHT"
-                            , "START", "SELECT"
-                            , "L1", "R1", "L2", "R2"
-                            , "LEFT_THUMB", "RIGHT_THUMB"
-                        };
-                        for (u32 key = 0; key < ::input::gamepad::KeyMask::COUNT && !padStr.full(); key++) {
-                            if (pad.down((::input::gamepad::KeyMask::Enum)(1 << key))) {
-                                io::append(
-                                    padStr.curr, padStr.last, "%s ", key_names[key]);
-                            }
-                        }
-                        im::text2d(textParamsLeft, padStr.str);
-                        textParamsLeft.pos.y -= lineheight;
-                    }
-                }
+            //        {
+            //            io::StrBuilder padStr{ appendBuff, sizeof(appendBuff) };
+            //            textParamsLeft.pos.y -= lineheight;
+            //            io::append(padStr.curr, padStr.last, "Keys: ");
+            //            const char* key_names[] = {
+            //                  "BUTTON_N", "BUTTON_S", "BUTTON_W", "BUTTON_E"
+            //                , "DPAD_UP", "DPAD_DOWN", "DPAD_LEFT", "DPAD_RIGHT"
+            //                , "START", "SELECT"
+            //                , "L1", "R1", "L2", "R2"
+            //                , "LEFT_THUMB", "RIGHT_THUMB"
+            //            };
+            //            for (u32 key = 0; key < ::input::gamepad::KeyMask::COUNT && !padStr.full(); key++) {
+            //                if (pad.down((::input::gamepad::KeyMask::Enum)(1 << key))) {
+            //                    io::append(
+            //                        padStr.curr, padStr.last, "%s ", key_names[key]);
+            //                }
+            //            }
+            //            im::text2d(textParamsLeft, padStr.str);
+            //            textParamsLeft.pos.y -= lineheight;
+            //        }
+            //    }
+            //}
 
-                {
-                    char formatted[256];
-                    io::format(formatted, sizeof(formatted), "H to toggle overlays: %s", debug::overlaynames[debug::overlaymode]);
-                    textParamsRight.pos.x -= textscale * stb_easy_font_width(formatted);
-                    im::text2d(
-                        textParamsRight, "H to toggle overlays: %s", debug::overlaynames[debug::overlaymode]);
-                    textParamsRight.pos.y -= lineheight;
-                }
-            }
-
+            if (debug::debugMenus[debug::DebugMenus::Arenas])
             {
-            }
-
-            if (debug::overlaymode == debug::OverlayMode::All
-             || debug::overlaymode == debug::OverlayMode::ArenaOnly)
-            {
-                auto renderArena = [](im::Text2DParams& textCfg, u8* arenaEnd,
-                                        u8* arenaStart, uintptr_t arenaHighmark,
-                                        const char* arenaName, const Color32 defaultCol,
-                                        const Color32 baseCol, const Color32 highmarkCol,
-                                        const f32 lineheight, const f32 textscale) {
-                    const f32 barwidth = 150.f * textscale;
-                    const f32 barheight = 10.f * textscale;
+                auto renderArena = [](u8* arenaEnd, u8* arenaStart, uintptr_t arenaHighmark,
+                                      const char* arenaName,
+                                      const Color32 baseCol, const Color32 highmarkCol) {
+                    const f32 barwidth = 150.f * im::ui.scale;
+                    const f32 barheight = 10.f * im::ui.scale;
 
                     const ptrdiff_t arenaTotal = (ptrdiff_t)arenaEnd - (ptrdiff_t)arenaStart;
                     const ptrdiff_t arenaHighmarkBytes =
                         (ptrdiff_t)arenaHighmark - (ptrdiff_t)arenaStart;
                     const f32 occupancy = arenaHighmarkBytes / (f32)arenaTotal;
                     const f32 arenaHighmark_barwidth = barwidth * occupancy;
-                    textCfg.color = highmarkCol;
+
                     if (arenaHighmarkBytes > 1024 * 1024) {
-                        im::text2d(
-                            textCfg, "%s highmark: %lu bytes (%.3fMB) / %.3f%%",
+                        im::label_format(
+                            highmarkCol, "%s highmark: %lu bytes (%.3fMB) / %.3f%%",
                             arenaName, arenaHighmarkBytes, arenaHighmarkBytes / (1024.f * 1024.f),
                             occupancy * 100.f);
                     } else if (arenaHighmarkBytes > 1024) {
-                        im::text2d(
-                            textCfg, "%s highmark: %lu bytes (%.3fKB) / %.3f%%",
+                        im::label_format(
+                            highmarkCol, "%s highmark: %lu bytes (%.3fKB) / %.3f%%",
                             arenaName, arenaHighmarkBytes, arenaHighmarkBytes / (1024.f),
                             occupancy * 100.f);
                     } else {
-                        im::text2d(
-                            textCfg, "%s highmark: %lu bytes / %.3f%%",
+                        im::label_format(
+                            highmarkCol, "%s highmark: %lu bytes / %.3f%%",
                             arenaName, arenaHighmarkBytes,
                             occupancy * 100.f);
                     }
-                    textCfg.pos.y -= lineheight;
-                    textCfg.color = defaultCol;
 
+                    // compute extents in pane
+                    float2 extents(barwidth, barheight);
+                    float2 originWS;
+                    im::impl::adjust_bounds_in_parent(
+                        originWS, extents, /* match parent width */ false);
+                    
+                    // background
                     im::box_2d(
-                        float2(textCfg.pos.x, textCfg.pos.y - barheight),
-                        float2(textCfg.pos.x + barwidth, textCfg.pos.y), baseCol);
+                        float2(originWS.x, originWS.y - extents.y),
+                        float2(originWS.x + extents.x, originWS.y), baseCol);
                     if (arenaHighmarkBytes) {
                         im::box_2d(
-                            float2(textCfg.pos.x, textCfg.pos.y - barheight),
-                            float2(textCfg.pos.x + arenaHighmark_barwidth, textCfg.pos.y),
-                            highmarkCol);
+                            float2(originWS.x, originWS.y - extents.y),
+                            float2(originWS.x + arenaHighmark_barwidth, originWS.y), highmarkCol);
                     }
-                    textCfg.pos.y -= barheight + 5.f * textscale;
                 };
 
-                const f32 barwidth = 150.f * textscale;
-                const f32 barheight = 10.f * textscale;
-                textParamsCenter.pos.x -= barwidth / 2.f;
+                im::pane_start(debug::arenasPane);
                 {
-                    const Color32 arenabaseCol(0.65f, 0.65f, 0.65f, 0.4f);
-                    const Color32 arenahighmarkCol(0.95f, 0.35f, 0.8f, 1.f);
-                    renderArena(
-                        textParamsCenter,
-                        (u8*)math::max(
-                            (uintptr_t)game.memory.frameArena.end, game.memory.frameArenaHighmark),
-                        game.memory.frameArenaBuffer, game.memory.frameArenaHighmark,
-                        "Frame arena", defaultCol, arenabaseCol, arenahighmarkCol,
-                        lineheight, textscale);
-                }
-                {
-                    const Color32 arenabaseCol(0.65f, 0.65f, 0.65f, 0.4f);
-                    const Color32 arenahighmarkCol(0.95f, 0.35f, 0.8f, 1.f);
-                    renderArena(
-                        textParamsCenter,
-                        (u8*)math::max(
-                            (uintptr_t)game.memory.scratchArenaRoot.end, game.memory.scratchArenaHighmark),
-                        game.memory.scratchArenaRoot.curr, game.memory.scratchArenaHighmark,
-                        "Scratch arena", defaultCol, arenabaseCol, arenahighmarkCol,
-                        lineheight, textscale);
-                }
-                {
-                    const Color32 arenabaseCol(0.65f, 0.65f, 0.65f, 0.4f);
-                    const Color32 arenahighmarkCol(0.95f, 0.35f, 0.8f, 1.f);
-                    renderArena(
-                        textParamsCenter, game.memory.persistentArena.end,
-                        game.memory.persistentArenaBuffer,
-                        (ptrdiff_t)game.memory.persistentArena.curr,
-                        "Persistent arena", defaultCol, arenabaseCol, arenahighmarkCol,
-                        lineheight, textscale);
-                }
-                {
-                    const Color32 arenabaseCol(0.65f, 0.65f, 0.65f, 0.4f);
-                    const Color32 arenahighmarkCol(0.95f, 0.35f, 0.8f, 1.f);
-                    renderArena(
-                        textParamsCenter, game.memory.sceneArena.end,
-                        game.memory.sceneArenaBuffer,
-                        (ptrdiff_t)game.memory.sceneArena.curr,
-                        "Scene arena", defaultCol, arenabaseCol, arenahighmarkCol,
-                        lineheight, textscale);
-                }
-                {
-                    const Color32 baseCol(0.65f, 0.65f, 0.65f, 0.4f);
-                    const Color32 used3dCol(0.95f, 0.35f, 0.8f, 1.f);
-                    const Color32 used2dCol(0.35f, 0.95f, 0.8f, 1.f);
-                    const Color32 used2didxCol(0.8f, 0.95f, 0.8f, 1.f);
+                    const f32 barwidth = 150.f * im::ui.scale;
+                    const f32 barheight = 10.f * im::ui.scale;
+                    {
+                        const Color32 arenabaseCol(0.65f, 0.65f, 0.65f, 0.4f);
+                        const Color32 arenahighmarkCol(0.95f, 0.35f, 0.8f, 1.f);
+                        renderArena(
+                            (u8*)math::max(
+                                (uintptr_t)game.memory.frameArena.end, game.memory.frameArenaHighmark),
+                            game.memory.frameArenaBuffer, game.memory.frameArenaHighmark,
+                            "Frame arena", arenabaseCol, arenahighmarkCol);
+                    }
+                    {
+                        const Color32 arenabaseCol(0.65f, 0.65f, 0.65f, 0.4f);
+                        const Color32 arenahighmarkCol(0.95f, 0.35f, 0.8f, 1.f);
+                        renderArena(
+                            (u8*)math::max(
+                                (uintptr_t)game.memory.scratchArenaRoot.end, game.memory.scratchArenaHighmark),
+                            game.memory.scratchArenaRoot.curr, game.memory.scratchArenaHighmark,
+                            "Scratch arena", arenabaseCol, arenahighmarkCol);
+                    }
+                    {
+                        const Color32 arenabaseCol(0.65f, 0.65f, 0.65f, 0.4f);
+                        const Color32 arenahighmarkCol(0.95f, 0.35f, 0.8f, 1.f);
+                        renderArena(
+                            game.memory.persistentArena.end, game.memory.persistentArenaBuffer,
+                            (ptrdiff_t)game.memory.persistentArena.curr,
+                            "Persistent arena", arenabaseCol, arenahighmarkCol);
+                    }
+                    {
+                        const Color32 arenabaseCol(0.65f, 0.65f, 0.65f, 0.4f);
+                        const Color32 arenahighmarkCol(0.95f, 0.35f, 0.8f, 1.f);
+                        renderArena(
+                            game.memory.sceneArena.end, game.memory.sceneArenaBuffer,
+                            (ptrdiff_t)game.memory.sceneArena.curr,
+                            "Scene arena", arenabaseCol, arenahighmarkCol);
+                    }
+                    {
+                        const Color32 baseCol(0.65f, 0.65f, 0.65f, 0.4f);
+                        const Color32 used3dCol(0.95f, 0.35f, 0.8f, 1.f);
+                        const Color32 used2dCol(0.35f, 0.95f, 0.8f, 1.f);
+                        const Color32 used2didxCol(0.8f, 0.95f, 0.8f, 1.f);
 
-                    const ptrdiff_t memory_size =
-                        (ptrdiff_t)game.memory.debugArena.curr - (ptrdiff_t)im::ctx.vertices_3d;
-                    const ptrdiff_t vertices_3d_start =
-                        (ptrdiff_t)im::ctx.vertices_3d - (ptrdiff_t)im::ctx.vertices_3d;
-                    const ptrdiff_t vertices_3d_size =
-                        (ptrdiff_t)debug::vertices_3d_head_last_frame * sizeof(im::Vertex3D);
-                    const ptrdiff_t vertices_2d_start =
-                        (ptrdiff_t)im::ctx.vertices_2d - (ptrdiff_t)im::ctx.vertices_3d;
-                    const ptrdiff_t vertices_2d_size =
-                        (ptrdiff_t)debug::vertices_2d_head_last_frame * sizeof(im::Vertex2D);
-                    const ptrdiff_t indices_2d_start =
-                        (ptrdiff_t)im::ctx.indices_2d - (ptrdiff_t)im::ctx.vertices_3d;
-                    const ptrdiff_t indices_2d_size =
-                        (ptrdiff_t)(im::ctx.vertices_2d_head * 3 / 2) * sizeof(u32);
-                    const f32 v3d_barstart = barwidth * vertices_3d_start / (f32)memory_size;
-                    const f32 v3d_barwidth = barwidth * vertices_3d_size / (f32)memory_size;
-                    const f32 v2d_barstart = barwidth * vertices_2d_start / (f32)memory_size;
-                    const f32 v2d_barwidth = barwidth * vertices_2d_size / (f32)memory_size;
-                    const f32 i2d_barstart = barwidth * indices_2d_start / (f32)memory_size;
-                    const f32 i2d_barwidth = barwidth * indices_2d_size / (f32)memory_size;
+                        const ptrdiff_t memory_size =
+                            (ptrdiff_t)game.memory.debugArena.curr - (ptrdiff_t)im::ctx.vertices_3d;
+                        const ptrdiff_t vertices_3d_start =
+                            (ptrdiff_t)im::ctx.vertices_3d - (ptrdiff_t)im::ctx.vertices_3d;
+                        const ptrdiff_t vertices_3d_size =
+                            (ptrdiff_t)debug::vertices_3d_head_last_frame * sizeof(im::Vertex3D);
+                        const ptrdiff_t vertices_2d_start =
+                            (ptrdiff_t)im::ctx.vertices_2d - (ptrdiff_t)im::ctx.vertices_3d;
+                        const ptrdiff_t vertices_2d_size =
+                            (ptrdiff_t)debug::vertices_2d_head_last_frame * sizeof(im::Vertex2D);
+                        const ptrdiff_t indices_2d_start =
+                            (ptrdiff_t)im::ctx.indices_2d - (ptrdiff_t)im::ctx.vertices_3d;
+                        const ptrdiff_t indices_2d_size =
+                            (ptrdiff_t)(debug::vertices_2d_head_last_frame * 3 / 2) * sizeof(u32);
+                        const f32 v3d_barstart = barwidth * vertices_3d_start / (f32)memory_size;
+                        const f32 v3d_barwidth = barwidth * vertices_3d_size / (f32)memory_size;
+                        const f32 v2d_barstart = barwidth * vertices_2d_start / (f32)memory_size;
+                        const f32 v2d_barwidth = barwidth * vertices_2d_size / (f32)memory_size;
+                        const f32 i2d_barstart = barwidth * indices_2d_start / (f32)memory_size;
+                        const f32 i2d_barwidth = barwidth * indices_2d_size / (f32)memory_size;
 
-                    textParamsCenter.color = used3dCol;
-                    im::text2d(textParamsCenter, "im 3d: %lu bytes", vertices_3d_size);
-                    textParamsCenter.pos.y -= lineheight;
-                    textParamsCenter.color = used2dCol;
-                    im::text2d(textParamsCenter, "im 2d: %lu bytes", vertices_2d_size);
-                    textParamsCenter.pos.y -= lineheight;
-                    textParamsCenter.color = used2didxCol;
-                    im::text2d(textParamsCenter, "im 2d indices: %lu bytes", indices_2d_size);
-                    textParamsCenter.pos.y -= lineheight;
-                    textParamsCenter.color = defaultCol;
+                        im::label_format(used3dCol, "im 3d: %lu bytes", vertices_3d_size);
+                        im::label_format(used2dCol, "im 2d: %lu bytes", vertices_2d_size);
+                        im::label_format(used2didxCol, "im 2d indices: %lu bytes", indices_2d_size);
 
-                    im::box_2d(
-                        float2(textParamsCenter.pos.x, textParamsCenter.pos.y - barheight),
-                        float2(textParamsCenter.pos.x + barwidth, textParamsCenter.pos.y),
-                        baseCol);
-                    im::box_2d(
-                        float2(textParamsCenter.pos.x + v3d_barstart, textParamsCenter.pos.y - barheight),
-                        float2(textParamsCenter.pos.x + v3d_barwidth, textParamsCenter.pos.y),
-                        used3dCol);
-                    im::box_2d(
-                        float2(textParamsCenter.pos.x + v2d_barstart, textParamsCenter.pos.y - barheight),
-                        float2(textParamsCenter.pos.x + v2d_barstart + v2d_barwidth, textParamsCenter.pos.y),
-                        used2dCol);
-                    im::box_2d(
-                        float2(textParamsCenter.pos.x + i2d_barstart, textParamsCenter.pos.y - barheight),
-                        float2(textParamsCenter.pos.x + i2d_barstart + i2d_barwidth, textParamsCenter.pos.y),
-                        used2didxCol);
+                        // compute extents in pane
+                        float2 extents(barwidth, barheight);
+                        float2 originWS;
+                        im::impl::adjust_bounds_in_parent(
+                            originWS, extents, /* match parent width */ false);
 
-                    textParamsCenter.pos.y -= barheight + 5.f * textscale;
-
+                        im::box_2d(
+                            float2(originWS.x, originWS.y - extents.y),
+                            float2(originWS.x + extents.x, originWS.y),
+                            baseCol);
+                        im::box_2d(
+                            float2(originWS.x + v3d_barstart, originWS.y - extents.y),
+                            float2(originWS.x + v3d_barstart + v3d_barwidth, originWS.y),
+                            baseCol);
+                        im::box_2d(
+                            float2(originWS.x + v2d_barstart, originWS.y - extents.y),
+                            float2(originWS.x + v2d_barstart + v2d_barwidth, originWS.y),
+                            baseCol);
+                        im::box_2d(
+                            float2(originWS.x + i2d_barstart, originWS.y - extents.y),
+                            float2(originWS.x + i2d_barstart + i2d_barwidth, originWS.y),
+                            baseCol);
+                    }
                 }
+                im::pane_end();
             }
 
             // event label
             if (debug::eventLabel.time != 0.f) {
+
+                const f32 label_width = (f32)stb_easy_font_width(debug::eventLabel.text);
+                im::Text2DParams textParams;
+                textParams.scale = 2 * (u8)im::ui.scale;
+                textParams.pos = float2(
+                    -label_width / 2.f,
+                    game.resources.renderCore.windowProjection.config.top - 10.f * im::ui.scale);
+
                 f32 timeRunning = f32(platform::state.time.now - debug::eventLabel.time);
                 f32 t = timeRunning / 2.f;
                 if (t > 1.f) { debug::eventLabel.time = 0.f; }
-                else {
-                    u8 oldScale = textParamsCenter.scale;
-                    textParamsCenter.color = Color32(1.0f, 0.2f, 0.1f, 1.f - t);
-                    textParamsCenter.scale *= 2;
-                    im::text2d(textParamsCenter, debug::eventLabel.text);
-                    textParamsCenter.pos.y -= textParamsCenter.scale * 12.f;
-                    textParamsCenter.color = defaultCol;
-                    textParamsCenter.scale = oldScale;
+                else { 
+                    textParams.color = Color32(1.0f, 0.2f, 0.1f, 1.f - t);
+                    im::text2d(debug::eventLabel.text, textParams);
                 }
             }
         }
@@ -1158,6 +1095,20 @@ void update(Instance& game, platform::GameConfig& config) {
                 gfx::rhi::RscCBuffer cbuffers[] = { scene_cbuffer, uitext_cbuffer };
                 gfx::rhi::bind_cbuffers(rsc.shaders[renderer::ShaderTechniques::Color2D], cbuffers, 2);
                 
+                #if __DEBUG
+                {
+                    renderer::NodeData noteUItext = {};
+                    noteUItext.groupColor =
+                        platform::state.input.keyboard.pressed(input::TOGGLE_DEBUG) ?
+                        float4(1.f, 0.f, 0.f, 1.f)
+                        : float4(1.f, 1.f, 1.f, 1.f);
+                    math::identity4x4(*(Transform*)&noteUItext.worldMatrix);
+                    gfx::rhi::update_cbuffer(uitext_cbuffer, &noteUItext);
+
+                    gfx::rhi::bind_indexed_vertex_buffer(game.resources.gpuBufferDebugText);
+                    gfx::rhi::draw_indexed_vertex_buffer(game.resources.gpuBufferDebugText);
+                }
+                #endif
                 {
                     renderer::NodeData noteUItext = {};
                     noteUItext.groupColor = float4(1.f, 1.f, 1.f, 1.f);

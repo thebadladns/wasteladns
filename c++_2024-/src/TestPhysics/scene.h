@@ -52,6 +52,7 @@ struct Resources {
     renderer::MeshHandle instancedUnitSphereMesh;
     renderer::MeshHandle groundMesh;
     // UI
+    __DEBUGDEF(gfx::rhi::RscIndexedVertexBuffer gpuBufferDebugText;)
     gfx::rhi::RscIndexedVertexBuffer gpuBufferHeaderText;
     gfx::rhi::RscIndexedVertexBuffer gpuBufferOrbitText;
     gfx::rhi::RscIndexedVertexBuffer gpuBufferPanText;
@@ -2012,6 +2013,11 @@ void load_coreResources(
         text2d(buffer2D, textParams, "Welcome to the mirror room");
         textParams.pos.y += lineheight;
         commit2d(core.gpuBufferHeaderText, buffer2D, attribs_2d, countof(attribs_2d));
+        #if __DEBUG
+        text2d(buffer2D, textParams, "Press H to toggle debug menu");
+        textParams.pos.y += lineheight;
+        commit2d(core.gpuBufferDebugText, buffer2D, attribs_2d, countof(attribs_2d));
+        #endif
     }
 
     // debug renderer

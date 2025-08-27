@@ -12,10 +12,10 @@ struct Vertex3D {
     u32 color;
 };
 
-const u32 max_3d_vertices = 1 << 17;
+const u32 max_3d_vertices = 1 << 16;
 const u32 max_2d_vertices = 1 << 16;
-const size_t arena_size =                       // 3.125MB
-      max_3d_vertices * sizeof(Vertex3D)        // (1 << 17) * 16 = 2MB
+const size_t arena_size =                       // 2.125MB
+      max_3d_vertices * sizeof(Vertex3D)        // (1 << 16) * 16 = 1MB
     + max_2d_vertices * sizeof(Vertex2D)        // 2^16 * 12 = 768KB
     + (max_2d_vertices * 3 / 2) * sizeof(u32);  // ((2^16 * 3) / 2) * 4 = 384KB (at worst we use 6 indices per quad)
 
@@ -552,10 +552,7 @@ struct Text2DParams {
     Color32 color;
     u8 scale;
 };
-void text2d_va(const Text2DParams& params, const char* format, va_list argList) {
-        
-    char text[256];
-    io::format_va(text, sizeof(text), format, argList);
+void text2d(const char* text, const Text2DParams& params) {
         
     // output to a temporary buffer, so we can clip before pushing to our vertex array
     float2 textpoly_buffer[2048];
@@ -573,15 +570,22 @@ void text2d_va(const Text2DParams& params, const char* format, va_list argList) 
         v += 4;
     }
 }
+void text2d_va(const Text2DParams& params, const char* format, va_list argList) {
 
-void text2d(const Text2DParams& params, const char* format, ...) {
+    char text[256];
+    io::format_va(text, sizeof(text), format, argList);
+
+    text2d(text, params);
+}
+
+void text2d_format(const Text2DParams& params, const char* format, ...) {
     va_list va;
     va_start(va, format);
     text2d_va(params, format, va);
     va_end(va);
 }
     
-void text2d(const float2& pos, const char* format, ...) {
+void text2d_format(const float2& pos, const char* format, ...) {
     Text2DParams params;
     params.pos = pos;
     params.scale = 1;
@@ -598,11 +602,9 @@ void init(allocator::PagedArena& arena) {
 
     {
         // reserve memory for buffers
-        u32 vertices_3d_size = max_3d_vertices * sizeof(Vertex3D);
-        u32 vertices_2d_size = max_2d_vertices * sizeof(Vertex2D);
         u32 indices_2d_size = (max_2d_vertices * 3) / 2; // at worst we have all quads, at 6 index per poly
-        ctx.vertices_3d = ALLOC_ARRAY(arena, Vertex3D, vertices_3d_size);
-        ctx.vertices_2d = ALLOC_ARRAY(arena, Vertex2D, vertices_2d_size);
+        ctx.vertices_3d = ALLOC_ARRAY(arena, Vertex3D, max_3d_vertices);
+        ctx.vertices_2d = ALLOC_ARRAY(arena, Vertex2D, max_2d_vertices);
         ctx.indices_2d = ALLOC_ARRAY(arena, u32, indices_2d_size);
         ctx.indices_2d_head = 0;
 
@@ -632,9 +634,9 @@ void init(allocator::PagedArena& arena) {
             gfx::rhi::IndexedVertexBufferDesc bufferParams;
             bufferParams.vertexData = nullptr;
             bufferParams.indexData = nullptr;
-            bufferParams.vertexSize = vertices_2d_size;
+            bufferParams.vertexSize = max_2d_vertices * sizeof(Vertex2D);
             bufferParams.vertexCount = max_2d_vertices;
-            bufferParams.indexSize = indices_2d_size;
+            bufferParams.indexSize = indices_2d_size * sizeof(u32);
             bufferParams.memoryUsage = gfx::rhi::BufferMemoryUsage::CPU;
             bufferParams.accessType = gfx::rhi::BufferAccessType::CPU;
             bufferParams.indexType = gfx::rhi::BufferItemType::U32;
@@ -663,7 +665,7 @@ void init(allocator::PagedArena& arena) {
 
             gfx::rhi::VertexBufferDesc bufferParams;
             bufferParams.vertexData = nullptr;
-            bufferParams.vertexSize = vertices_3d_size;
+            bufferParams.vertexSize = max_3d_vertices * sizeof(Vertex3D);
             bufferParams.vertexCount = max_3d_vertices;
             bufferParams.memoryUsage = gfx::rhi::BufferMemoryUsage::CPU;
             bufferParams.accessType = gfx::rhi::BufferAccessType::CPU;
@@ -974,7 +976,7 @@ void pane_start(Pane& pane) {
     params.pos = float2(header_bbox_min_WS.x + headerPadding, header_bbox_max_WS.y - headerPadding);
     params.color = color_bright;
     params.scale = ui.scale;
-    im::text2d(params, pane.text);
+    im::text2d(pane.text, params);
 
     // handle scrolling
     float2 scroll = mousescroll();
@@ -1029,7 +1031,7 @@ void horizontal_layout_end() {
 
 void label(
     const char* text,
-    Color32 textColor, float2 min_dimensions) {
+    Color32 textColor = color_bright, float2 min_dimensions = float2(0.f)) {
     
     // calculate extents of the text to be displayed
     const f32 padding = ui.scale * 5.f;
@@ -1047,23 +1049,23 @@ void label(
     params.pos = float2(origin_WS.x + padding, origin_WS.y - padding);
     params.color = textColor;
     params.scale = ui.scale;
-    im::text2d(params, text);
+    im::text2d(text, params);
 }
 void label_va(
     Color32 textColor, 
     float2 min_dimensions,
     const char* format, va_list argList) {
-    char text[256];
+    char text[512];
     io::format_va(text, sizeof(text), format, argList);
     label(text, textColor, min_dimensions);
 }
-void label(const char* format, ...) {
+void label_format(const char* format, ...) {
     va_list va;
     va_start(va, format);
     label_va(color_bright, float2(0.f), format, va);
     va_end(va);
 }
-void label(Color32 textColor, const char* format, ...) {
+void label_format(Color32 textColor, const char* format, ...) {
     va_list va;
     va_start(va, format);
     label_va(textColor, float2(0.f), format, va);
@@ -1137,7 +1139,7 @@ bool button(
     params.pos = float2(origin_WS.x + padding, origin_WS.y - padding);
     params.color = color_bright;
     params.scale = ui.scale;
-    im::text2d(params, text);
+    im::text2d(text, params);
 
     return result;
 };
@@ -1208,7 +1210,7 @@ void slider(const char* text, f32* v, const f32 min, const f32 max) {
         origin_WS.y - extents.y * 0.5f + label_extents.y * 0.5f);
     params.color = Color32(0xFFFFFF);
     params.scale = ui.scale;
-    im::text2d(params, text_with_value);
+    im::text2d(text_with_value, params);
 }
 
 template<typename _type>
@@ -1252,7 +1254,7 @@ bool checkbox(const char* text, bool* v) {
             *v = !*v;
             result = true;
         }
-        label(text);
+        label_format(text);
     }
     horizontal_layout_end();
 

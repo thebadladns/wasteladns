@@ -531,7 +531,7 @@ void init(allocator::PagedArena& arena) {
         // reserve memory for buffers
         u32 vertices_3d_size = max_3d_vertices * sizeof(Vertex3D);
         u32 vertices_2d_size = max_2d_vertices * sizeof(Vertex2D);
-        u32 indices_2d_size = (max_2d_vertices * 3) / 2; // at worst we have all quads, at 6 index per poly
+        u32 indices_2d_size = sizeof(u32) * (max_2d_vertices * 3) / 2; // at worst we have all quads, at 6 index per poly
         debug::ctx.vertices_3d = (Vertex3D*)allocator::alloc_arena(arena, vertices_3d_size, alignof(Vertex3D));
         debug::ctx.vertices_2d = (Vertex2D*)allocator::alloc_arena(arena, vertices_2d_size, alignof(Vertex2D));
         debug::ctx.indices_2d = (u32*)allocator::alloc_arena(arena, indices_2d_size, alignof(u32));
