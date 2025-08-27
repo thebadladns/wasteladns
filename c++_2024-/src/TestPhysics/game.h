@@ -1027,7 +1027,7 @@ void update(Instance& game, platform::GameConfig& config) {
             // event label
             if (debug::eventLabel.time != 0.f) {
 
-                const f32 label_width = (f32)stb_easy_font_width(debug::eventLabel.text);
+                const f32 label_width = im::ui.scale * (f32)stb_easy_font_width(debug::eventLabel.text);
                 im::Text2DParams textParams;
                 textParams.scale = 2 * (u8)im::ui.scale;
                 textParams.pos = float2(
