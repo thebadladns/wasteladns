@@ -1010,15 +1010,15 @@ void update(Instance& game, platform::GameConfig& config) {
                         im::box_2d(
                             float2(originWS.x + v3d_barstart, originWS.y - extents.y),
                             float2(originWS.x + v3d_barstart + v3d_barwidth, originWS.y),
-                            baseCol);
+                            used3dCol);
                         im::box_2d(
                             float2(originWS.x + v2d_barstart, originWS.y - extents.y),
                             float2(originWS.x + v2d_barstart + v2d_barwidth, originWS.y),
-                            baseCol);
+                            used2dCol);
                         im::box_2d(
                             float2(originWS.x + i2d_barstart, originWS.y - extents.y),
                             float2(originWS.x + i2d_barstart + i2d_barwidth, originWS.y),
-                            baseCol);
+                            used2didxCol);
                     }
                 }
                 im::pane_end();
