@@ -20,7 +20,7 @@ The head is a simple sphere, as are the eyes, which project their material onto 
 
 ![](breakdown_1.jpg)
 
-The mirrors use the same setup as [the one detailed in this test](../testMirrors/README.md), and don't really add much to the scene, since it's not reasonable to render the SDF scene with as many passes as a recursive mirror scene demands. 
+The mirrors use the same setup as [the one detailed in this test](../TestMirrors/README.md), and don't really add much to the scene, since it's not reasonable to render the SDF scene with as many passes as a recursive mirror scene demands. 
 The SDF scene could handle its own reflections, but it wouldn't have a way to blend the depth with the rasterized scene, since we lose the depth of every reflection after each mirror pass. Regardless, the mirror scene is there and the SDF scene does render on each mirror pass, however it is at least culled using the camera's frustum.
 
 This test also uses a new zero-memory immediate mode UI, based on Casey Muratori's and Sean Barrett's work:
