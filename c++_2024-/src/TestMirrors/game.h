@@ -286,7 +286,97 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
                 game.scene.player.control.localInput = math::invScale(game.scene.player.control.localInput, game.scene.player.control.mag);
                 game.scene.player.control.mag = math::min(game.scene.player.control.mag, 1.f);
             }
-            game::updateMovement_cameraRelative(game.scene.player.transform, game.scene.player.state, game.scene.player.control, game.scene.camera.transform, dt);
+            const float2 effectiveLocalInput = game::calculateMovement_cameraRelative(
+                game.scene.player.transform, game.scene.player.state, game.scene.player.control,
+                game.scene.camera.transform, dt);
+
+            // enforce player movement
+            {
+                Transform33 movementTransform =
+                    math::fromUpTowardsFront(
+                        game.scene.player.transform.up, game.scene.camera.transform.front);
+                const float3& front = movementTransform.front;
+                const float3& right = movementTransform.right;
+
+                // Movement update
+                float3 desiredMovement = {};
+                if (game.scene.player.state.speed > math::eps32) {
+                    float3 cameraRelativeMovementInput;
+                    if (game.scene.player.control.mag > math::eps32) {
+                        cameraRelativeMovementInput = float3(game.scene.player.control.localInput, 0.f);
+                    } else {
+                        const f32 camCurrentRad = math::orientation(game.scene.camera.transform.front.xy);
+                        const f32 playerCurrentRad = math::orientation(game.scene.player.transform.front.xy);
+                        const f32 camPlayerCurrentRad = math::subtractShort(playerCurrentRad, camCurrentRad);
+
+                        cameraRelativeMovementInput = float3(math::direction(camPlayerCurrentRad), 0.f);
+                    }
+                    const f32 translation = game.scene.player.state.speed * dt;
+                    const float3 worldMovementInput = math::add(math::scale(front, cameraRelativeMovementInput.y), math::scale(right, cameraRelativeMovementInput.x));
+                    const float3 worldVelocity = math::scale(worldMovementInput, translation);
+                    desiredMovement = worldVelocity;
+                }
+
+                float3 pos = math::add(game.scene.player.transform.pos, desiredMovement);
+                u32 playerObstacleIndex = (game.scene.playerPhysicsNodeHandle) >> physics::ObjectType::Bits;
+                const float radius = game.scene.physicsScene.obstacles[playerObstacleIndex].radius;
+
+                // hack: update player movement in physics
+                for (u32 i = 0; i < game.scene.physicsScene.obstacle_count; i++) {
+
+                    if (i == playerObstacleIndex) continue;
+
+                    physics::StaticObject_Sphere& o = game.scene.physicsScene.obstacles[i];
+                    float3 collisionDir = math::subtract(pos, o.pos);
+                    collisionDir.z = 0.f;
+                    f32 dist = math::mag(collisionDir);
+                    if (dist < math::eps32 || dist > radius + o.radius) continue;
+                    collisionDir = math::invScale(collisionDir, dist);
+                    f32 correction = radius + o.radius - dist;
+                    pos = math::add(pos, math::scale(collisionDir, correction));
+                }
+                for (u32 i = 0; i < game.scene.physicsScene.wall_count; i++) {
+
+                    physics::StaticObject_Line& w = game.scene.physicsScene.walls[i];
+
+                    // distance to wall
+                    float3 ab = math::subtract(w.end, w.start);
+                    f32 t = math::max(0.f,
+                        math::min(1.f,
+                            (math::dot(math::subtract(pos, w.start), ab)) / math::dot(ab, ab)));
+                    float3 col = math::add(w.start, math::scale(ab, t));
+                    float3 d = math::subtract(pos, col);
+                    d.z = 0.f;
+                    f32 dist = math::mag(d);
+                    float3 normal(-ab.y, ab.x, ab.z);
+
+                    // push out
+                    if (dist == 0.f) {
+                        d = normal;
+                        dist = math::mag(normal);
+                    }
+                    d = math::invScale(d, dist);
+                    if (math::dot(d, normal) >= 0.f) { // outside the wall
+                        if (dist > radius) continue;
+                        pos = math::add(pos, math::scale(d, radius - dist));
+                    }
+                    else { // inside the wall
+                        pos = math::add(pos, math::scale(d, -(radius + dist)));
+                    }
+                }
+
+                if (game.scene.player.control.mag > math::eps32) {
+                    // Facing update
+                    const float3 cameraRelativeFacingInput(effectiveLocalInput, 0.f);
+                    const float3 worldFacingInput = math::add(math::scale(front, cameraRelativeFacingInput.y), math::scale(right, cameraRelativeFacingInput.x));
+                    Transform33 t = math::fromUpTowardsFront(game.scene.player.transform.up, worldFacingInput);
+                    game.scene.player.transform.front = t.front;
+                    game.scene.player.transform.right = t.right;
+                    game.scene.player.transform.up = t.up;
+                }
+                // Positon update
+                game.scene.player.transform.pos = pos;
+            }
 
             // update player render
             renderer::NodeData& nodeData = renderer::node_from_handle(game.scene.renderScene, game.scene.playerDrawNodeHandle).nodeData;
@@ -391,7 +481,7 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
         {
             physics::updatePositionFromHandle(
                 game.scene.physicsScene,
-                game.scene.instancedNodesHandles[Scene::InstancedTypes::PhysicsBalls],
+                game.scene.playerPhysicsNodeHandle,
                 game.scene.player.transform.pos, (f32)game.time.lastFrameDelta);
 
             physics::updatePhysics(game.scene.physicsScene, dt);
@@ -637,25 +727,25 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
                     allocator::Buffer<AABB> aabbs = {};
                     const Color32 boxColor(0.1f, 0.8f, 0.8f, 0.7f);
                     while (stackCount > 0) {
-                        DrawNode n = nodeStack[--stackCount];
-                        if (!bvh.nodes[n.nodeid].isLeaf) {
-                            if (n.depth == debug::bvhDepth) {
-                                float3 center =
-                                    math::scale(
-                                        math::add(bvh.nodes[n.nodeid].min,
-                                            bvh.nodes[n.nodeid].max), 0.5f);
-                                float3 scale =
-                                    math::scale(
-                                        math::subtract(
-                                            bvh.nodes[n.nodeid].max, bvh.nodes[n.nodeid].min),
-                                        0.5f);
-                                allocator::push(aabbs, scratchArena) = { center, scale };
-                            } else {
-                                nodeStack[stackCount++] =
-                                    DrawNode{ bvh.nodes[n.nodeid].lchildId, u16(n.depth + 1u) };
-                                nodeStack[stackCount++] =
-                                    DrawNode{ u16(bvh.nodes[n.nodeid].lchildId + 1u), u16(n.depth + 1u) };
-                            }
+                        const DrawNode n = nodeStack[--stackCount];
+                        const bvh::Node& node = bvh.nodes[n.nodeid];
+                        if (n.depth == debug::bvhDepth || node.isLeaf) {
+                            float3 min, max;
+                            #if DISABLE_INTRINSICS
+                                min = node.min; max = node.max;
+                            #else
+                                bvh::ymm_to_minmax(
+                                    min, max, node.xcoords_256, node.ycoords_256, node.zcoords_256);
+                            #endif
+                            float3 center = math::scale(math::add(min, max), 0.5f);
+                            float3 scale = math::scale(math::subtract(max, min), 0.5f);
+                            allocator::push(aabbs, scratchArena) = { center, scale };
+                        }
+                        else if (!node.isLeaf) {
+                            nodeStack[stackCount++] =
+                                DrawNode{ bvh.nodes[n.nodeid].lchildId, u16(n.depth + 1u) };
+                            nodeStack[stackCount++] =
+                                DrawNode{ u16(bvh.nodes[n.nodeid].lchildId + 1u), u16(n.depth + 1u) };
                         }
                     }
 

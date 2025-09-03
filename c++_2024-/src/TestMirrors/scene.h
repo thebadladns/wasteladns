@@ -41,13 +41,12 @@ struct AssetInMemory {
     u32 clipCount;
 };
 struct Resources {
-    struct MeshesMeta { enum Enum { ToiletLo, ToiletHi, Count }; };
+    struct MeshesMeta { enum Enum { ToiletLo, ToiletHi, HallOfMirrors, Count }; };
     struct AssetsMeta { enum Enum { Bird, Boar, Ground, Count }; };
     struct MirrorHallMeta { enum Enum { Count = 8 }; };
     renderer::CoreResources renderCore;
     AssetInMemory assets[AssetsMeta::Count];
     GPUCPUMesh meshes[MeshesMeta::Count];
-    GPUCPUMesh mirrorHallMeshes[MirrorHallMeta::Count];
     renderer::MeshHandle instancedUnitCubeMesh;
     renderer::MeshHandle instancedUnitSphereMesh;
     renderer::MeshHandle groundMesh;
@@ -73,13 +72,13 @@ const RoomDefinition roomDefinitions[] = {
       float3(-180.f * math::d2r32, 0.f, -180 * math::d2r32), // min camera eulers
       float3(180.f * math::d2r32, 0.f, 180 * math::d2r32), // max camera eulers
       0.3f, 2.f,
-      4, false },
+      4, true },
     { Resources::MeshesMeta::ToiletHi,
       float3(-180.f * math::d2r32, 0.f, -180 * math::d2r32), // min camera eulers
       float3(180.f * math::d2r32, 0.f, 180 * math::d2r32), // max camera eulers
       0.2f, 0.5f,
-      2, false },
-    { Resources::MeshesMeta::Count,
+      2, true },
+    { Resources::MeshesMeta::HallOfMirrors,
       float3(-180.f * math::d2r32, 0.f, -180 * math::d2r32), // min camera eulers
       float3(180.f * math::d2r32, 0.f, 180 * math::d2r32), // max camera eulers
       0.3f, 2.f,
@@ -89,12 +88,12 @@ const RoomDefinition roomDefinitions[] = {
       float3(-45 * math::d2r32, 0.f, -180 * math::d2r32), // min camera eulers
       float3(-1.f * math::d2r32, 0.f, 180 * math::d2r32), // max camera eulers
       0.3f, 2.f,
-      4, false },
+      4, true },
     { Resources::MeshesMeta::ToiletHi,
       float3(-30 * math::d2r32, 0.f, -180 * math::d2r32), // min camera eulers
       float3(-1.f * math::d2r32, 0.f, 180 * math::d2r32), // max camera eulers
       0.2f, 0.5f,
-      3, false },
+      3, true },
     { Resources::MeshesMeta::Count,
       float3(-45 * math::d2r32, 0.f, -180 * math::d2r32), // min camera eulers
       float3(-1.f * math::d2r32, 0.f, 180 * math::d2r32), // max camera eulers
@@ -148,15 +147,12 @@ Scene& scene, const AssetInMemory& def, const float3& spawnPos) {
 
 void spawn_model_as_mirrors(
     game::Mirrors& mirrors, const game::GPUCPUMesh& loadedMesh,
-    allocator::PagedArena scratchArena, allocator::PagedArena& sceneArena, bool accelerateBVH) {
+    allocator::PagedArena scratchArena, allocator::PagedArena& sceneArena) {
 
     const renderer::CPUMesh& cpuMesh = loadedMesh.cpuBuffer;
-    u32* triangleIds;
-    if (accelerateBVH) {
-        triangleIds =
+    u32* triangleIds =
         (u32*)allocator::alloc_arena(
             scratchArena, sizeof(u32) * (cpuMesh.indexCount / 3), alignof(u32));
-    }
 
     u32 index = 0;
     u32 triangles = 0;
@@ -179,7 +175,7 @@ void spawn_model_as_mirrors(
         poly.v[0] = v0;
         poly.v[1] = v1;
         poly.v[2] = v2;
-        if (accelerateBVH) { triangleIds[triangles++] = mirrorId; }
+        triangleIds[triangles++] = mirrorId;
 
         if (index + 6 <= cpuMesh.indexCount) {
             float3 v3 = cpuMesh.vertices[cpuMesh.indices[index + 3]];
@@ -194,18 +190,16 @@ void spawn_model_as_mirrors(
                 poly.numPts = 4;
                 poly.v[3] = v3;
                 mesh.vertexBuffer.indexCount = 6;
-                if (accelerateBVH) { triangleIds[triangles++] = mirrorId; }
+                triangleIds[triangles++] = mirrorId;
             }
         }
         poly.normal = math::normalize(math::cross(math::subtract(poly.v[2], poly.v[0]), math::subtract(poly.v[1], poly.v[0])));
         index += mesh.vertexBuffer.indexCount;
     }
 
-    if (accelerateBVH) {
-        bvh::buildTree(
-            sceneArena, scratchArena, mirrors.bvh, &(loadedMesh.cpuBuffer.vertices[0].x),
-            loadedMesh.cpuBuffer.indices, loadedMesh.cpuBuffer.indexCount, triangleIds);
-    }
+    bvh::buildTree(
+        sceneArena, scratchArena, mirrors.bvh, &(loadedMesh.cpuBuffer.vertices[0].x),
+        loadedMesh.cpuBuffer.indices, loadedMesh.cpuBuffer.indexCount, triangleIds);
 }
 }
 
@@ -2434,34 +2428,50 @@ void load_coreResources(
         scratchArena, persistentArena, "assets/meshes/mid-smooth.obj", 1.5f);
 
     // Hall of mirrors
-    for (u32 m = 0; m < game::Resources::MirrorHallMeta::Count; m++) {
-        game::GPUCPUMesh& meshToLoad = core.mirrorHallMeshes[m];
-        f32 w = 12.4f, h = 10.f;
-        u32 c = Color32(0.01f, 0.19f, 0.3f, 0.32f).ABGR();
-        renderer::VertexLayout_Color_3D v[] = {
-            { { 1.f, 0.f, -1.f }, c }, { { -1.f, 0.f, -1.f }, c },
-            { { -1.f, 0.f, 1.f }, c }, { { 1.f, 0.f, 1.f }, c } };
-        Transform t;
-        Transform rot = math::fromOffsetAndOrbit(
-            float3(0.f, 0.f, 0.f), float3(0.f, 0.f, f32(m) * math::twopi32 / f32(8)));
-        Transform translate = {};
-        math::identity4x4(translate);
-        translate.pos = float3(0.f, -30.f, 0.f);
-        t.matrix = math::mult(rot.matrix, translate.matrix);
-        t.matrix.col0.xyz = math::scale(t.matrix.col0.xyz, w);
-        t.matrix.col2.xyz = math::scale(t.matrix.col2.xyz, h);
-        for (u32 i = 0; i < countof(v); i++) {
-            v[i].pos = math::mult(t.matrix, float4(v[i].pos, 1.f)).xyz;
+    {
+        const u32 mirrorCount = 8;
+        renderer::VertexLayout_Color_3D vertices[4 * mirrorCount];
+        u16 indices[4 * mirrorCount * 3 / 2]; // 6 indices per quad
+        const float3 v0(1.f, 0.f, -1.f);
+        const float3 v1(-1.f, 0.f, -1.f);
+        const float3 v2(-1.f, 0.f, 1.f);
+        const float3 v3(1.f, 0.f, 1.f);
+        for (u32 m = 0; m < mirrorCount; m++) {
+            f32 w = 12.4f, h = 10.f;
+            u32 c = Color32(0.01f, 0.19f, 0.3f, 0.32f).ABGR();
+            u32 vertex_idx = m * 4;
+            Transform t;
+            Transform rot = math::fromOffsetAndOrbit(
+                float3(0.f, 0.f, 0.f), float3(0.f, 0.f, f32(m) * math::twopi32 / f32(8)));
+            Transform translate = {};
+            math::identity4x4(translate);
+            translate.pos = float3(0.f, -30.f, 0.f);
+            t.matrix = math::mult(rot.matrix, translate.matrix);
+            t.matrix.col0.xyz = math::scale(t.matrix.col0.xyz, w);
+            t.matrix.col2.xyz = math::scale(t.matrix.col2.xyz, h);
+            vertices[vertex_idx + 0] = { math::mult(t.matrix, float4(v0, 1.f)).xyz, c };
+            vertices[vertex_idx + 1] = { math::mult(t.matrix, float4(v1, 1.f)).xyz, c };
+            vertices[vertex_idx + 2] = { math::mult(t.matrix, float4(v2, 1.f)).xyz, c };
+            vertices[vertex_idx + 3] = { math::mult(t.matrix, float4(v3, 1.f)).xyz, c };
+
+            // clock-wise indices
+            u32 index_idx = vertex_idx * 3 / 2;
+            // todo: start of second tri needs to be the last vertex, fix this weird restriction
+            indices[index_idx + 0] = vertex_idx + 2;
+            indices[index_idx + 1] = vertex_idx + 1;
+            indices[index_idx + 2] = vertex_idx + 0;
+            indices[index_idx + 3] = vertex_idx + 3;
+            indices[index_idx + 4] = vertex_idx + 2;
+            indices[index_idx + 5] = vertex_idx + 0;
         }
-        // clock-wise indices
-        u16 i[] = { 2, 1, 0, 3, 2, 0 }; // todo: start of second tri needs to be the last vertex, fix this weird restriction
+        game::GPUCPUMesh& meshToLoad = core.meshes[game::Resources::MeshesMeta::HallOfMirrors];
         renderer::driver::IndexedVertexBufferDesc bufferParams;
-        bufferParams.vertexData = v;
-        bufferParams.indexData = i;
-        bufferParams.vertexSize = sizeof(v);
-        bufferParams.vertexCount = countof(v);
-        bufferParams.indexSize = sizeof(i);
-        bufferParams.indexCount = countof(i);
+        bufferParams.vertexData = vertices;
+        bufferParams.indexData = indices;
+        bufferParams.vertexSize = sizeof(vertices);
+        bufferParams.vertexCount = countof(vertices);
+        bufferParams.indexSize = sizeof(indices);
+        bufferParams.indexCount = countof(indices);
         bufferParams.memoryUsage = renderer::driver::BufferMemoryUsage::GPU;
         bufferParams.accessType = renderer::driver::BufferAccessType::GPU;
         bufferParams.indexType = renderer::driver::BufferItemType::U16;
@@ -2479,17 +2489,17 @@ void load_coreResources(
         renderer::driver::create_indexed_vertex_buffer(
             meshToLoad.gpuBuffer, bufferParams, attribs, countof(attribs));
 
-        renderer::CPUMesh& mesh = meshToLoad.cpuBuffer;
-        mesh.vertices = (float3*)allocator::alloc_arena(
-            persistentArena,
-            sizeof(float3) * countof(v), alignof(float3));
-        mesh.indices = (u16*)allocator::alloc_arena(
-            persistentArena,
-            sizeof(u16) * countof(i), alignof(u16));
-        for (u32 i = 0; i < countof(v); i++) { mesh.vertices[i] = v[i].pos; }
-        memcpy(mesh.indices, i, sizeof(u16) * countof(i));
-        mesh.indexCount = countof(i);
-        mesh.vertexCount = countof(v);
+        renderer::CPUMesh& cpuBuffer = meshToLoad.cpuBuffer;
+        cpuBuffer.vertices =
+            (float3*)allocator::alloc_arena(
+                persistentArena, sizeof(float3) * countof(vertices), alignof(float3));
+        cpuBuffer.indices =
+            (u16*)allocator::alloc_arena(
+                persistentArena, sizeof(u16) * countof(indices), alignof(u16));
+        for (u32 i = 0; i < countof(vertices); i++) { cpuBuffer.vertices[i] = vertices[i].pos; }
+        memcpy(cpuBuffer.indices, indices, sizeof(u16) * countof(indices));
+        cpuBuffer.indexCount = countof(indices);
+        cpuBuffer.vertexCount = countof(vertices);
     }
 
     // UI text
@@ -2694,6 +2704,33 @@ void spawn_scene_mirrorRoom(
             handle_from_instanced_node(renderScene, node);
     }
 
+    // physics ground
+    {
+        float width = 12.4f;
+        float radius = 30.f;
+        float2 ground[] = {
+            float2(width, radius),
+            float2(-width, radius),
+            float2(-radius, width),
+            float2(-radius, -width),
+            float2(-width, -radius),
+            float2(width, -radius),
+            float2(radius, -width),
+            float2(radius, width)
+        };
+
+        u32 prev = countof(ground) - 1;
+        for (u32 i = 0; i < countof(ground); i++) {
+            float2 coods_xy = ground[i];
+            physics::StaticObject_Line& wall = physicsScene.walls[physicsScene.wall_count++];
+            wall = {};
+            wall.start = float3(ground[prev], 0.f);
+            wall.end = float3(ground[i], 0.f);
+
+            prev = i;
+        }
+    }
+
     for (u32 asset_idx = 0; asset_idx < countof(assetDefs); asset_idx++) {
         const AssetData& assetDef = assetDefs[asset_idx];
         for (u32 asset_rep = 0; asset_rep < assetDef.count; asset_rep++) {
@@ -2723,7 +2760,7 @@ void spawn_scene_mirrorRoom(
                 scene.player.transform.pos = asset_init_pos;
             }
 
-            if (roomDef.physicsBalls && assetDef.physicsObstacle) {
+            if (assetDef.physicsObstacle) {
                 physics::StaticObject_Sphere& o =
                     physicsScene.obstacles[physicsScene.obstacle_count++];
                 o = {};
@@ -2765,8 +2802,11 @@ void spawn_scene_mirrorRoom(
             handle_from_instanced_node(renderScene, node);
     }
 
-    if (roomDef.mirrorMesh < game::Resources::MeshesMeta::Count) {
-        const u32 numMirrors = 1024 * 1024;
+    // mirrors
+    {
+        const u32 numMirrors = 
+            (roomDef.mirrorMesh == game::Resources::MeshesMeta::HallOfMirrors) ?
+            game::Resources::MirrorHallMeta::Count * 2 : 1024 * 1024;
         scene.mirrors.polys = (game::Mirrors::Poly*)
             allocator::alloc_arena(
                 sceneArena,
@@ -2779,37 +2819,20 @@ void spawn_scene_mirrorRoom(
                 alignof(renderer::DrawMesh));
         scene.mirrors.bvh = {};
         game::spawn_model_as_mirrors(
-            scene.mirrors, core.meshes[roomDef.mirrorMesh], scratchArena, sceneArena, true);
-    } else { // hall of mirrors
-        const u32 numMirrors = game::Resources::MirrorHallMeta::Count * 2;
-        scene.mirrors.polys = (game::Mirrors::Poly*)
-            allocator::alloc_arena(
-                sceneArena,
-                sizeof(game::Mirrors::Poly) * numMirrors,
-                alignof(game::Mirrors::Poly));
-        scene.mirrors.drawMeshes = (renderer::DrawMesh*)
-            allocator::alloc_arena(
-                sceneArena,
-                sizeof(renderer::DrawMesh) * numMirrors,
-                alignof(renderer::DrawMesh));
-        scene.mirrors.bvh = {};
-        for (u32 m = 0; m < game::Resources::MirrorHallMeta::Count; m++) {
-            const game::GPUCPUMesh& mirrorMesh = core.mirrorHallMeshes[m];
-            game::spawn_model_as_mirrors(
-                scene.mirrors, mirrorMesh, scratchArena, sceneArena, false);
-        }
-        for (u32 i = 0; i < scene.mirrors.count; i++) {
-            game::Mirrors::Poly& p = scene.mirrors.polys[i];
-            physics::StaticObject_Line& wall = physicsScene.walls[physicsScene.wall_count++];
-            wall = {};
-            wall.start = p.v[0];
-            for (u32 j = 1; j < p.numPts; j++) {
-                if ((p.v[j].x != wall.start.x) || (p.v[j].y != wall.start.y)) {
-                    wall.end = p.v[j];
-                }
-            }
-            wall.start.z = 0.f;
-            wall.end.z = 0.f;
+            scene.mirrors, core.meshes[roomDef.mirrorMesh], scratchArena, sceneArena);
+
+        // Manually define the bounding boxes for these obstacles, since their bounding box
+        // will otherwise account for the upper water tank
+        if (roomDef.mirrorMesh == game::Resources::MeshesMeta::ToiletLo) {
+            physics::StaticObject_Sphere& o =
+                physicsScene.obstacles[physicsScene.obstacle_count++];
+            o.pos = float3(0.f, -1.f, 0.f);
+            o.radius = 2.5f;
+        } else if (roomDef.mirrorMesh == game::Resources::MeshesMeta::ToiletHi) {
+            physics::StaticObject_Sphere& o =
+                physicsScene.obstacles[physicsScene.obstacle_count++];
+            o.pos = float3(0.f, 0.f, 0.f);
+            o.radius = 9.f;
         }
     }
     scene.maxMirrorBounces = roomDef.maxMirrorBounces;
