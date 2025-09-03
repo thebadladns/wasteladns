@@ -1155,7 +1155,12 @@ void update(Instance& game, platform::GameConfig& config) {
             gfx::rhi::end_event();
         }
 
-        // Hires SDF scene (only available if the upscale pass copies depth too)
+        // Hires SDF scene. Only available if the upscale pass copies depth too, which requires the
+        // following changes to the "UPSCALE TO WINDOW" pass:
+        // - input render target needs to be created with flag RenderTargetParams::Flags::ReadDepth
+        // - depth state needs to be depthStateAlways
+        // - shader should be FullscreenBlitTexturedDepth
+        // - gameRT.depthStencil needs to be passed as a second texture input
         //renderSDFScene(cameraTree[0], game.resources.renderCore, game.resources.renderCore.depthStateOn);
 
         // from now we should have

@@ -31,6 +31,9 @@ void create_RT(RscRenderTarget& rt, const RenderTargetParams& params) {
                 GL_TEXTURE_2D, 0, GL_DEPTH24_STENCIL8,
                 params.width, params.height, 0,
                 GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, nullptr);
+            // ensure the parameters are unpacked correctly
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
             glFramebufferTexture2D(
                 GL_DRAW_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D, rt.depthStencil.id, 0);
             glBindFramebuffer(GL_FRAMEBUFFER, 0);

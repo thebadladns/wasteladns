@@ -2,7 +2,7 @@
 
 ![](summary.gif)
 
-Here is some quick and simple setup to blend a raymarched SDF (signed distance fields) scene with a traditional rasterized one. The setup is heavily inspired by Iñigo Quilez's articles on the subject.
+Here is some quick and simple setup to blend a raymarched SDF (signed distance fields) scene with a traditional rasterized one. The techniques are heavily inspired by Iñigo Quilez's articles on the subject.
 
 ## Building notes
 
@@ -12,7 +12,7 @@ For building this project, refer to [this very rough blurb](../../README.md). CO
 
 ## Breakdown
 
-The SDF scene is roughly based from a very quick mock-up done in Adobe Neo:
+The SDF scene is roughly based on a very quick mock-up done in Adobe Neo:
 
 ![](breakdown_0.gif)
 
@@ -23,6 +23,6 @@ The head is a simple sphere, as are the eyes, which project their material onto 
 The mirrors use the same setup as [the one detailed in this test](../TestMirrors/README.md), and don't really add much to the scene, since it's not reasonable to render the SDF scene with as many passes as a recursive mirror scene demands. 
 The SDF scene could handle its own reflections, but it wouldn't have a way to blend the depth with the rasterized scene, since we lose the depth of every reflection after each mirror pass. Regardless, the mirror scene is there and the SDF scene does render on each mirror pass, however it is at least culled using the camera's frustum.
 
-This test also uses a new zero-memory immediate mode UI, based on Casey Muratori's and Sean Barrett's work:
+This test also uses a new zero-memory immediate mode UI, based on Casey Muratori's and Sean Barrett's work. Feel free to look at `im::WindowContext` and related code inside `helpers/immediate_mode.h`.
 
 ![](breakdown_2.gif)

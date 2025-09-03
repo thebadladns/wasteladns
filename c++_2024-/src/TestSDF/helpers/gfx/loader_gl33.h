@@ -170,6 +170,7 @@ typedef struct __GLsync* GLsync;
 #define GL_ALWAYS 0x0207
 #define GL_ZERO 0
 #define GL_ONE 1
+#define GL_NONE 0
 #define GL_SRC_COLOR 0x0300
 #define GL_ONE_MINUS_SRC_COLOR 0x0301
 #define GL_SRC_ALPHA 0x0302
@@ -184,6 +185,7 @@ typedef struct __GLsync* GLsync;
 #define GL_DEPTH_COMPONENT 0x1902
 #define GL_UNSIGNED_INT_24_8 0x84FA
 #define GL_DEPTH24_STENCIL8 0x88F0
+#define GL_TEXTURE_COMPARE_MODE 0x884C
 #define GL_RED 0x1903
 #define GL_GREEN 0x1904
 #define GL_BLUE 0x1905
@@ -198,6 +200,7 @@ typedef struct __GLsync* GLsync;
 #define GL_TEXTURE_MIN_FILTER 0x2801
 #define GL_TEXTURE_WRAP_S 0x2802
 #define GL_TEXTURE_WRAP_T 0x2803
+#define GL_CLAMP_TO_EDGE 0x812F
 #define GL_REPEAT 0x2901
 #define GL_BLEND_DST 0x0BE0
 #define GL_BLEND_SRC 0x0BE1
