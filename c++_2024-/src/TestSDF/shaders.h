@@ -876,7 +876,7 @@ layout(std140) uniform type_BlitSDF {
     float time; float platformSize; vec2 padding;
 } BlitSDF;
 
-layout(location = 0) in vec2 in_var_TEXCOORD;
+layout(location = 0) in vec2 varying_TEXCOORD;
 layout(location = 1) in vec4 in_var_POSITION;
 layout(location = 0) out vec4 out_var_SV_TARGET;
 
@@ -1037,13 +1037,13 @@ void main() {
         -dot(BlitSDF.viewMatrix1.xyz, BlitSDF.viewMatrix3.xyz),
         -dot(BlitSDF.viewMatrix2.xyz, BlitSDF.viewMatrix3.xyz));
     vec3 ro = camPos_WS;
-    vec3 camToNear_WS = nearPos_WS(in_var_TEXCOORD) - camPos_WS;
+    vec3 camToNear_WS = nearPos_WS(varying_TEXCOORD) - camPos_WS;
     vec3 rd = normalize(camToNear_WS);
     
     // raymarch scene
     vec2 tm = castRay(ro, rd);
     
-    vec4 output = vec4(0.0);
+    vec4 output_color = vec4(0.0);
     float depth = 1.0;
     if (tm.y > 0.0) {
         vec3 pos = ro + tm.x * rd;
@@ -1080,7 +1080,7 @@ void main() {
         // gamma correction
         col = pow(col, vec3(0.4545, 0.4545, 0.4545));
 
-        output = vec4(col.xyz, 1.0 );
+        output_color = vec4(col.xyz, 1.0 );
 
         // compute depth
 
@@ -1108,7 +1108,7 @@ void main() {
         //float depth = zc / wc;
     }
 
-    out_var_SV_TARGET = output;
+    out_var_SV_TARGET = output_color;
     gl_FragDepth = depth;
 }
 )"
