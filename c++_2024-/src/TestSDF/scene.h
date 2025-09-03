@@ -1060,10 +1060,12 @@ void renderBaseScene(RenderSceneContext& sceneCtx) {
     #endif
 
     // SDF scene
+    gfx::rhi::bind_RS(rsc.rasterizerStateFillFrontfaces);
     renderSDFScene(sceneCtx.camera, rsc, sceneCtx.ds_opaque);
 
     // Alpha pass
     {
+        gfx::rhi::bind_RS(sceneCtx.rs);
         allocator::PagedArena scratchArena = sceneCtx.scratchArena;
         Drawlist dl = {};
         u32 maxDrawCalls =

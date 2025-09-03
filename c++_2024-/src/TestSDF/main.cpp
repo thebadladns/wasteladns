@@ -1,12 +1,12 @@
 #define __GPU_DEBUG 0
 
-//#ifdef NDEBUG
-//#define __DEBUG 0
-//#define __DEBUGDEF(...)
-//#else
+#ifdef NDEBUG
+#define __DEBUG 0
+#define __DEBUGDEF(...)
+#else
 #define __DEBUG 1
 #define __DEBUGDEF(...) __VA_ARGS__
-//#endif
+#endif
 
 #define __PROFILE 1
 #if __PROFILE

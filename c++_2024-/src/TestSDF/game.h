@@ -100,7 +100,7 @@ void loadLaunchConfig(platform::LaunchConfig& config) {
     config.game_width = 320 * 1;
     config.game_height = 240 * 1;
     config.fullscreen = false;
-    config.title = "Physics Test";
+    config.title = "SDF Test";
 }
 void start(Instance& game, platform::GameConfig& config) {
 
