@@ -23,6 +23,17 @@ struct CBuffer_Binding { enum { Binding_0 = 0, Binding_1 = 1, Binding_2 = 2, Cou
 struct BlitColor {
     float4 color;
 };
+struct SDF {
+    float4 viewMatrix0;
+    float4 viewMatrix1;
+    float4 viewMatrix2;
+    float4 viewMatrix3;
+    // row necessary to project the z coordinate. Note that we need more than the z and w components
+    // of this row in the case of oblique projections (used in mirrors)
+    float4 proj_row2; 
+    float tanfov; float aspect; float near; float far;
+    float time; float platformSize; float2 padding;
+};
 struct SceneData {
     float4x4 vpMatrix;
 };
@@ -84,14 +95,14 @@ struct DrawlistStreams { enum Enum {
 
 typedef u32 MeshHandle;
 struct ShaderTechniques { enum Enum {
-        FullscreenBlitClearColor, FullscreenBlitTextured,
+        FullscreenBlitClearColor, FullscreenBlitTextured, FullscreenBlitTexturedDepth, FullscreenBlitSDF,
         Color2D, Instanced3D,
         Color3D, Color3DSkinned,
         Textured3D, Textured3DAlphaClip, Textured3DSkinned, Textured3DAlphaClipSkinned,
         Count, Bits = math::ceillog2(Count)
 }; };
 const char* shaderNames[] = {
-    "FullscreenBlitClearColor", "FullscreenBlitTextured",
+    "FullscreenBlitClearColor", "FullscreenBlitTextured", "FullscreenBlitTexturedDepth", "FullscreenBlitSDF",
     "Color2D", "Instanced3D",
     "Color3D", "Color3DSkinned",
     "Textured3D", "Textured3DAlphaClip", "Textured3DSkinned", "Textured3DAlphaClipSkinned"
@@ -174,7 +185,7 @@ struct CoreResources {
     DrawMesh* meshes;
     u32 num_meshes;
     struct CBuffersMeta { enum {
-        ClearColor, Scene, NodeIdentity, UIText, Instances64, Count }; };
+        SDF, ClearColor, Scene, NodeIdentity, UIText, Instances64, Count }; };
     gfx::rhi::RscCBuffer cbuffers[CBuffersMeta::Count];
     gfx::rhi::RscRasterizerState rasterizerStateFillFrontfaces;
     gfx::rhi::RscRasterizerState rasterizerStateFillBackfaces;

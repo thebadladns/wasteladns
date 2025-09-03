@@ -51,23 +51,54 @@ void bind_main_RT(RscMainRenderTarget& rt) {
 
 void create_RT(RscRenderTarget& rt, const RenderTargetParams& params) {
 
-    if (params.depth) {
+    if (params.flags & RenderTargetParams::Flags::EnableDepth) {
         // same format as texture, 0 minmap
-        ID3D11Texture2D* stencil = nullptr;
         D3D11_TEXTURE2D_DESC stencilDesc = {};
         stencilDesc.Width = params.width;
         stencilDesc.Height = params.height;
         stencilDesc.MipLevels = 1;
         stencilDesc.ArraySize = 1;
-        stencilDesc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
+        stencilDesc.Format = DXGI_FORMAT_R24G8_TYPELESS;
         stencilDesc.SampleDesc.Count = 1;
         stencilDesc.SampleDesc.Quality = 0;
         stencilDesc.Usage = D3D11_USAGE_DEFAULT;
-        stencilDesc.BindFlags = D3D11_BIND_DEPTH_STENCIL;
+        stencilDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE|D3D11_BIND_DEPTH_STENCIL;
         stencilDesc.CPUAccessFlags = 0;
         stencilDesc.MiscFlags = 0;
-        d3ddev->CreateTexture2D(&stencilDesc, nullptr, &stencil);
-        d3ddev->CreateDepthStencilView(stencil, nullptr, &rt.depthStencilView);
+        d3ddev->CreateTexture2D(&stencilDesc, nullptr, &rt.depthStencil.impl);
+
+        D3D11_DEPTH_STENCIL_VIEW_DESC descDSV = {};
+        descDSV.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
+        descDSV.ViewDimension = D3D11_DSV_DIMENSION_TEXTURE2D;
+        descDSV.Texture2D.MipSlice = 0;
+        d3ddev->CreateDepthStencilView(rt.depthStencil.impl, &descDSV, &rt.depthStencilView);
+
+        if (params.flags & RenderTargetParams::Flags::ReadDepth) {
+
+            D3D11_SHADER_RESOURCE_VIEW_DESC texViewDesc = {};
+            texViewDesc.Format = DXGI_FORMAT_R24_UNORM_X8_TYPELESS;
+            texViewDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+            texViewDesc.Texture2D.MipLevels = 1;
+            texViewDesc.Texture2D.MostDetailedMip = 0;
+            d3ddev->CreateShaderResourceView(rt.depthStencil.impl, &texViewDesc, &rt.depthStencil.view);
+
+            D3D11_SAMPLER_DESC samplerDesc = {};
+            samplerDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_POINT;
+            samplerDesc.AddressU = D3D11_TEXTURE_ADDRESS_WRAP;
+            samplerDesc.AddressV = D3D11_TEXTURE_ADDRESS_WRAP;
+            samplerDesc.AddressW = D3D11_TEXTURE_ADDRESS_WRAP;
+            samplerDesc.MipLODBias = 0.0f;
+            samplerDesc.MaxAnisotropy = 1;
+            samplerDesc.ComparisonFunc = D3D11_COMPARISON_ALWAYS;
+            samplerDesc.BorderColor[0] = 0;
+            samplerDesc.BorderColor[1] = 0;
+            samplerDesc.BorderColor[2] = 0;
+            samplerDesc.BorderColor[3] = 0;
+            samplerDesc.MinLOD = 0;
+            samplerDesc.MaxLOD = 0;
+
+            d3ddev->CreateSamplerState(&samplerDesc, &rt.depthStencil.samplerState);
+        }
     }
 
     {
@@ -99,7 +130,7 @@ void clear_RT(const RscRenderTarget& rt, u32 flags) {
             d3dcontext->ClearRenderTargetView(rt.views[i], colorv);
         }
     }
-    if (rt.depthStencilView) {
+    if (rt.depthStencil.view) {
         flags &= ~RenderTargetClearFlags::Color;
         d3dcontext->ClearDepthStencilView(rt.depthStencilView, flags, 1.f, 0);
     }

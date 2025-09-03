@@ -1,7 +1,7 @@
 #define TEST_MIRRORS 0
 #define TEST_PHYSICS 1
 
-#define COMPILE_TARGET TEST_MIRRORS
+#define COMPILE_TARGET TEST_PHYSICS
 
 #if COMPILE_TARGET == TEST_MIRRORS
     #include "TestMirrors/main.cpp"

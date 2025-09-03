@@ -74,7 +74,9 @@ void movementInputFromPad(MovementInput& control, const ::input::gamepad::State&
     control.localInput = localInput;
     control.mag = mag;
 }
-void updateMovement_cameraRelative(Transform& transform, MovementState& controller, const MovementInput& control, const Transform& camera, const f32 dt) {
+float2 calculateMovement_cameraRelative(
+    Transform& transform, MovementState& controller, 
+    const MovementInput& control, const Transform& camera, const f32 dt) {
 
     const f32 maxspeed = 15.f;
 
@@ -116,31 +118,7 @@ void updateMovement_cameraRelative(Transform& transform, MovementState& controll
         controller.speed = 0.f;
     }
 
-    // Facing update
-    if (control.mag > math::eps32) {
-        const float3 cameraRelativeFacingInput(effectiveLocalInput, 0.f);
-        const float3 worldFacingInput = math::add(math::scale(front, cameraRelativeFacingInput.y), math::scale(right, cameraRelativeFacingInput.x));
-        Transform33 t = math::fromUpTowardsFront(transform.up, worldFacingInput);
-        transform.front = t.front;
-        transform.right = t.right;
-        transform.up = t.up;
-    }
-
-    // Movement update
-    if (controller.speed > math::eps32) {
-        float3 cameraRelativeMovementInput;
-        if (control.mag > math::eps32) {
-            cameraRelativeMovementInput = float3(control.localInput, 0.f);
-        } else {
-            cameraRelativeMovementInput = float3(math::direction(camPlayerCurrentRad), 0.f);
-        }
-        const f32 translation = controller.speed * dt;
-        const float3 worldMovementInput = math::add(math::scale(front, cameraRelativeMovementInput.y), math::scale(right, cameraRelativeMovementInput.x));
-        const float3 worldVelocity = math::scale(worldMovementInput, translation);
-        float3 pos = transform.pos;
-        pos = math::add(pos, worldVelocity);
-        transform.pos = pos;
-    }
+    return effectiveLocalInput;
 }
 
 struct OrbitInput {

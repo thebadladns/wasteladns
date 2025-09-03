@@ -94,7 +94,37 @@ struct VertexOut {
 float4 PS(VertexOut IN) : SV_TARGET {
 
     float4 albedo = texSrc.Sample(texSrcSampler, IN.uv).rgba;
-    return albedo.rgba;
+
+    return albedo;
+}
+)"
+};
+
+constexpr PS_src ps_fullscreen_blit_textured_depth = {
+"ps_fullscreen_blit_textured_depth",
+R"(
+Texture2D texSrc : register(t0);
+SamplerState texSrcSampler : register(s0);
+
+Texture2D depthSrc : register(t1);
+SamplerState depthSrcSampler : register(s1);
+
+struct VertexOut {
+    float2 uv : TEXCOORD;
+};
+struct PixelOut {
+    float4 color : SV_TARGET;
+    float depth : SV_DEPTH;
+};
+PixelOut PS(VertexOut IN) {
+
+    float4 albedo = texSrc.Sample(texSrcSampler, IN.uv).rgba;
+    float depth = depthSrc.Sample(depthSrcSampler, IN.uv).r;
+    PixelOut output;
+    output.color =  albedo;
+    output.depth = depth;
+
+    return output;
 }
 )"
 };

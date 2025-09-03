@@ -64,7 +64,6 @@ namespace input
         ;
     constexpr ::input::keyboard::Keys::Enum
           EXIT = ::input::keyboard::Keys::ESCAPE
-        , CYCLE_ROOM = ::input::keyboard::Keys::N
         #if __DEBUG
         , TOGGLE_DEBUG = ::input::keyboard::Keys::H
         #endif
@@ -199,9 +198,6 @@ void update(Instance& game, platform::GameConfig& config) {
         if (keyboard.released(input::EXIT)) {
             config.quit = true;
         }
-        if (keyboard.pressed(input::CYCLE_ROOM)) {
-            game.roomId = (game.roomId + 1) % countof(roomDefinitions);
-        }
         #if __DEBUG
         if (keyboard.pressed(input::TOGGLE_DEBUG)) {
             debug::debugMenus[debug::DebugMenus::Main] = !debug::debugMenus[debug::DebugMenus::Main];
@@ -235,7 +231,98 @@ void update(Instance& game, platform::GameConfig& config) {
                 game.scene.player.control.localInput = math::invScale(game.scene.player.control.localInput, game.scene.player.control.mag);
                 game.scene.player.control.mag = math::min(game.scene.player.control.mag, 1.f);
             }
-            game::updateMovement_cameraRelative(game.scene.player.transform, game.scene.player.state, game.scene.player.control, game.scene.camera.transform, dt);
+            const float2 effectiveLocalInput =  game::calculateMovement_cameraRelative(
+                game.scene.player.transform, game.scene.player.state,
+                game.scene.player.control, game.scene.camera.transform, dt);
+
+            // enforce player movement
+            {
+                Transform33 movementTransform = 
+                    math::fromUpTowardsFront(
+                        game.scene.player.transform.up, game.scene.camera.transform.front);
+                const float3& front = movementTransform.front;
+                const float3& right = movementTransform.right;
+
+                // Movement update
+                float3 desiredMovement = {};
+                if (game.scene.player.state.speed > math::eps32) {
+                    float3 cameraRelativeMovementInput;
+                    if (game.scene.player.control.mag > math::eps32) {
+                        cameraRelativeMovementInput = float3(game.scene.player.control.localInput, 0.f);
+                    } else {
+                        const f32 camCurrentRad = math::orientation(game.scene.camera.transform.front.xy);
+                        const f32 playerCurrentRad = math::orientation(game.scene.player.transform.front.xy);
+                        const f32 camPlayerCurrentRad = math::subtractShort(playerCurrentRad, camCurrentRad);
+
+                        cameraRelativeMovementInput = float3(math::direction(camPlayerCurrentRad), 0.f);
+                    }
+                    const f32 translation = game.scene.player.state.speed * dt;
+                    const float3 worldMovementInput = math::add(math::scale(front, cameraRelativeMovementInput.y), math::scale(right, cameraRelativeMovementInput.x));
+                    const float3 worldVelocity = math::scale(worldMovementInput, translation);
+                    desiredMovement = worldVelocity;
+                }
+
+                float3 pos = math::add(game.scene.player.transform.pos, desiredMovement);
+                u32 playerObstacleIndex = (game.scene.playerPhysicsNodeHandle) >> physics::ObjectType::Bits;
+                const float radius = game.scene.physicsScene.obstacles[playerObstacleIndex].radius;
+
+                // hack: update player movement in physics
+                for (u32 i = 0; i < game.scene.physicsScene.obstacle_count; i++) {
+
+                    if (i == playerObstacleIndex) continue;
+
+                    physics::StaticObject_Sphere& o = game.scene.physicsScene.obstacles[i];
+                    float3 collisionDir = math::subtract(pos, o.pos);
+                    collisionDir.z = 0.f;
+                    f32 dist = math::mag(collisionDir);
+                    if (dist < math::eps32 || dist > radius + o.radius) continue;
+                    collisionDir = math::invScale(collisionDir, dist);
+                    f32 correction = radius + o.radius - dist;
+                    pos = math::add(pos, math::scale(collisionDir, correction));
+                }
+                for (u32 i = 0; i < game.scene.physicsScene.wall_count; i++) {
+
+                    physics::StaticObject_Line& w = game.scene.physicsScene.walls[i];
+
+                    // distance to wall
+                    float3 ab = math::subtract(w.end, w.start);
+                    f32 t = math::max(0.f,
+                        math::min(1.f,
+                            (math::dot(math::subtract(pos, w.start), ab)) / math::dot(ab, ab)));
+                    float3 col = math::add(w.start, math::scale(ab, t));
+                    float3 d = math::subtract(pos, col);
+                    d.z = 0.f;
+                    f32 dist = math::mag(d);
+                    float3 normal(-ab.y, ab.x, ab.z);
+
+                    // push out
+                    if (dist == 0.f) {
+                        d = normal;
+                        dist = math::mag(normal);
+                    }
+                    d = math::invScale(d, dist);
+                    if (math::dot(d, normal) >= 0.f) { // outside the wall
+                        if (dist > radius) continue;
+                        pos = math::add(pos, math::scale(d, radius - dist));
+                    }
+                    else { // inside the wall
+                        pos = math::add(pos, math::scale(d, -(radius + dist)));
+                    }
+                }
+
+                if (game.scene.player.control.mag > math::eps32) {
+                    // Facing update
+                    const float3 cameraRelativeFacingInput(effectiveLocalInput, 0.f);
+                    const float3 worldFacingInput = math::add(math::scale(front, cameraRelativeFacingInput.y), math::scale(right, cameraRelativeFacingInput.x));
+                    Transform33 t = math::fromUpTowardsFront(game.scene.player.transform.up, worldFacingInput);
+                    game.scene.player.transform.front = t.front;
+                    game.scene.player.transform.right = t.right;
+                    game.scene.player.transform.up = t.up;
+                }
+                // Positon update
+                game.scene.player.transform.pos = pos;
+            }
+
 
             // update player render
             renderer::NodeData& nodeData = renderer::node_from_handle(game.scene.renderScene, game.scene.playerDrawNodeHandle).nodeData;
@@ -340,10 +427,11 @@ void update(Instance& game, platform::GameConfig& config) {
         {
             physics::updatePositionFromHandle(
                 game.scene.physicsScene,
-                game.scene.instancedNodesHandles[Scene::InstancedTypes::PhysicsBalls],
+                game.scene.playerPhysicsNodeHandle,
                 game.scene.player.transform.pos, (f32)game.time.lastFrameDelta);
 
             physics::updatePhysics(game.scene.physicsScene, dt);
+
             // update draw positions
             renderer::Matrices64* instance_matrices; u32* instance_count;
             renderer::instanced_node_from_handle(instance_matrices, instance_count, game.scene.renderScene, game.scene.instancedNodesHandles[Scene::InstancedTypes::PhysicsBalls]);
@@ -528,17 +616,6 @@ void update(Instance& game, platform::GameConfig& config) {
         #if __DEBUG
         // Immediate mode debug, to be rendered along with the 3D scene on the next frame
         {
-            //World axis
-            const Color32 axisX(0.8f, 0.15f, 0.25f, 0.7f); // x is red
-            const Color32 axisY(0.25f, 0.8f, 0.15f, 0.7f); // y is green
-            const Color32 axisZ(0.15f, 0.25f, 0.8f, 0.7f); // z is blue
-            const f32 axisSize = 7.f;
-            const float3 pos(0.f, 0.f, 0.1f);
-
-            im::segment(pos, math::add(pos, math::scale(float3(1.f, 0.f, 0.f), axisSize)), axisX);
-            im::segment(pos, math::add(pos, math::scale(float3(0.f, 1.f, 0.f), axisSize)), axisY);
-            im::segment(pos, math::add(pos, math::scale(float3(0.f, 0.f, 1.f), axisSize)), axisZ);
-
             if (debug::visualizationModes[debug::VisualizationModes::BVH]) {
 
                 allocator::PagedArena scratchArena = game.memory.scratchArenaRoot; // explicit copy
@@ -641,6 +718,7 @@ void update(Instance& game, platform::GameConfig& config) {
                 }
                 for (u32 i = 0; i < pScene.obstacle_count; i++) {
                     im::sphere(pScene.obstacles[i].pos, pScene.obstacles[i].radius, Color32(1.f, 1.f, 1.f, 1.f));
+                    im::sphere(pScene.obstacles[i].pos, pScene.obstacles[i].radius + 1.f, Color32(1.f, 1.f, 1.f, 0.25f));
                 }
             }
 
@@ -767,6 +845,7 @@ void update(Instance& game, platform::GameConfig& config) {
                         platform::state.input.mouse.x, platform::state.input.mouse.y,
                         platform::state.screen.window_width, platform::state.screen.window_height,
                         game.resources.renderCore.perspProjection.config, game.scene.camera.viewMatrix);
+                    
                     float3 eulers_deg = math::scale(game.scene.orbitCamera.eulers, math::r2d32);
                     im::label_format("mouse (%.3f, %.3f)"
                               "\nmouse in scene (%.3f,%.3f,%.3f)"
@@ -1064,13 +1143,21 @@ void update(Instance& game, platform::GameConfig& config) {
                 gfx::rhi::bind_main_RT(game.resources.renderCore.windowRT);
 
                 gfx::rhi::bind_shader(game.resources.renderCore.shaders[renderer::ShaderTechniques::FullscreenBlitTextured]);
-                gfx::rhi::bind_textures(&game.resources.renderCore.gameRT.textures[0], 1);
+                gfx::rhi::RscTexture textures[] = {
+                    game.resources.renderCore.gameRT.textures[0],
+                    //game.resources.renderCore.gameRT.depthStencil // todo: make work in opengl
+                };
+                gfx::rhi::bind_textures(textures, countof(textures));
                 gfx::rhi::draw_fullscreen();
                 gfx::rhi::RscTexture nullTex = {};
                 gfx::rhi::bind_textures(&nullTex, 1); // unbind gameRT
             }
             gfx::rhi::end_event();
         }
+
+        // Hires SDF scene (only available if the upscale pass copies depth too)
+        //renderSDFScene(cameraTree[0], game.resources.renderCore, game.resources.renderCore.depthStateOn);
+
         // from now we should have
         // rhi::bind_main_RT(game.resources.renderCore.windowRT);
         // UI
@@ -1117,19 +1204,6 @@ void update(Instance& game, platform::GameConfig& config) {
 
                     gfx::rhi::bind_indexed_vertex_buffer(game.resources.gpuBufferHeaderText);
                     gfx::rhi::draw_indexed_vertex_buffer(game.resources.gpuBufferHeaderText);
-                }
-
-                {
-                    renderer::NodeData noteUItext = {};
-                    noteUItext.groupColor =
-                        platform::state.input.keyboard.pressed(input::CYCLE_ROOM) ?
-                            float4(1.f, 0.f, 0.f, 1.f)
-                          : float4(1.f, 1.f, 1.f, 1.f);
-                    math::identity4x4(*(Transform*)&noteUItext.worldMatrix);
-                    gfx::rhi::update_cbuffer(uitext_cbuffer, &noteUItext);
-
-                    gfx::rhi::bind_indexed_vertex_buffer(game.resources.gpuBufferCycleRoomText);
-                    gfx::rhi::draw_indexed_vertex_buffer(game.resources.gpuBufferCycleRoomText);
                 }
                 {
                     renderer::NodeData noteUItext = {};

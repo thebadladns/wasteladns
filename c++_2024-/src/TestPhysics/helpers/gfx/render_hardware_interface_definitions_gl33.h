@@ -45,6 +45,7 @@ struct RscTexture { GLuint id; };
 struct RscMainRenderTarget { u32 mask; };
 struct RscRenderTarget {
     RscTexture textures[RenderTarget_MaxCount];
+    RscTexture depthStencil;
     GLuint buffer;
     GLuint depthBuffer;
     u32 width, height;

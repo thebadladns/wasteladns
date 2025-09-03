@@ -22,14 +22,28 @@ void create_RT(RscRenderTarget& rt, const RenderTargetParams& params) {
     rt.buffer = buffer;
     rt.width = params.width;
     rt.height = params.height;
-    if (params.depth) {
-        GLuint depthBuffer;
-        glGenRenderbuffers(1, &depthBuffer);
-        glBindRenderbuffer(GL_RENDERBUFFER, depthBuffer);
-        glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, params.width, params.height);
-        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, depthBuffer);
-        rt.depthBuffer = depthBuffer;
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    if (params.flags & RenderTargetParams::Flags::EnableDepth) {
+        if (params.flags & RenderTargetParams::Flags::ReadDepth) {
+            // create a texture so we can sample depth as a shader input
+            glGenTextures(1, &rt.depthStencil.id);
+            glBindTexture(GL_TEXTURE_2D, rt.depthStencil.id);
+            glTexImage2D(
+                GL_TEXTURE_2D, 0, GL_DEPTH24_STENCIL8,
+                params.width, params.height, 0,
+                GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8, nullptr);
+            glFramebufferTexture2D(
+                GL_DRAW_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D, rt.depthStencil.id, 0);
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        } else {
+            GLuint depthBuffer;
+            glGenRenderbuffers(1, &depthBuffer);
+            glBindRenderbuffer(GL_RENDERBUFFER, depthBuffer);
+            glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, params.width, params.height);
+            glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, depthBuffer);
+            rt.depthBuffer = depthBuffer;
+            rt.depthStencil = {}; // todo: assert if use as shader input
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        }
     }
 
     {

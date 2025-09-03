@@ -3,6 +3,8 @@
 
 namespace game {
 
+const f32 SDF_scene_radius = 8.5f;
+
 struct Mirrors { // todo: figure out delete, unhack sizes
     struct Poly { float3 v[4]; float3 normal; u32 numPts; };
     Poly* polys; // xy from 0.f to 1.f describe the mirror quad, z is the normal
@@ -16,7 +18,7 @@ struct GPUCPUMesh {
 };
 
 struct Scene {
-    struct InstancedTypes { enum Enum { PlayerTrail, PhysicsBalls, Count }; };
+    struct InstancedTypes { enum Enum { PlayerTrail, PhysicsBalls, SceneLimits, Count }; };
     camera::Camera camera;
     renderer::Scene renderScene;
     physics::Scene physicsScene;
@@ -41,8 +43,8 @@ struct AssetInMemory {
     u32 clipCount;
 };
 struct Resources {
-    struct AssetsMeta { enum Enum { Bird, Boar, Ground, Count }; };
-    struct MirrorHallMeta { enum Enum { Count = 8 }; };
+    struct AssetsMeta { enum Enum { Bird, Ground, BackMirrors, Count }; };
+    struct MirrorHallMeta { enum Enum { Count = 4 }; };
     renderer::CoreResources renderCore;
     AssetInMemory assets[AssetsMeta::Count];
     GPUCPUMesh mirrorHallMesh;
@@ -67,7 +69,7 @@ struct RoomDefinition {
 };
 const RoomDefinition roomDefinitions[] = {
     { float3(-180.f * math::d2r32, 0.f, -180 * math::d2r32), // min camera eulers
-      float3(180.f * math::d2r32, 0.f, 180 * math::d2r32), // max camera eulers
+      float3(-3.f * math::d2r32, 0.f, 180 * math::d2r32), // max camera eulers
       0.3f, 2.f,
       8, true }
 };
@@ -920,6 +922,72 @@ u32 gatherMirrorTreeRecursive(GatherMirrorTreeContext& ctx, u32 index, const Cam
     return index;
 }
 
+void renderSDFScene(
+    const CameraNode& camera, renderer::CoreResources& rsc, gfx::rhi::RscDepthStencilState& ds) {
+
+    const float radius = game::SDF_scene_radius;
+    float3 boxPointsWS[8] = {
+        float3(-radius, -radius, 0.f),
+        float3(-radius, -radius, radius),
+        float3(-radius, radius, 0.f),
+        float3(-radius, radius, radius),
+        float3(radius, -radius, 0.f),
+        float3(radius, -radius, radius),
+        float3(radius, radius, 0.f),
+        float3(radius, radius, radius),
+    };
+    bool visible = true;
+    const renderer::Frustum& frustum = camera.frustum;
+    for (u32 p = 0; p < frustum.numPlanes; p++) {
+        int out = 0;
+        out += (math::dot(frustum.planes[p], float4(boxPointsWS[0], 1.f)) < 0.f) ? 1 : 0;
+        out += (math::dot(frustum.planes[p], float4(boxPointsWS[1], 1.f)) < 0.f) ? 1 : 0;
+        out += (math::dot(frustum.planes[p], float4(boxPointsWS[2], 1.f)) < 0.f) ? 1 : 0;
+        out += (math::dot(frustum.planes[p], float4(boxPointsWS[3], 1.f)) < 0.f) ? 1 : 0;
+        out += (math::dot(frustum.planes[p], float4(boxPointsWS[4], 1.f)) < 0.f) ? 1 : 0;
+        out += (math::dot(frustum.planes[p], float4(boxPointsWS[5], 1.f)) < 0.f) ? 1 : 0;
+        out += (math::dot(frustum.planes[p], float4(boxPointsWS[6], 1.f)) < 0.f) ? 1 : 0;
+        out += (math::dot(frustum.planes[p], float4(boxPointsWS[7], 1.f)) < 0.f) ? 1 : 0;
+        if (out == 8) { visible = false; break; }
+    }
+
+    if (visible) {
+        gfx::rhi::start_event("SDF");
+        {
+            gfx::rhi::RscCBuffer& cbuffersdf =
+                rsc.cbuffers[renderer::CoreResources::CBuffersMeta::SDF];
+
+            renderer::SDF sdf;
+            sdf.near = rsc.perspProjection.config.near;
+            sdf.far = rsc.perspProjection.config.far;
+            sdf.tanfov = math::tan(rsc.perspProjection.config.fov * 0.5f * math::d2r32);
+            sdf.aspect = ::platform::state.screen.window_width / (f32)::platform::state.screen.window_height;
+            sdf.viewMatrix0 = camera.viewMatrix.col0;
+            sdf.viewMatrix1 = camera.viewMatrix.col1;
+            sdf.viewMatrix2 = camera.viewMatrix.col2;
+            sdf.viewMatrix3 = camera.viewMatrix.col3;
+            sdf.proj_row2 = float4(
+                camera.projectionMatrix.m[2],
+                camera.projectionMatrix.m[6],
+                camera.projectionMatrix.m[10],
+                camera.projectionMatrix.m[14]);
+            sdf.time = (f32)::platform::state.time.running;
+            sdf.platformSize = radius;
+
+            gfx::rhi::update_cbuffer(cbuffersdf, &sdf);
+
+            gfx::rhi::bind_blend_state(rsc.blendStateOn);
+            gfx::rhi::bind_DS(ds, camera.depth);
+            gfx::rhi::bind_cbuffers(
+                rsc.shaders[renderer::ShaderTechniques::FullscreenBlitSDF],
+                &cbuffersdf, 1);
+            gfx::rhi::bind_shader(rsc.shaders[renderer::ShaderTechniques::FullscreenBlitSDF]);
+            gfx::rhi::draw_fullscreen();
+        }
+        gfx::rhi::end_event();
+    }
+}
+
 struct RenderSceneContext {
     const CameraNode& camera;
     const renderer::VisibleNodes& visibleNodes;
@@ -961,6 +1029,7 @@ void renderBaseScene(RenderSceneContext& sceneCtx) {
     }
     gfx::rhi::end_event();
 
+    // Opaque pass
     gfx::rhi::bind_RS(sceneCtx.rs);
     {
         allocator::PagedArena scratchArena = sceneCtx.scratchArena;
@@ -985,9 +1054,15 @@ void renderBaseScene(RenderSceneContext& sceneCtx) {
     }
     #if __DEBUG
     {
+        gfx::rhi::bind_blend_state(rsc.blendStateOn);
         im::present3d(sceneCtx.camera.projectionMatrix, sceneCtx.camera.viewMatrix);
     }
     #endif
+
+    // SDF scene
+    renderSDFScene(sceneCtx.camera, rsc, sceneCtx.ds_opaque);
+
+    // Alpha pass
     {
         allocator::PagedArena scratchArena = sceneCtx.scratchArena;
         Drawlist dl = {};
@@ -1171,8 +1246,7 @@ void load_coreResources(
         game::Resources::AssetsMeta::Enum assetId;
     };
     const AssetDef assets[] = {
-          { "assets/meshes/boar.fbx", game::Resources::AssetsMeta::Boar }
-        , { "assets/meshes/bird.fbx", game::Resources::AssetsMeta::Bird }
+        { "assets/meshes/bird.fbx", game::Resources::AssetsMeta::Bird }
     };
     // very very hack: number of assets * 4 + 16 (for the meshes we load ourselves)
     const size_t meshArenaSize = (countof(assets) * 4 + 16) * sizeof(renderer::DrawMesh);
@@ -1207,7 +1281,7 @@ void load_coreResources(
         renderCore.windowRT, windowRTparams);
 
     gfx::rhi::RenderTargetParams gameRTparams;
-    gameRTparams.depth = true;
+    gameRTparams.flags = (gfx::rhi::RenderTargetParams::Flags::EnableDepth);// | gfx::rhi::RenderTargetParams::Flags::ReadDepth);
     gameRTparams.width = screen.width;
     gameRTparams.height = screen.height;
     gameRTparams.textureFormat = gfx::rhi::TextureFormat::V4_8;
@@ -1331,6 +1405,11 @@ void load_coreResources(
     gfx::rhi::create_cbuffer(cbufferclear, { sizeof(renderer::BlitColor) });
     renderer::BlitColor clearColor = { float4(0.2f, 0.344f, 0.59f, 1.f) };
     gfx::rhi::update_cbuffer(cbufferclear, &clearColor);
+    gfx::rhi::RscCBuffer& cbuffersdf =
+        renderCore.cbuffers[renderer::CoreResources::CBuffersMeta::SDF];
+    gfx::rhi::create_cbuffer(cbuffersdf, { sizeof(renderer::SDF) });
+    renderer::SDF sdf = { };
+    gfx::rhi::update_cbuffer(cbuffersdf, &sdf);
     gfx::rhi::RscCBuffer& cbufferscene =
         renderCore.cbuffers[renderer::CoreResources::CBuffersMeta::Scene];
     gfx::rhi::create_cbuffer(cbufferscene, { sizeof(renderer::SceneData) });
@@ -1425,6 +1504,9 @@ void load_coreResources(
     const gfx::rhi::CBufferBindingDesc bufferBindings_blit_clear_color[] = {
         { "type_BlitColor", gfx::rhi::CBufferStageMask::PS }
     };
+    const gfx::rhi::CBufferBindingDesc bufferBindings_blit_sdf[] = {
+        { "type_BlitSDF", gfx::rhi::CBufferStageMask::PS }
+    };
     const gfx::rhi::CBufferBindingDesc bufferBindings_untextured_base[] = {
         { "type_PerScene", gfx::rhi::CBufferStageMask::VS },
         { "type_PerGroup", gfx::rhi::CBufferStageMask::VS }
@@ -1453,7 +1535,8 @@ void load_coreResources(
 
     // texture bindings
     const gfx::rhi::TextureBindingDesc textureBindings_base[] = { { "texDiffuse" } };
-    const gfx::rhi::TextureBindingDesc textureBindings_fullscreenblit[] = {{ "texSrc" }};
+    const gfx::rhi::TextureBindingDesc textureBindings_fullscreenblit[] = { { "texSrc" } };
+    const gfx::rhi::TextureBindingDesc textureBindings_fullscreenblit_depth[] = { { "texSrc" }, { "depthSrc" }};
 
     // shaders
     {
@@ -1482,6 +1565,23 @@ void load_coreResources(
         }
         {
             gfx::ShaderDesc desc = {};
+            desc.vertexAttrs = attribs_3d;
+            desc.vertexAttr_count = countof(attribs_3d);
+            desc.textureBindings = nullptr;
+            desc.textureBinding_count = 0;
+            desc.bufferBindings = bufferBindings_blit_sdf;
+            desc.bufferBinding_count = countof(bufferBindings_blit_sdf);
+            // reuse 3d shaders
+            desc.vs_name = gfx::shaders::vs_fullscreen_bufferless_textured_blit.name;
+            desc.vs_src = gfx::shaders::vs_fullscreen_bufferless_textured_blit.src;
+            desc.ps_name = gfx::shaders::ps_fullscreen_blit_sdf.name;
+            desc.ps_src = gfx::shaders::ps_fullscreen_blit_sdf.src;
+            desc.shader_cache = &shader_cache;
+            gfx::compile_shader(
+                renderCore.shaders[renderer::ShaderTechniques::FullscreenBlitSDF], desc);
+        }
+        {
+            gfx::ShaderDesc desc = {};
             desc.vertexAttrs = attribs_textured3d;
             desc.vertexAttr_count = countof(attribs_textured3d);
             desc.textureBindings = textureBindings_fullscreenblit;
@@ -1496,6 +1596,23 @@ void load_coreResources(
             desc.shader_cache = &shader_cache;
             gfx::compile_shader(
                 renderCore.shaders[renderer::ShaderTechniques::FullscreenBlitTextured], desc);
+        }
+        {
+            gfx::ShaderDesc desc = {};
+            desc.vertexAttrs = attribs_textured3d;
+            desc.vertexAttr_count = countof(attribs_textured3d);
+            desc.textureBindings = textureBindings_fullscreenblit_depth;
+            desc.textureBinding_count = countof(textureBindings_fullscreenblit_depth);
+            desc.bufferBindings = nullptr;
+            desc.bufferBinding_count = 0;
+            // reuse 3d shaders
+            desc.vs_name = gfx::shaders::vs_fullscreen_bufferless_textured_blit.name;
+            desc.vs_src = gfx::shaders::vs_fullscreen_bufferless_textured_blit.src;
+            desc.ps_name = gfx::shaders::ps_fullscreen_blit_textured_depth.name;
+            desc.ps_src = gfx::shaders::ps_fullscreen_blit_textured_depth.src;
+            desc.shader_cache = &shader_cache;
+            gfx::compile_shader(
+                renderCore.shaders[renderer::ShaderTechniques::FullscreenBlitTexturedDepth], desc);
         }
         {
             gfx::ShaderDesc desc = {};
@@ -1744,30 +1861,35 @@ void load_coreResources(
 
     // Hall of mirrors
     {
-        const u32 mirrorCount = 8;
+        const u32 mirrorCount = game::Resources::MirrorHallMeta::Count;
         renderer::VertexLayout_Color_3D vertices[4 * mirrorCount];
         u16 indices[4 * mirrorCount * 3 / 2]; // 6 indices per quad
+        renderer::VertexLayout_Color_3D verticesBack[countof(vertices)];
+        u16 indicesBack[countof(indices)];
         const float3 v0(1.f, 0.f, -1.f);
         const float3 v1(-1.f, 0.f, -1.f);
         const float3 v2(-1.f, 0.f, 1.f);
         const float3 v3(1.f, 0.f, 1.f);
+        u32 c = Color32(0.01f, 0.19f, 0.3f, 0.32f).ABGR();
+        u32 c_back = Color32(0.21f, 0.24f, 0.22f, 1.f).ABGR();
         for (u32 m = 0; m < mirrorCount; m++) {
             f32 w = 12.4f, h = 10.f;
-            u32 c = Color32(0.01f, 0.19f, 0.3f, 0.32f).ABGR();
             u32 vertex_idx = m * 4;
             Transform t;
+            // set up mirrors in an octagon
             Transform rot = math::fromOffsetAndOrbit(
                 float3(0.f, 0.f, 0.f), float3(0.f, 0.f, f32(m) * math::twopi32 / f32(8)));
             Transform translate = {};
             math::identity4x4(translate);
-            translate.pos = float3(0.f, -30.f, 0.f);
+            translate.pos = float3(0.f, -30.f, h);
             t.matrix = math::mult(rot.matrix, translate.matrix);
             t.matrix.col0.xyz = math::scale(t.matrix.col0.xyz, w);
             t.matrix.col2.xyz = math::scale(t.matrix.col2.xyz, h);
-            vertices[vertex_idx + 0] = { math::mult(t.matrix, float4(v0, 1.f)).xyz, c };
-            vertices[vertex_idx + 1] = { math::mult(t.matrix, float4(v1, 1.f)).xyz, c };
-            vertices[vertex_idx + 2] = { math::mult(t.matrix, float4(v2, 1.f)).xyz, c };
-            vertices[vertex_idx + 3] = { math::mult(t.matrix, float4(v3, 1.f)).xyz, c };
+            // shrink vertices horizontally a bit, so they don't cut into the columns
+            vertices[vertex_idx + 0] = { math::mult(t.matrix, float4(math::subtract(v0, float3( 0.035f, 0.f, 0.f)), 1.f)).xyz, c };
+            vertices[vertex_idx + 1] = { math::mult(t.matrix, float4(math::subtract(v1, float3(-0.035f, 0.f, 0.f)), 1.f)).xyz, c };
+            vertices[vertex_idx + 2] = { math::mult(t.matrix, float4(math::subtract(v2, float3(-0.035f, 0.f, 0.f)), 1.f)).xyz, c };
+            vertices[vertex_idx + 3] = { math::mult(t.matrix, float4(math::subtract(v3, float3( 0.035f, 0.f, 0.f)), 1.f)).xyz, c };
 
             // clock-wise indices
             u32 index_idx = vertex_idx * 3 / 2;
@@ -1778,6 +1900,20 @@ void load_coreResources(
             indices[index_idx + 3] = vertex_idx + 3;
             indices[index_idx + 4] = vertex_idx + 2;
             indices[index_idx + 5] = vertex_idx + 0;
+
+            // counter clock-wise indices for the back of the mirror
+            // shrink vertices horizontally a bit, so they don't cut into the columns, and push them
+            // back, to avoid z-fighting with the actual mirrors
+            verticesBack[vertex_idx + 0] = { math::mult(t.matrix, float4(math::add(v0, float3(-0.035f, -0.1f, 0.f)), 1.f)).xyz, c_back };
+            verticesBack[vertex_idx + 1] = { math::mult(t.matrix, float4(math::add(v1, float3( 0.035f, -0.1f, 0.f)), 1.f)).xyz, c_back };
+            verticesBack[vertex_idx + 2] = { math::mult(t.matrix, float4(math::add(v2, float3( 0.035f, -0.1f, 0.f)), 1.f)).xyz, c_back };
+            verticesBack[vertex_idx + 3] = { math::mult(t.matrix, float4(math::add(v3, float3(-0.035f, -0.1f, 0.f)), 1.f)).xyz, c_back };
+            indicesBack[index_idx + 0] = vertex_idx + 0;
+            indicesBack[index_idx + 1] = vertex_idx + 1;
+            indicesBack[index_idx + 2] = vertex_idx + 2;
+            indicesBack[index_idx + 3] = vertex_idx + 0;
+            indicesBack[index_idx + 4] = vertex_idx + 2;
+            indicesBack[index_idx + 5] = vertex_idx + 3;
         }
         game::GPUCPUMesh& meshToLoad = core.mirrorHallMesh;
         gfx::rhi::IndexedVertexBufferDesc bufferParams;
@@ -1811,6 +1947,31 @@ void load_coreResources(
         memcpy(cpuBuffer.indices, indices, sizeof(u16) * countof(indices));
         cpuBuffer.indexCount = countof(indices);
         cpuBuffer.vertexCount = countof(vertices);
+
+        // back mirror
+        renderer::DrawMesh& mesh = renderer::alloc_drawMesh(renderCore);
+        mesh = {};
+        mesh.shaderTechnique = renderer::ShaderTechniques::Color3D;
+        bufferParams = {};
+        bufferParams.vertexData = verticesBack;
+        bufferParams.indexData = indicesBack;
+        bufferParams.vertexSize = sizeof(verticesBack);
+        bufferParams.vertexCount = countof(verticesBack);
+        bufferParams.indexSize = sizeof(indicesBack);
+        bufferParams.indexCount = countof(indicesBack);
+        bufferParams.memoryUsage = gfx::rhi::BufferMemoryUsage::GPU;
+        bufferParams.accessType = gfx::rhi::BufferAccessType::GPU;
+        bufferParams.indexType = gfx::rhi::BufferItemType::U16;
+        bufferParams.type = gfx::rhi::BufferTopologyType::Triangles;
+        gfx::rhi::create_indexed_vertex_buffer(
+            mesh.vertexBuffer, bufferParams, attribs, countof(attribs));
+
+        game::AssetInMemory& ground = core.assets[game::Resources::AssetsMeta::BackMirrors];
+        ground = {};
+        ground.min = float3(-30.f, -30.f, 0.f);
+        ground.max = float3(30.f, 30.f, 0.f);
+        ground.meshHandles[0] = renderer::handle_from_drawMesh(renderCore, mesh);
+        ground.skeleton.jointCount = 0;
     }
 
     // UI text
@@ -1910,12 +2071,9 @@ void load_coreResources(
         text2d(buffer2D, textParams, "Mouse wheel to scale");
         textParams.pos.y += lineheight;
         commit2d(core.gpuBufferScaleText, buffer2D, attribs_2d, countof(attribs_2d));
-        text2d(buffer2D, textParams, "[todo: implement more rooms, toggle with N?]");
+        text2d(buffer2D, textParams, "There's some physics too");
         textParams.pos.y += lineheight;
-        commit2d(core.gpuBufferCycleRoomText, buffer2D, attribs_2d, countof(attribs_2d));
-        text2d(buffer2D, textParams, "There's some mirrors");
-        textParams.pos.y += lineheight;
-        text2d(buffer2D, textParams, "Welcome to the physics room");
+        text2d(buffer2D, textParams, "Welcome to the SDF room");
         textParams.pos.y += lineheight;
         commit2d(core.gpuBufferHeaderText, buffer2D, attribs_2d, countof(attribs_2d));
         #if __DEBUG
@@ -1945,10 +2103,9 @@ void spawn_scene_mirrorRoom(
         bool physicsObstacle;
     };
     const AssetData assetDefs[] = {
-          { game::Resources::AssetsMeta::Boar, { -5.f, 10.f, 2.30885f }, 1, false, true }
-        , { game::Resources::AssetsMeta::Bird, { 9.f, 6.f, 2.23879f }, 1, true, true }
-        , { game::Resources::AssetsMeta::Bird, { -8.f, 12.f, 2.23879f }, 1, false, true }
+          { game::Resources::AssetsMeta::Bird, { 9.f, 6.f, 2.23879f }, 1, true, true }
         , { game::Resources::AssetsMeta::Ground, { 0.f, 0.f, 0.f }, 1, false, false }
+        , { game::Resources::AssetsMeta::BackMirrors, { 0.f, 0.f, 0.f }, 1, false, false }
     };
 
     size_t maxDrawNodes = countof(assetDefs); 
@@ -1981,15 +2138,20 @@ void spawn_scene_mirrorRoom(
         physicsScene.ball_count = 8;
         physicsScene.bounds = float2(w, h);
         physicsScene.restitution = 1.f;
+        const float origin_x = w - 5.f; const float origin_y = h - 5.f;
+        float2 positions[8] = {
+            float2(0.f, 1.f), float2(0.5f, 0.5f),
+            float2(1.f, 0.f), float2(0.5f, -0.5f),
+            float2(0.f, -1.f), float2(-0.5f, -0.5f),
+            float2(-1.f, 0.f), float2(-0.5f, 0.5f),
+        };
         for (u32 i = 0; i < physicsScene.ball_count; i++) {
             physics::DynamicObject_Sphere& ball = physicsScene.balls[i];
             ball.radius = (math::rand() + 1.f) * 2.f;
             ball.mass = math::pi32 * ball.radius * ball.radius;
+            const float2 pos_xy = math::scale(positions[i], float2(origin_x, origin_y));
             ball.pos =
-                float3(
-                    w * (-1.f + 2.f * math::rand()),
-                    h * (-1.f + 2.f * math::rand()),
-                    ball.radius * 0.5f);
+                float3(pos_xy, ball.radius * 0.5f);
             ball.vel =
                 float3(
                     maxspeed * (-1.f + 2.f * math::rand()),
@@ -2066,7 +2228,7 @@ void spawn_scene_mirrorRoom(
         }
     }
 
-    // unit cubes
+    // unit cubes behind player when running
     {
         renderer::DrawNodeInstanced& node = allocator::alloc_pool(renderScene.instancedDrawNodes);
         node = {};
@@ -2091,6 +2253,107 @@ void spawn_scene_mirrorRoom(
             handle_from_instanced_node(renderScene, node);
     }
 
+    // instanced bars around scene
+    {
+        float width = 12.4f;
+        float radius = 30.f;
+        float2 ground[] = {
+            float2(-radius, width),
+            float2(-radius, -width),
+            float2(-width, -radius),
+            float2(width, -radius),
+            float2(radius, -width),
+            float2(radius, width),
+            float2(width, radius),
+            float2(-width, radius),
+        };
+
+        // physics setup
+        {
+            u32 prev = countof(ground) - 1;
+            for (u32 i = 0; i < countof(ground); i++) {
+                float2 coods_xy = ground[i];
+                physics::StaticObject_Line& wall = physicsScene.walls[physicsScene.wall_count++];
+                wall = {};
+                wall.start = float3(ground[prev], 0.f);
+                wall.end = float3(ground[i], 0.f);
+
+                prev = i;
+            }
+        }
+
+        // render setup
+        {
+            renderer::DrawNodeInstanced& node = allocator::alloc_pool(renderScene.instancedDrawNodes);
+            node = {};
+            node.meshHandles[0] = core.instancedUnitCubeMesh;
+            math::identity4x4(*(Transform*)&(node.nodeData.worldMatrix));
+            node.nodeData.groupColor = Color32(0.82f, 0.64f, 0.12f, 1.f).RGBAv4();
+            node.instanceCount = 2 * game::Resources::MirrorHallMeta::Count + 1;
+            gfx::rhi::RscCBuffer& cbuffercore = allocator::alloc_pool(renderScene.cbuffers);
+            node.cbuffer_node = handle_from_cbuffer(renderScene, cbuffercore);
+            gfx::rhi::create_cbuffer(cbuffercore, { sizeof(renderer::NodeData) });
+            gfx::rhi::RscCBuffer& cbufferinstances =
+                allocator::alloc_pool(renderScene.cbuffers);
+            node.cbuffer_instances = handle_from_cbuffer(renderScene, cbufferinstances);
+            gfx::rhi::create_cbuffer(
+                cbufferinstances,
+                { (u32)sizeof(float4x4) * node.instanceCount });
+
+            // initialize whole buffer
+            for (u32 m = 0; m < countof(node.instanceMatrices.data); m++) {
+                float4x4& matrix = node.instanceMatrices.data[m];
+                math::identity4x4(*(Transform*)&(matrix));
+            }
+            // set up the horizontal instances
+            u32 maxBars = math::min(u32(game::Resources::MirrorHallMeta::Count), (u32)countof(ground));
+            u32 prev = countof(ground) - 1;
+            for (u32 m = 0; m < maxBars; m++) {
+
+                float3 segment = float3(math::subtract(ground[m], ground[prev]), 0.f);
+                float3 dir = math::invScale(segment, 2.f * width);
+
+                float4x4& matrix = node.instanceMatrices.data[m];
+                Transform& t = *(Transform*)&(matrix);
+                t.right = dir;
+                t.up = float3(0.f, 0.f, 1.f);
+                t.front = float3(-t.right.y, t.right.x, t.right.z);
+
+                t.pos = math::add(float3(ground[prev], 0.f), math::scale(dir, width));
+                t.matrix.col0 = math::scale(t.matrix.col0, width);
+                t.matrix.col1 = math::scale(t.matrix.col1, 0.3f);
+                t.matrix.col2 = math::scale(t.matrix.col2, 0.3f);
+
+                prev = m;
+            }
+            // set up the vertical instances
+            u32 maxColumns = math::min(u32(game::Resources::MirrorHallMeta::Count + 1), (u32)countof(ground));
+            prev = countof(ground) - 1;
+            float2 prevSegment = math::subtract(ground[countof(ground) - 1], ground[countof(ground) - 2]);
+            for (u32 m = 0; m < maxColumns; m++) {
+
+                float2 segment = math::subtract(ground[m], ground[prev]);
+                float3 columnDir = math::normalize(float3(math::add(segment, prevSegment), 0.f));
+
+                float4x4& matrix = node.instanceMatrices.data[m + maxBars];
+                Transform& t = *(Transform*)&(matrix);
+                t.right = columnDir;
+                t.front = float3(-t.right.y, t.right.x, 0.f);
+                t.up = float3(0.f, 0.f, 1.f);
+
+                t.pos = float3(ground[prev], 10.f);
+                t.matrix.col0 = math::scale(t.matrix.col0, 0.4f);
+                t.matrix.col1 = math::scale(t.matrix.col1, 0.8f);
+                t.matrix.col2 = math::scale(t.matrix.col2, 10.f);
+
+                prev = m;
+                prevSegment = segment;
+            }
+            scene.instancedNodesHandles[game::Scene::InstancedTypes::SceneLimits] =
+                handle_from_instanced_node(renderScene, node);
+        }
+    }
+
     // hall of mirrors
     {
         const u32 numMirrors = game::Resources::MirrorHallMeta::Count * 2;
@@ -2099,21 +2362,16 @@ void spawn_scene_mirrorRoom(
         scene.mirrors.bvh = {};
         const game::GPUCPUMesh& mirrorMesh = core.mirrorHallMesh;
         game::spawn_model_as_mirrors(scene.mirrors, mirrorMesh, scratchArena, sceneArena, true);
-        // add mirrors to physics sim
-        for (u32 i = 0; i < scene.mirrors.count; i++) {
-            game::Mirrors::Poly& p = scene.mirrors.polys[i];
-            physics::StaticObject_Line& wall = physicsScene.walls[physicsScene.wall_count++];
-            wall = {};
-            wall.start = p.v[0];
-            for (u32 j = 1; j < p.numPts; j++) {
-                if ((p.v[j].x != wall.start.x) || (p.v[j].y != wall.start.y)) {
-                    wall.end = p.v[j];
-                }
-            }
-            wall.start.z = 0.f;
-            wall.end.z = 0.f;
-        }
         scene.maxMirrorBounces = roomDef.maxMirrorBounces;
+    }
+
+    // SDF platform
+    {
+        physics::StaticObject_Sphere& o =
+            physicsScene.obstacles[physicsScene.obstacle_count++];
+        o = {};
+        f32 radius = game::SDF_scene_radius;
+        o.radius = radius;
     }
 
     // camera

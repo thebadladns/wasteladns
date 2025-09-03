@@ -48,13 +48,14 @@ void create_main_RT(RscMainRenderTarget&, const MainRenderTargetParams&);
 void bind_main_RT(RscMainRenderTarget& rt);
     
 struct RenderTargetParams {
+    struct Flags { enum Enum { EnableDepth = 1<<0, ReadDepth = 1 << 1 }; };
     u32 width;
     u32 height;
     TextureFormat::Enum textureFormat;
     InternalTextureFormat::Enum textureInternalFormat;
     Type::Enum textureFormatType;
     u32 count;
-    bool depth;
+    u32 flags;
 };
 void create_RT(RscRenderTarget& rt, const RenderTargetParams& params);
 force_inline void bind_RT(const RscRenderTarget& rt);

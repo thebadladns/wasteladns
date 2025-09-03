@@ -62,6 +62,7 @@ struct RscMainRenderTarget {
 struct RscRenderTarget {
     RscTexture textures[RenderTarget_MaxCount];
     ID3D11RenderTargetView* views[RenderTarget_MaxCount];
+    RscTexture depthStencil;
     ID3D11DepthStencilView* depthStencilView;
     u32 count;
 };
