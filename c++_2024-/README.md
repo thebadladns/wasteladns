@@ -30,6 +30,10 @@ You can also run build.sh on MacOS to build the test specified by `COMPILE_TARGE
 
 ## Current tests
 
+[SDF Scene Test](src/TestSDF/README.md) - a small setup blending raymarched SDF pixels with rasterized ones
+
+![](src/TestSDF/summary.gif)
+
 [Planar Mirror Test](src/TestMirrors/README.md) - a silly study of recursive mirrored cameras
 
 ![](src/TestMirrors/summary.gif)

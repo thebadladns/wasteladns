@@ -4,9 +4,13 @@
 
 Here is some ugly and dirty code to render a scene with several mirrors, resulting in a number of recursively reflected cameras. Each camera is rendered with the traditional rasterized pipeline, there's no raytracing going on whatsoever. The aim of the test is to see how many mirrored cameras can be handled in one scene.
 
+## Building notes
+
 If you use vim, you can load the .vimrc in this project to set up commands for building and running the project via \<leader>bb and \<leader>rr, respectively.
 
 For building this project, refer to [this very rough blurb](../../README.md). COMPILE_TARGET should be set to TEST_MIRRORS.
+
+## Breakdown
 
 Mirrors can be loaded from 3D models, for example:
 
@@ -43,3 +47,7 @@ The polygon clipping algorithm mentioned above returns the actual vertices to us
 ![](mirrors_breakdown_8.jpg)
 
 ![](mirrors_breakdown_9.jpg)
+
+## Why a toilet?
+
+I'm not a good 3D artist, and the number of 3D assets I have lying around is somewhat limited. In particular for this scene, I needed a mesh with smooth, curved surfaces. I had in the past modeled and printed a 3D replica of my apartment for my partner's birthday, so I just grabbed what something quick from there.
