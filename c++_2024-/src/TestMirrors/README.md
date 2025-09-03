@@ -50,4 +50,4 @@ The polygon clipping algorithm mentioned above returns the actual vertices to us
 
 ## Why a toilet?
 
-I'm not a good 3D artist, and the number of 3D assets I have lying around is somewhat limited. In particular for this scene, I needed a mesh with smooth, curved surfaces. I had in the past modeled and printed a 3D replica of my apartment for my partner's birthday, so I just grabbed what something quick from there.
+I'm not a good 3D artist, and the number of 3D assets I have lying around is somewhat limited. In particular for this scene, I needed a mesh with smooth, curved surfaces. I had in the past modeled and printed a 3D replica of my apartment for my partner's birthday, so I just grabbed something quick from there.
