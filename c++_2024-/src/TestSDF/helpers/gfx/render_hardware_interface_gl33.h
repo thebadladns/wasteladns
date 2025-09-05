@@ -170,7 +170,7 @@ ShaderResult create_shader_vs(RscVertexShader& vs, const VertexShaderRuntimeComp
     GLuint vertexShader;
         
     vertexShader = glCreateShader(GL_VERTEX_SHADER);
-    glShaderSource(vertexShader, 1, &(const char*)params.shader_src, nullptr);
+    glShaderSource(vertexShader, 1, (const char**)&params.shader_src, nullptr);
     glCompileShader(vertexShader);
         
     vs.id = vertexShader;
@@ -194,7 +194,7 @@ ShaderResult create_shader_ps(RscPixelShader& ps, const PixelShaderRuntimeCompil
     GLuint pixelShader;
         
     pixelShader = glCreateShader(GL_FRAGMENT_SHADER);
-    glShaderSource(pixelShader, 1, &(const char*)params.shader_src, nullptr);
+    glShaderSource(pixelShader, 1, (const char**)&params.shader_src, nullptr);
     glCompileShader(pixelShader);
         
     ps.id = pixelShader;

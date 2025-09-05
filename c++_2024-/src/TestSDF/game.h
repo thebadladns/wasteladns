@@ -614,10 +614,10 @@ void update(Instance& game, platform::GameConfig& config) {
         }
     }
     {
-        // render update wrap up
+        #if __DEBUG
+
         renderer::Scene& scene = game.scene.renderScene;
 
-        #if __DEBUG
         // Immediate mode debug, to be rendered along with the 3D scene on the next frame
         {
             if (debug::visualizationModes[debug::VisualizationModes::BVH]) {

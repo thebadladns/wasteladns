@@ -198,7 +198,7 @@ void process_hid_pads_win(allocator::Arena scratchArena, State* pads, u32& padCo
     const ptrdiff_t align = 16;
 
     GetRawInputData(lParam, RID_INPUT, NULL, &bufferSize, sizeof(RAWINPUTHEADER));
-    RAWINPUT* input = ALLOC_BYTES(scratchArena, RAWINPUT, bufferSize); // align??
+    RAWINPUT* input = ALLOC_BYTES(scratchArena, RAWINPUT, bufferSize, align);
     bool gotInput = GetRawInputData(lParam, RID_INPUT, input, &bufferSize, sizeof(RAWINPUTHEADER)) > 0;
     if (!gotInput) return;
 

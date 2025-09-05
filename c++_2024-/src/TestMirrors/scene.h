@@ -94,7 +94,7 @@ const RoomDefinition roomDefinitions[] = {
       float3(-1.f * math::d2r32, 0.f, 180 * math::d2r32), // max camera eulers
       0.2f, 0.5f,
       3, true },
-    { Resources::MeshesMeta::Count,
+    { Resources::MeshesMeta::HallOfMirrors,
       float3(-45 * math::d2r32, 0.f, -180 * math::d2r32), // min camera eulers
       float3(-1.f * math::d2r32, 0.f, 180 * math::d2r32), // max camera eulers
       0.3f, 2.f,
@@ -2721,7 +2721,6 @@ void spawn_scene_mirrorRoom(
 
         u32 prev = countof(ground) - 1;
         for (u32 i = 0; i < countof(ground); i++) {
-            float2 coods_xy = ground[i];
             physics::StaticObject_Line& wall = physicsScene.walls[physicsScene.wall_count++];
             wall = {};
             wall.start = float3(ground[prev], 0.f);

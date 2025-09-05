@@ -1252,7 +1252,7 @@ void load_coreResources(
     };
     // very very hack: number of assets * 4 + 16 (for the meshes we load ourselves)
     const size_t meshArenaSize = (countof(assets) * 4 + 16) * sizeof(renderer::DrawMesh);
-    renderCore.meshes = ALLOC_BYTES(persistentArena, renderer::DrawMesh, meshArenaSize);
+    renderCore.meshes = ALLOC_BYTES(persistentArena, renderer::DrawMesh, meshArenaSize, alignof(renderer::DrawMesh));
     renderCore.num_meshes = 0;
 
     camera::WindowProjection::Config& ortho =
@@ -2252,7 +2252,6 @@ void spawn_scene_mirrorRoom(
         {
             u32 prev = countof(ground) - 1;
             for (u32 i = 0; i < countof(ground); i++) {
-                float2 coods_xy = ground[i];
                 physics::StaticObject_Line& wall = physicsScene.walls[physicsScene.wall_count++];
                 wall = {};
                 wall.start = float3(ground[prev], 0.f);

@@ -664,11 +664,11 @@ void update(Instance& game, platform::GameConfig& config, platform::State& platf
         }
     }
     {
+        using namespace renderer;
+        #if __DEBUG
         // render update wrap up
         renderer::Scene& scene = game.scene.renderScene;
-        using namespace renderer;
 
-        #if __DEBUG
         // Immediate mode debug, to be rendered along with the 3D scene on the next frame
         {
             //World axis

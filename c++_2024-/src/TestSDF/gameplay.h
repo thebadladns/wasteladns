@@ -80,10 +80,6 @@ float2 calculateMovement_cameraRelative(
 
     const f32 maxspeed = 15.f;
 
-    Transform33 movementTransform = math::fromUpTowardsFront(transform.up, camera.front);
-    const float3& front = movementTransform.front;
-    const float3& right = movementTransform.right;
-
     // Interpolate input angles
     f32 effectiveLocalInputRad = 0.f;
     const f32 camCurrentRad = math::orientation(camera.front.xy);

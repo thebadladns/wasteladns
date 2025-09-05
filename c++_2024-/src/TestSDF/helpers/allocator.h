@@ -83,7 +83,7 @@ void free_arena(PagedArena& arena, void* ptr, ptrdiff_t size) {
         arena.curr = (u8*)oldbuff;
     }
 }
-#define ALLOC_BYTES(arena, type, size) (type*)allocator::alloc_arena(arena, size, alignof(type))
+#define ALLOC_BYTES(arena, type, size, align) (type*)allocator::alloc_arena(arena, size, align)
 #define ALLOC_ARRAY(arena, type, count) (type*)allocator::alloc_arena(arena, (count) * sizeof(type), alignof(type))
 
 // Dynamic array. When used with the same arena without any external allocations in between calls

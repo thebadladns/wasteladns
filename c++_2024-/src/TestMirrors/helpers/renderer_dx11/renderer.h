@@ -343,11 +343,8 @@ namespace driver {
         if (!readcache) {
             pErrorBlob = nullptr;
             hr = D3DCompile(
-                  params.shader_str, params.shader_length, "VS"
-                , nullptr // defines
-                , D3D_COMPILE_STANDARD_FILE_INCLUDE
-                , "VS"
-                , "vs_5_0"
+                  params.shader_str, params.shader_length, nullptr /* source file */
+                , nullptr /* defines */, 0, "VS", "vs_5_0"
                 , D3DCOMPILE_ENABLE_STRICTNESS | D3DCOMPILE_DEBUG, 0
                 , &pShaderBlob, &pErrorBlob
             );
@@ -398,11 +395,8 @@ namespace driver {
         if (!readcache) {
             pErrorBlob = nullptr;
             hr = D3DCompile(
-                  params.shader_str, params.shader_length, "PS"
-                , nullptr // defines
-                , D3D_COMPILE_STANDARD_FILE_INCLUDE
-                , "PS"
-                , "ps_5_0"
+                  params.shader_str, params.shader_length, nullptr /* source file */
+                , nullptr /* defines */, 0 , "PS" , "ps_5_0"
                 , D3DCOMPILE_ENABLE_STRICTNESS | D3DCOMPILE_DEBUG, 0
                 , &pShaderBlob, &pErrorBlob
             );
