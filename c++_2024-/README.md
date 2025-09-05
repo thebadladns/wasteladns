@@ -19,7 +19,7 @@ Alternatively, you can run build.bat on Windows to build the test specified by `
 
 1. Launch a command-line (say, Windows+R -> cmd.exe)
 2. Call either `vcvars64.bat` or `vcvarsall.bat`. These are usually located in Visual Studio's installation files: `C:\Program Files (x86)\Microsoft Visual Studio\{Year}\{Edition}\VC\Auxiliary\Build\`
-3. Run `build.bat [dx11|gl33|] [debug|release] [assets|]`. The first parameter determines the graphics API to use (defaults to DirectX11 if empty), the second specifies the build configuration (defaults to debug if empty). The third parameter copies the assets to the build folder (defaults to false, unless the assets folder is missing in the binary directory).
+3. Run `sh build.bat [dx11|gl33|] [debug|release] [assets|]`. The first parameter determines the graphics API to use (defaults to DirectX11 if empty), the second specifies the build configuration (defaults to debug if empty). The third parameter copies the assets to the build folder (defaults to false, unless the assets folder is missing in the binary directory).
 
 ### MacOS command-line 
 
