@@ -11,7 +11,7 @@ REM These are usually located in Visual Studio's installation files: C:\Program 
 
 REM usage
 REM build.bat [dx11|gl33|] [debug|release|] [assets|]
-REM defaults to dx11 debug no assets
+REM defaults to dx11 debug no assets (unless the assets folder doesn't exist)
 set debug=0
 set release=0
 set dx11=0
@@ -62,6 +62,7 @@ REM build
 %compile% /nologo /Fe%outdir%\%outname%.exe src\main.cpp %libs% /D__WIN64=1 %flags% %linkflags%
 
 REM post-build step (/E for recursive, /Y for overwrite without prompting)
+if not exist %outdir%\assets\ set assets=1
 if "%assets%"=="1" xcopy .\assets\ %outdir%\assets\ /E /Y
 
 REM track end time
