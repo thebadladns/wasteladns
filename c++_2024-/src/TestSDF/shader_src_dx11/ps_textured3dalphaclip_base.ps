@@ -1,0 +1,20 @@
+cbuffer PerGroup : register(b0) {
+    matrix modelMatrix;
+    float4 groupColor;
+}
+Texture2D texDiffuse : register(t0);
+SamplerState texDiffuseSampler : register(s0);
+
+struct VertexOut {
+    float2 uv : TEXCOORD;
+};
+float4 PS(VertexOut IN) : SV_TARGET {
+
+    float4 albedo = texDiffuse.Sample(texDiffuseSampler, IN.uv).rgba;
+    albedo = albedo * groupColor;
+    if (albedo.a < 0.1)
+        discard;
+    //float3 color = albedo.a * albedo.rgb + (1.0 - albedo.a) * OUT.color.rgb;
+    //return color;
+    return albedo.rgba;
+}

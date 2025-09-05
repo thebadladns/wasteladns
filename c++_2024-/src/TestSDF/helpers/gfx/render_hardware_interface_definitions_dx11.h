@@ -67,13 +67,6 @@ struct RscRenderTarget {
     u32 count;
 };
 
-struct ShaderCache {
-    struct ByteCode { u8* data; u64 size; };
-    allocator::PagedArena* arena;
-    const char* path;
-    ByteCode* shaderBytecode;
-    u64 shaderBytecodeCount;
-};
 struct RscVertexShader {
     ID3D11VertexShader* impl;
     ID3D11InputLayout* inputLayout_impl;
@@ -101,6 +94,7 @@ VertexAttribDesc make_vertexAttribDesc(const char* name, size_t offset, size_t ,
     return D3D11_INPUT_ELEMENT_DESC{
         name, 0, (DXGI_FORMAT)format, 0, (u32)offset, D3D11_INPUT_PER_VERTEX_DATA, 0 };
 }
+
 struct RscInputLayout {
     ID3D11InputLayout* impl;
 };

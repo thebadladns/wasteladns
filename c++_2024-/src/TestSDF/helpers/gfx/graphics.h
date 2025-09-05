@@ -17,10 +17,25 @@ struct PS_src {
 } // shaders
 } // gfx
 #if __DX11
-#include "shaders_dx11.h"
+#include "shader_src_dx11/shader_output_dx11.h"
+#define POPULATE_VSSHADER_PARAMS(vs_params, shader) \
+        vs_params.shader_name = shader::name; \
+        vs_params.shader_src = shader::g_VS; \
+        vs_params.shader_length = countof(shader::g_VS);
+#define POPULATE_PSSHADER_PARAMS(ps_params, shader) \
+        ps_params.shader_name = shader::name; \
+        ps_params.shader_src = shader::g_PS; \
+        ps_params.shader_length = countof(shader::g_PS);
 #elif __GL33
-#include "shaders_gl33.h"
+#include "shader_src_gl33/shader_output_gl33.h"
+#define POPULATE_SHADER_PARAMS(params, shader) \
+        params.shader_name = shader::name; \
+        params.shader_src = shader::src; \
+        params.shader_length = (u32)strlen(shader::src);
+#define POPULATE_VSSHADER_PARAMS(vs_params, shader) POPULATE_SHADER_PARAMS(vs_params, shader)
+#define POPULATE_PSSHADER_PARAMS(ps_params, shader) POPULATE_SHADER_PARAMS(ps_params, shader)
 #endif
+
 
 // other helpers
 namespace gfx {
@@ -294,15 +309,10 @@ u16* indices, u32 indices_count) {
 }
 
 struct ShaderDesc {
-    rhi::ShaderCache* shader_cache;
-    const rhi::VertexAttribDesc* vertexAttrs;
+    rhi::VertexShaderRuntimeCompileParams vs_params;
+    rhi::PixelShaderRuntimeCompileParams ps_params;
     const rhi::CBufferBindingDesc* bufferBindings;
     const rhi::TextureBindingDesc* textureBindings;
-    const char* vs_name;
-    const char* ps_name;
-    const char* vs_src;
-    const char* ps_src;
-    u32 vertexAttr_count;
     u32 bufferBinding_count;
     u32 textureBinding_count;
 };
@@ -312,19 +322,24 @@ void compile_shader(rhi::RscShaderSet& shader, const ShaderDesc& desc) {
     gfx::rhi::RscPixelShader ps;
     gfx::rhi::ShaderResult pixelResult;
     gfx::rhi::ShaderResult vertexResult;
-    vertexResult = gfx::rhi::create_shader_vs(vs, { desc.shader_cache, desc.vs_src, desc.vertexAttrs, (u32)strlen(desc.vs_src), desc.vertexAttr_count });
+    vertexResult = gfx::rhi::create_shader_vs(vs, desc.vs_params);
     if (!vertexResult.compiled) {
-        io::debuglog("%s: %s\n", desc.vs_name, vertexResult.error);
+        io::debuglog("%s: %s\n", desc.vs_params.shader_name, vertexResult.error);
         return;
     }
-    pixelResult = gfx::rhi::create_shader_ps(ps, { desc.shader_cache, desc.ps_src, (u32)strlen(desc.ps_src) });
+    pixelResult = gfx::rhi::create_shader_ps(ps, desc.ps_params);
     if (!pixelResult.compiled) {
-        io::debuglog("%s: %s\n", desc.ps_name, pixelResult.error);
+        io::debuglog("%s: %s\n", desc.ps_params.shader_name, pixelResult.error);
         return;
     }
-    gfx::rhi::ShaderResult result = gfx::rhi::create_shader_set(shader, { vs, ps, desc.bufferBindings, desc.textureBindings, desc.bufferBinding_count, desc.textureBinding_count });
+    gfx::rhi::ShaderResult result =
+        gfx::rhi::create_shader_set(
+            shader,
+            { vs, ps, desc.bufferBindings, desc.textureBindings,
+              desc.bufferBinding_count, desc.textureBinding_count });
     if (!result.compiled) {
-        io::debuglog("Linking %s & %s: %s\n", desc.vs_name, desc.ps_name, result.error);
+        io::debuglog("Linking %s & %s: %s\n",
+                     desc.vs_params.shader_name, desc.ps_params.shader_name, result.error);
     }
 }
 

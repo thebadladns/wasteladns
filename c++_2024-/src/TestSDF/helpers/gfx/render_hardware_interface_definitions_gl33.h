@@ -52,7 +52,6 @@ struct RscRenderTarget {
     u32 count;
 };
     
-struct ShaderCache {};
 struct RscVertexShader { GLuint id; };
 struct RscPixelShader { GLuint id; };
 struct RscShaderSet { GLuint id; };

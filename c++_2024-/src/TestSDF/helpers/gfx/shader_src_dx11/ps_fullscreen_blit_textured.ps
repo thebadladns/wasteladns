@@ -1,0 +1,12 @@
+Texture2D texSrc : register(t0);
+SamplerState texSrcSampler : register(s0);
+
+struct VertexOut {
+    float2 uv : TEXCOORD;
+};
+float4 PS(VertexOut IN) : SV_TARGET {
+
+    float4 albedo = texSrc.Sample(texSrcSampler, IN.uv).rgba;
+
+    return albedo;
+}

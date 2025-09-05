@@ -617,19 +617,20 @@ void init(allocator::PagedArena& arena) {
                 gfx::rhi::make_vertexAttribDesc("POSITION", offsetof(Vertex2D, pos), sizeof(Vertex2D), gfx::rhi::BufferAttributeFormat::R32G32_FLOAT),
                 gfx::rhi::make_vertexAttribDesc("COLOR", offsetof(Vertex2D, color), sizeof(Vertex2D), gfx::rhi::BufferAttributeFormat::R8G8B8A8_UNORM)
             };
-            gfx::ShaderDesc desc = {};
-            desc.vertexAttrs = attribs_color2d;
-            desc.vertexAttr_count = countof(attribs_color2d);
-            desc.textureBindings = nullptr;
-            desc.textureBinding_count = 0;
-            desc.bufferBindings = bufferBindings_MVP;
-            desc.bufferBinding_count = countof(bufferBindings_MVP);
-            // reuse 3d shaders
-            desc.vs_name = gfx::shaders::vs_color3d_unlit.name;
-            desc.vs_src = gfx::shaders::vs_color3d_unlit.src;
-            desc.ps_name = gfx::shaders::ps_color3d_unlit.name;
-            desc.ps_src = gfx::shaders::ps_color3d_unlit.src;
-            gfx::compile_shader(ctx.shader_2d, desc);
+            {
+                gfx::ShaderDesc desc = {};
+                gfx::rhi::VertexShaderRuntimeCompileParams& vs_params = desc.vs_params;
+                gfx::rhi::PixelShaderRuntimeCompileParams& ps_params = desc.ps_params;
+                vs_params.attribs = attribs_color2d;
+                vs_params.attrib_count = countof(attribs_color2d);
+                POPULATE_VSSHADER_PARAMS(vs_params, gfx::shaders::vs_color3d_unlit)
+                POPULATE_PSSHADER_PARAMS(ps_params, gfx::shaders::ps_color3d_unlit)
+                desc.textureBindings = nullptr;
+                desc.textureBinding_count = 0;
+                desc.bufferBindings = bufferBindings_MVP;
+                desc.bufferBinding_count = countof(bufferBindings_MVP);
+                gfx::compile_shader(ctx.shader_2d, desc);
+            }
 
             gfx::rhi::IndexedVertexBufferDesc bufferParams;
             bufferParams.vertexData = nullptr;
@@ -650,18 +651,20 @@ void init(allocator::PagedArena& arena) {
                 gfx::rhi::make_vertexAttribDesc("POSITION", offsetof(Vertex3D, pos), sizeof(Vertex3D), gfx::rhi::BufferAttributeFormat::R32G32B32_FLOAT),
                 gfx::rhi::make_vertexAttribDesc("COLOR", offsetof(Vertex3D, color), sizeof(Vertex3D), gfx::rhi::BufferAttributeFormat::R8G8B8A8_UNORM)
             };
-            gfx::ShaderDesc desc = {};
-            desc.vertexAttrs = attribs_color3d;
-            desc.vertexAttr_count = countof(attribs_color3d);
-            desc.textureBindings = nullptr;
-            desc.textureBinding_count = 0;
-            desc.bufferBindings = bufferBindings_MVP;
-            desc.bufferBinding_count = countof(bufferBindings_MVP);
-            desc.vs_name = gfx::shaders::vs_color3d_unlit.name;
-            desc.vs_src = gfx::shaders::vs_color3d_unlit.src;
-            desc.ps_name = gfx::shaders::ps_color3d_unlit.name;
-            desc.ps_src = gfx::shaders::ps_color3d_unlit.src;
-            gfx::compile_shader(ctx.shader_3d, desc);
+            {
+                gfx::ShaderDesc desc = {};
+                gfx::rhi::VertexShaderRuntimeCompileParams& vs_params = desc.vs_params;
+                gfx::rhi::PixelShaderRuntimeCompileParams& ps_params = desc.ps_params;
+                vs_params.attribs = attribs_color3d;
+                vs_params.attrib_count = countof(attribs_color3d);
+                POPULATE_VSSHADER_PARAMS(vs_params, gfx::shaders::vs_color3d_unlit)
+                POPULATE_PSSHADER_PARAMS(ps_params, gfx::shaders::ps_color3d_unlit)
+                desc.textureBindings = nullptr;
+                desc.textureBinding_count = 0;
+                desc.bufferBindings = bufferBindings_MVP;
+                desc.bufferBinding_count = countof(bufferBindings_MVP);
+                gfx::compile_shader(ctx.shader_3d, desc);
+            }
 
             gfx::rhi::VertexBufferDesc bufferParams;
             bufferParams.vertexData = nullptr;

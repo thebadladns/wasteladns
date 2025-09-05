@@ -100,16 +100,16 @@ struct ShaderResult {
     bool compiled;
 };
 struct VertexShaderRuntimeCompileParams {
-    ShaderCache* shader_cache;
-    const char* shader_str;
+    const char* shader_name;
+    const void* shader_src;
     const VertexAttribDesc* attribs;
     u32 shader_length;
-	u32 attrib_count;
+    u32 attrib_count;
 };
 ShaderResult create_shader_vs(RscVertexShader&, const VertexShaderRuntimeCompileParams&);
 struct PixelShaderRuntimeCompileParams {
-    ShaderCache* shader_cache;
-    const char* shader_str;
+    const char* shader_name;
+    const void* shader_src;
     u32 shader_length;
 };
 ShaderResult create_shader_ps(RscPixelShader&, const PixelShaderRuntimeCompileParams&);

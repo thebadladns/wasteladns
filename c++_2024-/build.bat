@@ -1,20 +1,24 @@
 @echo off
-setlocal
-cd /D "%~dp0"
 
-:: track start time
+setlocal
+REM switch to file's directory
+cd /D "%~dp0"
+REM track start time
 set t0=%time: =0%
 
-:: usage
-:: build.bat [dx11|gl33|] [debug|release|] [assets|]
-:: defaults to dx11 debug no assets
+REM Before running this bat file, you need to call either vcvars64.bat or vcvarsall.bat.
+REM These are usually located in Visual Studio's installation files: C:\Program Files (x86)\Microsoft Visual Studio\{Year}\{Edition}\VC\Auxiliary\Build\
+
+REM usage
+REM build.bat [dx11|gl33|] [debug|release|] [assets|]
+REM defaults to dx11 debug no assets
 set debug=0
 set release=0
 set dx11=0
 set gl33=0
 set assets=0
 
-:: unpack args
+REM unpack args
 for %%a in (%*) do set "%%a=1"
 if not "%release%"=="1" set debug=1
 if "%debug%"=="1" set release=0
@@ -23,10 +27,10 @@ if not "%gl33%"=="1" set dx11=1
 if "%dx11%"=="1" set gl33=0
 if "%gl33%"=="1" set dx11=0
 
-:: figure out compile args
-:: /Od=no optimization, /Ob1=respect __inline, /Zi=generate PDB
+REM figure out compile args
+REM /Od=no optimization, /Ob1=respect __inline, /Zi=generate PDB
 set cl_debug=call cl /Od /Ob1 /Zi
-:: /O2=speed optimization, /DNDEBUG=define non-debug macro to match CMake
+REM /O2=speed optimization, /DNDEBUG=define non-debug macro to match CMake
 set cl_release=call cl /O2 /DNDEBUG
 if "%dx11%"=="1" (
     set outname=app-dx11
@@ -42,31 +46,28 @@ if "%gl33%"=="1" (
 )
 if "%debug%"=="1" (
     set outdir=.\bin\Debug
-    ::set objectdir=%compileoutdir%\Debug\
     set compile=%cl_debug%
     set linkflags=/link /incremental:no /PDB:%outdir%\%outname%.pdb
 )
 if "%release%"=="1" (
     set outdir=.\bin\Release\
-    ::set objectdir=%compileoutdir%\Release\
     set compile=%cl_release%
     set linkflags=/link /incremental:no
 )
 
-:: create dirs
+REM create dirs
 if not exist %outdir% mkdir %outdir%
-::if not exist %objectdir% mkdir %objectdir%
 
-:: build
+REM build
 %compile% /nologo /Fe%outdir%\%outname%.exe src\main.cpp %libs% /D__WIN64=1 %flags% %linkflags%
 
-:: post-build step (/E for recursive, /Y for overwrite without prompting)
+REM post-build step (/E for recursive, /Y for overwrite without prompting)
 if "%assets%"=="1" xcopy .\assets\ %outdir%\assets\ /E /Y
 
-:: track end time
+REM track end time
 set t=%time: =0%
 
-:: output total compilation time (/a for arithmetic statements, not strings)
+REM output total compilation time (/a for arithmetic statements, not strings)
 set /a h=1%t0:~0,2%-100
 set /a m=1%t0:~3,2%-100
 set /a s=1%t0:~6,2%-100

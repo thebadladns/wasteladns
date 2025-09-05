@@ -1542,208 +1542,186 @@ void load_coreResources(
 
     // shaders
     {
-        allocator::PagedArena scratchArena = memory.scratchArena; // explicit copy
-        // Initialize cache with room for a VS and PS shader of each technique
-        gfx::rhi::ShaderCache shader_cache = {};
-        gfx::rhi::load_shader_cache(
-            shader_cache, "assets/data/shaderCache_physics.bin", &scratchArena,
-            renderer::ShaderTechniques::Count * 2);
         {
             gfx::ShaderDesc desc = {};
-            desc.vertexAttrs = attribs_3d;
-            desc.vertexAttr_count = countof(attribs_3d);
+            gfx::rhi::VertexShaderRuntimeCompileParams& vs_params = desc.vs_params;
+            gfx::rhi::PixelShaderRuntimeCompileParams& ps_params = desc.ps_params;
+            vs_params.attribs = attribs_3d;
+            vs_params.attrib_count = countof(attribs_3d);
+            POPULATE_VSSHADER_PARAMS(vs_params, gfx::shaders::vs_fullscreen_bufferless_clear_blit)
+            POPULATE_PSSHADER_PARAMS(ps_params, gfx::shaders::ps_fullscreen_blit_clear_colored)
             desc.textureBindings = nullptr;
             desc.textureBinding_count = 0;
             desc.bufferBindings = bufferBindings_blit_clear_color;
             desc.bufferBinding_count = countof(bufferBindings_blit_clear_color);
-            // reuse 3d shaders
-            desc.vs_name = gfx::shaders::vs_fullscreen_bufferless_clear_blit.name;
-            desc.vs_src = gfx::shaders::vs_fullscreen_bufferless_clear_blit.src;
-            desc.ps_name = gfx::shaders::ps_fullscreen_blit_clear_colored.name;
-            desc.ps_src = gfx::shaders::ps_fullscreen_blit_clear_colored.src;
-            desc.shader_cache = &shader_cache;
             gfx::compile_shader(
                 renderCore.shaders[renderer::ShaderTechniques::FullscreenBlitClearColor], desc);
         }
         {
             gfx::ShaderDesc desc = {};
-            desc.vertexAttrs = attribs_3d;
-            desc.vertexAttr_count = countof(attribs_3d);
+            gfx::rhi::VertexShaderRuntimeCompileParams& vs_params = desc.vs_params;
+            gfx::rhi::PixelShaderRuntimeCompileParams& ps_params = desc.ps_params;
+            vs_params.attribs = attribs_3d;
+            vs_params.attrib_count = countof(attribs_3d);
+            POPULATE_VSSHADER_PARAMS(vs_params, gfx::shaders::vs_fullscreen_bufferless_textured_blit)
+            POPULATE_PSSHADER_PARAMS(ps_params, gfx::shaders::ps_fullscreen_blit_sdf)
             desc.textureBindings = nullptr;
             desc.textureBinding_count = 0;
             desc.bufferBindings = bufferBindings_blit_sdf;
             desc.bufferBinding_count = countof(bufferBindings_blit_sdf);
-            // reuse 3d shaders
-            desc.vs_name = gfx::shaders::vs_fullscreen_bufferless_textured_blit.name;
-            desc.vs_src = gfx::shaders::vs_fullscreen_bufferless_textured_blit.src;
-            desc.ps_name = gfx::shaders::ps_fullscreen_blit_sdf.name;
-            desc.ps_src = gfx::shaders::ps_fullscreen_blit_sdf.src;
-            desc.shader_cache = &shader_cache;
             gfx::compile_shader(
                 renderCore.shaders[renderer::ShaderTechniques::FullscreenBlitSDF], desc);
         }
         {
             gfx::ShaderDesc desc = {};
-            desc.vertexAttrs = attribs_textured3d;
-            desc.vertexAttr_count = countof(attribs_textured3d);
+            gfx::rhi::VertexShaderRuntimeCompileParams& vs_params = desc.vs_params;
+            gfx::rhi::PixelShaderRuntimeCompileParams& ps_params = desc.ps_params;
+            vs_params.attribs = attribs_textured3d;
+            vs_params.attrib_count = countof(attribs_textured3d);
+            POPULATE_VSSHADER_PARAMS(vs_params, gfx::shaders::vs_fullscreen_bufferless_textured_blit)
+            POPULATE_PSSHADER_PARAMS(ps_params, gfx::shaders::ps_fullscreen_blit_textured)
             desc.textureBindings = textureBindings_fullscreenblit;
             desc.textureBinding_count = countof(textureBindings_fullscreenblit);
-            desc.bufferBindings = nullptr;
-            desc.bufferBinding_count = 0;
-            // reuse 3d shaders
-            desc.vs_name = gfx::shaders::vs_fullscreen_bufferless_textured_blit.name;
-            desc.vs_src = gfx::shaders::vs_fullscreen_bufferless_textured_blit.src;
-            desc.ps_name = gfx::shaders::ps_fullscreen_blit_textured.name;
-            desc.ps_src = gfx::shaders::ps_fullscreen_blit_textured.src;
-            desc.shader_cache = &shader_cache;
+            desc.bufferBindings = bufferBindings_blit_sdf;
+            desc.bufferBinding_count = countof(bufferBindings_blit_sdf);
             gfx::compile_shader(
                 renderCore.shaders[renderer::ShaderTechniques::FullscreenBlitTextured], desc);
         }
         {
             gfx::ShaderDesc desc = {};
-            desc.vertexAttrs = attribs_textured3d;
-            desc.vertexAttr_count = countof(attribs_textured3d);
+            gfx::rhi::VertexShaderRuntimeCompileParams& vs_params = desc.vs_params;
+            gfx::rhi::PixelShaderRuntimeCompileParams& ps_params = desc.ps_params;
+            vs_params.attribs = attribs_textured3d;
+            vs_params.attrib_count = countof(attribs_textured3d);
+            POPULATE_VSSHADER_PARAMS(vs_params, gfx::shaders::vs_fullscreen_bufferless_textured_blit)
+            POPULATE_PSSHADER_PARAMS(ps_params, gfx::shaders::ps_fullscreen_blit_textured_depth)
             desc.textureBindings = textureBindings_fullscreenblit_depth;
             desc.textureBinding_count = countof(textureBindings_fullscreenblit_depth);
-            desc.bufferBindings = nullptr;
-            desc.bufferBinding_count = 0;
-            // reuse 3d shaders
-            desc.vs_name = gfx::shaders::vs_fullscreen_bufferless_textured_blit.name;
-            desc.vs_src = gfx::shaders::vs_fullscreen_bufferless_textured_blit.src;
-            desc.ps_name = gfx::shaders::ps_fullscreen_blit_textured_depth.name;
-            desc.ps_src = gfx::shaders::ps_fullscreen_blit_textured_depth.src;
-            desc.shader_cache = &shader_cache;
+            desc.bufferBindings = bufferBindings_blit_sdf;
+            desc.bufferBinding_count = countof(textureBindings_fullscreenblit);
             gfx::compile_shader(
                 renderCore.shaders[renderer::ShaderTechniques::FullscreenBlitTexturedDepth], desc);
         }
         {
             gfx::ShaderDesc desc = {};
-            desc.vertexAttrs = attribs_2d;
-            desc.vertexAttr_count = countof(attribs_2d);
+            gfx::rhi::VertexShaderRuntimeCompileParams& vs_params = desc.vs_params;
+            gfx::rhi::PixelShaderRuntimeCompileParams& ps_params = desc.ps_params;
+            vs_params.attribs = attribs_2d;
+            vs_params.attrib_count = countof(attribs_2d);
+            POPULATE_VSSHADER_PARAMS(vs_params, gfx::shaders::vs_color2d_base)
+            POPULATE_PSSHADER_PARAMS(ps_params, gfx::shaders::ps_color3d_unlit)
             desc.textureBindings = nullptr;
             desc.textureBinding_count = 0;
             desc.bufferBindings = bufferBindings_untextured_base;
             desc.bufferBinding_count = countof(bufferBindings_untextured_base);
-            desc.vs_name = gfx::shaders::vs_color2d_base.name;
-            desc.vs_src = gfx::shaders::vs_color2d_base.src;
-            desc.ps_name = gfx::shaders::ps_color3d_unlit.name;
-            desc.ps_src = gfx::shaders::ps_color3d_unlit.src;
-            desc.shader_cache = &shader_cache;
             gfx::compile_shader(
                 renderCore.shaders[renderer::ShaderTechniques::Color2D], desc);
         }
         {
             gfx::ShaderDesc desc = {};
-            desc.vertexAttrs = attribs_3d;
-            desc.vertexAttr_count = countof(attribs_3d);
+            gfx::rhi::VertexShaderRuntimeCompileParams& vs_params = desc.vs_params;
+            gfx::rhi::PixelShaderRuntimeCompileParams& ps_params = desc.ps_params;
+            vs_params.attribs = attribs_3d;
+            vs_params.attrib_count = countof(attribs_3d);
+            POPULATE_VSSHADER_PARAMS(vs_params, gfx::shaders::vs_3d_instanced_base)
+            POPULATE_PSSHADER_PARAMS(ps_params, gfx::shaders::ps_color3d_unlit)
             desc.textureBindings = nullptr;
             desc.textureBinding_count = 0;
             desc.bufferBindings = bufferBindings_instanced_base;
             desc.bufferBinding_count = countof(bufferBindings_instanced_base);
-            desc.vs_name = gfx::shaders::vs_3d_instanced_base.name;
-            desc.vs_src = gfx::shaders::vs_3d_instanced_base.src;
-            desc.ps_name = gfx::shaders::ps_color3d_unlit.name;
-            desc.ps_src = gfx::shaders::ps_color3d_unlit.src;
-            desc.shader_cache = &shader_cache;
             gfx::compile_shader(
                 renderCore.shaders[renderer::ShaderTechniques::Instanced3D], desc);
         }
         {
             gfx::ShaderDesc desc = {};
-            desc.vertexAttrs = attribs_color3d;
-            desc.vertexAttr_count = countof(attribs_color3d);
+            gfx::rhi::VertexShaderRuntimeCompileParams& vs_params = desc.vs_params;
+            gfx::rhi::PixelShaderRuntimeCompileParams& ps_params = desc.ps_params;
+            vs_params.attribs = attribs_color3d;
+            vs_params.attrib_count = countof(attribs_color3d);
+            POPULATE_VSSHADER_PARAMS(vs_params, gfx::shaders::vs_color3d_base)
+            POPULATE_PSSHADER_PARAMS(ps_params, gfx::shaders::ps_color3d_unlit)
             desc.textureBindings = nullptr;
             desc.textureBinding_count = 0;
             desc.bufferBindings = bufferBindings_untextured_base;
             desc.bufferBinding_count = countof(bufferBindings_untextured_base);
-            desc.vs_name = gfx::shaders::vs_color3d_base.name;
-            desc.vs_src = gfx::shaders::vs_color3d_base.src;
-            desc.ps_name = gfx::shaders::ps_color3d_unlit.name;
-            desc.ps_src = gfx::shaders::ps_color3d_unlit.src;
-            desc.shader_cache = &shader_cache;
-            gfx::compile_shader(renderCore.shaders[renderer::ShaderTechniques::Color3D], desc);
+            gfx::compile_shader(
+                renderCore.shaders[renderer::ShaderTechniques::Color3D], desc);
         }
         {
             gfx::ShaderDesc desc = {};
-            desc.vertexAttrs = attribs_color3d_skinned;
-            desc.vertexAttr_count = countof(attribs_color3d_skinned);
+            gfx::rhi::VertexShaderRuntimeCompileParams& vs_params = desc.vs_params;
+            gfx::rhi::PixelShaderRuntimeCompileParams& ps_params = desc.ps_params;
+            vs_params.attribs = attribs_color3d_skinned;
+            vs_params.attrib_count = countof(attribs_color3d_skinned);
+            POPULATE_VSSHADER_PARAMS(vs_params, gfx::shaders::vs_color3d_skinned_base)
+            POPULATE_PSSHADER_PARAMS(ps_params, gfx::shaders::ps_color3d_unlit)
             desc.textureBindings = nullptr;
             desc.textureBinding_count = 0;
             desc.bufferBindings = bufferBindings_skinned_untextured_base;
             desc.bufferBinding_count = countof(bufferBindings_skinned_untextured_base);
-            desc.vs_name = gfx::shaders::vs_color3d_skinned_base.name;
-            desc.vs_src = gfx::shaders::vs_color3d_skinned_base.src;
-            desc.ps_name = gfx::shaders::ps_color3d_unlit.name;
-            desc.ps_src = gfx::shaders::ps_color3d_unlit.src;
-            desc.shader_cache = &shader_cache;
             gfx::compile_shader(
                 renderCore.shaders[renderer::ShaderTechniques::Color3DSkinned], desc);
         }
         {
             gfx::ShaderDesc desc = {};
-            desc.vertexAttrs = attribs_textured3d;
-            desc.vertexAttr_count = countof(attribs_textured3d);
+            gfx::rhi::VertexShaderRuntimeCompileParams& vs_params = desc.vs_params;
+            gfx::rhi::PixelShaderRuntimeCompileParams& ps_params = desc.ps_params;
+            vs_params.attribs = attribs_textured3d;
+            vs_params.attrib_count = countof(attribs_textured3d);
+            POPULATE_VSSHADER_PARAMS(vs_params, gfx::shaders::vs_textured3d_base)
+            POPULATE_PSSHADER_PARAMS(ps_params, gfx::shaders::ps_textured3d_base)
             desc.textureBindings = textureBindings_base;
             desc.textureBinding_count = countof(textureBindings_base);
             desc.bufferBindings = bufferBindings_textured_base;
             desc.bufferBinding_count = countof(bufferBindings_textured_base);
-            desc.vs_name = gfx::shaders::vs_textured3d_base.name;
-            desc.vs_src = gfx::shaders::vs_textured3d_base.src;
-            desc.ps_name = gfx::shaders::ps_textured3d_base.name;
-            desc.ps_src = gfx::shaders::ps_textured3d_base.src;
-            desc.shader_cache = &shader_cache;
             gfx::compile_shader(
                 renderCore.shaders[renderer::ShaderTechniques::Textured3D], desc);
         }
         {
             gfx::ShaderDesc desc = {};
-            desc.vertexAttrs = attribs_textured3d;
-            desc.vertexAttr_count = countof(attribs_textured3d);
+            gfx::rhi::VertexShaderRuntimeCompileParams& vs_params = desc.vs_params;
+            gfx::rhi::PixelShaderRuntimeCompileParams& ps_params = desc.ps_params;
+            vs_params.attribs = attribs_textured3d;
+            vs_params.attrib_count = countof(attribs_textured3d);
+            POPULATE_VSSHADER_PARAMS(vs_params, gfx::shaders::vs_textured3d_base)
+            POPULATE_PSSHADER_PARAMS(ps_params, gfx::shaders::ps_textured3dalphaclip_base)
             desc.textureBindings = textureBindings_base;
             desc.textureBinding_count = countof(textureBindings_base);
             desc.bufferBindings = bufferBindings_textured_base;
             desc.bufferBinding_count = countof(bufferBindings_textured_base);
-            desc.vs_name = gfx::shaders::vs_textured3d_base.name;
-            desc.vs_src = gfx::shaders::vs_textured3d_base.src;
-            desc.ps_name = gfx::shaders::ps_textured3dalphaclip_base.name;
-            desc.ps_src = gfx::shaders::ps_textured3dalphaclip_base.src;
-            desc.shader_cache = &shader_cache;
             gfx::compile_shader(
                 renderCore.shaders[renderer::ShaderTechniques::Textured3DAlphaClip], desc);
         }
         {
             gfx::ShaderDesc desc = {};
-            desc.vertexAttrs = attribs_textured3d_skinned;
-            desc.vertexAttr_count = countof(attribs_textured3d_skinned);
+            gfx::rhi::VertexShaderRuntimeCompileParams& vs_params = desc.vs_params;
+            gfx::rhi::PixelShaderRuntimeCompileParams& ps_params = desc.ps_params;
+            vs_params.attribs = attribs_textured3d_skinned;
+            vs_params.attrib_count = countof(attribs_textured3d_skinned);
+            POPULATE_VSSHADER_PARAMS(vs_params, gfx::shaders::vs_textured3d_skinned_base)
+            POPULATE_PSSHADER_PARAMS(ps_params, gfx::shaders::ps_textured3d_base)
             desc.textureBindings = textureBindings_base;
             desc.textureBinding_count = countof(textureBindings_base);
             desc.bufferBindings = bufferBindings_skinned_textured_base;
             desc.bufferBinding_count = countof(bufferBindings_skinned_textured_base);
-            desc.vs_name = gfx::shaders::vs_textured3d_skinned_base.name;
-            desc.vs_src = gfx::shaders::vs_textured3d_skinned_base.src;
-            desc.ps_name = gfx::shaders::ps_textured3d_base.name;
-            desc.ps_src = gfx::shaders::ps_textured3d_base.src;
-            desc.shader_cache = &shader_cache;
             gfx::compile_shader(
                 renderCore.shaders[renderer::ShaderTechniques::Textured3DSkinned], desc);
         }
         {
             gfx::ShaderDesc desc = {};
-            desc.vertexAttrs = attribs_textured3d_skinned;
-            desc.vertexAttr_count = countof(attribs_textured3d_skinned);
+            gfx::rhi::VertexShaderRuntimeCompileParams& vs_params = desc.vs_params;
+            gfx::rhi::PixelShaderRuntimeCompileParams& ps_params = desc.ps_params;
+            vs_params.attribs = attribs_textured3d_skinned;
+            vs_params.attrib_count = countof(attribs_textured3d_skinned);
+            POPULATE_VSSHADER_PARAMS(vs_params, gfx::shaders::vs_textured3d_skinned_base)
+            POPULATE_PSSHADER_PARAMS(ps_params, gfx::shaders::ps_textured3dalphaclip_base)
             desc.textureBindings = textureBindings_base;
             desc.textureBinding_count = countof(textureBindings_base);
             desc.bufferBindings = bufferBindings_skinned_textured_base;
             desc.bufferBinding_count = countof(bufferBindings_skinned_textured_base);
-            desc.vs_name = gfx::shaders::vs_textured3d_skinned_base.name;
-            desc.vs_src = gfx::shaders::vs_textured3d_skinned_base.src;
-            desc.ps_name = gfx::shaders::ps_textured3dalphaclip_base.name;
-            desc.ps_src = gfx::shaders::ps_textured3dalphaclip_base.src;
-            desc.shader_cache = &shader_cache;
             gfx::compile_shader(
                 renderCore.shaders[renderer::ShaderTechniques::Textured3DAlphaClipSkinned], desc);
         }
-        gfx::rhi::write_shader_cache(shader_cache);
     }
 
     allocator::PagedArena scratchArena = memory.scratchArena; // explicit copy

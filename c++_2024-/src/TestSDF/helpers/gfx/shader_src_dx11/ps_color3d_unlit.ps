@@ -1,0 +1,6 @@
+struct VertexOut {
+    float4 color : COLOR;
+};
+float4 PS(VertexOut OUT) : SV_TARGET {
+    return OUT.color;
+}

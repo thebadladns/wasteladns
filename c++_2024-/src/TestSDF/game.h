@@ -30,7 +30,11 @@ im::Pane arenasPane;
 #endif
 
 #include "gameplay.h"
-#include "shaders.h"
+#if __DX11
+#include "shader_src_dx11/shader_output_dx11.h"
+#elif __GL33
+#include "shader_src_gl33/shader_output_gl33.h"
+#endif // __GL33
 #include "renderer.h"
 #include "animation.h"
 #include "physics.h"

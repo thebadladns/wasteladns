@@ -317,153 +317,20 @@ void bind_textures(const RscTexture* textures, const u32 count) {
     d3dcontext->PSSetSamplers(0, count, samplers);
 }
 
-void load_shader_cache(ShaderCache& shaderCache, const char* path, allocator::PagedArena* arena, u32 maxShaders) {
-    shaderCache.arena = arena;
-    shaderCache.path = path;
-    #if WRITE_SHADERCACHE
-    shaderCache.shaderBytecode = ALLOC_ARRAY(*shaderCache.arena, ShaderCache::ByteCode, maxShaders);
-    #elif READ_SHADERCACHE
-    FILE* f;
-    if (io::fopen(&f, path, "rb") == 0) {
-        u64 count;
-        fread(&count, sizeof(u64), 1, f);
-        shaderCache.shaderBytecode = ALLOC_ARRAY(*shaderCache.arena, ShaderCache::ByteCode, count);
-        for (u64 i = 0; i < count; i++) {
-            u64 size;
-            fread(&size, sizeof(u64), 1, f);
-            gfx::rhi::ShaderCache::ByteCode& byteCode = shaderCache.shaderBytecode[i];
-            byteCode.data = ALLOC_ARRAY(*shaderCache.arena, u8, size);
-            byteCode.size = size;
-            fread(byteCode.data, sizeof(u8), size, f);
-        }
-        io::fclose(f);
-    }
-    #endif
-};
-void save_shader_to_cache(ShaderCache& shaderCache, void* ptr, size_t size) {
-    ShaderCache::ByteCode& byteCode = shaderCache.shaderBytecode[shaderCache.shaderBytecodeCount++];
-    byteCode.data = ALLOC_ARRAY(*shaderCache.arena, u8, size);
-    byteCode.size = size;
-    memcpy(byteCode.data, ptr, size);
-};
-void write_shader_cache(ShaderCache& shaderCache) {
-    #if WRITE_SHADERCACHE
-    FILE* f;
-    if (io::fopen(&f, shaderCache.path, "wb") == 0) {
-        fwrite(&shaderCache.shaderBytecodeCount, sizeof(u64), 1, f);
-        for (size_t i = 0; i < shaderCache.shaderBytecodeCount; i++) {
-            fwrite(&shaderCache.shaderBytecode[i].size, sizeof(u64), 1, f);
-            fwrite(shaderCache.shaderBytecode[i].data, sizeof(u8), shaderCache.shaderBytecode[i].size, f);
-        }
-        io::fclose(f);
-    }
-    #endif
-}
 ShaderResult create_shader_vs(RscVertexShader& vs, const VertexShaderRuntimeCompileParams& params) {
-    bool readcache = false, writecache = false;
-    #if WRITE_SHADERCACHE
-    writecache = params.shader_cache; readcache = false;
-    #elif READ_SHADERCACHE
-    writecache = false; readcache = params.shader_cache;
-    #endif
-    HRESULT hr;
-    ID3DBlob* pShaderBlob;
-    ID3DBlob* pErrorBlob;
-    void* error;
-    if (!readcache) {
-        pErrorBlob = nullptr;
-        hr = D3DCompile(
-                params.shader_str, params.shader_length, "VS"
-            , nullptr // defines
-            , D3D_COMPILE_STANDARD_FILE_INCLUDE
-            , "VS"
-            , "vs_5_0"
-            , D3DCOMPILE_ENABLE_STRICTNESS | D3DCOMPILE_DEBUG, 0
-            , &pShaderBlob, &pErrorBlob
-        );
-        error = pErrorBlob ? pErrorBlob->GetBufferPointer() : nullptr;
-    } else {
-        hr = S_OK;
-        error = nullptr;
-    }
-    ShaderResult result;
-    result.compiled = !FAILED(hr);
-    if (result.compiled) {
-        void* shaderBufferPointer;
-        size_t shaderBufferSize;
-        if (readcache) {
-            ShaderCache::ByteCode& byteCode = params.shader_cache->shaderBytecode[params.shader_cache->shaderBytecodeCount++];
-            shaderBufferPointer = byteCode.data;
-            shaderBufferSize = byteCode.size;
-        } else {
-            shaderBufferPointer = pShaderBlob->GetBufferPointer();
-            shaderBufferSize = pShaderBlob->GetBufferSize();
-            if (writecache) { save_shader_to_cache(*params.shader_cache, shaderBufferPointer, shaderBufferSize); }
-        }
-        d3ddev->CreateVertexShader(shaderBufferPointer, shaderBufferSize, nullptr, &vs.impl);
-        d3ddev->CreateInputLayout(
-            params.attribs, params.attrib_count, shaderBufferPointer, shaderBufferSize,
-            &vs.inputLayout_impl);
-    } else {
-        io::format(result.error, 128, "%.128s", error ? (char*)error : "Unknown shader error");
-    }
-    if (!readcache) {
-        if (pShaderBlob) pShaderBlob->Release();
-        if (pErrorBlob) pErrorBlob->Release();
-    }
-
+    d3ddev->CreateVertexShader(params.shader_src, params.shader_length, nullptr, &vs.impl);
+    d3ddev->CreateInputLayout(
+        params.attribs, params.attrib_count, params.shader_src, params.shader_length,
+        &vs.inputLayout_impl);
+    ShaderResult result = {};
+    result.compiled = true;
     return result;
 }
 ShaderResult create_shader_ps(RscPixelShader& ps, const PixelShaderRuntimeCompileParams& params) {
-    bool readcache = false, writecache = false;
-    #if WRITE_SHADERCACHE
-    writecache = params.shader_cache; readcache = false;
-    #elif READ_SHADERCACHE
-    writecache = false; readcache = params.shader_cache;
-    #endif
-    HRESULT hr;
-    ID3DBlob* pShaderBlob;
-    ID3DBlob* pErrorBlob;
-    void* error;
-    if (!readcache) {
-        pErrorBlob = nullptr;
-        hr = D3DCompile(
-                params.shader_str, params.shader_length, "PS"
-            , nullptr // defines
-            , D3D_COMPILE_STANDARD_FILE_INCLUDE
-            , "PS"
-            , "ps_5_0"
-            , D3DCOMPILE_ENABLE_STRICTNESS | D3DCOMPILE_DEBUG, 0
-            , &pShaderBlob, &pErrorBlob
-        );
-        error = pErrorBlob ? pErrorBlob->GetBufferPointer() : nullptr;
-    } else {
-        hr = S_OK;
-        error = nullptr;
-    }
-    ShaderResult result;
-    result.compiled = !FAILED(hr);
-    if (result.compiled) {
-        void* shaderBufferPointer;
-        size_t shaderBufferSize;
-        if (readcache) {
-            ShaderCache::ByteCode& byteCode = params.shader_cache->shaderBytecode[params.shader_cache->shaderBytecodeCount++];
-            shaderBufferPointer = byteCode.data;
-            shaderBufferSize = byteCode.size;
-        } else {
-            shaderBufferPointer = pShaderBlob->GetBufferPointer();
-            shaderBufferSize = pShaderBlob->GetBufferSize();
-            if (writecache) { save_shader_to_cache(*params.shader_cache, shaderBufferPointer, shaderBufferSize); }
-        }
-        d3ddev->CreatePixelShader(shaderBufferPointer, shaderBufferSize, nullptr, &ps.impl);
-    } else {
-        io::format(result.error, 128, "%.128s", error ? (char*)error : "Unknown shader error");
-    }
-    if (!readcache) {
-        if (pShaderBlob) pShaderBlob->Release();
-        if (pErrorBlob) pErrorBlob->Release();
-    }
+    d3ddev->CreatePixelShader(params.shader_src, params.shader_length, nullptr, &ps.impl);
 
+    ShaderResult result = {};
+    result.compiled = true;
     return result;
 }
 ShaderResult create_shader_set(RscShaderSet& ss, const ShaderSetRuntimeCompileParams& params) {
