@@ -12,7 +12,7 @@ If you use vim, you can load the .vimrc in this project to set up commands for b
 
 For building code for this project, refer to [this very rough blurb](../../README.md). COMPILE_TARGET should be set to TEST_SDF.
 
-### Shaders (Window's only, for now)
+### Shaders (Windows)
 
 If you edit shaders, whether on DirectX or OpenGL, you'll need to rebuild them so they can be loaded as string literals in the C++ project:
 
@@ -25,6 +25,14 @@ If you are on Visual Studio, you can set up an External Tool to compile shaders 
 2. Create a new tool called `Compile Shader`, with a command `%systemroot%\system32\cmd.exe` and arguments `/k call "C:\Program Files\Microsoft Visual Studio\{Year}\{Edition}\VC\Auxiliary\Build\vcvars64.bat" && call "$(SolutionDir)src\TestSDF\shader_build.bat" "$(ItemPath)"`, where `{Year}` and `{Edition}` are specific to your setup.
 3. Alternatively, you can set up a tool to compile all shaders by using the arguments `/k call "C:\Program Files\Microsoft Visual Studio\{Year}\{Edition}\VC\Auxiliary\Build\vcvars64.bat" && call "$(SolutionDir)src\TestSDF\shader_build.bat"`
 You can then set up a shortcut under `Tools->Options->Environment->Keyboard` and selecting the appropriate `Tools.ExternalCommand{number}` from the list.
+
+### Shaders (MacOS)
+
+If you edit shaders you'll need to rebuild the collection file so they can be loaded as string literals in the C++ project:
+
+1. Launch te terminal (say, Command+Space -> Terminal)
+2. Run `shader_build.bat` to build all shaders, or `shader_build.bat file` to build a specific shader file.
+3. Note that `glslangValidator` will need to be in your computer and your PATH. This can be done via Homebrew through `brew install glslang`.
 
 ## Breakdown
 
