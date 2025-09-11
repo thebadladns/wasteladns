@@ -21,17 +21,23 @@ struct PS_src {
 #define POPULATE_VSSHADER_PARAMS(vs_params, shader) \
         vs_params.shader_name = shader::name; \
         vs_params.shader_src = shader::g_VS; \
-        vs_params.shader_length = countof(shader::g_VS);
+        vs_params.shader_length = countof(shader::g_VS); \
+        __DEBUGDEF(vs_params.srcFile = shader::srcFile;) \
+        __DEBUGDEF(vs_params.binFile = shader::binFile;)
 #define POPULATE_PSSHADER_PARAMS(ps_params, shader) \
         ps_params.shader_name = shader::name; \
         ps_params.shader_src = shader::g_PS; \
-        ps_params.shader_length = countof(shader::g_PS);
+        ps_params.shader_length = countof(shader::g_PS); \
+        __DEBUGDEF(ps_params.srcFile = shader::srcFile;) \
+        __DEBUGDEF(ps_params.binFile = shader::binFile;)
 #elif __GL33
 #include "shader_src_gl33/shader_output_gl33.h"
 #define POPULATE_SHADER_PARAMS(params, shader) \
         params.shader_name = shader::name; \
         params.shader_src = shader::src; \
-        params.shader_length = (u32)strlen(shader::src);
+        params.shader_length = (u32)strlen(shader::src); \
+        __DEBUGDEF(params.srcFile = shader::srcFile;) \
+        __DEBUGDEF(params.binFile = shader::binFile;)
 #define POPULATE_VSSHADER_PARAMS(vs_params, shader) POPULATE_SHADER_PARAMS(vs_params, shader)
 #define POPULATE_PSSHADER_PARAMS(ps_params, shader) POPULATE_SHADER_PARAMS(ps_params, shader)
 #endif

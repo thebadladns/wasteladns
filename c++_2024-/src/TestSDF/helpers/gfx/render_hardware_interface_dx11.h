@@ -345,6 +345,67 @@ ShaderResult create_shader_set(RscShaderSet& ss, const ShaderSetRuntimeCompilePa
     result.compiled = true;
     return result;
 }
+#if __DEBUG
+ShaderResult recompile_shaderfile_vs(RscShaderSet& shader, const char* path) {
+    // Convert path to wide character array
+    HRESULT hr;
+    ID3DBlob* pShaderBlob;
+    ID3DBlob* pErrorBlob;
+    void* error;
+    pErrorBlob = nullptr;
+    wchar_t wide[MAX_PATH];
+    size_t converted;
+    mbstowcs_s(&converted, wide, path, countof(wide));
+    hr = D3DCompileFromFile(
+        wide, nullptr /* defines */, nullptr, "VS", "vs_5_0"
+        , D3DCOMPILE_ENABLE_STRICTNESS | D3DCOMPILE_DEBUG, 0
+        , &pShaderBlob, &pErrorBlob
+    );
+    error = pErrorBlob ? pErrorBlob->GetBufferPointer() : nullptr;
+
+    ShaderResult result = {};
+    result.compiled = !FAILED(hr);
+    if (result.compiled) {
+        gfx::rhi::d3ddev->CreateVertexShader(
+            pShaderBlob->GetBufferPointer(), pShaderBlob->GetBufferSize(), nullptr,
+            &shader.vs.impl);
+    }
+    else {
+        io::format(result.error, 128, "%.128s", error ? (char*)error : "Unknown shader error");
+    }
+
+    return result;
+}
+ShaderResult recompile_shaderfile_ps(RscShaderSet& shader, const char* path) {
+    // Convert path to wide character array
+    HRESULT hr;
+    ID3DBlob* pShaderBlob;
+    ID3DBlob* pErrorBlob;
+    void* error;
+    pErrorBlob = nullptr;
+    wchar_t wide[MAX_PATH];
+    size_t converted;
+    mbstowcs_s(&converted, wide, path, countof(wide));
+    hr = D3DCompileFromFile(
+        wide, nullptr /* defines */, nullptr, "PS", "ps_5_0"
+        , D3DCOMPILE_ENABLE_STRICTNESS | D3DCOMPILE_DEBUG, 0
+        , &pShaderBlob, &pErrorBlob
+    );
+    error = pErrorBlob ? pErrorBlob->GetBufferPointer() : nullptr;
+
+    ShaderResult result = {};
+    result.compiled = !FAILED(hr);
+    if (result.compiled) {
+        gfx::rhi::d3ddev->CreatePixelShader(
+            pShaderBlob->GetBufferPointer(), pShaderBlob->GetBufferSize(), nullptr,
+            &shader.ps.impl);
+    } else {
+        io::format(result.error, 128, "%.128s", error ? (char*)error : "Unknown shader error");
+    }
+
+    return result;
+}
+#endif // __DEBUG
 void bind_shader(const RscShaderSet& ss) {
     d3dcontext->VSSetShader(ss.vs.impl, nullptr, 0);
     d3dcontext->PSSetShader(ss.ps.impl, nullptr, 0);

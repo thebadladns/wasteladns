@@ -979,9 +979,9 @@ void renderSDFScene(
             gfx::rhi::bind_blend_state(rsc.blendStateOn);
             gfx::rhi::bind_DS(ds, camera.depth);
             gfx::rhi::bind_cbuffers(
-                rsc.shaders[renderer::ShaderTechniques::FullscreenBlitSDF],
+                rsc.shaders[renderer::ShaderTechniques::FullscreenBlitSDF].shader,
                 &cbuffersdf, 1);
-            gfx::rhi::bind_shader(rsc.shaders[renderer::ShaderTechniques::FullscreenBlitSDF]);
+            gfx::rhi::bind_shader(rsc.shaders[renderer::ShaderTechniques::FullscreenBlitSDF].shader);
             gfx::rhi::draw_fullscreen();
         }
         gfx::rhi::end_event();
@@ -1022,9 +1022,9 @@ void renderBaseScene(RenderSceneContext& sceneCtx) {
         gfx::rhi::bind_DS(sceneCtx.ds_always, sceneCtx.camera.depth);
         gfx::rhi::bind_RS(rsc.rasterizerStateFillFrontfaces);
         gfx::rhi::bind_cbuffers(
-            rsc.shaders[renderer::ShaderTechniques::FullscreenBlitClearColor],
+            rsc.shaders[renderer::ShaderTechniques::FullscreenBlitClearColor].shader,
             &clearColor_cbuffer, 1);
-        gfx::rhi::bind_shader(rsc.shaders[renderer::ShaderTechniques::FullscreenBlitClearColor]);
+        gfx::rhi::bind_shader(rsc.shaders[renderer::ShaderTechniques::FullscreenBlitClearColor].shader);
         gfx::rhi::draw_fullscreen();
     }
     gfx::rhi::end_event();
@@ -1121,10 +1121,10 @@ void markMirror(RenderMirrorContext& mirrorCtx) {
 
         const renderer::DrawMesh& mesh =
             mirrorCtx.camera.drawMesh;
-        gfx::rhi::bind_shader(rsc.shaders[mesh.shaderTechnique]);
+        gfx::rhi::bind_shader(rsc.shaders[mesh.shaderTechnique].shader);
         gfx::rhi::bind_indexed_vertex_buffer(mesh.vertexBuffer);
         gfx::rhi::RscCBuffer buffers[] = { scene_cbuffer, identity_cbuffer };
-        gfx::rhi::bind_cbuffers(rsc.shaders[mesh.shaderTechnique], buffers, 2);
+        gfx::rhi::bind_cbuffers(rsc.shaders[mesh.shaderTechnique].shader, buffers, 2);
         gfx::rhi::draw_indexed_vertex_buffer(mesh.vertexBuffer);
     }
     gfx::rhi::end_event();
@@ -1158,10 +1158,10 @@ void unmarkMirror(RenderMirrorContext& mirrorCtx) {
 
         renderer::DrawMesh mesh = //gfx::drawMesh_from_handle(rsc, mirrorCtx.camera.meshHandle);
             mirrorCtx.camera.drawMesh;
-        gfx::rhi::bind_shader(rsc.shaders[mesh.shaderTechnique]);
+        gfx::rhi::bind_shader(rsc.shaders[mesh.shaderTechnique].shader);
         gfx::rhi::bind_indexed_vertex_buffer(mesh.vertexBuffer);
         gfx::rhi::RscCBuffer buffers[] = { scene_cbuffer, identity_cbuffer };
-        gfx::rhi::bind_cbuffers(rsc.shaders[ShaderTechniques::Color3D], buffers, 2);
+        gfx::rhi::bind_cbuffers(rsc.shaders[ShaderTechniques::Color3D].shader, buffers, 2);
         gfx::rhi::draw_indexed_vertex_buffer(mesh.vertexBuffer);
     }
     gfx::rhi::end_event();
@@ -1542,6 +1542,16 @@ void load_coreResources(
 
     // shaders
     {
+        #if __DEBUG
+            #define LOAD_SHADER_PARAMS(shader)         \
+                shader.vs_srcFile = vs_params.srcFile; \
+                shader.vs_binFile = vs_params.binFile; \
+                shader.ps_srcFile = ps_params.srcFile; \
+                shader.ps_binFile = ps_params.binFile; \
+                shader.vs_lastCompileTime = shader.ps_lastCompileTime = 0;
+        #else 
+            #define LOAD_SHADER_PARAMS(shader)
+        #endif
         {
             gfx::ShaderDesc desc = {};
             gfx::rhi::VertexShaderRuntimeCompileParams& vs_params = desc.vs_params;
@@ -1554,8 +1564,10 @@ void load_coreResources(
             desc.textureBinding_count = 0;
             desc.bufferBindings = bufferBindings_blit_clear_color;
             desc.bufferBinding_count = countof(bufferBindings_blit_clear_color);
-            gfx::compile_shader(
-                renderCore.shaders[renderer::ShaderTechniques::FullscreenBlitClearColor], desc);
+            renderer::ReloadableShader& shader =
+                renderCore.shaders[renderer::ShaderTechniques::FullscreenBlitClearColor];
+            gfx::compile_shader(shader.shader, desc);
+            LOAD_SHADER_PARAMS(shader);
         }
         {
             gfx::ShaderDesc desc = {};
@@ -1569,8 +1581,10 @@ void load_coreResources(
             desc.textureBinding_count = 0;
             desc.bufferBindings = bufferBindings_blit_sdf;
             desc.bufferBinding_count = countof(bufferBindings_blit_sdf);
-            gfx::compile_shader(
-                renderCore.shaders[renderer::ShaderTechniques::FullscreenBlitSDF], desc);
+            renderer::ReloadableShader& shader =
+                renderCore.shaders[renderer::ShaderTechniques::FullscreenBlitSDF];
+            gfx::compile_shader(shader.shader, desc);
+            LOAD_SHADER_PARAMS(shader);
         }
         {
             gfx::ShaderDesc desc = {};
@@ -1584,8 +1598,10 @@ void load_coreResources(
             desc.textureBinding_count = countof(textureBindings_fullscreenblit);
             desc.bufferBindings = bufferBindings_blit_sdf;
             desc.bufferBinding_count = countof(bufferBindings_blit_sdf);
-            gfx::compile_shader(
-                renderCore.shaders[renderer::ShaderTechniques::FullscreenBlitTextured], desc);
+            renderer::ReloadableShader& shader =
+                renderCore.shaders[renderer::ShaderTechniques::FullscreenBlitTextured];
+            gfx::compile_shader(shader.shader, desc);
+            LOAD_SHADER_PARAMS(shader);
         }
         {
             gfx::ShaderDesc desc = {};
@@ -1599,8 +1615,10 @@ void load_coreResources(
             desc.textureBinding_count = countof(textureBindings_fullscreenblit_depth);
             desc.bufferBindings = bufferBindings_blit_sdf;
             desc.bufferBinding_count = countof(textureBindings_fullscreenblit);
-            gfx::compile_shader(
-                renderCore.shaders[renderer::ShaderTechniques::FullscreenBlitTexturedDepth], desc);
+            renderer::ReloadableShader& shader =
+                renderCore.shaders[renderer::ShaderTechniques::FullscreenBlitTexturedDepth];
+            gfx::compile_shader(shader.shader, desc);
+            LOAD_SHADER_PARAMS(shader);
         }
         {
             gfx::ShaderDesc desc = {};
@@ -1614,8 +1632,10 @@ void load_coreResources(
             desc.textureBinding_count = 0;
             desc.bufferBindings = bufferBindings_untextured_base;
             desc.bufferBinding_count = countof(bufferBindings_untextured_base);
-            gfx::compile_shader(
-                renderCore.shaders[renderer::ShaderTechniques::Color2D], desc);
+            renderer::ReloadableShader& shader =
+                renderCore.shaders[renderer::ShaderTechniques::Color2D];
+            gfx::compile_shader(shader.shader, desc);
+            LOAD_SHADER_PARAMS(shader);
         }
         {
             gfx::ShaderDesc desc = {};
@@ -1629,8 +1649,10 @@ void load_coreResources(
             desc.textureBinding_count = 0;
             desc.bufferBindings = bufferBindings_instanced_base;
             desc.bufferBinding_count = countof(bufferBindings_instanced_base);
-            gfx::compile_shader(
-                renderCore.shaders[renderer::ShaderTechniques::Instanced3D], desc);
+            renderer::ReloadableShader& shader =
+                renderCore.shaders[renderer::ShaderTechniques::Instanced3D];
+            gfx::compile_shader(shader.shader, desc);
+            LOAD_SHADER_PARAMS(shader);
         }
         {
             gfx::ShaderDesc desc = {};
@@ -1644,8 +1666,10 @@ void load_coreResources(
             desc.textureBinding_count = 0;
             desc.bufferBindings = bufferBindings_untextured_base;
             desc.bufferBinding_count = countof(bufferBindings_untextured_base);
-            gfx::compile_shader(
-                renderCore.shaders[renderer::ShaderTechniques::Color3D], desc);
+            renderer::ReloadableShader& shader =
+                renderCore.shaders[renderer::ShaderTechniques::Color3D];
+            gfx::compile_shader(shader.shader, desc);
+            LOAD_SHADER_PARAMS(shader);
         }
         {
             gfx::ShaderDesc desc = {};
@@ -1659,8 +1683,10 @@ void load_coreResources(
             desc.textureBinding_count = 0;
             desc.bufferBindings = bufferBindings_skinned_untextured_base;
             desc.bufferBinding_count = countof(bufferBindings_skinned_untextured_base);
-            gfx::compile_shader(
-                renderCore.shaders[renderer::ShaderTechniques::Color3DSkinned], desc);
+            renderer::ReloadableShader& shader =
+                renderCore.shaders[renderer::ShaderTechniques::Color3DSkinned];
+            gfx::compile_shader(shader.shader, desc);
+            LOAD_SHADER_PARAMS(shader);
         }
         {
             gfx::ShaderDesc desc = {};
@@ -1674,8 +1700,10 @@ void load_coreResources(
             desc.textureBinding_count = countof(textureBindings_base);
             desc.bufferBindings = bufferBindings_textured_base;
             desc.bufferBinding_count = countof(bufferBindings_textured_base);
-            gfx::compile_shader(
-                renderCore.shaders[renderer::ShaderTechniques::Textured3D], desc);
+            renderer::ReloadableShader& shader =
+                renderCore.shaders[renderer::ShaderTechniques::Textured3D];
+            gfx::compile_shader(shader.shader, desc);
+            LOAD_SHADER_PARAMS(shader);
         }
         {
             gfx::ShaderDesc desc = {};
@@ -1689,8 +1717,10 @@ void load_coreResources(
             desc.textureBinding_count = countof(textureBindings_base);
             desc.bufferBindings = bufferBindings_textured_base;
             desc.bufferBinding_count = countof(bufferBindings_textured_base);
-            gfx::compile_shader(
-                renderCore.shaders[renderer::ShaderTechniques::Textured3DAlphaClip], desc);
+            renderer::ReloadableShader& shader =
+                renderCore.shaders[renderer::ShaderTechniques::Textured3DAlphaClip];
+            gfx::compile_shader(shader.shader, desc);
+            LOAD_SHADER_PARAMS(shader);
         }
         {
             gfx::ShaderDesc desc = {};
@@ -1704,8 +1734,10 @@ void load_coreResources(
             desc.textureBinding_count = countof(textureBindings_base);
             desc.bufferBindings = bufferBindings_skinned_textured_base;
             desc.bufferBinding_count = countof(bufferBindings_skinned_textured_base);
-            gfx::compile_shader(
-                renderCore.shaders[renderer::ShaderTechniques::Textured3DSkinned], desc);
+            renderer::ReloadableShader& shader =
+                renderCore.shaders[renderer::ShaderTechniques::Textured3DSkinned];
+            gfx::compile_shader(shader.shader, desc);
+            LOAD_SHADER_PARAMS(shader);
         }
         {
             gfx::ShaderDesc desc = {};
@@ -1719,8 +1751,10 @@ void load_coreResources(
             desc.textureBinding_count = countof(textureBindings_base);
             desc.bufferBindings = bufferBindings_skinned_textured_base;
             desc.bufferBinding_count = countof(bufferBindings_skinned_textured_base);
-            gfx::compile_shader(
-                renderCore.shaders[renderer::ShaderTechniques::Textured3DAlphaClipSkinned], desc);
+            renderer::ReloadableShader& shader =
+                renderCore.shaders[renderer::ShaderTechniques::Textured3DAlphaClipSkinned];
+            gfx::compile_shader(shader.shader, desc);
+            LOAD_SHADER_PARAMS(shader);
         }
     }
 

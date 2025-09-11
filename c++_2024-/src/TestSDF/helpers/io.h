@@ -31,6 +31,7 @@ namespace io {
 #endif
     const auto fclose = ::fclose;
     const auto fgetc = ::fgetc;
+    const auto ftell = ::ftell;
 
     void append(char*& curr, const char* last, const char* format, ...) {
         va_list va;

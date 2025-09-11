@@ -206,6 +206,10 @@ void update(Instance& game, platform::GameConfig& config) {
         if (keyboard.pressed(input::TOGGLE_DEBUG)) {
             debug::debugMenus[debug::DebugMenus::Main] = !debug::debugMenus[debug::DebugMenus::Main];
         }
+        if (keyboard.pressed(::input::keyboard::Keys::ENTER) &&
+            keyboard.down(::input::keyboard::Keys::LEFT_SHIFT)) {
+            renderer::recompileShaders(game.resources.renderCore);
+        }
         #endif
     }
 
@@ -679,11 +683,11 @@ void update(Instance& game, platform::GameConfig& config) {
                             renderCore, game.resources.instancedUnitCubeMesh);
 
                     gfx::rhi::bind_DS(renderCore.depthStateOn);
-                    gfx::rhi::bind_shader(renderCore.shaders[drawMesh.shaderTechnique]);
+                    gfx::rhi::bind_shader(renderCore.shaders[drawMesh.shaderTechnique].shader);
                     gfx::rhi::bind_RS(renderCore.rasterizerStateLine);
                     gfx::rhi::bind_indexed_vertex_buffer(drawMesh.vertexBuffer);
                     gfx::rhi::bind_cbuffers(
-                        renderCore.shaders[drawMesh.shaderTechnique], cbuffers, countof(cbuffers));
+                        renderCore.shaders[drawMesh.shaderTechnique].shader, cbuffers, countof(cbuffers));
 
                     // round up, the last block will have less than or equal max elems
                     u32 blockCount = ((u32)aabbs.len + 64 - 1) / 64;
@@ -1125,6 +1129,51 @@ void update(Instance& game, platform::GameConfig& config) {
                     im::text2d(debug::eventLabel.text, textParams);
                 }
             }
+
+            {
+
+                bool outofdate = false;
+                const renderer::CoreResources& rsc = game.resources.renderCore;
+                for (u32 i = 0; i < renderer::ShaderTechniques::Count && !outofdate; i++) {
+                    struct stat binFile_lastModified;
+                    char buff[1024];
+                    errno_t err;
+                    io::format(buff, sizeof(buff), SRC_PATH_FROM_BIN"%s", rsc.shaders[i].vs_binFile);
+                    err = stat(buff, &binFile_lastModified);
+                    if (err == 0) {
+                        struct stat srcFile_lastModified;
+                        io::format(buff, sizeof(buff), SRC_PATH_FROM_BIN"%s", rsc.shaders[i].vs_srcFile);
+                        err = stat(buff, &srcFile_lastModified);
+                        if (err == 0 &&
+                            math::max(binFile_lastModified.st_mtime, rsc.shaders[i].vs_lastCompileTime) < srcFile_lastModified.st_mtime) {
+                            outofdate = true;
+                        }
+                    }
+                    io::format(buff, sizeof(buff), SRC_PATH_FROM_BIN"%s", rsc.shaders[i].ps_binFile);
+                    err = stat(buff, &binFile_lastModified);
+                    if (err == 0) {
+                        struct stat srcFile_lastModified;
+                        io::format(buff, sizeof(buff), SRC_PATH_FROM_BIN"%s", rsc.shaders[i].ps_srcFile);
+                        err = stat(buff, &srcFile_lastModified);
+                        if (err == 0 &&
+                            math::max(binFile_lastModified.st_mtime, rsc.shaders[i].ps_lastCompileTime) < srcFile_lastModified.st_mtime) {
+                            outofdate = true;
+                        }
+                    }
+                }
+
+                if (outofdate) {
+                    const char* shader_warning = "OUT OF DATE SHADERS, SHIFT+ENTER TO RECOMPILE";
+                    const f32 label_width = im::ui.scale * (f32)stb_easy_font_width(shader_warning);
+                    im::Text2DParams textParams;
+                    textParams.scale = 2 * (u8)im::ui.scale;
+                    textParams.pos = float2(
+                        game.resources.renderCore.windowProjection.config.right - (label_width + 10.f) * textParams.scale,
+                        game.resources.renderCore.windowProjection.config.bottom + 20.f * textParams.scale);
+                    textParams.color = Color32(1.0f, 0.2f, 0.1f, 1.f);
+                    im::text2d(shader_warning, textParams);
+                }
+            }
         }
         #endif
 
@@ -1146,7 +1195,7 @@ void update(Instance& game, platform::GameConfig& config) {
                 gfx::rhi::bind_RS( game.resources.renderCore.rasterizerStateFillFrontfaces);
                 gfx::rhi::bind_main_RT(game.resources.renderCore.windowRT);
 
-                gfx::rhi::bind_shader(game.resources.renderCore.shaders[renderer::ShaderTechniques::FullscreenBlitTextured]);
+                gfx::rhi::bind_shader(game.resources.renderCore.shaders[renderer::ShaderTechniques::FullscreenBlitTextured].shader);
                 gfx::rhi::RscTexture textures[] = {
                     game.resources.renderCore.gameRT.textures[0],
                     //game.resources.renderCore.gameRT.depthStencil // todo: make work in opengl
@@ -1187,9 +1236,9 @@ void update(Instance& game, platform::GameConfig& config) {
                 gfx::rhi::bind_RS(game.resources.renderCore.rasterizerStateFillFrontfaces);
                 gfx::rhi::bind_DS(game.resources.renderCore.depthStateOff);
 
-                gfx::rhi::bind_shader(rsc.shaders[renderer::ShaderTechniques::Color2D]);
+                gfx::rhi::bind_shader(rsc.shaders[renderer::ShaderTechniques::Color2D].shader);
                 gfx::rhi::RscCBuffer cbuffers[] = { scene_cbuffer, uitext_cbuffer };
-                gfx::rhi::bind_cbuffers(rsc.shaders[renderer::ShaderTechniques::Color2D], cbuffers, 2);
+                gfx::rhi::bind_cbuffers(rsc.shaders[renderer::ShaderTechniques::Color2D].shader, cbuffers, 2);
                 
                 #if __DEBUG
                 {

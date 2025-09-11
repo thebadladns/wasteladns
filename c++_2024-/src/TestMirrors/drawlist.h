@@ -587,7 +587,7 @@ void addNodesToDrawlistSorted(
             item.name = shaderNames[mesh.shaderTechnique];
         }
     }
-    const bool addInstancedNodes = true;//TODO: DO NOT COMMIT
+    const bool addInstancedNodes = true;
     if (addInstancedNodes) {
         for (u32 n = 0, count = 0;n < scene.instancedDrawNodes.cap && count < scene.instancedDrawNodes.count; n++) {
             if (scene.instancedDrawNodes.data[n].alive == 0) { continue; }

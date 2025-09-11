@@ -105,14 +105,21 @@ struct VertexShaderRuntimeCompileParams {
     const VertexAttribDesc* attribs;
     u32 shader_length;
     u32 attrib_count;
+    __DEBUGDEF(const char* srcFile;)
+    __DEBUGDEF(const char* binFile;)
 };
 ShaderResult create_shader_vs(RscVertexShader&, const VertexShaderRuntimeCompileParams&);
+ShaderResult recompile_shaderfile_vs(RscShaderSet&, const char*);
+
 struct PixelShaderRuntimeCompileParams {
     const char* shader_name;
     const void* shader_src;
     u32 shader_length;
+    __DEBUGDEF(const char* srcFile;)
+    __DEBUGDEF(const char* binFile;)
 };
 ShaderResult create_shader_ps(RscPixelShader&, const PixelShaderRuntimeCompileParams&);
+ShaderResult recompile_shaderfile_ps(RscShaderSet&, const char*);
 struct CBufferBindingDesc {
     const char* name;
     u32 stageMask;

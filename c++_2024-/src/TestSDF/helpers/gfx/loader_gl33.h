@@ -120,6 +120,7 @@ typedef struct __GLsync* GLsync;
 #define GL_COLOR_ATTACHMENT4 0x8CE4
 #define GL_FRAGMENT_SHADER 0x8B30
 #define GL_VERTEX_SHADER 0x8B31
+#define GL_SHADER_TYPE 0x8B4F
 #define GL_COMPILE_STATUS 0x8B81
 #define GL_LINK_STATUS 0x8B82
 #define GL_INFO_LOG_LENGTH 0x8B84
@@ -283,6 +284,8 @@ typedef void (APIENTRYP PFNGLGETPROGRAMINFOLOGPROC)(GLuint program, GLsizei bufS
 PFNGLGETPROGRAMINFOLOGPROC glGetProgramInfoLog = nullptr;
 typedef void (APIENTRYP PFNGLUSEPROGRAMPROC)(GLuint program);
 PFNGLUSEPROGRAMPROC glUseProgram = nullptr;
+typedef void (APIENTRYP PFNGLGETATTACHEDSHADERSPROC)(GLuint program, GLsizei maxCount, GLsizei* count, GLuint* shaders);
+PFNGLGETATTACHEDSHADERSPROC glGetAttachedShaders = nullptr;
 typedef void (APIENTRYP PFNGLGENBUFFERSPROC)(GLsizei n, GLuint* buffers);
 PFNGLGENBUFFERSPROC glGenBuffers = nullptr;
 typedef void (APIENTRYP PFNGLBINDBUFFERPROC)(GLenum target, GLuint buffer);
@@ -398,6 +401,7 @@ void loadGLExtensions() {
     glGetProgramiv = (PFNGLGETPROGRAMIVPROC)getGLProcAddress("glGetProgramiv");
     glGetProgramInfoLog = (PFNGLGETPROGRAMINFOLOGPROC)getGLProcAddress("glGetProgramInfoLog");
     glUseProgram = (PFNGLUSEPROGRAMPROC)getGLProcAddress("glUseProgram");
+    glGetAttachedShaders = (PFNGLGETATTACHEDSHADERSPROC)getGLProcAddress("glGetAttachedShaders");
     glGenBuffers = (PFNGLGENBUFFERSPROC)getGLProcAddress("glGenBuffers");
     glBindBuffer = (PFNGLBINDBUFFERPROC)getGLProcAddress("glBindBuffer");
     glBufferData = (PFNGLBUFFERDATAPROC)getGLProcAddress("glBufferData");

@@ -23,6 +23,8 @@ if(WIN32)
 	set(CMAKE_CXX_FLAGS_DEBUG "/MDd /Zi /Ob1 /Od /RTC1")
 	# windows target using directx 11 renderer
 	add_executable(app-dx11 WIN32 ${SOURCES})
+	# working directory is target directory (files are relative to bin/{Configuration})
+	set_target_properties(app-dx11 PROPERTIES VS_DEBUGGER_WORKING_DIRECTORY "$<TARGET_FILE_DIR:app-dx11>")
 	target_compile_definitions(app-dx11 PUBLIC __WIN64=1 __DX11=1)
 	target_link_libraries(app-dx11 user32)
 	set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT app-dx11) # set as default
@@ -31,6 +33,8 @@ if(WIN32)
                        ${CMAKE_SOURCE_DIR}/assets $<TARGET_FILE_DIR:app-dx11>/assets)
 	# windows target using opengl 3.3 renderer
 	add_executable(app-gl33 WIN32 ${SOURCES})
+	# working directory is target directory (files are relative to bin/{Configuration})
+	set_target_properties(app-gl33 PROPERTIES VS_DEBUGGER_WORKING_DIRECTORY "$<TARGET_FILE_DIR:app-gl33>")
 	target_compile_definitions(app-gl33 PUBLIC __WIN64=1 __GL33=1)
 	target_link_libraries(app-gl33 user32 gdi32)
 	add_custom_command(TARGET app-gl33 PRE_BUILD

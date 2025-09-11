@@ -160,12 +160,8 @@ void bind_textures(const RscTexture* textures, const u32 count) {
         glBindTexture(GL_TEXTURE_2D, textures[i].id);
     }
 }
-void bind_shader_samplers(RscShaderSet& ss, const char** params, const u32 count) {
+void bind_shader_samplers(RscShaderSet& ss, const char** params, const u32 count) {}
 
-}
-
-void load_shader_cache(ShaderCache&, const char*, allocator::PagedArena*, const u32) {}
-void write_shader_cache(ShaderCache&) {}
 ShaderResult create_shader_vs(RscVertexShader& vs, const VertexShaderRuntimeCompileParams& params) {
     GLuint vertexShader;
         
@@ -214,6 +210,73 @@ ShaderResult create_shader_ps(RscPixelShader& ps, const PixelShaderRuntimeCompil
 
     return result;
 }
+#if __DEBUG
+ShaderResult recompile_shaderfile(RscShaderSet& shader, const char* path, GLenum type) {
+    // read contents of file, relying on malloc, since this is intended for debug only
+    // consider using a scratch allocator if this is ever used on release
+    char* buff;
+    {
+        FILE* f;
+        io::fopen(&f, path, "rb");
+        fseek(f, 0, SEEK_END);
+        s32 filesize = io::ftell(f);
+        fseek(f, 0, SEEK_SET); // or rewind(f)
+        buff = (char*)malloc(filesize + 1);
+        fread(buff, filesize, 1, f);
+        io::fclose(f);
+        buff[filesize] = 0; // c-style buffer
+    }
+
+    GLuint shaderProgram = glCreateShader(type);
+    glShaderSource(shaderProgram, 1, (const char**)&buff, nullptr);
+    glCompileShader(shaderProgram);
+
+    GLint compiled;
+    glGetShaderiv(shaderProgram, GL_COMPILE_STATUS, &compiled);
+
+    ShaderResult result;
+    result.compiled = compiled != 0;
+    if (result.compiled) {
+
+        GLuint shaders[8];
+        GLsizei count;
+        glGetAttachedShaders(shader.id, countof(shaders), &count, shaders);
+
+        for (GLsizei i = 0; i < count; i++) {
+            GLint shaderType;
+            glGetShaderiv(shaders[i], GL_SHADER_TYPE, &shaderType);
+            if (shaderType == type) {
+                glDetachShader(shader.id, shaders[i]);
+                glAttachShader(shader.id, shaderProgram);
+                glLinkProgram(shader.id);
+                break;
+            }
+        }
+    }
+    else {
+        GLint infoLogLength;
+        glGetShaderiv(shaderProgram, GL_INFO_LOG_LENGTH, &infoLogLength);
+        if (infoLogLength > 0) {
+            glGetShaderInfoLog(
+                shaderProgram,
+                math::min(infoLogLength, 
+                    (GLint)(sizeof(result.error) / sizeof(result.error[0]))), 
+                nullptr, &result.error[0]);
+        }
+    }
+
+    glDeleteShader(shaderProgram);
+    free(buff);
+
+    return result;
+}
+ShaderResult recompile_shaderfile_vs(RscShaderSet& shader, const char* path) {
+    return recompile_shaderfile(shader, path, GL_VERTEX_SHADER);
+}
+ShaderResult recompile_shaderfile_ps(RscShaderSet& shader, const char* path) {
+    return recompile_shaderfile(shader, path, GL_FRAGMENT_SHADER);
+}
+#endif // __DEBUG
 ShaderResult create_shader_set(RscShaderSet& ss, const ShaderSetRuntimeCompileParams& params) {
     GLuint shader;
     GLuint vs = params.vs.id;
@@ -252,11 +315,15 @@ ShaderResult create_shader_set(RscShaderSet& ss, const ShaderSetRuntimeCompilePa
             glGetProgramInfoLog(ss.id, math::min(infoLogLength, (GLint)(sizeof(result.error)/sizeof(result.error[0]))), nullptr, &result.error[0]);
         }
     }
-        
+
+#if !__DEBUG
+    // in debug mode, we'll remember which shader was attached,
+    // so that we can easily hot-swap them
     glDetachShader(shader, vs);
     glDetachShader(shader, ps);
     glDeleteShader(vs);
     glDeleteShader(ps);
+#endif
         
     return result;
 }

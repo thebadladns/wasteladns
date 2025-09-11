@@ -14,6 +14,12 @@
 #include "core_mac.h"
 #endif
 
+#if __DEBUG
+ // for last time modified file queries
+#include <sys/types.h>
+#include <sys/stat.h>
+#endif
+
 typedef int64_t s64;
 typedef uint64_t u64;
 typedef int32_t s32;
@@ -25,6 +31,10 @@ typedef uint8_t u8;
 
 typedef float f32;
 typedef double f64;
+
+#if __DEBUG
+    #define SRC_PATH_FROM_BIN "../../src/TestSDF/"
+#endif
 
 #define countof(x) (sizeof(x)/sizeof(0[x]))
 

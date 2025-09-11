@@ -174,6 +174,17 @@ void draw_drawlist(Drawlist& dl, Drawlist_Context& ctx, const Drawlist_Overrides
     }
 }
 
+struct ReloadableShader {
+    gfx::rhi::RscShaderSet shader;
+    #if __DEBUG
+        const char* vs_binFile;
+        const char* ps_binFile;
+        const char* vs_srcFile;
+        const char* ps_srcFile;
+        s64 vs_lastCompileTime;
+        s64 ps_lastCompileTime;
+    #endif
+};
 
 struct Scene {
     allocator::Pool<DrawNode> drawNodes;
@@ -181,7 +192,7 @@ struct Scene {
     allocator::Pool<gfx::rhi::RscCBuffer> cbuffers;
 };
 struct CoreResources {
-    gfx::rhi::RscShaderSet shaders[ShaderTechniques::Count];
+    ReloadableShader shaders[ShaderTechniques::Count];
     DrawMesh* meshes;
     u32 num_meshes;
     struct CBuffersMeta { enum {
@@ -574,7 +585,7 @@ void addNodesToDrawlistSorted(
             key.idx = dl_index;
             const DrawMesh& mesh = drawMesh_from_handle(rsc, node.meshHandles[m]);
             key.v = makeSortKey(n, mesh.shaderTechnique, sortParams);
-            item.shader = rsc.shaders[mesh.shaderTechnique];
+            item.shader = rsc.shaders[mesh.shaderTechnique].shader;
             item.vertexBuffer = mesh.vertexBuffer;
             item.cbuffers[item.cbuffer_count++] = cbuffer_from_handle(scene, node.cbuffer_node);
             if (node.cbuffer_ext) {
@@ -591,7 +602,7 @@ void addNodesToDrawlistSorted(
             item.name = shaderNames[mesh.shaderTechnique];
         }
     }
-    const bool addInstancedNodes = true;//TODO: DO NOT COMMIT
+    const bool addInstancedNodes = true;
     if (addInstancedNodes) {
         for (u32 n = 0, count = 0;n < scene.instancedDrawNodes.cap && count < scene.instancedDrawNodes.count; n++) {
             if (scene.instancedDrawNodes.data[n].alive == 0) { continue; }
@@ -613,7 +624,7 @@ void addNodesToDrawlistSorted(
                 key.idx = dl_index;
                 const DrawMesh& mesh = drawMesh_from_handle(rsc, node.meshHandles[m]);
                 key.v = makeSortKey(n, mesh.shaderTechnique, sortParams);
-                item.shader = rsc.shaders[mesh.shaderTechnique];
+                item.shader = rsc.shaders[mesh.shaderTechnique].shader;
                 item.vertexBuffer = mesh.vertexBuffer;
                 item.cbuffers[item.cbuffer_count++] =
                     cbuffer_from_handle(scene, node.cbuffer_node);
@@ -634,6 +645,60 @@ void addNodesToDrawlistSorted(
               dl.count[DrawlistBuckets::Base],
               dl.count[DrawlistBuckets::Base] + dl.count[DrawlistBuckets::Instanced] - 1);
 }
+
+#if __DEBUG
+void recompileShaders(CoreResources& rsc) {
+
+    for (u32 i = 0; i < ShaderTechniques::Count; i++) {
+
+        struct stat binFile_lastModified;
+        char buff[1024];
+        errno_t err;
+
+        // recompile vertex shaders
+        io::format(buff, sizeof(buff), SRC_PATH_FROM_BIN"%s", rsc.shaders[i].vs_binFile);
+        err = stat(buff, &binFile_lastModified);
+        if (err == 0) {
+            struct stat srcFile_lastModified;
+            io::format(buff, sizeof(buff), SRC_PATH_FROM_BIN"%s", rsc.shaders[i].vs_srcFile);
+            err = stat(buff, &srcFile_lastModified);
+            if (err == 0 &&
+                math::max(binFile_lastModified.st_mtime, rsc.shaders[i].vs_lastCompileTime) < srcFile_lastModified.st_mtime) {
+
+                gfx::rhi::ShaderResult result = 
+                    gfx::rhi::recompile_shaderfile_vs(rsc.shaders[i].shader, buff);
+                if (result.compiled) {
+                    rsc.shaders[i].vs_lastCompileTime = srcFile_lastModified.st_mtime;
+                } else {
+                    io::debuglog("%s: %s\n", rsc.shaders[i].vs_srcFile, result.error);
+                }
+            }
+        }
+
+        // recompile pixel shaders
+        io::format(buff, sizeof(buff), SRC_PATH_FROM_BIN"%s", rsc.shaders[i].ps_binFile);
+        err = stat(buff, &binFile_lastModified);
+        if (err == 0) {
+            struct stat srcFile_lastModified;
+            io::format(buff, sizeof(buff), SRC_PATH_FROM_BIN"%s", rsc.shaders[i].ps_srcFile);
+            err = stat(buff, &srcFile_lastModified);
+            if (err == 0 &&
+                math::max(binFile_lastModified.st_mtime, rsc.shaders[i].ps_lastCompileTime) < srcFile_lastModified.st_mtime) {
+
+                gfx::rhi::ShaderResult result =
+                    gfx::rhi::recompile_shaderfile_ps(rsc.shaders[i].shader, buff);
+                if (result.compiled) {
+                    rsc.shaders[i].ps_lastCompileTime = srcFile_lastModified.st_mtime;
+                }
+                else {
+                    io::debuglog("%s: %s\n", rsc.shaders[i].vs_srcFile, result.error);
+                }
+            }
+        }
+    }
+}
+#endif
+
 }
 
 #endif // __WASTELADNS_RENDERER_H__
