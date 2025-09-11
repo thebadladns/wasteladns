@@ -12,6 +12,10 @@ If you use vim, you can load the .vimrc in this project to set up commands for b
 
 For building code for this project, refer to [this very rough blurb](../../README.md). COMPILE_TARGET should be set to TEST_SDF.
 
+### Shaders (hot-reload)
+
+At any point during the execution of a debug build, you may recompile any modified shader source files via `SHIFT+ENTER`. An onscreen text label will let you know whether the shader source code is more recent than the compiled shaders the application is running with.
+
 ### Shaders (Windows)
 
 If you edit shaders, whether on DirectX or OpenGL, you'll need to rebuild them so they can be loaded as string literals in the C++ project. You will require Visual Studio to be installed in your machine:
@@ -22,7 +26,7 @@ If you edit shaders, whether on DirectX or OpenGL, you'll need to rebuild them s
 
 If you are on Visual Studio, you can set up an External Tool to compile shaders in this project using the bat file. It's not perfect, but it's ok for now:
 1. Open the `Tools->External Tools` dialog
-2. Create a new tool called `Compile Shader`, with a command `%systemroot%\system32\cmd.exe` and arguments `/k call "C:\Program Files\Microsoft Visual Studio\{Year}\{Edition}\VC\Auxiliary\Build\vcvars64.bat" && call "$(SolutionDir)src\TestSDF\shader_build.bat" "$(ItemPath)"`, where `{Year}` and `{Edition}` are specific to your setup.
+2. Create a new tool called `Compile Shader`, with a command `%systemroot%\system32\cmd.exe` and arguments `/k call "C:\Program Files\Microsoft Visual Studio\{Year}\{Edition}\VC\Auxiliary\Build\vcvars64.bat" && call "$(SolutionDir)src\TestSDF\shader_build.bat" "$(ItemPath)"`, where `{Year}` and `{Edition}` are specific to your setup. 
 3. Alternatively, you can set up a tool to compile all shaders by using the arguments `/k call "C:\Program Files\Microsoft Visual Studio\{Year}\{Edition}\VC\Auxiliary\Build\vcvars64.bat" && call "$(SolutionDir)src\TestSDF\shader_build.bat"`
 You can then set up a shortcut under `Tools->Options->Environment->Keyboard` and selecting the appropriate `Tools.ExternalCommand{number}` from the list.
 
