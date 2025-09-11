@@ -97,6 +97,10 @@ if [ ${collect_all} ]; then
             name=${file_nopath%.*}
 			printf "namespace ${name} {\n" >> ${outfile}
 			printf "const char* name = \"${name}\";\n" >> ${outfile}
+			printf "#if __DEBUG\n" >> ${outfile}
+			printf "const char* binFile = \"${outfile}\";\n" >> ${outfile}
+			printf "const char* srcFile = \"${f}\";\n" >> ${outfile}
+			printf "#endif // __DEBUG\n" >> ${outfile}
 			echo const char* src =  >> ${outfile}
 			printf "R\"(\n" >> ${outfile}
 			cat ${f} >> ${outfile}

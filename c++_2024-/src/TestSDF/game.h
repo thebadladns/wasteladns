@@ -1168,7 +1168,7 @@ void update(Instance& game, platform::GameConfig& config) {
                     im::Text2DParams textParams;
                     textParams.scale = 2 * (u8)im::ui.scale;
                     textParams.pos = float2(
-                        game.resources.renderCore.windowProjection.config.right - (label_width + 10.f) * textParams.scale,
+                        game.resources.renderCore.windowProjection.config.right - (label_width * 2 + 10.f * im::ui.scale),
                         game.resources.renderCore.windowProjection.config.bottom + 20.f * textParams.scale);
                     textParams.color = Color32(1.0f, 0.2f, 0.1f, 1.f);
                     im::text2d(shader_warning, textParams);

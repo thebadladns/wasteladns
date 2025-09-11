@@ -181,8 +181,8 @@ struct ReloadableShader {
         const char* ps_binFile;
         const char* vs_srcFile;
         const char* ps_srcFile;
-        s64 vs_lastCompileTime;
-        s64 ps_lastCompileTime;
+        time_t vs_lastCompileTime;
+        time_t ps_lastCompileTime;
     #endif
 };
 
