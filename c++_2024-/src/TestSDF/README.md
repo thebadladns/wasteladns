@@ -14,11 +14,11 @@ For building code for this project, refer to [this very rough blurb](../../READM
 
 ### Shaders (Windows)
 
-If you edit shaders, whether on DirectX or OpenGL, you'll need to rebuild them so they can be loaded as string literals in the C++ project:
+If you edit shaders, whether on DirectX or OpenGL, you'll need to rebuild them so they can be loaded as string literals in the C++ project. You will require Visual Studio to be installed in your machine:
 
 1. Launch a command-line (say, Windows+R -> cmd.exe)
-2. Call either `vcvars64.bat` or `vcvarsall.bat`. These are usually located in Visual Studio's installation files: `C:\Program Files\Microsoft Visual Studio\{Year}\{Edition}\VC\Auxiliary\Build\`
-3. Run `shader_build.bat [dx11|gl33|]` to build all shaders, or `shader_build.bat file` to build a specific shader file. If no graphics API is specified, all shaders are compiled. Note that you don't need to specify the graphics API when compiling a single file, as it is auto-detected.
+2. Run `shader_build.bat [dx11|gl33|]` to build all shaders, or `shader_build.bat file` to build a specific shader file. If no graphics API is specified, all shaders are compiled. Note that you don't need to specify the graphics API when compiling a single file, as it is auto-detected.
+3. If you see the error `'fxc' is not recognized as an internal or external command`, it means the Visual Studio installation path wasn't found, and you'll need to provide it yourself. Please find and call `vcvars64.bat` (or `vcvarsall.bat` with the appropriate parameters for your machine) manually before calling `shader_build.bat`. These are usually located in Visual Studio's installation files: `C:\Program Files (x86)\Microsoft Visual Studio\{Year}\{Edition}\VC\Auxiliary\Build\`.
 
 If you are on Visual Studio, you can set up an External Tool to compile shaders in this project using the bat file. It's not perfect, but it's ok for now:
 1. Open the `Tools->External Tools` dialog
@@ -31,7 +31,7 @@ You can then set up a shortcut under `Tools->Options->Environment->Keyboard` and
 If you edit shaders you'll need to rebuild the collection file so they can be loaded as string literals in the C++ project:
 
 1. Launch te terminal (say, Command+Space -> Terminal)
-2. Run `shader_build.bat` to build all shaders, or `shader_build.bat file` to build a specific shader file.
+2. Run `sh shader_build.sh` to build all shaders, or `sh shader_build.sh file` to build a specific shader file.
 3. Note that `glslangValidator` will need to be in your computer and your PATH. This can be done via Homebrew through `brew install glslang`.
 
 ## Breakdown

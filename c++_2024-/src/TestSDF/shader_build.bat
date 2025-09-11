@@ -1,5 +1,9 @@
 @echo off
 
+where cl >nul 2>nul
+if %errorlevel% neq 0 echo Setting up Visual Studio compiler & call ..\..\setupvcvars.bat
+
+REM defer setlocal till after we've setup the Visual Studio variables
 REM we are going to use variables within nested loops, so we need enabledelayedexpansion as well as to use !variable!  
 setlocal enabledelayedexpansion
 REM switch to file's directory
