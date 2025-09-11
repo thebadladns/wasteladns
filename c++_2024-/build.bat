@@ -1,13 +1,14 @@
 @echo off
 
+REM switch to file's directory
+cd /D "%~dp0"
+
 where cl >nul 2>nul
 if %errorlevel% neq 0 echo Setting up Visual Studio compiler & call setupvcvars.bat
 
 REM defer setlocal till after we've setup the Visual Studio variables
 setlocal
 
-REM switch to file's directory
-cd /D "%~dp0"
 REM track start time
 set t0=%time: =0%
 

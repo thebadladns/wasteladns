@@ -26,9 +26,8 @@ If you edit shaders, whether on DirectX or OpenGL, you'll need to rebuild them s
 
 If you are on Visual Studio, you can set up an External Tool to compile shaders in this project using the bat file. It's not perfect, but it's ok for now:
 1. Open the `Tools->External Tools` dialog
-2. Create a new tool called `Compile Shader`, with a command `%systemroot%\system32\cmd.exe` and arguments `/k call "C:\Program Files\Microsoft Visual Studio\{Year}\{Edition}\VC\Auxiliary\Build\vcvars64.bat" && call "$(SolutionDir)src\TestSDF\shader_build.bat" "$(ItemPath)"`, where `{Year}` and `{Edition}` are specific to your setup. 
-3. Alternatively, you can set up a tool to compile all shaders by using the arguments `/k call "C:\Program Files\Microsoft Visual Studio\{Year}\{Edition}\VC\Auxiliary\Build\vcvars64.bat" && call "$(SolutionDir)src\TestSDF\shader_build.bat"`
-You can then set up a shortcut under `Tools->Options->Environment->Keyboard` and selecting the appropriate `Tools.ExternalCommand{number}` from the list.
+2. Create a new tool called `Compile Shader`, with a command `"$(SolutionDir)src\TestSDF\shader_build.bat"`, and arguments `"$(ItemPath)"`. This will compile the currently open shader source file.
+3. Alternatively, you can set up a tool to compile all shaders by creating a tool with the command `"$(SolutionDir)src\TestSDF\shader_build.bat"`. You can then set up a shortcut under `Tools->Options->Environment->Keyboard` and selecting the appropriate `Tools.ExternalCommand{number}` from the list.
 
 ### Shaders (MacOS)
 
