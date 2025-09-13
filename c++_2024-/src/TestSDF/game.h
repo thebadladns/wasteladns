@@ -592,7 +592,7 @@ void update(Instance& game, platform::GameConfig& config) {
             gfx::rhi::bind_RT(renderCore.gameRT);
             // TODO: figure out whether this is needed
             gfx::rhi::clear_RT(renderCore.gameRT,
-                gfx::rhi::RenderTargetClearFlags::Stencil);
+                u32(gfx::rhi::RenderTargetClearFlags::Stencil));
 
             {
                 gfx::rhi::start_event("BASE SCENE");

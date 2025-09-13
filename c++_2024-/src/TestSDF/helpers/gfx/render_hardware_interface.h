@@ -1,9 +1,25 @@
 #ifndef __WASTELADNS_RHI_H__
 #define __WASTELADNS_RHI_H__
 
-
+// Forward type declarations, each implementation needs to define these
 namespace gfx {
-namespace rhi { // render hardware interface template for all platforms
+namespace rhi { // render hardware interface
+
+enum class Type : u32;
+enum class InternalTextureFormat : u32;
+enum class TextureFormat : u32;
+enum class RenderTargetClearFlags : u32;
+enum class RenderTargetWriteMask : u32;
+enum class RasterizerFillMode : u32;
+enum class RasterizerCullMode : u32;
+enum class CompFunc : u32;
+enum class DepthWriteMask : u32;
+enum class StencilOp : u32;
+enum class BufferMemoryUsage : u32;
+enum class BufferAccessType : u32;
+enum class BufferItemType : u32;
+enum class BufferTopologyType : u32;
+enum class BufferAttributeFormat : u32;
 
 struct RscMainRenderTarget;
 enum { RenderTarget_MaxCount = 4 };
@@ -16,26 +32,18 @@ struct ShaderCache;
 struct RscVertexShader;
 struct RscPixelShader;
 struct RscShaderSet;
-//typedef (something) VertexAttribDesc;
 //VertexAttribDesc make_vertexAttribDesc(
-// const char* name, size_t offset, size_t stride, BufferAttributeFromat::Enum format);
+// const char* name, size_t offset, size_t stride, BufferAttributeFormat format);
 struct RscInputLayout;
 struct RscVertexBuffer;
 struct RscIndexedVertexBuffer;
 struct CBufferStageMask { enum Enum { VS = 1, PS = 2 }; };
 struct RscCBuffer;
-//typedef (something) Marker_t;
 
 } // rhi
 } // gfx
 
-#if __DX11
-#include "render_hardware_interface_definitions_dx11.h"
-#elif __GL33
-#include "loader_gl33.h"
-#include "render_hardware_interface_definitions_gl33.h"
-#endif
-
+// Each implementations needs to define these functions
 namespace gfx {
 namespace rhi { // render hardware interface
     
@@ -51,9 +59,9 @@ struct RenderTargetParams {
     struct Flags { enum Enum { EnableDepth = 1<<0, ReadDepth = 1 << 1 }; };
     u32 width;
     u32 height;
-    TextureFormat::Enum textureFormat;
-    InternalTextureFormat::Enum textureInternalFormat;
-    Type::Enum textureFormatType;
+    TextureFormat textureFormat;
+    InternalTextureFormat textureInternalFormat;
+    Type textureFormatType;
     u32 count;
     u32 flags;
 };
@@ -86,9 +94,9 @@ void create_texture_from_file(RscTexture& t, const TextureFromFileParams& params
 struct TextureRenderTargetCreateParams {
     s32 width;
     s32 height;
-    TextureFormat::Enum format;
-    InternalTextureFormat::Enum internalFormat;
-    Type::Enum type;
+    TextureFormat format;
+    InternalTextureFormat internalFormat;
+    Type type;
 };
 void create_texture_empty(RscTexture& t, const TextureRenderTargetCreateParams& params);
 force_inline void bind_textures(const RscTexture* textures, const u32 count);
@@ -102,14 +110,13 @@ struct ShaderResult {
 struct VertexShaderRuntimeCompileParams {
     const char* shader_name;
     const void* shader_src;
-    const VertexAttribDesc* attribs;
+    const void* attribs;
     u32 shader_length;
     u32 attrib_count;
     __DEBUGDEF(const char* srcFile;)
     __DEBUGDEF(const char* binFile;)
 };
 ShaderResult create_shader_vs(RscVertexShader&, const VertexShaderRuntimeCompileParams&);
-ShaderResult recompile_shaderfile_vs(RscShaderSet&, const char*);
 
 struct PixelShaderRuntimeCompileParams {
     const char* shader_name;
@@ -119,7 +126,6 @@ struct PixelShaderRuntimeCompileParams {
     __DEBUGDEF(const char* binFile;)
 };
 ShaderResult create_shader_ps(RscPixelShader&, const PixelShaderRuntimeCompileParams&);
-ShaderResult recompile_shaderfile_ps(RscShaderSet&, const char*);
 struct CBufferBindingDesc {
     const char* name;
     u32 stageMask;
@@ -137,18 +143,22 @@ struct ShaderSetRuntimeCompileParams {
     u32 texture_count;
 };
 ShaderResult create_shader_set(RscShaderSet&, const ShaderSetRuntimeCompileParams&);
+#if __DEBUG
+    ShaderResult recompile_shaderfile_vs(RscShaderSet&, const char*);
+    ShaderResult recompile_shaderfile_ps(RscShaderSet&, const char*);
+#endif
 force_inline void bind_shader(const RscShaderSet& ss);
 
 struct BlendStateParams {
-    RenderTargetWriteMask::Enum renderTargetWriteMask;
+    RenderTargetWriteMask renderTargetWriteMask;
     bool blendEnable;
 };
 void create_blend_state(RscBlendState&, const BlendStateParams&);
 force_inline void bind_blend_state(const RscBlendState& bs);
 
 struct RasterizerStateParams {
-    RasterizerFillMode::Enum fill;
-    RasterizerCullMode::Enum cull;
+    RasterizerFillMode fill;
+    RasterizerCullMode cull;
     bool scissor;
 };
 void create_RS(RscRasterizerState&, const RasterizerStateParams&);
@@ -156,12 +166,12 @@ force_inline void bind_RS(const RscRasterizerState& rs);
 force_inline void set_scissor(const u32, const u32, const u32, const u32);
 
 struct DepthStencilStateParams {
-    CompFunc::Enum depth_func;
-    DepthWriteMask::Enum depth_writemask;
-    StencilOp::Enum stencil_failOp;
-    StencilOp::Enum stencil_depthFailOp;
-    StencilOp::Enum stencil_passOp;
-    CompFunc::Enum stencil_func;
+    CompFunc depth_func;
+    DepthWriteMask depth_writemask;
+    StencilOp stencil_failOp;
+    StencilOp stencil_depthFailOp;
+    StencilOp stencil_passOp;
+    CompFunc stencil_func;
     bool depth_enable;
     bool stencil_enable;
     u8 stencil_readmask;
@@ -174,11 +184,11 @@ struct VertexBufferDesc {
     void* vertexData;
     u32 vertexSize;
     u32 vertexCount;
-    BufferTopologyType::Enum type;
-    BufferMemoryUsage::Enum memoryUsage;
-    BufferAccessType::Enum accessType;
+    BufferTopologyType type;
+    BufferMemoryUsage memoryUsage;
+    BufferAccessType accessType;
 };
-void create_vertex_buffer(RscVertexBuffer&, const VertexBufferDesc&, const VertexAttribDesc*, const u32);
+void create_vertex_buffer(RscVertexBuffer&, const VertexBufferDesc&, const void*, const u32);
 struct BufferUpdateParams {
     void* vertexData;
     u32 vertexSize;
@@ -195,12 +205,12 @@ struct IndexedVertexBufferDesc {
     u32 vertexCount;
     u32 indexSize;
     u32 indexCount;
-    BufferItemType::Enum indexType;
-    BufferTopologyType::Enum type;
-    BufferMemoryUsage::Enum memoryUsage;
-    BufferAccessType::Enum accessType;
+    BufferItemType indexType;
+    BufferTopologyType type;
+    BufferMemoryUsage memoryUsage;
+    BufferAccessType accessType;
 };
-void create_indexed_vertex_buffer(RscIndexedVertexBuffer&, const IndexedVertexBufferDesc&, const VertexAttribDesc*, const u32);
+void create_indexed_vertex_buffer(RscIndexedVertexBuffer&, const IndexedVertexBufferDesc&, const void*, const u32);
 struct IndexedBufferUpdateParams {
     void* vertexData;
     void* indexData;
@@ -234,10 +244,11 @@ force_inline void end_event() {}
 } // rhi
 } // gfx
 
+// API-specific implementations
 #if __DX11
-#include "render_hardware_interface_dx11.h"
+#include "rhi_dx11.h"
 #elif __GL33
-#include "render_hardware_interface_gl33.h"
+#include "rhi_gl33.h"
 #endif
 
 #endif // __WASTELADNS_RHI_H__

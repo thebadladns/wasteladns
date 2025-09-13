@@ -2,6 +2,139 @@
 #define __WASTELADNS_RHI_DX11_H__
 
 namespace gfx {
+const auto generate_matrix_ortho = camera::generate_matrix_ortho_z0to1;
+const auto generate_matrix_persp = camera::generate_matrix_persp_z0to1;
+const auto add_oblique_plane_to_persp = camera::add_oblique_plane_to_persp_z0to1;
+const auto extract_frustum_planes_from_vp = camera::extract_frustum_planes_from_vp_z0to1;
+const f32 min_z = 0.f;
+}
+
+// definitions
+namespace gfx {
+namespace rhi { // render hardware interface
+
+enum class Type : u32 { Float }; // unused, compatibility-only
+enum class InternalTextureFormat : u32 {
+    V4_8 = DXGI_FORMAT_B8G8R8A8_UNORM, V316 = DXGI_FORMAT_R16G16B16A16_FLOAT };
+enum class TextureFormat : u32 {
+    V4_8 = DXGI_FORMAT_B8G8R8A8_UNORM, V4_16 = DXGI_FORMAT_R16G16B16A16_FLOAT };
+enum class RenderTargetClearFlags : u32 {
+    Stencil = D3D11_CLEAR_STENCIL, Depth = D3D11_CLEAR_DEPTH, Color = 0x4L };
+enum class RenderTargetWriteMask : u32 {
+    All = D3D11_COLOR_WRITE_ENABLE_ALL, None = 0 };
+enum class RasterizerFillMode : u32 {
+    Fill = D3D11_FILL_SOLID, Line = D3D11_FILL_WIREFRAME };
+enum class RasterizerCullMode : u32 {
+    CullFront = D3D11_CULL_FRONT, CullBack = D3D11_CULL_BACK, CullNone = D3D11_CULL_NONE };
+enum class CompFunc : u32 {
+    Never = D3D11_COMPARISON_NEVER, Always = D3D11_COMPARISON_ALWAYS,
+    Less = D3D11_COMPARISON_LESS, LessEqual = D3D11_COMPARISON_LESS_EQUAL,
+    Equal = D3D11_COMPARISON_EQUAL, NotEqual = D3D11_COMPARISON_NOT_EQUAL,
+    Greater = D3D11_COMPARISON_GREATER, GreaterEqual = D3D11_COMPARISON_GREATER_EQUAL };
+enum class DepthWriteMask : u32 {
+    All = D3D11_DEPTH_WRITE_MASK_ALL, Zero = D3D11_DEPTH_WRITE_MASK_ZERO };
+enum class StencilOp : u32 {
+    Keep = D3D11_STENCIL_OP_KEEP, Zero = D3D11_STENCIL_OP_ZERO,
+    Replace = D3D11_STENCIL_OP_REPLACE, Invert = D3D11_STENCIL_OP_INVERT,
+    Incr = D3D11_STENCIL_OP_INCR, Decr = D3D11_STENCIL_OP_DECR };
+enum class BufferMemoryUsage : u32 {
+    GPU = D3D11_USAGE_IMMUTABLE, CPU = D3D11_USAGE_DYNAMIC };
+enum class BufferAccessType : u32 {
+    GPU = 0, CPU = D3D11_CPU_ACCESS_WRITE };
+enum class BufferItemType : u32 {
+    U16 = DXGI_FORMAT_R16_UINT, U32 = DXGI_FORMAT_R32_UINT };
+enum class BufferTopologyType : u32 {
+    Triangles = D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST,
+    Lines = D3D_PRIMITIVE_TOPOLOGY_LINELIST };
+enum class BufferAttributeFormat : u32 {
+    R32G32B32_FLOAT = DXGI_FORMAT_R32G32B32_FLOAT,
+    R32G32_FLOAT = DXGI_FORMAT_R32G32_FLOAT,
+    R8G8B8A8_SINT = DXGI_FORMAT_R8G8B8A8_SINT,
+    R8G8B8A8_UNORM = DXGI_FORMAT_R8G8B8A8_UNORM };
+
+struct RscTexture {
+    ID3D11Texture2D* impl;
+    ID3D11ShaderResourceView* view;
+    ID3D11SamplerState* samplerState;
+    DXGI_FORMAT format;
+};
+
+struct RscMainRenderTarget {
+    ID3D11RenderTargetView* view;
+    ID3D11DepthStencilView* depthStencilView;
+};
+struct RscRenderTarget {
+    RscTexture textures[RenderTarget_MaxCount];
+    ID3D11RenderTargetView* views[RenderTarget_MaxCount];
+    RscTexture depthStencil;
+    ID3D11DepthStencilView* depthStencilView;
+    u32 count;
+};
+
+struct RscVertexShader {
+    ID3D11VertexShader* impl;
+    ID3D11InputLayout* inputLayout_impl;
+};
+struct RscPixelShader {
+    ID3D11PixelShader* impl;
+};
+struct RscShaderSet {
+    u32 cbuffer_bindings_vs[4];
+    u32 cbuffer_bindings_ps[4];
+    RscVertexShader vs;
+    RscPixelShader ps;
+    u16 cbuffer_vs_count;
+    u16 cbuffer_ps_count;
+};
+
+typedef D3D11_INPUT_ELEMENT_DESC VertexAttribDesc;
+VertexAttribDesc make_vertexAttribDesc(const char* name, size_t offset, size_t , BufferAttributeFormat format) {
+    return D3D11_INPUT_ELEMENT_DESC{
+        name, 0, (DXGI_FORMAT)format, 0, (u32)offset, D3D11_INPUT_PER_VERTEX_DATA, 0 };
+}
+
+struct RscInputLayout {
+    ID3D11InputLayout* impl;
+};
+
+struct RscBlendState {
+    ID3D11BlendState1* impl;
+};
+    
+struct RscRasterizerState {
+    ID3D11RasterizerState* impl;
+};
+
+struct RscDepthStencilState {
+    ID3D11DepthStencilState* impl;
+};
+    
+struct RscVertexBuffer {
+    ID3D11Buffer* impl;
+    D3D11_PRIMITIVE_TOPOLOGY type;
+    u32 vertexStride;
+    u32 vertexCount;
+};
+    
+struct RscIndexedVertexBuffer {
+    ID3D11Buffer* vertexBuffer_impl;
+    ID3D11Buffer* indexBuffer_impl;
+    D3D11_PRIMITIVE_TOPOLOGY type;
+    DXGI_FORMAT indexType;
+    u32 vertexStride;
+    u32 indexCount;
+    u32 indexOffset;
+};
+    
+struct RscCBuffer {
+    ID3D11Buffer* impl;
+};
+
+} // rhi
+} // gfx
+
+// functions
+namespace gfx {
 namespace rhi { // render hardware interface
 
 ID3D11Device1* d3ddev;
@@ -124,14 +257,14 @@ void bind_RT(const RscRenderTarget& rt) {
     d3dcontext->OMSetRenderTargets(rt.count, rt.views, rt.depthStencilView);
 }
 void clear_RT(const RscRenderTarget& rt, u32 flags) {
-    if (flags & RenderTargetClearFlags::Color) {
+    if (flags & u32(RenderTargetClearFlags::Color)) {
         float colorv[] = { 0.f, 0.f, 0.f, 0.f };
         for (u32 i = 0; i < rt.count; i++) {
             d3dcontext->ClearRenderTargetView(rt.views[i], colorv);
         }
     }
     if (rt.depthStencil.view) {
-        flags &= ~RenderTargetClearFlags::Color;
+        flags &= ~u32(RenderTargetClearFlags::Color);
         d3dcontext->ClearDepthStencilView(rt.depthStencilView, flags, 1.f, 0);
     }
 }
@@ -141,7 +274,7 @@ void clear_RT(const RscRenderTarget& rt, u32 flags, Color32 color) {
         d3dcontext->ClearRenderTargetView(rt.views[i], colorv);
     }
     if (rt.depthStencilView) {
-        flags &= ~RenderTargetClearFlags::Color;
+        flags &= ~u32(RenderTargetClearFlags::Color);
         d3dcontext->ClearDepthStencilView(rt.depthStencilView, flags, 1.f, 0);
     }
 }
@@ -320,7 +453,7 @@ void bind_textures(const RscTexture* textures, const u32 count) {
 ShaderResult create_shader_vs(RscVertexShader& vs, const VertexShaderRuntimeCompileParams& params) {
     d3ddev->CreateVertexShader(params.shader_src, params.shader_length, nullptr, &vs.impl);
     d3ddev->CreateInputLayout(
-        params.attribs, params.attrib_count, params.shader_src, params.shader_length,
+        (const D3D11_INPUT_ELEMENT_DESC*)params.attribs, params.attrib_count, params.shader_src, params.shader_length,
         &vs.inputLayout_impl);
     ShaderResult result = {};
     result.compiled = true;
@@ -423,7 +556,7 @@ void create_blend_state(RscBlendState& bs, const BlendStateParams& params) {
     blendStateDesc.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_ONE;
     blendStateDesc.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_ZERO;
     blendStateDesc.RenderTarget[0].BlendOpAlpha = D3D11_BLEND_OP_ADD;
-    blendStateDesc.RenderTarget[0].RenderTargetWriteMask = params.renderTargetWriteMask;
+    blendStateDesc.RenderTarget[0].RenderTargetWriteMask = u8(params.renderTargetWriteMask);
     d3ddev->CreateBlendState1(&blendStateDesc, &blendState);
 
     bs.impl = blendState;
@@ -494,7 +627,7 @@ void create_vertex_buffer(RscVertexBuffer& t, const VertexBufferDesc& params, co
     D3D11_BUFFER_DESC vertexVertexBufferDesc = { 0 };
     vertexVertexBufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
     vertexVertexBufferDesc.ByteWidth = params.vertexSize;
-    vertexVertexBufferDesc.CPUAccessFlags = params.accessType;
+    vertexVertexBufferDesc.CPUAccessFlags = u32(params.accessType);
     vertexVertexBufferDesc.Usage = (D3D11_USAGE) params.memoryUsage;
     resourceData = { params.vertexData, 0, 0 };
     HRESULT result = d3ddev->CreateBuffer(&vertexVertexBufferDesc, params.memoryUsage == BufferMemoryUsage::CPU ? nullptr : &resourceData, &vertexBuffer);
@@ -530,7 +663,7 @@ void create_indexed_vertex_buffer(RscIndexedVertexBuffer& t, const IndexedVertex
     D3D11_BUFFER_DESC vertexVertexBufferDesc = { 0 };
     vertexVertexBufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
     vertexVertexBufferDesc.ByteWidth = params.vertexSize;
-    vertexVertexBufferDesc.CPUAccessFlags = params.accessType;
+    vertexVertexBufferDesc.CPUAccessFlags = u32(params.accessType);
     vertexVertexBufferDesc.Usage = (D3D11_USAGE) params.memoryUsage;
     resourceData = { params.vertexData, 0, 0 };
     d3ddev->CreateBuffer(&vertexVertexBufferDesc, params.memoryUsage == BufferMemoryUsage::CPU ? nullptr : &resourceData, &vertexBuffer);
@@ -538,7 +671,7 @@ void create_indexed_vertex_buffer(RscIndexedVertexBuffer& t, const IndexedVertex
     D3D11_BUFFER_DESC indexVertexBufferDesc = { 0 };
     indexVertexBufferDesc.BindFlags = D3D11_BIND_INDEX_BUFFER;
     indexVertexBufferDesc.ByteWidth = params.indexSize;
-    indexVertexBufferDesc.CPUAccessFlags = params.accessType;
+    indexVertexBufferDesc.CPUAccessFlags = u32(params.accessType);
     indexVertexBufferDesc.Usage = (D3D11_USAGE) params.memoryUsage;
     resourceData = { params.indexData, 0, 0 };
     d3ddev->CreateBuffer(&indexVertexBufferDesc, params.memoryUsage == BufferMemoryUsage::CPU ? nullptr : &resourceData, &indexBuffer);

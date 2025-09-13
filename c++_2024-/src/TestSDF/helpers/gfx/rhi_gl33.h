@@ -2,6 +2,129 @@
 #define __WASTELADNS_RHI_GL33_H__
 
 namespace gfx {
+const auto generate_matrix_ortho = camera::generate_matrix_ortho_zneg1to1;
+const auto generate_matrix_persp = camera::generate_matrix_persp_zneg1to1;
+const auto add_oblique_plane_to_persp = camera::add_oblique_plane_to_persp_zneg1to1;
+const auto extract_frustum_planes_from_vp = camera::extract_frustum_planes_from_vp_zneg1to1;
+const f32 min_z = -1.f;
+}
+
+#include "loader_gl33.h"
+
+// definitions
+namespace gfx {
+namespace rhi { // render hardware interface
+
+enum class Type : u32 { Float = GL_FLOAT };
+enum class InternalTextureFormat : u32 { V4_8 = GL_RGB8, V316 = GL_RGB16F };
+enum class TextureFormat : u32 { V4_8 = GL_RGB, V4_16 = GL_RGB };
+enum class RenderTargetClearFlags : u32 {
+    Stencil = GL_STENCIL_BUFFER_BIT, Depth = GL_DEPTH_BUFFER_BIT,
+    Color = GL_COLOR_BUFFER_BIT };
+enum class RenderTargetWriteMask : u32 {
+    All = 1, None = 0 };
+enum class RasterizerFillMode : u32 {
+    Fill = GL_FILL, Line = GL_LINE };
+enum class RasterizerCullMode : u32 {
+    CullFront = GL_FRONT, CullBack = GL_BACK, CullNone = 0 };
+enum class CompFunc : u32 {
+    Never = GL_NEVER, Always = GL_ALWAYS,
+    Less = GL_LESS, LessEqual = GL_LEQUAL,
+    Equal = GL_EQUAL, NotEqual = GL_NOTEQUAL,
+    Greater = GL_GREATER, GreaterEqual = GL_GEQUAL };
+enum class DepthWriteMask : u32 { All = GL_TRUE, Zero = GL_FALSE };
+enum class StencilOp : u32 {
+    Keep = GL_KEEP, Zero = GL_ZERO, Replace = GL_REPLACE, Invert = GL_INVERT,
+    Incr = GL_INCR, Decr = GL_DECR };
+enum class BufferMemoryUsage : u32 { GPU = GL_STATIC_DRAW, CPU = GL_DYNAMIC_DRAW };
+enum class BufferAccessType : u32 { GPU = GL_STATIC_DRAW, CPU = GL_DYNAMIC_DRAW }; // repeated, compatibility-only
+enum class BufferItemType : u32 { U16 = GL_UNSIGNED_SHORT, U32 = GL_UNSIGNED_INT };
+enum class BufferTopologyType : u32 { Triangles = GL_TRIANGLES, Lines = GL_LINES };
+enum class BufferAttributeFormat : u32 { R32G32B32_FLOAT, R32G32_FLOAT, R8G8B8A8_SINT, R8G8B8A8_UNORM };
+
+struct RscTexture { GLuint id; };
+
+struct RscMainRenderTarget { u32 mask; };
+struct RscRenderTarget {
+    RscTexture textures[RenderTarget_MaxCount];
+    RscTexture depthStencil;
+    GLuint buffer;
+    GLuint depthBuffer;
+    u32 width, height;
+    u32 count;
+};
+    
+struct RscVertexShader { GLuint id; };
+struct RscPixelShader { GLuint id; };
+struct RscShaderSet { GLuint id; };
+
+struct VertexAttribDesc {
+    const char* name;
+    size_t offset;
+    size_t stride;
+    s32 size;
+    GLenum type;
+    GLenum normalized;
+};
+VertexAttribDesc make_vertexAttribDesc(const char* name, size_t offset, size_t stride, BufferAttributeFormat format) {
+    const s32 sizes[] = {3, 2, 4, 4};
+    const GLenum types[] = {GL_FLOAT, GL_FLOAT, GL_BYTE, GL_UNSIGNED_BYTE};
+    const GLenum normalized[] = {GL_FALSE, GL_FALSE, GL_FALSE, GL_TRUE};
+    return VertexAttribDesc{
+        name, offset, stride, sizes[u32(format)], types[u32(format)], normalized[u32(format)]
+    };
+}
+struct RscInputLayout {};
+    
+struct RscBlendState {
+    bool writeColor; // todo: add more parameters to this
+    bool blendEnable;
+};
+struct RscRasterizerState {
+    GLenum fillMode;
+    GLenum cullFace;
+    bool scissor;
+};
+struct RscDepthStencilState {
+    bool depth_enable;
+    bool stencil_enable;
+    u8 stencil_readmask;
+    u8 stencil_writemask;
+    GLenum depth_func;
+    GLenum depth_writemask;
+    GLenum stencil_failOp;
+    GLenum stencil_depthFailOp;
+    GLenum stencil_passOp;
+    GLenum stencil_func;
+};
+    
+struct RscVertexBuffer {
+    GLsizei vertexCount;
+    GLuint arrayObject;
+    GLuint vertexBuffer;
+    GLenum type;
+};
+    
+struct RscIndexedVertexBuffer {
+    GLsizei indexCount;
+    GLuint indexOffset;
+    GLuint arrayObject;
+    GLuint vertexBuffer;
+    GLuint indexBuffer;
+    GLenum type;
+    GLenum indexType;
+};
+    
+struct RscCBuffer {
+    GLuint id;
+    u32 byteWidth;
+};
+
+} // rhi
+} // gfx
+
+// functions
+namespace gfx {
 namespace rhi { // render hardware interface
 
 void create_main_RT(RscMainRenderTarget& rt, const MainRenderTargetParams& params) {
@@ -74,11 +197,11 @@ void bind_RT(const RscRenderTarget& rt) {
     glBindFramebuffer(GL_FRAMEBUFFER, rt.buffer);
 }
 void clear_RT(const RscRenderTarget& rt, u32 flags) {
-    if (flags & RenderTargetClearFlags::Depth) { glEnable(GL_DEPTH_TEST), glDepthMask(DepthWriteMask::All); } // todo: restore??
+    if (flags & u32(RenderTargetClearFlags::Depth)) { glEnable(GL_DEPTH_TEST), glDepthMask(GLenum(DepthWriteMask::All)); } // todo: restore??
     glClear(flags);
 }
 void clear_RT(const RscRenderTarget& rt, u32 flags, Color32 color) {
-    if (flags & RenderTargetClearFlags::Depth) { glEnable(GL_DEPTH_TEST), glDepthMask(DepthWriteMask::All); } // todo: restore??
+    if (flags & u32(RenderTargetClearFlags::Depth)) { glEnable(GL_DEPTH_TEST), glDepthMask(GLenum(DepthWriteMask::All)); } // todo: restore??
     glClearColor(RGBA_PARAMS(color));
     glClear(flags | GL_COLOR_BUFFER_BIT);
 }
@@ -147,7 +270,9 @@ void create_texture_empty(RscTexture& t, const TextureRenderTargetCreateParams& 
     GLuint texId;
     glGenTextures(1, &texId);
     glBindTexture(GL_TEXTURE_2D, texId);
-    glTexImage2D(GL_TEXTURE_2D, 0, params.internalFormat, params.width, params.height, 0, params.format, params.type, nullptr);
+    glTexImage2D(
+        GL_TEXTURE_2D, 0, GLint(params.internalFormat),
+        params.width, params.height, 0, GLenum(params.format), GLenum(params.type), nullptr);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glBindTexture(GL_TEXTURE_2D, 0);
@@ -333,7 +458,7 @@ void bind_shader(const RscShaderSet& ss) {
     
 void create_blend_state(RscBlendState& bs, const BlendStateParams& params) {
     bs.blendEnable = params.blendEnable;
-    bs.writeColor = params.renderTargetWriteMask;
+    bs.writeColor = params.renderTargetWriteMask == RenderTargetWriteMask::All;
 }
 void bind_blend_state(const RscBlendState& bs) {
     if (bs.blendEnable) {
@@ -409,7 +534,7 @@ void create_vertex_buffer(RscVertexBuffer& t, const VertexBufferDesc& params, co
     // Vertex buffer binding is not part of the VAO state
     glGenBuffers(1, &vertexBuffer);
     glBindBuffer(GL_ARRAY_BUFFER, vertexBuffer);
-    glBufferData(GL_ARRAY_BUFFER, params.vertexSize, params.vertexData, params.memoryUsage);
+    glBufferData(GL_ARRAY_BUFFER, params.vertexSize, params.vertexData, GLenum(params.memoryUsage));
     glGenVertexArrays(1, &arrayObject);
     glBindVertexArray(arrayObject);
     for (u32 i = 0; i < attr_count; i++) { // bind vertex layout
@@ -444,7 +569,7 @@ void create_indexed_vertex_buffer(RscIndexedVertexBuffer& t, const IndexedVertex
     // Vertex buffer binding is not part of the VAO state
     glGenBuffers(1, &vertexBuffer);
     glBindBuffer(GL_ARRAY_BUFFER, vertexBuffer);
-    glBufferData(GL_ARRAY_BUFFER, params.vertexSize, params.vertexData, params.memoryUsage);
+    glBufferData(GL_ARRAY_BUFFER, params.vertexSize, params.vertexData, GLenum(params.memoryUsage));
     glGenVertexArrays(1, &arrayObject);
     glBindVertexArray(arrayObject);
     for (u32 i = 0; i < attr_count; i++) { // bind vertex layout
@@ -454,7 +579,7 @@ void create_indexed_vertex_buffer(RscIndexedVertexBuffer& t, const IndexedVertex
     }
     glGenBuffers(1, &indexBuffer);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBuffer);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, params.indexSize, params.indexData, params.memoryUsage);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, params.indexSize, params.indexData, GLenum(params.memoryUsage));
     glBindVertexArray(0);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
@@ -481,7 +606,7 @@ void bind_indexed_vertex_buffer(const RscIndexedVertexBuffer& b) {
     glBindVertexArray(b.arrayObject);
 }
 void draw_indexed_vertex_buffer(const RscIndexedVertexBuffer& b) {
-    const size_t index_size = (b.indexType == BufferItemType::Enum::U16) ? sizeof(u16) : sizeof(u32);
+    const size_t index_size = (b.indexType == GLenum(BufferItemType::U16)) ? sizeof(u16) : sizeof(u32);
     glDrawElements(b.type, b.indexCount, b.indexType, (void*)(b.indexOffset * index_size));
 }
 void draw_instances_indexed_vertex_buffer(const RscIndexedVertexBuffer& b, const u32 instanceCount) {
