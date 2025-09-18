@@ -11,3 +11,7 @@ Experiments on different aspects of interactive 3D applications — mostly for e
 [Planar Mirror Test](c++_2024-/src/TestMirrors/README.md) - a silly study of recursive mirrored cameras
 
 ![](c++_2024-/src/TestMirrors/summary.gif)
+
+[Shadow casting technique retrospective](c++_2024-/src/TestShadows/README.md) - a research project on how different games have implemented shadows over the years
+
+![](c++_2024-/src/TestShadows/summary.gif)

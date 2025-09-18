@@ -37,3 +37,7 @@ You can also run build.sh on MacOS to build the test specified by `COMPILE_TARGE
 [Planar Mirror Test](src/TestMirrors/README.md) - a silly study of recursive mirrored cameras
 
 ![](src/TestMirrors/summary.gif)
+
+[Shadow casting technique retrospective](src/TestShadows/README.md) - a research project on how different games have implemented shadows over the years
+
+![](src/TestShadows/summary.gif)
