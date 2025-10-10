@@ -185,8 +185,9 @@ struct DrawType { enum Enum { Default, DefaultAlphaClip, Count }; };
 // materials, of sorts
 struct ShaderTechnique {
     enum Type { 
-        Instanced, VertexColor, VertexColorSkinned,
-        Diffuse, DiffuseSkinned, CutoutDiffuse, CutoutDiffuseSkinned, Count };
+        VertexColor, VertexColorSkinned,
+        Diffuse, DiffuseSkinned, CutoutDiffuse, CutoutDiffuseSkinned, FBXLoadCount,
+        Instanced = FBXLoadCount, Count};
     ShaderPrograms::Enum shaders[DrawType::Count];
 };
 

@@ -429,7 +429,6 @@ void update(Instance& game, platform::GameConfig& config) {
         }
 
         // physics update
-        if (game.scene.renderHandles[Scene::RenderedTypes::PhysicsBalls])
         {
             physics::Scene& physicsScene = physics::scene;
 
@@ -439,14 +438,15 @@ void update(Instance& game, platform::GameConfig& config) {
 
             physics::updatePhysics(dt);
 
-            // update draw positions
-            renderer::Drawable& drawable = renderer::drawable_from_handle(
-                game.scene.renderScene,
-                game.scene.renderHandles[Scene::RenderedTypes::PhysicsBalls]);
+            // update draw positions of balls
+            for (u32 i = 0; i < physicsScene.ball_count; i++) {
 
-            float4x4* instancedMatrices = (float4x4*)drawable.ext_data;
-            for (u32 i = 0; i < drawable.instanceCount; i++) {
-                float4x4& m = instancedMatrices[i];
+                renderer::DrawNodeHandle renderHandle =
+                    game.scene.renderHandles[game::Scene::RenderedTypes::FirstPhysicsBall + i];
+                renderer::Drawable& drawable = renderer::drawable_from_handle(
+                    game.scene.renderScene, renderHandle);
+
+                float4x4& m = drawable.nodeData.worldMatrix;
                 m.col3.xyz = physicsScene.balls[i].pos;
                 m.col0.x = physicsScene.balls[i].radius;
                 m.col1.y = physicsScene.balls[i].radius;
@@ -595,11 +595,10 @@ void update(Instance& game, platform::GameConfig& config) {
                             node.ext_data);
                     }
 
-                    // ground z, if they cast shadows (maybe should done before this)
+                    // ground z, if they cast shadows (maybe we should explicitly tag them as shadow casters)
                     float3 sundir(0.f, -1.f, -1.f);
                     sundir = math::scale(sundir, 1000.f);
-                    if (node.drawlistType == renderer::DrawlistType::AfterShadows) {
-                        // todo: handle instances
+                    if (node.drawlistType == renderer::DrawlistType::AfterShadows && node.instanceCount == 0) {
                         physics::RaycastResult result = physics::raycast(
                             node.nodeData.worldMatrix.col3.xyz,
                             math::add(node.nodeData.worldMatrix.col3.xyz, sundir));
@@ -741,6 +740,17 @@ void update(Instance& game, platform::GameConfig& config) {
                 }
                 gfx::rhi::end_event();
             }
+
+            // todo: shadows
+            //for (u32 n = 0, count = 0; n < scene.drawables.cap && count < scene.drawables.count; n++) {
+            //    if (scene.drawables.data[n].alive == 0) { continue; }
+            //    count++;
+
+            //    renderer::Drawable& d = scene.drawables.data[n].state.live;
+            //    if (d.drawlistType == renderer::DrawlistType::AfterShadows && d.instanceCount == 0) {
+            //        im::sphere(d.shadowpos, 1.f, Color32(0.f, 0.f, 0.f, 1.f));
+            //    }
+            //}
             
             if (debug::visualizationModes[debug::VisualizationModes::Physics]) {
                 physics::Scene& pScene = physics::scene;

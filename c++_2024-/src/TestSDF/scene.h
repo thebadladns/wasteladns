@@ -25,7 +25,9 @@ struct Scene {
     Mirrors mirrors;
     game::OrbitInput orbitCamera;
     // specific drawables that we will update
-    struct RenderedTypes { enum Enum { Player, PlayerTrail, PhysicsBalls, Count }; };
+    struct RenderedTypes { enum Enum {
+        Player, PlayerTrail, FirstPhysicsBall, LastPhysicsBall = FirstPhysicsBall + countof(physics::Scene::balls) - 1, Count };
+    };
     u32 renderHandles[RenderedTypes::Count];
     u32 playerAnimatedNodeHandle;
     u32 playerPhysicsNodeHandle;
@@ -51,7 +53,7 @@ struct Resources {
     AssetInMemory assets[AssetsMeta::Count];
     GPUCPUMesh mirrorHallMesh;
     renderer::MeshHandle instancedUnitCubeMesh;
-    renderer::MeshHandle instancedUnitSphereMesh;
+    renderer::MeshHandle unitSphereMesh;
     renderer::MeshHandle groundMesh;
     // UI
     __DEBUGDEF(gfx::rhi::RscIndexedVertexBuffer gpuBufferDebugText;)
@@ -373,7 +375,7 @@ bool load_with_materials(
             u32 vertex_size;
             u32 vertex_align;
         };
-        DstStreams materialVertexBuffer[renderer::ShaderTechnique::Count] = {};
+        DstStreams materialVertexBuffer[renderer::ShaderTechnique::FBXLoadCount] = {};
 		materialVertexBuffer[renderer::ShaderTechnique::VertexColor].vertex_size =
             sizeof(renderer::VertexLayout_Color_3D);
 		materialVertexBuffer[renderer::ShaderTechnique::VertexColor].vertex_align =
@@ -399,7 +401,7 @@ bool load_with_materials(
         materialVertexBuffer[renderer::ShaderTechnique::CutoutDiffuseSkinned].vertex_align =
             alignof(renderer::VertexLayout_Textured_Skinned_3D);
 
-		for (u32 i = 0; i < renderer::ShaderTechnique::Count; i++) {
+		for (u32 i = 0; i < countof(materialVertexBuffer); i++) {
             DstStreams& stream = materialVertexBuffer[i];
             if (stream.vertex_size == 0) continue;
             allocator::reserve(stream.vertex, maxVertices, stream.vertex_size,
@@ -665,7 +667,7 @@ bool load_with_materials(
         assetToAdd.max = max;
         assetToAdd.min = min;
 
-		for (u32 i = 0; i < renderer::ShaderTechnique::Count; i++) {
+		for (u32 i = 0; i < countof(materialVertexBuffer); i++) {
 			DstStreams& stream = materialVertexBuffer[i];
 			if (!stream.vertex.len) { continue; }
 
@@ -1664,19 +1666,17 @@ void load_coreResources(
         core.instancedUnitCubeMesh = renderer::handle_from_drawMesh(renderCore, mesh);
     }
 
-    // instanced spheres
+    // unit spheres
     {
         renderer::DrawMesh& mesh = renderer::alloc_drawMesh(renderCore);
         mesh = {};
-        mesh.shaderTechnique = renderer::ShaderTechnique::Instanced;
-        gfx::UntexturedSphere sphere;
-        gfx::create_sphere_coords(
-            (uintptr_t)sphere.vertices, sizeof(sphere.vertices[0]),
-            sphere.indices, 1.f);
-        gfx::create_indexed_vertex_buffer_from_untextured_mesh(
+        mesh.shaderTechnique = renderer::ShaderTechnique::VertexColor;
+        gfx::ColoredSphere sphere;
+        gfx::create_colored_sphere_coords(sphere, 1.f, Color32(1.f, 1.f, 0.f, 1.f));
+        gfx::create_indexed_vertex_buffer_from_colored_mesh(
             mesh.vertexBuffer, sphere.vertices, countof(sphere.vertices),
             sphere.indices, countof(sphere.indices));
-        core.instancedUnitSphereMesh = renderer::handle_from_drawMesh(renderCore, mesh);
+        core.unitSphereMesh = renderer::handle_from_drawMesh(renderCore, mesh);
     }
 
     // ground
@@ -1728,15 +1728,6 @@ void load_coreResources(
         ground.max = float3(w, h, 0.f);
         ground.meshHandles[ground.meshCount++] = renderer::handle_from_drawMesh(renderCore, mesh);
         ground.skeleton.jointCount = 0;
-
-        for (u32 curr = 0; curr < bufferParams.indexCount; curr += 3) {
-            physics::StaticObject_Tri tri = {
-                v[i[curr + 2]].pos,
-                v[i[curr + 1]].pos,
-                v[i[curr + 0]].pos
-            };
-            physics::scene.tris[physics::scene.tri_count++] = tri;
-        }
     }
 
     // Hall of mirrors
@@ -2004,6 +1995,7 @@ void spawn_scene_mirrorRoom(
     allocator::init_pool(animScene.nodes, maxAnimNodes, sceneArena);
 	__DEBUGDEF(animScene.nodes.name = "anim nodes";)
 
+    const u32 ball_count = (u32)countof(physics::Scene::balls);
     // physics
     struct BallAssets {
         float3 position;
@@ -2012,16 +2004,16 @@ void spawn_scene_mirrorRoom(
         float mass;
     };
     physicsScene = {};
-    BallAssets ballAssets[8];
+    BallAssets ballAssets[ball_count];
     const f32 w = 30.f;
     const f32 h = 30.f;
     const f32 maxspeed = 20.f;
     //physicsScene.dt = 1 / 60.f;
-    physicsScene.ball_count = 8;
+    physicsScene.ball_count = ball_count;
     physicsScene.bounds = float2(w, h);
     physicsScene.restitution = 1.f;
     const float origin_x = w - 5.f; const float origin_y = h - 5.f;
-    float2 positions[8] = {
+    float2 positions[ball_count] = {
         float2(0.f, 1.f), float2(0.5f, 0.5f),
         float2(1.f, 0.f), float2(0.5f, -0.5f),
         float2(0.f, -1.f), float2(-0.5f, -0.5f),
@@ -2039,18 +2031,18 @@ void spawn_scene_mirrorRoom(
                 maxspeed * (-1.f + 2.f * math::rand()),
                 maxspeed * (-1.f + 2.f * math::rand()),
                 0.f);
-    }
 
-    u32 renderHandle, animHandle;
-    allocateDrawable(sceneArena, renderHandle, animHandle, scene, {
-            float3(-FLT_MAX), float3(FLT_MAX), // min/max
-            1, { core.instancedUnitSphereMesh }, // meshCount / mesh handles
-            {}, nullptr, 0, // animation data
-            physicsScene.ball_count // instances
-        },
-        float3(0.f), Color32(0.72f, 0.74f, 0.12f, 1.f), // spawn pos / color
-        renderer::DrawlistType::AfterShadows);
-    scene.renderHandles[game::Scene::RenderedTypes::PhysicsBalls] = renderHandle;
+        u32 renderHandle, animHandle;
+        allocateDrawable(sceneArena, renderHandle, animHandle, scene, {
+                float3(-ball.radius), float3(ball.radius), // min/max
+                1, { core.unitSphereMesh }, // meshCount / mesh handles
+                {}, nullptr, 0, // animation data
+                0 // instances
+            },
+            ball.pos, Color32(0.72f, 0.74f, 0.12f, 1.f), // spawn pos / color
+            renderer::DrawlistType::AfterShadows);
+        scene.renderHandles[game::Scene::RenderedTypes::FirstPhysicsBall + i] = renderHandle;
+    }
 
     for (u32 asset_idx = 0; asset_idx < countof(assetDefs); asset_idx++) {
         const AssetData& assetDef = assetDefs[asset_idx];
@@ -2131,6 +2123,7 @@ void spawn_scene_mirrorRoom(
 
         // physics setup
         {
+            // walls
             u32 prev = countof(ground) - 1;
             for (u32 i = 0; i < countof(ground); i++) {
                 physics::StaticObject_Wall& wall = physicsScene.walls[physicsScene.wall_count++];
@@ -2142,6 +2135,16 @@ void spawn_scene_mirrorRoom(
 
                 prev = i;
             }
+
+            // ground
+            float3 v0 = float3(ground[0], 0.f);
+            for (u32 i = 2; i < countof(ground); i++) {
+                float3 v1 = float3(ground[i - 2], 0.f);
+                float3 v2 = float3(ground[i - 1], 0.f);
+                physics::StaticObject_Tri tri = { v0, v1, v2 };
+                physics::scene.tris[physics::scene.tri_count++] = tri;
+            }
+
         }
 
         // render setup
