@@ -17,6 +17,19 @@ struct GPUCPUMesh {
     gfx::rhi::RscIndexedVertexBuffer gpuBuffer;
 };
 
+struct EntityTypes { enum Enum {
+    Player, PlayerTrail,
+    FirstPhysicsBall, LastPhysicsBall = FirstPhysicsBall + countof(physics::Scene::balls) - 1,
+    Count, Null = Count };
+};
+struct Entity {
+    renderer::DrawableHandle renderHandle;
+    animation::Handle animhandle;
+    physics::Handle physicsHandle;
+    u32 shadow_cbuffer;
+    void* shadowData;
+};
+
 struct Scene {
     camera::Camera camera;
     renderer::Scene renderScene;
@@ -24,13 +37,7 @@ struct Scene {
     MovementController player;
     Mirrors mirrors;
     game::OrbitInput orbitCamera;
-    // specific drawables that we will update
-    struct RenderedTypes { enum Enum {
-        Player, PlayerTrail, FirstPhysicsBall, LastPhysicsBall = FirstPhysicsBall + countof(physics::Scene::balls) - 1, Count };
-    };
-    u32 renderHandles[RenderedTypes::Count];
-    u32 playerAnimatedNodeHandle;
-    u32 playerPhysicsNodeHandle;
+    Entity entities[EntityTypes::Count];
     u32 maxMirrorBounces;
 };
 struct AssetInMemory {
@@ -53,7 +60,9 @@ struct Resources {
     AssetInMemory assets[AssetsMeta::Count];
     GPUCPUMesh mirrorHallMesh;
     renderer::MeshHandle instancedUnitCubeMesh;
-    renderer::MeshHandle unitSphereMesh;
+    renderer::MeshHandle unitSphere;
+    renderer::MeshHandle unitSphereShadowA;
+    renderer::MeshHandle unitSphereShadowB;
     renderer::MeshHandle groundMesh;
     // UI
     __DEBUGDEF(gfx::rhi::RscIndexedVertexBuffer gpuBufferDebugText;)
@@ -76,33 +85,43 @@ const RoomDefinition roomDefinitions[] = {
       0.3f, 2.f, 8 }
 };
 
-renderer::Drawable& allocateDrawable(
-    allocator::PagedArena& sceneArena,
-    renderer::DrawNodeHandle& renderHandle, animation::Handle& animationHandle,
-    Scene& scene, const AssetInMemory& def, const float3& spawnPos, const Color32& color,
-    const renderer::DrawlistType::Enum drawlistType) {
+renderer::Drawable& allocateEntity(
+    allocator::PagedArena& sceneArena, Scene& scene,
+    u32 entityId, const AssetInMemory& def, const float3& spawnPos, const Color32& color,
+    const renderer::DrawlistType::Enum drawlistType, bool castShadow) {
 
     // render data
     renderer::Scene& renderScene = scene.renderScene;
-    renderer::Drawable& renderNode = allocator::alloc_pool(renderScene.drawables);
-    renderHandle = renderer::handle_from_drawable(renderScene, renderNode);
-    renderNode = {};
-    math::identity4x4(*(Transform*)&(renderNode.nodeData.worldMatrix));
-    renderNode.nodeData.worldMatrix.col3.xyz = { spawnPos };
-    renderNode.nodeData.groupColor = color.RGBAv4();
+    renderer::Drawable& drawable = allocator::alloc_pool(renderScene.drawables);
+
+    game::Entity* entity = (entityId != game::EntityTypes::Null) ? &(scene.entities[entityId]) : nullptr;
+    if (entity) { entity->renderHandle = renderer::handle_from_drawable(renderScene, drawable); }
+    drawable = {};
+    math::identity4x4(*(Transform*)&(drawable.nodeData.worldMatrix));
+    drawable.nodeData.worldMatrix.col3.xyz = { spawnPos };
+    drawable.nodeData.groupColor = color.RGBAv4();
+    if (entity && castShadow) {
+        entity->shadowData = ALLOC_ARRAY(sceneArena, renderer::CBufferNodeData, 1);
+        renderer::CBufferNodeData& sd = *(renderer::CBufferNodeData*)(entity->shadowData);
+        math::identity4x4(*(Transform*)&(sd.worldMatrix));
+        sd.groupColor = Color32(1.f, 1.f, 1.f, 1.f).RGBAv4();
+        gfx::rhi::RscCBuffer& cbuffershadow = allocator::alloc_pool(renderScene.cbuffers);
+        entity->shadow_cbuffer = handle_from_cbuffer(renderScene, cbuffershadow);
+        gfx::rhi::create_cbuffer(cbuffershadow, { (u32)sizeof(renderer::CBufferNodeData) });
+    }
     // reduce bounds a bit to prevent floating point issues when culling (todo: reverse z?)
-    renderNode.min = math::max(def.min, float3(-500.f));
-    renderNode.max = math::min(def.max, float3(500.f));
-    renderNode.drawlistType = drawlistType;
-    memcpy(renderNode.meshHandles, def.meshHandles, sizeof(renderNode.meshHandles));
-    renderNode.meshCount = def.meshCount;
+    drawable.min = math::max(def.min, float3(-500.f));
+    drawable.max = math::min(def.max, float3(500.f));
+    drawable.drawlistType = drawlistType;
+    memcpy(drawable.meshHandles, def.meshHandles, sizeof(drawable.meshHandles));
+    drawable.meshCount = def.meshCount;
     gfx::rhi::RscCBuffer& cbuffercore = allocator::alloc_pool(renderScene.cbuffers);
-    renderNode.cbuffer_node = handle_from_cbuffer(renderScene, cbuffercore);
+    drawable.cbuffer_node = handle_from_cbuffer(renderScene, cbuffercore);
     gfx::rhi::create_cbuffer(cbuffercore, { sizeof(renderer::CBufferNodeData) });
     if (def.skeleton.jointCount) {
         animation::Scene& animScene = scene.animScene;
         animation::Node& animNode = allocator::alloc_pool(animScene.nodes);
-        animationHandle = animation::handle_from_drawable(animScene, animNode);
+        if (entity) { entity->animhandle = animation::handle_from_drawable(animScene, animNode); }
         animNode = {};
         animNode.skeleton = def.skeleton;
         animNode.clips = def.clips;
@@ -117,28 +136,28 @@ renderer::Drawable& allocateDrawable(
         // skinning data for rendering
         gfx::rhi::RscCBuffer& cbufferskinning =
             allocator::alloc_pool(renderScene.cbuffers);
-        renderNode.cbuffer_ext = handle_from_cbuffer(renderScene, cbufferskinning);
+        drawable.cbuffer_ext = handle_from_cbuffer(renderScene, cbufferskinning);
         gfx::rhi::create_cbuffer(cbufferskinning,
             { (u32) sizeof(float4x4) * animNode.skeleton.jointCount });
-        renderNode.ext_data = animNode.state.skinning;
+        drawable.ext_data = animNode.state.skinning;
     }
     else if (def.instanceCount > 0) {
-        renderNode.instanceCount = def.instanceCount;
+        drawable.instanceCount = def.instanceCount;
 
-        float4x4* matrices = ALLOC_ARRAY(sceneArena, float4x4, renderNode.instanceCount);
-        for (u32 m = 0; m < renderNode.instanceCount; m++) {
+        float4x4* matrices = ALLOC_ARRAY(sceneArena, float4x4, drawable.instanceCount);
+        for (u32 m = 0; m < drawable.instanceCount; m++) {
             float4x4& matrix = matrices[m];
             math::identity4x4(*(Transform*)&(matrix));
         }
         gfx::rhi::RscCBuffer& cbufferInstances =
             allocator::alloc_pool(renderScene.cbuffers);
-        renderNode.cbuffer_ext = handle_from_cbuffer(renderScene, cbufferInstances);
+        drawable.cbuffer_ext = handle_from_cbuffer(renderScene, cbufferInstances);
         gfx::rhi::create_cbuffer(cbufferInstances,
-            { (u32)sizeof(float4x4) * renderNode.instanceCount });
-        renderNode.ext_data = matrices;
+            { (u32)sizeof(float4x4) * drawable.instanceCount });
+        drawable.ext_data = matrices;
     }
 
-    return renderNode;
+    return drawable;
 }
 
 void spawn_model_as_mirrors(
@@ -1005,10 +1024,12 @@ struct RenderSceneContext {
     const CameraNode& camera;
     const renderer::VisibleNodes& visibleNodes;
     game::Scene& gameScene;
-    renderer::CoreResources& core;
+    game::Resources& resources;
     gfx::rhi::RscDepthStencilState& ds_always;
+    gfx::rhi::RscDepthStencilState& ds_off;
     gfx::rhi::RscDepthStencilState& ds_opaque;
     gfx::rhi::RscDepthStencilState& ds_alpha;
+    gfx::rhi::RscDepthStencilState& ds_readOnlyReversed;
     gfx::rhi::RscRasterizerState& rs;
     allocator::PagedArena scratchArena;
 };
@@ -1016,7 +1037,7 @@ void renderBaseScene(RenderSceneContext& sceneCtx) {
 
     using namespace renderer;
     Scene& scene = sceneCtx.gameScene.renderScene;
-    renderer::CoreResources& rsc = sceneCtx.core;
+    renderer::CoreResources& rsc = sceneCtx.resources.renderCore;
 
     gfx::rhi::RscCBuffer& scene_cbuffer =
         rsc.cbuffers[renderer::CoreResources::CBuffersMeta::Scene];
@@ -1031,6 +1052,9 @@ void renderBaseScene(RenderSceneContext& sceneCtx) {
     {
         gfx::rhi::RscCBuffer& clearColor_cbuffer =
             rsc.cbuffers[renderer::CoreResources::CBuffersMeta::ClearColor];
+        renderer::CBufferBlitColor clearColor = { float4(0.2f, 0.344f, 0.59f, 1.f) };
+        gfx::rhi::update_cbuffer(clearColor_cbuffer, &clearColor);
+
         gfx::rhi::bind_blend_state(rsc.blendStateBlendOff);
         gfx::rhi::bind_DS(sceneCtx.ds_always, sceneCtx.camera.depth);
         gfx::rhi::bind_RS(rsc.rasterizerStateFillFrontfaces);
@@ -1065,8 +1089,13 @@ void renderBaseScene(RenderSceneContext& sceneCtx) {
             gfx::rhi::end_event();
         }
     }
+
+    // SDF scene
+    gfx::rhi::bind_RS(rsc.rasterizerStateFillFrontfaces);
+    renderSDFScene(sceneCtx.camera, rsc, sceneCtx.ds_opaque);
+
     // Shadows + opaque after shadows passes (they use the same entities, for now)
-    //gfx::rhi::bind_RS(sceneCtx.rs);
+    gfx::rhi::bind_RS(sceneCtx.rs);
     {
         allocator::PagedArena scratchArena = sceneCtx.scratchArena;
         Drawlist dl = {};
@@ -1079,13 +1108,65 @@ void renderBaseScene(RenderSceneContext& sceneCtx) {
             renderer::DrawlistType::AfterShadows, renderer::DrawlistType::Alpha,
             renderer::SortParams::Type::Default);
         if (dl.count > 0) {
-            //gfx::rhi::start_event("SHADOWS");
-            //gfx::rhi::bind_DS(sceneCtx.ds_opaque, sceneCtx.camera.depth);
-            //Drawlist_Context ctx = {};
-            //Drawlist_Overrides overrides = {};
-            //ctx.cbuffers[overrides.forced_cbuffer_count++] = scene_cbuffer;
-            //draw_drawlist(dl, ctx, overrides);
-            //gfx::rhi::end_event();
+
+            gfx::rhi::start_event("SHADOWS");
+            {
+                gfx::rhi::bind_blend_state(rsc.blendStateBlendOffAlpha);
+
+                // shadow mesh 
+                const DrawMesh& meshA = drawMesh_from_handle(rsc, sceneCtx.resources.unitSphereShadowA);
+                const DrawMesh& meshB = drawMesh_from_handle(rsc, sceneCtx.resources.unitSphereShadowB);
+                renderer::ShaderPrograms::Enum program =
+                    rsc.shaderTechniques[meshA.shaderTechnique].
+                        shaders[renderer::DrawType::Default];
+                assert(program == rsc.shaderTechniques[meshB.shaderTechnique].shaders[renderer::DrawType::Default]);
+                gfx::rhi::bind_shader(rsc.shaderPrograms[program].shader);
+                gfx::rhi::bind_DS(sceneCtx.ds_readOnlyReversed, sceneCtx.camera.depth);
+
+                // backfaces
+                gfx::rhi::bind_indexed_vertex_buffer(meshA.vertexBuffer);
+                gfx::rhi::RscRasterizerState& rasterizerStateCullFront =
+                    (sceneCtx.camera.depth & 1) != 0 ?
+                    rsc.rasterizerStateFillFrontfaces
+                    : rsc.rasterizerStateFillBackfaces;
+                gfx::rhi::bind_RS(rasterizerStateCullFront);
+                for (u32 i = 0; i < game::EntityTypes::Count; i++) {
+                    game::Entity& e = sceneCtx.gameScene.entities[i];
+                    if (e.shadowData) {
+                        gfx::rhi::RscCBuffer shadowData = cbuffer_from_handle(scene, e.shadow_cbuffer);
+                        gfx::rhi::RscCBuffer cbuffers[] = { scene_cbuffer, shadowData };
+                        gfx::rhi::bind_cbuffers(rsc.shaderPrograms[program].shader, cbuffers, countof(cbuffers));
+                        gfx::rhi::draw_indexed_vertex_buffer(meshA.vertexBuffer);
+                    }
+                }
+                // frontfaces
+                gfx::rhi::bind_indexed_vertex_buffer(meshB.vertexBuffer);
+                gfx::rhi::bind_RS(sceneCtx.rs);
+                for (u32 i = 0; i < game::EntityTypes::Count; i++) {
+                    game::Entity& e = sceneCtx.gameScene.entities[i];
+                    if (e.shadowData) {
+                        gfx::rhi::RscCBuffer shadowData = cbuffer_from_handle(scene, e.shadow_cbuffer);
+                        gfx::rhi::RscCBuffer cbuffers[] = { scene_cbuffer, shadowData };
+                        gfx::rhi::bind_cbuffers(rsc.shaderPrograms[program].shader, cbuffers, countof(cbuffers));
+                        gfx::rhi::draw_indexed_vertex_buffer(meshA.vertexBuffer);
+                    }
+                }
+
+                // render alpha
+                gfx::rhi::bind_blend_state(rsc.blendStateBlendShadows);
+                gfx::rhi::RscCBuffer& clearColor_cbuffer =
+                    rsc.cbuffers[renderer::CoreResources::CBuffersMeta::ClearColor];
+                renderer::CBufferBlitColor clearColor = { float4(0.10f, 0.13f, 0.2f, 1.f) };
+                gfx::rhi::update_cbuffer(clearColor_cbuffer, &clearColor);
+                gfx::rhi::bind_DS(sceneCtx.ds_off, sceneCtx.camera.depth);
+                gfx::rhi::bind_RS(rsc.rasterizerStateFillFrontfaces);
+                gfx::rhi::bind_cbuffers(
+                    rsc.shaderPrograms[renderer::ShaderPrograms::FullscreenBlitClearColor].shader,
+                    &clearColor_cbuffer, 1);
+                gfx::rhi::bind_shader(rsc.shaderPrograms[renderer::ShaderPrograms::FullscreenBlitClearColor].shader);
+                gfx::rhi::draw_fullscreen();
+            }
+            gfx::rhi::end_event();
 
             gfx::rhi::start_event("OPAQUE AFTER SHADOWS");
             gfx::rhi::bind_DS(sceneCtx.ds_opaque, sceneCtx.camera.depth);
@@ -1102,10 +1183,6 @@ void renderBaseScene(RenderSceneContext& sceneCtx) {
         im::present3d(sceneCtx.camera.projectionMatrix, sceneCtx.camera.viewMatrix);
     }
     #endif
-
-    // SDF scene
-    gfx::rhi::bind_RS(rsc.rasterizerStateFillFrontfaces);
-    renderSDFScene(sceneCtx.camera, rsc, sceneCtx.ds_opaque);
 
     // Alpha pass
     {
@@ -1215,7 +1292,7 @@ void renderMirrorTree(
         const CameraNode* cameraTree,
         const renderer::VisibleNodes* visibleNodes,
         game::Scene& gameScene,
-        renderer::CoreResources& renderCore,
+        game::Resources& resources,
         allocator::PagedArena scratchArena) {
 
     using namespace renderer;
@@ -1227,6 +1304,8 @@ void renderMirrorTree(
 
         const CameraNode& camera = cameraTree[index];
         const CameraNode& parent = cameraTree[parents[parentCount - 1]];
+
+        renderer::CoreResources& renderCore = resources.renderCore;
 
         // render this mirror
         __PROFILEONLY(gfx::rhi::start_event(camera.str);)
@@ -1245,10 +1324,12 @@ void renderMirrorTree(
                       renderCore.rasterizerStateFillFrontfaces
                     : renderCore.rasterizerStateFillBackfaces;
             RenderSceneContext renderSceneContext = {
-                camera, visibleNodes[index], gameScene, renderCore,
+                camera, visibleNodes[index], gameScene, resources,
                 renderCore.depthStateMirrorReflectionsDepthAlways,
+                renderCore.depthStateMirrorReflectionsDepthOff,
                 renderCore.depthStateMirrorReflections,
                 renderCore.depthStateMirrorReflectionsDepthReadOnly,
+                renderCore.depthStateMirrorReflectionsDepthReadOnlyReversed,
                 rasterizerStateMirror,
                 scratchArena };
             renderBaseScene(renderSceneContext);
@@ -1331,7 +1412,7 @@ void load_coreResources(
 
         // in-game RT (less resolution than actual window)
         gfx::rhi::RenderTargetParams gameRTparams;
-        gameRTparams.flags = (gfx::rhi::RenderTargetParams::Flags::EnableDepth);// | gfx::rhi::RenderTargetParams::Flags::ReadDepth);
+        gameRTparams.flags = (gfx::rhi::RenderTargetParams::Flags::EnableDepth);// | gfx::rhi::RenderTargetParams::Flags::ReadDepth;
         gameRTparams.width = screen.width;
         gameRTparams.height = screen.height;
         gameRTparams.textureFormat = gfx::rhi::TextureFormat::B8G8R8A8_UNORM;
@@ -1344,19 +1425,49 @@ void load_coreResources(
     }
 
     {
+        #define DEFAULT_BLEND(params) \
+            params.srcBlend = gfx::rhi::BlendStateAlphaBlend::SrcAlpha; \
+            params.dstBlend = gfx::rhi::BlendStateAlphaBlend::InvSrcAlpha; \
+            params.blendOp = gfx::rhi::BlendStateAlphaOp::Add; \
+            params.srcBlendAlpha = gfx::rhi::BlendStateAlphaBlend::One; \
+            params.dstBlendAlpha = gfx::rhi::BlendStateAlphaBlend::Zero; \
+            params.blendOpAlpha = gfx::rhi::BlendStateAlphaOp::Add;
+
+
         gfx::rhi::BlendStateParams blendState_params;
         blendState_params = {};
+        DEFAULT_BLEND(blendState_params);
         blendState_params.renderTargetWriteMask =
             gfx::rhi::RenderTargetWriteMask::All; blendState_params.blendEnable = true;
         gfx::rhi::create_blend_state(renderCore.blendStateOn, blendState_params);
         blendState_params = {};
+        DEFAULT_BLEND(blendState_params);
         blendState_params.renderTargetWriteMask =
             gfx::rhi::RenderTargetWriteMask::All;
         gfx::rhi::create_blend_state(renderCore.blendStateBlendOff, blendState_params);
         blendState_params = {};
+        DEFAULT_BLEND(blendState_params);
         blendState_params.renderTargetWriteMask =
             gfx::rhi::RenderTargetWriteMask::None;
         gfx::rhi::create_blend_state(renderCore.blendStateOff, blendState_params);
+        blendState_params = {};
+        DEFAULT_BLEND(blendState_params);
+        blendState_params.renderTargetWriteMask =
+            gfx::rhi::RenderTargetWriteMask::Alpha;
+        blendState_params.blendEnable = false;
+        gfx::rhi::create_blend_state(renderCore.blendStateBlendOffAlpha, blendState_params);
+        blendState_params = {};
+        DEFAULT_BLEND(blendState_params);
+        blendState_params.renderTargetWriteMask =
+            gfx::rhi::RenderTargetWriteMask::All;
+        blendState_params.blendEnable = true;
+        blendState_params.srcBlend = gfx::rhi::BlendStateAlphaBlend::InvSrcAlpha;
+        blendState_params.dstBlend = gfx::rhi::BlendStateAlphaBlend::DstAlpha;
+        blendState_params.blendOp = gfx::rhi::BlendStateAlphaOp::Add;
+        blendState_params.srcBlendAlpha = gfx::rhi::BlendStateAlphaBlend::One;
+        blendState_params.dstBlendAlpha = gfx::rhi::BlendStateAlphaBlend::Zero;
+        blendState_params.blendOpAlpha = gfx::rhi::BlendStateAlphaOp::Add;
+        gfx::rhi::create_blend_state(renderCore.blendStateBlendShadows, blendState_params);
     }
     gfx::rhi::create_RS(renderCore.rasterizerStateFillFrontfaces,
             { gfx::rhi::RasterizerFillMode::Fill,
@@ -1383,6 +1494,11 @@ void load_coreResources(
         dsParams.depth_func = gfx::rhi::CompFunc::Less;
         dsParams.depth_writemask = gfx::rhi::DepthWriteMask::Zero;
         gfx::rhi::create_DS(renderCore.depthStateReadOnly, dsParams);
+        dsParams = {};
+        dsParams.depth_enable = true;
+        dsParams.depth_func = gfx::rhi::CompFunc::GreaterEqual;
+        dsParams.depth_writemask = gfx::rhi::DepthWriteMask::Zero;
+        gfx::rhi::create_DS(renderCore.depthStateReadOnlyReversed, dsParams);
         dsParams = {};
         dsParams.depth_enable = false;
         gfx::rhi::create_DS(renderCore.depthStateOff, dsParams);
@@ -1437,6 +1553,17 @@ void load_coreResources(
             dsParams.stencil_func = gfx::rhi::CompFunc::Equal;
             gfx::rhi::create_DS(renderCore.depthStateMirrorReflectionsDepthReadOnly, dsParams);
             dsParams.depth_enable = true;
+            dsParams.depth_func = gfx::rhi::CompFunc::GreaterEqual;
+            dsParams.depth_writemask = gfx::rhi::DepthWriteMask::Zero;
+            dsParams.stencil_enable = true;
+            dsParams.stencil_readmask = 0xff;
+            dsParams.stencil_writemask = 0x00;
+            dsParams.stencil_failOp = gfx::rhi::StencilOp::Keep;
+            dsParams.stencil_depthFailOp = gfx::rhi::StencilOp::Keep;
+            dsParams.stencil_passOp = gfx::rhi::StencilOp::Keep;
+            dsParams.stencil_func = gfx::rhi::CompFunc::Equal;
+            gfx::rhi::create_DS(renderCore.depthStateMirrorReflectionsDepthReadOnlyReversed, dsParams);
+            dsParams.depth_enable = true;
             dsParams.depth_func = gfx::rhi::CompFunc::Always;
             dsParams.depth_writemask = gfx::rhi::DepthWriteMask::All;
             dsParams.stencil_enable = true;
@@ -1447,6 +1574,15 @@ void load_coreResources(
             dsParams.stencil_passOp = gfx::rhi::StencilOp::Keep;
             dsParams.stencil_func = gfx::rhi::CompFunc::Equal;
             gfx::rhi::create_DS(renderCore.depthStateMirrorReflectionsDepthAlways, dsParams);
+            dsParams.depth_enable = false;
+            dsParams.stencil_enable = true;
+            dsParams.stencil_readmask = 0xff;
+            dsParams.stencil_writemask = 0x00;
+            dsParams.stencil_failOp = gfx::rhi::StencilOp::Keep;
+            dsParams.stencil_depthFailOp = gfx::rhi::StencilOp::Keep;
+            dsParams.stencil_passOp = gfx::rhi::StencilOp::Keep;
+            dsParams.stencil_func = gfx::rhi::CompFunc::Equal;
+            gfx::rhi::create_DS(renderCore.depthStateMirrorReflectionsDepthOff, dsParams);
         }
     }
 
@@ -1454,8 +1590,6 @@ void load_coreResources(
     gfx::rhi::RscCBuffer& cbufferclear =
         renderCore.cbuffers[renderer::CoreResources::CBuffersMeta::ClearColor];
     gfx::rhi::create_cbuffer(cbufferclear, { sizeof(renderer::CBufferBlitColor) });
-    renderer::CBufferBlitColor clearColor = { float4(0.2f, 0.344f, 0.59f, 1.f) };
-    gfx::rhi::update_cbuffer(cbufferclear, &clearColor);
     gfx::rhi::RscCBuffer& cbuffersdf =
         renderCore.cbuffers[renderer::CoreResources::CBuffersMeta::SDF];
     gfx::rhi::create_cbuffer(cbuffersdf, { sizeof(renderer::CBufferSDF) });
@@ -1668,15 +1802,39 @@ void load_coreResources(
 
     // unit spheres
     {
-        renderer::DrawMesh& mesh = renderer::alloc_drawMesh(renderCore);
-        mesh = {};
-        mesh.shaderTechnique = renderer::ShaderTechnique::VertexColor;
-        gfx::ColoredSphere sphere;
-        gfx::create_colored_sphere_coords(sphere, 1.f, Color32(1.f, 1.f, 0.f, 1.f));
-        gfx::create_indexed_vertex_buffer_from_colored_mesh(
-            mesh.vertexBuffer, sphere.vertices, countof(sphere.vertices),
-            sphere.indices, countof(sphere.indices));
-        core.unitSphereMesh = renderer::handle_from_drawMesh(renderCore, mesh);
+        {
+            renderer::DrawMesh& mesh = renderer::alloc_drawMesh(renderCore);
+            mesh = {};
+            mesh.shaderTechnique = renderer::ShaderTechnique::VertexColor;
+            gfx::ColoredSphere sphere;
+            gfx::create_colored_sphere_coords(sphere, 1.f, Color32(1.f, 1.f, 1.f, 1.f));
+            gfx::create_indexed_vertex_buffer_from_colored_mesh(
+                mesh.vertexBuffer, sphere.vertices, countof(sphere.vertices),
+                sphere.indices, countof(sphere.indices));
+            core.unitSphere = renderer::handle_from_drawMesh(renderCore, mesh);
+        }
+        {
+            renderer::DrawMesh& mesh = renderer::alloc_drawMesh(renderCore);
+            mesh = {};
+            mesh.shaderTechnique = renderer::ShaderTechnique::VertexColor;
+            gfx::ColoredSphere sphere;
+            gfx::create_colored_sphere_coords(sphere, 1.f, Color32(0.f, 0.f, 0.f, 0.65f));
+            gfx::create_indexed_vertex_buffer_from_colored_mesh(
+                mesh.vertexBuffer, sphere.vertices, countof(sphere.vertices),
+                sphere.indices, countof(sphere.indices));
+            core.unitSphereShadowA = renderer::handle_from_drawMesh(renderCore, mesh);
+        }
+        {
+            renderer::DrawMesh& mesh = renderer::alloc_drawMesh(renderCore);
+            mesh = {};
+            mesh.shaderTechnique = renderer::ShaderTechnique::VertexColor;
+            gfx::ColoredSphere sphere;
+            gfx::create_colored_sphere_coords(sphere, 1.f, Color32(0.f, 0.f, 0.f, 1.f));
+            gfx::create_indexed_vertex_buffer_from_colored_mesh(
+                mesh.vertexBuffer, sphere.vertices, countof(sphere.vertices),
+                sphere.indices, countof(sphere.indices));
+            core.unitSphereShadowB = renderer::handle_from_drawMesh(renderCore, mesh);
+        }
     }
 
     // ground
@@ -1971,22 +2129,22 @@ void spawn_scene_mirrorRoom(
         float3 asset_init_pos;
         u32 count;
         renderer::DrawlistType::Enum drawlistType;
-        bool player; // only first count
+        u32 entityId;
         bool physicsObstacle;
+        bool castShadow;
     };
     const AssetData assetDefs[] = {
           { game::Resources::AssetsMeta::Bird, { 9.f, 6.f, 2.23879f }, 1,
-            renderer::DrawlistType::AfterShadows, true, true }
+            renderer::DrawlistType::AfterShadows, game::EntityTypes::Player, true, true }
         , { game::Resources::AssetsMeta::Ground, { 0.f, 0.f, 0.f }, 1,
-            renderer::DrawlistType::BeforeShadows, false, false }
+            renderer::DrawlistType::BeforeShadows, game::EntityTypes::Null, false, false }
         , { game::Resources::AssetsMeta::BackMirrors, { 0.f, 0.f, 0.f }, 1,
-            renderer::DrawlistType::BeforeShadows, false, false }
+            renderer::DrawlistType::BeforeShadows, game::EntityTypes::Null, false, false }
     };
 
-    size_t maxDrawables = math::max(countof(assetDefs), (size_t)1024);
+    size_t maxDrawables = math::max(game::EntityTypes::Count, 1024);
     size_t maxRenderData = 1024 * sizeof(float4x4);
-    size_t maxInstancedNodes = game::Scene::RenderedTypes::Count; 
-    size_t cbufferCount = (maxDrawables + maxInstancedNodes) * 2;
+    size_t cbufferCount = maxDrawables * 2;
     size_t maxAnimNodes = countof(assetDefs);
     allocator::init_pool(renderScene.cbuffers, cbufferCount, sceneArena);
 	__DEBUGDEF(renderScene.cbuffers.name = "cbuffers";)
@@ -2032,16 +2190,14 @@ void spawn_scene_mirrorRoom(
                 maxspeed * (-1.f + 2.f * math::rand()),
                 0.f);
 
-        u32 renderHandle, animHandle;
-        allocateDrawable(sceneArena, renderHandle, animHandle, scene, {
+        allocateEntity(sceneArena, scene, game::EntityTypes::FirstPhysicsBall + i, {
                 float3(-ball.radius), float3(ball.radius), // min/max
-                1, { core.unitSphereMesh }, // meshCount / mesh handles
+                1, { core.unitSphere }, // meshCount / mesh handles
                 {}, nullptr, 0, // animation data
                 0 // instances
             },
-            ball.pos, Color32(0.72f, 0.74f, 0.12f, 1.f), // spawn pos / color
-            renderer::DrawlistType::AfterShadows);
-        scene.renderHandles[game::Scene::RenderedTypes::FirstPhysicsBall + i] = renderHandle;
+            ball.pos, Color32(0.73f, 0.69f, 0.06f, 1.f), // spawn pos / color
+            renderer::DrawlistType::AfterShadows, true); // drawlist type / cast shadows
     }
 
     for (u32 asset_idx = 0; asset_idx < countof(assetDefs); asset_idx++) {
@@ -2062,15 +2218,13 @@ void spawn_scene_mirrorRoom(
 
             const game::AssetInMemory& asset = core.assets[assetDef.assetId];
 
-            renderer::DrawNodeHandle renderHandle = {};
+            renderer::DrawableHandle renderHandle = {};
             animation::Handle animHandle = {};
-            allocateDrawable(
-                sceneArena, renderHandle, animHandle, scene, asset,
-                asset_init_pos, Color32(0xFFFFFF), assetDef.drawlistType);
+            allocateEntity(
+                sceneArena, scene, assetDef.entityId, asset,
+                asset_init_pos, Color32(0xFFFFFF), assetDef.drawlistType, assetDef.castShadow);
 
-            if (assetDef.player) {
-                scene.playerAnimatedNodeHandle = animHandle;
-                scene.renderHandles[game::Scene::RenderedTypes::Player] = renderHandle;
+            if (assetDef.entityId == game::EntityTypes::Player) {
                 math::identity4x4(scene.player.transform);
                 scene.player.transform.pos = asset_init_pos;
             }
@@ -2085,8 +2239,8 @@ void spawn_scene_mirrorRoom(
                     math::min(math::abs(asset.min.x), math::abs(asset.min.y)));
                 o.radius = radius;
 
-                if (assetDef.player) {
-                    scene.playerPhysicsNodeHandle = physics::handleFromObject(o);
+                if (assetDef.entityId != game::EntityTypes::Null) {
+                    scene.entities[assetDef.entityId].physicsHandle = physics::handleFromObject(o);
                 }
             }
         }
@@ -2094,16 +2248,14 @@ void spawn_scene_mirrorRoom(
 
     // unit cubes behind player when running
     {
-        u32 renderHandle, animHandle;
-        allocateDrawable(sceneArena, renderHandle, animHandle, scene, {
+        allocateEntity(sceneArena, scene, game::EntityTypes::PlayerTrail, {
             float3(-FLT_MAX), float3(FLT_MAX), // min/max
             1, { core.instancedUnitCubeMesh }, // meshCount / mesh handles
             {}, nullptr, 0, // animation data
             4 // instances
             },
             float3(0.f), Color32(0.68f, 0.69f, 0.71f, 1.f), // spawn pos / color
-            renderer::DrawlistType::AfterShadows);
-        scene.renderHandles[game::Scene::RenderedTypes::PlayerTrail] = renderHandle;
+            renderer::DrawlistType::AfterShadows, false); // drawlist type / cast shadow
     }
 
     // instanced bars around scene
@@ -2139,8 +2291,8 @@ void spawn_scene_mirrorRoom(
             // ground
             float3 v0 = float3(ground[0], 0.f);
             for (u32 i = 2; i < countof(ground); i++) {
-                float3 v1 = float3(ground[i - 2], 0.f);
-                float3 v2 = float3(ground[i - 1], 0.f);
+                float3 v1 = float3(ground[i - 1], 0.f);
+                float3 v2 = float3(ground[i], 0.f);
                 physics::StaticObject_Tri tri = { v0, v1, v2 };
                 physics::scene.tris[physics::scene.tri_count++] = tri;
             }
@@ -2149,16 +2301,15 @@ void spawn_scene_mirrorRoom(
 
         // render setup
         {
-            u32 renderHandle, animHandle;
-            renderer::Drawable& drawable = allocateDrawable(
-                sceneArena, renderHandle, animHandle, scene, {
+            renderer::Drawable& drawable = allocateEntity(
+                sceneArena, scene, game::EntityTypes::Null, {
                     float3(-FLT_MAX), float3(FLT_MAX), // min/max
                     1, { core.instancedUnitCubeMesh }, // meshCount / mesh handles
                     {}, nullptr, 0, // animation data
                     2 * game::Resources::MirrorHallMeta::Count + 1 // instances
                 },
                 float3(0.f), Color32(0.82f, 0.64f, 0.12f, 1.f), // spawn pos / color
-                renderer::DrawlistType::BeforeShadows);
+                renderer::DrawlistType::BeforeShadows, false); // drawlist type / cast shadow
 
             float4x4* instancedMatrices = (float4x4*)drawable.ext_data;
             // set up the horizontal instances

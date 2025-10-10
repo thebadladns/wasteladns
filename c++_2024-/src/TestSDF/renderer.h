@@ -143,11 +143,10 @@ struct DrawCall_Item {
 };
 
 typedef u64 SortKeyValue;
-typedef u32 DrawNodeHandle;
-struct DrawNodeMeta { enum Enum : u32 {
+typedef u32 DrawableHandle;
+struct DrawableMeta { enum Enum : u32 {
     HandleBits = 32, HandleMask = 0xffffffff, MaxNodes = HandleMask - 1
 }; };
-typedef u32 InstancedNodeHandle;
 
 struct SortKey { SortKeyValue v; s32 idx; };
 struct DrawlistType { enum Enum {
@@ -206,7 +205,6 @@ struct Drawable {
     void* ext_data;
     float3 min;
     float3 max;
-    float3 shadowpos;
     u32 instanceCount;
     u32 cbuffer_node;
     u32 cbuffer_ext;
@@ -280,26 +278,31 @@ struct CoreResources {
     gfx::rhi::RscRasterizerState rasterizerStateLine;
     gfx::rhi::RscDepthStencilState depthStateOn;
     gfx::rhi::RscDepthStencilState depthStateReadOnly;
+    gfx::rhi::RscDepthStencilState depthStateReadOnlyReversed;
     gfx::rhi::RscDepthStencilState depthStateOff;
     gfx::rhi::RscDepthStencilState depthStateAlways;
     gfx::rhi::RscDepthStencilState depthStateMarkMirror;
     gfx::rhi::RscDepthStencilState depthStateUnmarkMirror;
-    gfx::rhi::RscDepthStencilState depthStateMirrorReflections; 
+    gfx::rhi::RscDepthStencilState depthStateMirrorReflections;
+    gfx::rhi::RscDepthStencilState depthStateMirrorReflectionsDepthReadOnlyReversed;
     gfx::rhi::RscDepthStencilState depthStateMirrorReflectionsDepthReadOnly;
     gfx::rhi::RscDepthStencilState depthStateMirrorReflectionsDepthAlways;
+    gfx::rhi::RscDepthStencilState depthStateMirrorReflectionsDepthOff;
     gfx::rhi::RscBlendState blendStateOn;
     gfx::rhi::RscBlendState blendStateBlendOff;
     gfx::rhi::RscBlendState blendStateOff;
+    gfx::rhi::RscBlendState blendStateBlendOffAlpha;
+    gfx::rhi::RscBlendState blendStateBlendShadows;
     gfx::rhi::RscMainRenderTarget windowRT;
     gfx::rhi::RscRenderTarget gameRT;
     camera::WindowProjection windowProjection;
     camera::PerspProjection perspProjection;
 };
 
-force_inline DrawNodeHandle handle_from_drawable(Scene& scene, Drawable& node) {
+force_inline DrawableHandle handle_from_drawable(Scene& scene, Drawable& node) {
     return allocator::get_pool_index(scene.drawables, node) + 1;
 }
-force_inline Drawable& drawable_from_handle(Scene& scene, const DrawNodeHandle handle) {
+force_inline Drawable& drawable_from_handle(Scene& scene, const DrawableHandle handle) {
     return allocator::get_pool_slot(scene.drawables, handle - 1);
 }
 force_inline DrawMesh& alloc_drawMesh(CoreResources& core) {
@@ -526,7 +529,7 @@ void makeSortKeyBitParams(
     SortParams& params,
     const SortParams::Type::Enum sortType)
 {
-    params.drawNodeBits = DrawNodeMeta::HandleBits;
+    params.drawNodeBits = DrawableMeta::HandleBits;
     params.drawNodeMask = (1 << params.drawNodeBits) - 1;
     params.shaderTechniqueBits = ShaderPrograms::Bits;
     params.shaderTechniqueMask = (1 << params.shaderTechniqueBits) - 1;
@@ -538,7 +541,7 @@ void makeSortKeyBitParams(
         params.depthMask = (1 << params.depthBits) - 1;
         params.maxDistValue = (1 << params.depthBits) - 1;
         params.maxDistSq = 1000.f * 1000.f;
-        assert(DrawNodeMeta::HandleBits + ShaderPrograms::Bits + 10 < sizeof(SortKeyValue) * 8);
+        assert(DrawableMeta::HandleBits + ShaderPrograms::Bits + 10 < sizeof(SortKeyValue) * 8);
     }
     break;
     case SortParams::Type::BackToFront: {
@@ -548,7 +551,7 @@ void makeSortKeyBitParams(
         params.depthMask = (1 << params.depthBits) - 1;
         params.maxDistValue = (1 << params.depthBits) - 1;
         params.maxDistSq = 1000.f * 1000.f; // todo: based on camera distance?
-        assert(DrawNodeMeta::HandleBits + ShaderPrograms::Bits + 10 < sizeof(SortKeyValue) * 8);
+        assert(DrawableMeta::HandleBits + ShaderPrograms::Bits + 10 < sizeof(SortKeyValue) * 8);
     }
     break;
     };
@@ -575,7 +578,7 @@ SortKeyValue makeSortKey(const u32 nodeIdx, const u32 shaderProgram, const SortP
         key |= (shaderProgram & params.shaderTechniqueMask) << curr_shift;
         curr_shift += params.shaderTechniqueBits;
         #if 0 // no depth sorting on opaques
-        if (params.drawNodeType != DrawNodeMeta::TypeInstanced) {
+        if (params.drawNodeType != DrawableMeta::TypeInstanced) {
             key |= (params.distSqNormalized & params.depthMask) << curr_shift;
             curr_shift += params.depthBits;
         }

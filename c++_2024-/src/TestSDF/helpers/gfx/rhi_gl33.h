@@ -16,13 +16,33 @@ namespace gfx {
 namespace rhi { // render hardware interface
 
 enum class Type : u32 { Float = GL_FLOAT };
-enum class InternalTextureFormat : u32 { B8G8R8A8_UNORM = GL_RGB8 };
-enum class TextureFormat : u32 { B8G8R8A8_UNORM = GL_RGB, R16G16B16A16_FLOAT = GL_RGB };
+enum class InternalTextureFormat : u32 { B8G8R8A8_UNORM = GL_RGBA };
+enum class TextureFormat : u32 { B8G8R8A8_UNORM = GL_RGB, R16G16B16A16_FLOAT = GL_RGBA };
 enum class RenderTargetClearFlags : u32 {
     Stencil = GL_STENCIL_BUFFER_BIT, Depth = GL_DEPTH_BUFFER_BIT,
     Color = GL_COLOR_BUFFER_BIT };
 enum class RenderTargetWriteMask : u32 {
-    All = 1, None = 0 };
+    Red = 1 << 0, Green = 1 << 1, Blue = 1 << 2, Alpha = 1 << 3,
+    All = Red | Green | Blue | Alpha , None = 0 };
+
+enum class BlendStateAlphaBlend : u32 {
+    Zero = GL_ZERO,
+    One = GL_ONE,
+    SrcColor = GL_SRC_COLOR,
+    InvSrcColor = GL_ONE_MINUS_SRC_COLOR,
+    SrcAlpha = GL_SRC_ALPHA,
+    InvSrcAlpha = GL_ONE_MINUS_SRC_ALPHA,
+    DstAlpha = GL_DST_ALPHA,
+    InvDstAlpha = GL_ONE_MINUS_DST_ALPHA,
+    DstColor = GL_DST_COLOR,
+    InvDstColor = GL_ONE_MINUS_DST_COLOR,
+};
+enum class BlendStateAlphaOp : u32 {
+    Add = GL_FUNC_ADD, Subtract = GL_FUNC_SUBTRACT,
+    RevSubtract = GL_FUNC_REVERSE_SUBTRACT,
+    Min = GL_MIN, Max = GL_MAX
+};
+
 enum class RasterizerFillMode : u32 {
     Fill = GL_FILL, Line = GL_LINE };
 enum class RasterizerCullMode : u32 {
@@ -77,7 +97,13 @@ VertexAttribDesc make_vertexAttribDesc(const char* name, size_t offset, size_t s
 struct RscInputLayout {};
     
 struct RscBlendState {
-    bool writeColor; // todo: add more parameters to this
+    bool writemask[4];
+    GLenum srcBlend;
+    GLenum dstBlend;
+    GLenum blendOp;
+    GLenum srcBlendAlpha;
+    GLenum dstBlendAlpha;
+    GLenum blendOpAlpha;
     bool blendEnable;
 };
 struct RscRasterizerState {
@@ -458,20 +484,31 @@ void bind_shader(const RscShaderSet& ss) {
     
 void create_blend_state(RscBlendState& bs, const BlendStateParams& params) {
     bs.blendEnable = params.blendEnable;
-    bs.writeColor = params.renderTargetWriteMask == RenderTargetWriteMask::All;
+    bs.writemask[0] = ((u32)params.renderTargetWriteMask & (u32)RenderTargetWriteMask::Red) != 0;
+    bs.writemask[1] = ((u32)params.renderTargetWriteMask & (u32)RenderTargetWriteMask::Green) != 0;
+    bs.writemask[2] = ((u32)params.renderTargetWriteMask & (u32)RenderTargetWriteMask::Blue) != 0;
+    bs.writemask[3] = ((u32)params.renderTargetWriteMask & (u32)RenderTargetWriteMask::Alpha) != 0;
+    bs.srcBlend = (GLenum)params.srcBlend;
+    bs.dstBlend = (GLenum)params.dstBlend;
+    bs.blendOp = (GLenum)params.blendOp;
+    bs.srcBlendAlpha = (GLenum)params.srcBlendAlpha;
+    bs.dstBlendAlpha = (GLenum)params.dstBlendAlpha;
+    bs.blendOpAlpha = (GLenum)params.blendOpAlpha;
 }
 void bind_blend_state(const RscBlendState& bs) {
     if (bs.blendEnable) {
         glEnable(GL_BLEND);
-        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        glBlendFuncSeparate(bs.srcBlend, bs.dstBlend, bs.srcBlendAlpha, bs.dstBlendAlpha);
+        glBlendEquationSeparate(bs.blendOp, bs.blendOpAlpha);
     } else {
         glDisable(GL_BLEND);
     }
-    if (bs.writeColor) {
-        glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
-    } else {
-        glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
-    }
+
+    bool r = bs.writemask[0] ? GL_TRUE : GL_FALSE;
+    bool g = bs.writemask[1] ? GL_TRUE : GL_FALSE;
+    bool b = bs.writemask[2] ? GL_TRUE : GL_FALSE;
+    bool a = bs.writemask[3] ? GL_TRUE : GL_FALSE;
+    glColorMask(r, g, b, a);
 }
     
 void create_RS(RscRasterizerState& rs, const RasterizerStateParams& params) {

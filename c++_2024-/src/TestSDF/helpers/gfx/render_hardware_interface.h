@@ -10,6 +10,8 @@ enum class InternalTextureFormat : u32;
 enum class TextureFormat : u32;
 enum class RenderTargetClearFlags : u32;
 enum class RenderTargetWriteMask : u32;
+enum class BlendStateAlphaBlend : u32;
+enum class BlendStateAlphaOp : u32;
 enum class RasterizerFillMode : u32;
 enum class RasterizerCullMode : u32;
 enum class CompFunc : u32;
@@ -151,6 +153,12 @@ force_inline void bind_shader(const RscShaderSet& ss);
 
 struct BlendStateParams {
     RenderTargetWriteMask renderTargetWriteMask;
+    BlendStateAlphaBlend srcBlend;
+    BlendStateAlphaBlend dstBlend;
+    BlendStateAlphaOp blendOp;
+    BlendStateAlphaBlend srcBlendAlpha;
+    BlendStateAlphaBlend dstBlendAlpha;
+    BlendStateAlphaOp blendOpAlpha;
     bool blendEnable;
 };
 void create_blend_state(RscBlendState&, const BlendStateParams&);

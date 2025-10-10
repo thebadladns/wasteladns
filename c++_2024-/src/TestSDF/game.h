@@ -279,7 +279,8 @@ void update(Instance& game, platform::GameConfig& config) {
                 }
 
                 float3 pos = math::add(game.scene.player.transform.pos, desiredMovement);
-                u32 playerObstacleIndex = (game.scene.playerPhysicsNodeHandle) >> physics::ObjectType::Bits;
+                u32 playerObstacleIndex =
+                    (game.scene.entities[game::EntityTypes::Player].physicsHandle) >> physics::ObjectType::Bits;
                 const float radius = physicsScene.obstacles[playerObstacleIndex].radius;
 
                 // hack: update player movement in physics
@@ -333,11 +334,11 @@ void update(Instance& game, platform::GameConfig& config) {
 
             // update player render
             renderer::CBufferNodeData& nodeData =
-                renderer::drawable_from_handle(game.scene.renderScene, game.scene.renderHandles[Scene::RenderedTypes::Player]).nodeData;
+                renderer::drawable_from_handle(game.scene.renderScene, game.scene.entities[game::EntityTypes::Player].renderHandle).nodeData;
             nodeData.worldMatrix = game.scene.player.transform.matrix;
 
             { // animation hack
-                animation::Node& animatedData = animation::get_node(game.scene.animScene, game.scene.playerAnimatedNodeHandle);
+                animation::Node& animatedData = animation::get_node(game.scene.animScene, game.scene.entities[game::EntityTypes::Player].animhandle);
 
                 enum Cycle { Idle = 0, JerkyRun = 1, Run = 2 };
                 const f32 maxSpeed = 15.f;
@@ -398,7 +399,7 @@ void update(Instance& game, platform::GameConfig& config) {
                 // dust particles hack
                 renderer::Drawable& drawable = renderer::drawable_from_handle(
                         game.scene.renderScene,
-                        game.scene.renderHandles[Scene::RenderedTypes::PlayerTrail]);
+                        game.scene.entities[EntityTypes::PlayerTrail].renderHandle);
                 float4x4* instancedMatrices = (float4x4*)drawable.ext_data;
                 for (u32 i = 0; i < drawable.instanceCount; i++) {
 
@@ -433,7 +434,7 @@ void update(Instance& game, platform::GameConfig& config) {
             physics::Scene& physicsScene = physics::scene;
 
             physics::updatePositionFromHandle(
-                game.scene.playerPhysicsNodeHandle,
+                game.scene.entities[EntityTypes::Player].physicsHandle,
                 game.scene.player.transform.pos, (f32)game.time.lastFrameDelta);
 
             physics::updatePhysics(dt);
@@ -441,8 +442,8 @@ void update(Instance& game, platform::GameConfig& config) {
             // update draw positions of balls
             for (u32 i = 0; i < physicsScene.ball_count; i++) {
 
-                renderer::DrawNodeHandle renderHandle =
-                    game.scene.renderHandles[game::Scene::RenderedTypes::FirstPhysicsBall + i];
+                renderer::DrawableHandle renderHandle =
+                    game.scene.entities[game::EntityTypes::FirstPhysicsBall + i].renderHandle;
                 renderer::Drawable& drawable = renderer::drawable_from_handle(
                     game.scene.renderScene, renderHandle);
 
@@ -579,7 +580,7 @@ void update(Instance& game, platform::GameConfig& config) {
                     }
                 }
 
-                // update all visible nodes physics properties
+                // update all visible nodes cbuffers
                 for (u32 n = 0, count = 0; n < scene.drawables.cap && count < scene.drawables.count; n++) {
                     if (scene.drawables.data[n].alive == 0) { continue; }
                     count++;
@@ -594,16 +595,33 @@ void update(Instance& game, platform::GameConfig& config) {
                             cbuffer_from_handle(scene, node.cbuffer_ext),
                             node.ext_data);
                     }
+                }
 
-                    // ground z, if they cast shadows (maybe we should explicitly tag them as shadow casters)
-                    float3 sundir(0.f, -1.f, -1.f);
-                    sundir = math::scale(sundir, 1000.f);
-                    if (node.drawlistType == renderer::DrawlistType::AfterShadows && node.instanceCount == 0) {
+                // update shadow cbuffers for all shadow casters
+                const f32 xdir = 0.3f * math::cos(math::halfpi32 + (f32)platform::state.time.running);
+                const f32 ydir = -0.3f * math::sin(math::halfpi32 + (f32)platform::state.time.running);
+                float3 sundir(xdir, ydir, -1.f);
+                sundir = math::scale(sundir, 1000.f);
+                for (u32 i = 0; i < game::EntityTypes::Count; i++) {
+                    game::Entity& entity = game.scene.entities[i];
+                    if (entity.shadowData) {
+                        renderer::CBufferNodeData& shadowData = *(renderer::CBufferNodeData*)entity.shadowData;
+                        Drawable& d = renderer::drawable_from_handle(scene, entity.renderHandle);
                         physics::RaycastResult result = physics::raycast(
-                            node.nodeData.worldMatrix.col3.xyz,
-                            math::add(node.nodeData.worldMatrix.col3.xyz, sundir));
+                            d.nodeData.worldMatrix.col3.xyz,
+                            math::add(d.nodeData.worldMatrix.col3.xyz, sundir));
                         if (result.valid) {
-                            node.shadowpos = result.hitpos;
+                            shadowData.worldMatrix.col3.xyz = result.hitpos;
+                            f32 radius = 0.75f * math::min(
+                                math::min(math::abs(d.max.x), math::abs(d.max.y)),
+                                math::min(math::abs(d.min.x), math::abs(d.min.y)));
+                            shadowData.worldMatrix.col0.x = radius;
+                            shadowData.worldMatrix.col1.y = radius;
+                            shadowData.worldMatrix.col2.z = radius;
+
+                            gfx::rhi::update_cbuffer(
+                                cbuffer_from_handle(scene, entity.shadow_cbuffer),
+                                &shadowData);
                         }
                     }
                 }
@@ -619,10 +637,12 @@ void update(Instance& game, platform::GameConfig& config) {
                 gfx::rhi::start_event("BASE SCENE");
 
                 RenderSceneContext renderSceneContext = {
-                    cameraTree[0], visibleNodesTree[0], game.scene, renderCore,
+                    cameraTree[0], visibleNodesTree[0], game.scene, game.resources,
                     renderCore.depthStateAlways,
+                    renderCore.depthStateOff,
                     renderCore.depthStateOn,
                     renderCore.depthStateReadOnly,
+                    renderCore.depthStateReadOnlyReversed,
                     renderCore.rasterizerStateFillFrontfaces,
                     game.memory.scratchArenaRoot };
                 renderBaseScene(renderSceneContext);
@@ -633,7 +653,7 @@ void update(Instance& game, platform::GameConfig& config) {
             // render camera tree
             if (cameraTree[0].siblingIndex > 1) {
                 renderMirrorTree(
-                        cameraTree, visibleNodesTree, game.scene, renderCore,
+                        cameraTree, visibleNodesTree, game.scene, game.resources,
                         game.memory.scratchArenaRoot);
             }
         }
@@ -740,17 +760,6 @@ void update(Instance& game, platform::GameConfig& config) {
                 }
                 gfx::rhi::end_event();
             }
-
-            // todo: shadows
-            //for (u32 n = 0, count = 0; n < scene.drawables.cap && count < scene.drawables.count; n++) {
-            //    if (scene.drawables.data[n].alive == 0) { continue; }
-            //    count++;
-
-            //    renderer::Drawable& d = scene.drawables.data[n].state.live;
-            //    if (d.drawlistType == renderer::DrawlistType::AfterShadows && d.instanceCount == 0) {
-            //        im::sphere(d.shadowpos, 1.f, Color32(0.f, 0.f, 0.f, 1.f));
-            //    }
-            //}
             
             if (debug::visualizationModes[debug::VisualizationModes::Physics]) {
                 physics::Scene& pScene = physics::scene;
@@ -920,7 +929,6 @@ void update(Instance& game, platform::GameConfig& config) {
                         mousepos_WS.x, mousepos_WS.y, mousepos_WS.z,
                         FLOAT3_PARAMS(eulers_deg));
 
-                        
                     if (im::checkbox("Pause render", &game.time.pausedRender)) {
                         io::format(
                             debug::eventLabel.text, sizeof(debug::eventLabel.text),
@@ -1258,8 +1266,8 @@ void update(Instance& game, platform::GameConfig& config) {
                 }
 
                 gfx::rhi::bind_blend_state(game.resources.renderCore.blendStateBlendOff);
-                gfx::rhi::bind_DS( game.resources.renderCore.depthStateOff);
-                gfx::rhi::bind_RS( game.resources.renderCore.rasterizerStateFillFrontfaces);
+                gfx::rhi::bind_DS(game.resources.renderCore.depthStateOff);
+                gfx::rhi::bind_RS(game.resources.renderCore.rasterizerStateFillFrontfaces);
                 gfx::rhi::bind_main_RT(game.resources.renderCore.windowRT);
 
                 gfx::rhi::bind_shader(game.resources.renderCore.shaderPrograms[renderer::ShaderPrograms::FullscreenBlitTextured].shader);

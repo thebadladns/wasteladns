@@ -25,7 +25,29 @@ enum class TextureFormat : u32 {
 enum class RenderTargetClearFlags : u32 {
     Stencil = D3D11_CLEAR_STENCIL, Depth = D3D11_CLEAR_DEPTH, Color = 0x4L };
 enum class RenderTargetWriteMask : u32 {
-    All = D3D11_COLOR_WRITE_ENABLE_ALL, None = 0 };
+    All = D3D11_COLOR_WRITE_ENABLE_ALL, None = 0,
+    Red = D3D11_COLOR_WRITE_ENABLE_RED,
+    Green = D3D11_COLOR_WRITE_ENABLE_GREEN,
+    Blue = D3D11_COLOR_WRITE_ENABLE_BLUE,
+    Alpha = D3D11_COLOR_WRITE_ENABLE_ALPHA };
+
+enum class BlendStateAlphaBlend : u32 {
+    Zero = D3D11_BLEND_ZERO,
+    One = D3D11_BLEND_ONE,
+    SrcColor = D3D11_BLEND_SRC_COLOR,
+    InvSrcColor = D3D11_BLEND_INV_SRC_COLOR,
+    SrcAlpha = D3D11_BLEND_SRC_ALPHA,
+    InvSrcAlpha = D3D11_BLEND_INV_SRC_ALPHA,
+    DstAlpha = D3D11_BLEND_DEST_ALPHA,
+    InvDstAlpha = D3D11_BLEND_INV_DEST_ALPHA,
+    DstColor = D3D11_BLEND_DEST_COLOR,
+    InvDstColor = D3D11_BLEND_INV_DEST_COLOR,
+};
+enum class BlendStateAlphaOp : u32 {
+    Add = D3D11_BLEND_OP_ADD, Subtract = D3D11_BLEND_OP_SUBTRACT,
+    RevSubtract = D3D11_BLEND_OP_REV_SUBTRACT,
+    Min = D3D11_BLEND_OP_MIN, Max = D3D11_BLEND_OP_MAX };
+
 enum class RasterizerFillMode : u32 {
     Fill = D3D11_FILL_SOLID, Line = D3D11_FILL_WIREFRAME };
 enum class RasterizerCullMode : u32 {
@@ -550,16 +572,15 @@ void bind_shader(const RscShaderSet& ss) {
 }
     
 void create_blend_state(RscBlendState& bs, const BlendStateParams& params) {
-    // Todo: make parameters when needed
     ID3D11BlendState1* blendState;
     D3D11_BLEND_DESC1 blendStateDesc = {};
     blendStateDesc.RenderTarget[0].BlendEnable = params.blendEnable;
-    blendStateDesc.RenderTarget[0].SrcBlend = D3D11_BLEND_SRC_ALPHA;
-    blendStateDesc.RenderTarget[0].DestBlend = D3D11_BLEND_INV_SRC_ALPHA;
-    blendStateDesc.RenderTarget[0].BlendOp = D3D11_BLEND_OP_ADD;
-    blendStateDesc.RenderTarget[0].SrcBlendAlpha = D3D11_BLEND_ONE;
-    blendStateDesc.RenderTarget[0].DestBlendAlpha = D3D11_BLEND_ZERO;
-    blendStateDesc.RenderTarget[0].BlendOpAlpha = D3D11_BLEND_OP_ADD;
+    blendStateDesc.RenderTarget[0].SrcBlend = (D3D11_BLEND)params.srcBlend;
+    blendStateDesc.RenderTarget[0].DestBlend = (D3D11_BLEND)params.dstBlend;
+    blendStateDesc.RenderTarget[0].BlendOp = (D3D11_BLEND_OP)params.blendOp;
+    blendStateDesc.RenderTarget[0].SrcBlendAlpha = (D3D11_BLEND)params.srcBlendAlpha;
+    blendStateDesc.RenderTarget[0].DestBlendAlpha = (D3D11_BLEND)params.dstBlendAlpha;
+    blendStateDesc.RenderTarget[0].BlendOpAlpha = (D3D11_BLEND_OP)params.blendOpAlpha;
     blendStateDesc.RenderTarget[0].RenderTargetWriteMask = u8(params.renderTargetWriteMask);
     d3ddev->CreateBlendState1(&blendStateDesc, &blendState);
 

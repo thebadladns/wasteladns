@@ -181,6 +181,11 @@ typedef struct __GLsync* GLsync;
 #define GL_DST_COLOR 0x0306
 #define GL_ONE_MINUS_DST_COLOR 0x0307
 #define GL_SRC_ALPHA_SATURATE 0x0308
+#define GL_FUNC_ADD 0x8006
+#define GL_FUNC_REVERSE_SUBTRACT 0x800B
+#define GL_FUNC_SUBTRACT 0x800A
+#define GL_MIN 0x8007
+#define GL_MAX 0x8008
 #define GL_READ_FRAMEBUFFER 0x8CA8
 #define GL_DRAW_FRAMEBUFFER 0x8CA9
 #define GL_DEPTH_COMPONENT 0x1902
@@ -253,6 +258,12 @@ typedef void (APIENTRYP PFNGLENABLEPROC)(GLenum cap);
 PFNGLENABLEPROC glEnable;
 typedef void (APIENTRYP PFNGLBLENDFUNCPROC)(GLenum sfactor, GLenum dfactor);
 PFNGLBLENDFUNCPROC glBlendFunc;
+typedef void (APIENTRYP PFNGLBLENDFUNCSEPARATEPROC)(GLenum sfactorRGB, GLenum dfactorRGB, GLenum sfactorAlpha, GLenum dfactorAlpha);
+PFNGLBLENDFUNCSEPARATEPROC glBlendFuncSeparate;
+typedef void (APIENTRYP PFNGLBLENDEQUATIONPROC)(GLenum mode);
+PFNGLBLENDEQUATIONPROC glBlendEquation;
+typedef void (APIENTRYP PFNGLBLENDEQUATIONSEPARATEPROC)(GLenum modeRGB, GLenum modeAlpha);
+PFNGLBLENDEQUATIONSEPARATEPROC glBlendEquationSeparate;
 typedef void (APIENTRYP PFNGLDISABLEPROC)(GLenum cap);
 PFNGLDISABLEPROC glDisable;
 typedef void (APIENTRYP PFNGLPOLYGONMODEPROC)(GLenum face, GLenum mode);
@@ -385,6 +396,9 @@ void loadGLExtensions() {
     glDrawElements = (PFNGLDRAWELEMENTSPROC)getGLProcAddress("glDrawElements");
     glEnable = (PFNGLENABLEPROC)getGLProcAddress("glEnable");
     glBlendFunc = (PFNGLBLENDFUNCPROC)getGLProcAddress("glBlendFunc");
+    glBlendFuncSeparate = (PFNGLBLENDFUNCSEPARATEPROC)getGLProcAddress("glBlendFuncSeparate");
+    glBlendEquation = (PFNGLBLENDEQUATIONPROC)getGLProcAddress("glBlendEquation");
+    glBlendEquationSeparate = (PFNGLBLENDEQUATIONSEPARATEPROC)getGLProcAddress("glBlendEquationSeparate");
     glDisable = (PFNGLDISABLEPROC)getGLProcAddress("glDisable");
     glPolygonMode = (PFNGLPOLYGONMODEPROC)getGLProcAddress("glPolygonMode");
     glFrontFace = (PFNGLFRONTFACEPROC)getGLProcAddress("glFrontFace");
