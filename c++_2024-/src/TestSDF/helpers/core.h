@@ -44,23 +44,4 @@ typedef double f64;
 # define force_inline __attribute__((always_inline))
 #endif
 
-#if _MSC_VER
-#include <intrin.h>
-#else
-#include <x86intrin.h>
-#endif
-
-struct m128_4 {
-    __m128 xxxx;
-    __m128 yyyy;
-    __m128 zzzz;
-    __m128 wwww;
-};
-struct m256_4 {
-    __m256 vx;
-    __m256 vy;
-    __m256 vz;
-    __m256 vw;
-};
-
 #endif // __WASTELADNS_CORE_H__

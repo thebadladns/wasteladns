@@ -1517,7 +1517,7 @@ u32 gatherMirrorTreeRecursive(GatherMirrorTreeContext& ctx, u32 index, const Cam
         index++;
 
         // compute mirror matrices
-        auto reflectionMatrix = [](float4 p) -> float4x4 { // todo: understand properly
+        auto reflectionMatrix = [](float4 p) -> float4x4 {
             float4x4 o;
             o.col0.x = 1 - 2.f * p.x * p.x; o.col1.x = -2.f * p.x * p.y;    o.col2.x = -2.f * p.x * p.z;        o.col3.x = -2.f * p.x * p.w;
             o.col0.y = -2.f * p.y * p.x;    o.col1.y = 1 - 2.f * p.y * p.y; o.col2.y = -2.f * p.y * p.z;        o.col3.y = -2.f * p.y * p.w;

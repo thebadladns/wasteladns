@@ -4,42 +4,13 @@
 namespace bvh {
 
 struct Node {
-    union {
-        struct { // for loading
-            float3 min;
-            float3 max;
-        };
-        struct { // for querying
-            __m256 xcoords_256;
-            __m256 ycoords_256;
-            __m256 zcoords_256;
-        };
-    };
+    float3 min;
+    float3 max;
     u16 lchildId;
     u16 firstIndexId;
     u16 sourceId;
     bool isLeaf;
 };
-
-// todo: having to do these because of the union is atrocious
-force_inline void ymm_to_minmax(
-    float3& min, float3& max, const __m256 xcoords, const __m256 ycoords, const __m256 zcoords) {
-    f32* vx = (f32*)&(xcoords);
-    f32* vy = (f32*)&(ycoords);
-    f32* vz = (f32*)&(zcoords);
-    min = float3(vx[7], vy[7], vz[7]);
-    max = float3(vx[0], vy[0], vz[0]);
-}
-force_inline void minmax_to_ymm(
-    __m256& xcoords, __m256& ycoords, __m256& zcoords, const float3 min, const float3 max) {
-    xcoords = _mm256_set_ps(
-        min.x, max.x, min.x, max.x, min.x, max.x, min.x, max.x);
-    ycoords = _mm256_set_ps(
-        min.y, min.y, max.y, max.y, min.y, min.y, max.y, max.y);
-    zcoords = _mm256_set_ps(
-        min.z, min.z, min.z, min.z, max.z, max.z, max.z, max.z);
-
-}
     
 struct Triangle {
     float3 min;
@@ -200,33 +171,36 @@ const u32* sourceIds) {
     };
     buildTreeRecursive(context, triangleIds, triangleCount, 0);
 
-    // Now that the bounds are set, load them into 256 registers so the queries run faster
-    for (u32 n = 0; n < (u32)nodes.len; n++) {
-        Node& node = nodes.data[n];
-        minmax_to_ymm(
-            node.xcoords_256, node.ycoords_256, node.zcoords_256,
-            node.min, node.max);
-    };
-
     bvh.nodes = nodes.data;
     bvh.nodeCount = (u32)nodes.len;
 }
 
 struct FrustumStatus { enum Enum { In, Intersecting, Out }; };
-FrustumStatus::Enum queryIsBoxVisibleInFrustum_256(
-    const m256_4* planes, const u32 numPlanes, const __m256 vx, const __m256 vy, const __m256 vz) {
+FrustumStatus::Enum queryIsBoxVisibleInFrustum(
+    const float4* planes, const u32 numPlanes, const float3& min, const float3& max) {
+    const float4 boxPoints[8] = {
+        { min.x, min.y, min.z, 1.f },
+        { max.x, min.y, min.z, 1.f },
+        { min.x, max.y, min.z, 1.f },
+        { max.x, max.y, min.z, 1.f },
+        { min.x, min.y, max.z, 1.f },
+        { max.x, min.y, max.z, 1.f },
+        { min.x, max.y, max.z, 1.f },
+        { max.x, max.y, max.z, 1.f }
+    };
 
     FrustumStatus::Enum status = FrustumStatus::In;
     for (u32 p = 0; p < numPlanes; p++) {
         int out = 0;
-        // for each point in the bounding box, check dot(float4(point, 1.f), plane.xyzw) < 0.f
-        // this does the dot product between the point and the plane normal, as well as subtracts
-        // the plane's normalized distance in the w coordinate
-        const __m256 vdotx = _mm256_fmadd_ps(vx, planes[p].vx, planes[p].vw);
-        const __m256 vdotxy = _mm256_fmadd_ps(vy, planes[p].vy, vdotx);
-        const __m256 vdot = _mm256_fmadd_ps(vz, planes[p].vz, vdotxy);
-        const s32 mask = _mm256_movemask_ps(vdot);
-        out += __popcnt(mask);
+        // explicitly doing the dot product instead of calling math::dot,
+        // and looping over all 8 points, instead of manually unrolling,
+        // produces better auto-vectorization in MSVC
+        for (u32 i = 0; i < 8; i++) {
+            out += ((planes[p].x * boxPoints[i].x
+                + planes[p].y * boxPoints[i].y
+                + planes[p].z * boxPoints[i].z
+                + planes[p].w) < 0.f) ? 1 : 0;
+        }
         if (out == 8) { status = FrustumStatus::Out; break; }
         else if (out > 0) { status = FrustumStatus::Intersecting; };
     }
@@ -236,7 +210,7 @@ FrustumStatus::Enum queryIsBoxVisibleInFrustum_256(
 void findTrianglesIntersectingFrustum(
     allocator::PagedArena scratchArena,
     bool* sourceVisibility, const Tree & bvh,
-    const m256_4* planes_256, const u32 numPlanes) {
+    const float4* planes, const u32 numPlanes) {
     struct FrustumQueryNode { u16 nodeId; FrustumStatus::Enum frustumStatus; };
 
     FrustumQueryNode* nodeStack = ALLOC_ARRAY(scratchArena, FrustumQueryNode, bvh.nodeCount);
@@ -262,10 +236,10 @@ void findTrianglesIntersectingFrustum(
                 nodeStack[stackCount++] = { u16(bvh.nodes[n.nodeId].lchildId + 1u), rStatus };
             } else {
                 // test each child against the frustum, cull if fully not visible
-                lStatus = queryIsBoxVisibleInFrustum_256(
-                    planes_256, numPlanes, lchild.xcoords_256, lchild.ycoords_256, lchild.zcoords_256);
-                rStatus = queryIsBoxVisibleInFrustum_256(
-                    planes_256, numPlanes, rchild.xcoords_256, rchild.ycoords_256, rchild.zcoords_256);
+                lStatus = queryIsBoxVisibleInFrustum(
+                    planes, numPlanes, lchild.min, lchild.max);
+                rStatus = queryIsBoxVisibleInFrustum(
+                    planes, numPlanes, rchild.min, rchild.max);
                 if (lStatus != FrustumStatus::Out) {
                     nodeStack[stackCount++] = { bvh.nodes[n.nodeId].lchildId, lStatus };
                 }

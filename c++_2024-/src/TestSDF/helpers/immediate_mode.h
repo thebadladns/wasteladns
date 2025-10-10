@@ -952,7 +952,10 @@ void pane_start(Pane& pane) {
     const f32 screenh = (f32)platform::state.screen.window_height;
     pane.content_cursor_WS = pane.content_origin_WS;
     float2 origin = float2(pane.content_origin_WS.x - padding, pane.content_origin_WS.y + padding);
-    const float2 raw_extents = math::add(pane.content_extents, float2(2.f * padding));
+    float2 raw_extents = math::add(pane.content_extents, float2(2.f * padding));
+    // ensure the extents can fit the header label
+    f32 header_min_extents_x = ui.scale * (f32)stb_easy_font_width(pane.text) + 2 * ui.scale * 5.f;
+    raw_extents.x = math::max(raw_extents.x, header_min_extents_x);
     const float2 available_extents(
         (f32)screenw - (origin.x + screenw * 0.5f),
         (f32)screenh + (origin.y - screenh * 0.5f));

@@ -183,7 +183,9 @@ bool inverse(float4x4& m) {
     
     f32* prev_m = prev.m;
     f32* next_m = m.m;
-    
+
+    // adjoint matrix (compute determinants and transpose at the same time)
+
     next_m[0] = prev_m[5]    * prev_m[10]   * prev_m[15] -
     prev_m[5]    * prev_m[11]   * prev_m[14] -
     prev_m[9]    * prev_m[6]    * prev_m[15] +
@@ -296,9 +298,11 @@ bool inverse(float4x4& m) {
     prev_m[8]  * prev_m[1]     * prev_m[6] -
     prev_m[8]  * prev_m[2]     * prev_m[5];
     
+    // compute determinant by choosing the 0th row
     f32 det = prev_m[0] * next_m[0] + prev_m[1] * next_m[4] + prev_m[2] * next_m[8] + prev_m[3] * next_m[12];
     if (det == 0.f) { return false; }
     
+    // divide adjoint matrix by determinant, get the inverse
     f32 inv_det = 1.0f / det;
     for (int i = 0; i < 16; i++)
         next_m[i] = next_m[i] * inv_det;

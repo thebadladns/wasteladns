@@ -28,12 +28,12 @@ f32 mod(const f32 a, const f32 b) { return ::fmodf(a, b); }
 f64 mod(const f64 a, const f64 b) { return ::fmod(a, b); }
 float2 direction(f32 headingRad) { return float2(sin(headingRad), cos(headingRad)); }
 f32 orientation(const float2& v) { return atan2(v.x, v.y); }
-f32 wrap(f32 rad) { // TODO: understand this
+f32 wrap(f32 rad) {
     rad = mod(rad + pi32, twopi32);
     if (rad < 0.f) { rad += twopi32; }
     return rad - pi32;
 }
-f64 wrap(f64 rad) { // TODO: understand this
+f64 wrap(f64 rad) {
     rad = mod(rad + pi64, twopi64);
     if (rad < 0.f) { rad += twopi64; }
     return rad - pi64;

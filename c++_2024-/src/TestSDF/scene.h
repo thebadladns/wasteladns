@@ -5,9 +5,9 @@ namespace game {
 
 const f32 SDF_scene_radius = 8.5f;
 
-struct Mirrors { // todo: figure out delete, unhack sizes
+struct Mirrors {
     struct Poly { float3 v[4]; float3 normal; u32 numPts; };
-    Poly* polys; // xy from 0.f to 1.f describe the mirror quad, z is the normal
+    Poly* polys;
     renderer::DrawMesh* drawMeshes;
     bvh::Tree bvh; // used to accelerate visibility queries
     u32 count;
@@ -18,16 +18,15 @@ struct GPUCPUMesh {
 };
 
 struct Scene {
-    struct InstancedTypes { enum Enum { PlayerTrail, PhysicsBalls, SceneLimits, Count }; };
     camera::Camera camera;
     renderer::Scene renderScene;
-    physics::Scene physicsScene;
     animation::Scene animScene;
     MovementController player;
     Mirrors mirrors;
     game::OrbitInput orbitCamera;
-    u32 instancedNodesHandles[InstancedTypes::Count];
-    u32 playerDrawNodeHandle;
+    // specific drawables that we will update
+    struct RenderedTypes { enum Enum { Player, PlayerTrail, PhysicsBalls, Count }; };
+    u32 renderHandles[RenderedTypes::Count];
     u32 playerAnimatedNodeHandle;
     u32 playerPhysicsNodeHandle;
     u32 maxMirrorBounces;
@@ -36,11 +35,14 @@ struct AssetInMemory {
     // render
     float3 min;
     float3 max;
-    renderer::MeshHandle meshHandles[renderer::DrawlistStreams::Count];
+    u32 meshCount;
+    renderer::MeshHandle meshHandles[countof(renderer::Drawable::meshHandles)];
     // animation
     animation::Skeleton skeleton;
     animation::Clip* clips;
     u32 clipCount;
+    // instance data
+    u32 instanceCount;
 };
 struct Resources {
     struct AssetsMeta { enum Enum { Bird, Ground, BackMirrors, Count }; };
@@ -65,36 +67,40 @@ struct RoomDefinition {
     f32 minCameraZoom;
     f32 maxCameraZoom;
     u32 maxMirrorBounces;
-    bool physicsBalls;
 };
 const RoomDefinition roomDefinitions[] = {
     { float3(-180.f * math::d2r32, 0.f, -180 * math::d2r32), // min camera eulers
       float3(-3.f * math::d2r32, 0.f, 180 * math::d2r32), // max camera eulers
-      0.3f, 2.f,
-      8, true }
+      0.3f, 2.f, 8 }
 };
 
-void spawnAsset(
+renderer::Drawable& allocateDrawable(
+    allocator::PagedArena& sceneArena,
     renderer::DrawNodeHandle& renderHandle, animation::Handle& animationHandle,
-Scene& scene, const AssetInMemory& def, const float3& spawnPos) {
+    Scene& scene, const AssetInMemory& def, const float3& spawnPos, const Color32& color,
+    const renderer::DrawlistType::Enum drawlistType) {
+
     // render data
     renderer::Scene& renderScene = scene.renderScene;
-    renderer::DrawNode& renderNode = allocator::alloc_pool(renderScene.drawNodes);
-    renderHandle = renderer::handle_from_node(renderScene, renderNode);
+    renderer::Drawable& renderNode = allocator::alloc_pool(renderScene.drawables);
+    renderHandle = renderer::handle_from_drawable(renderScene, renderNode);
     renderNode = {};
     math::identity4x4(*(Transform*)&(renderNode.nodeData.worldMatrix));
     renderNode.nodeData.worldMatrix.col3.xyz = { spawnPos };
-    renderNode.nodeData.groupColor = Color32(1.f, 1.f, 1.f, 1.f).RGBAv4();
-    renderNode.min = def.min;
-    renderNode.max = def.max;
+    renderNode.nodeData.groupColor = color.RGBAv4();
+    // reduce bounds a bit to prevent floating point issues when culling (todo: reverse z?)
+    renderNode.min = math::max(def.min, float3(-500.f));
+    renderNode.max = math::min(def.max, float3(500.f));
+    renderNode.drawlistType = drawlistType;
     memcpy(renderNode.meshHandles, def.meshHandles, sizeof(renderNode.meshHandles));
+    renderNode.meshCount = def.meshCount;
     gfx::rhi::RscCBuffer& cbuffercore = allocator::alloc_pool(renderScene.cbuffers);
     renderNode.cbuffer_node = handle_from_cbuffer(renderScene, cbuffercore);
-    gfx::rhi::create_cbuffer(cbuffercore, { sizeof(renderer::NodeData) });
+    gfx::rhi::create_cbuffer(cbuffercore, { sizeof(renderer::CBufferNodeData) });
     if (def.skeleton.jointCount) {
         animation::Scene& animScene = scene.animScene;
         animation::Node& animNode = allocator::alloc_pool(animScene.nodes);
-        animationHandle = animation::handle_from_node(animScene, animNode);
+        animationHandle = animation::handle_from_drawable(animScene, animNode);
         animNode = {};
         animNode.skeleton = def.skeleton;
         animNode.clips = def.clips;
@@ -114,7 +120,23 @@ Scene& scene, const AssetInMemory& def, const float3& spawnPos) {
             { (u32) sizeof(float4x4) * animNode.skeleton.jointCount });
         renderNode.ext_data = animNode.state.skinning;
     }
-    // todo: physics??
+    else if (def.instanceCount > 0) {
+        renderNode.instanceCount = def.instanceCount;
+
+        float4x4* matrices = ALLOC_ARRAY(sceneArena, float4x4, renderNode.instanceCount);
+        for (u32 m = 0; m < renderNode.instanceCount; m++) {
+            float4x4& matrix = matrices[m];
+            math::identity4x4(*(Transform*)&(matrix));
+        }
+        gfx::rhi::RscCBuffer& cbufferInstances =
+            allocator::alloc_pool(renderScene.cbuffers);
+        renderNode.cbuffer_ext = handle_from_cbuffer(renderScene, cbufferInstances);
+        gfx::rhi::create_cbuffer(cbufferInstances,
+            { (u32)sizeof(float4x4) * renderNode.instanceCount });
+        renderNode.ext_data = matrices;
+    }
+
+    return renderNode;
 }
 
 void spawn_model_as_mirrors(
@@ -139,7 +161,7 @@ void spawn_model_as_mirrors(
         renderer::DrawMesh& mesh = mirrors.drawMeshes[mirrorId];
 
         // reference triangles in the gpu mesh
-        mesh.shaderTechnique = renderer::ShaderTechniques::Color3D;
+        mesh.shaderTechnique = renderer::ShaderTechnique::VertexColor;
         mesh.vertexBuffer = loadedMesh.gpuBuffer; // copy buffer
         mesh.vertexBuffer.indexOffset = index;
         mesh.vertexBuffer.indexCount = 3;
@@ -309,8 +331,8 @@ void extract_skinning_attribs(u8* joint_indices, u8* joint_weights,
 struct PipelineAssetContext {
     allocator::PagedArena scratchArena;
     allocator::PagedArena& persistentArena;
-    const gfx::rhi::VertexAttribDesc* vertexAttrs[renderer::DrawlistStreams::Count];
-    u32 attr_count[renderer::DrawlistStreams::Count];
+    const gfx::rhi::VertexAttribDesc* vertexAttrs[renderer::ShaderTechnique::Count];
+    u32 attr_count[renderer::ShaderTechnique::Count];
 };
 bool load_with_materials(
     game::AssetInMemory& assetToAdd, renderer::CoreResources& renderCore,
@@ -341,6 +363,9 @@ bool load_with_materials(
         allocator::Buffer<float3> vertices = {};
         allocator::reserve(vertices, maxVertices, pipelineContext.scratchArena);
 
+        // Asset simplification: because we have so little "materials" (basically one for each type
+        // of vertex layout, plus cutout/alphaclip), we'll just have each asset support having one
+        // mesh of each material
         struct DstStreams {
             allocator::Buffer_t vertex;
             allocator::Buffer<u32> index;
@@ -348,34 +373,35 @@ bool load_with_materials(
             u32 vertex_size;
             u32 vertex_align;
         };
-        DstStreams materialVertexBuffer[renderer::DrawlistStreams::Count] = {};
-		materialVertexBuffer[renderer::DrawlistStreams::Color3D].vertex_size =
+        DstStreams materialVertexBuffer[renderer::ShaderTechnique::Count] = {};
+		materialVertexBuffer[renderer::ShaderTechnique::VertexColor].vertex_size =
             sizeof(renderer::VertexLayout_Color_3D);
-		materialVertexBuffer[renderer::DrawlistStreams::Color3D].vertex_align =
+		materialVertexBuffer[renderer::ShaderTechnique::VertexColor].vertex_align =
             alignof(renderer::VertexLayout_Color_3D);
-        materialVertexBuffer[renderer::DrawlistStreams::Color3DSkinned].vertex_size =
+        materialVertexBuffer[renderer::ShaderTechnique::VertexColorSkinned].vertex_size =
             sizeof(renderer::VertexLayout_Color_Skinned_3D);
-        materialVertexBuffer[renderer::DrawlistStreams::Color3DSkinned].vertex_align =
+        materialVertexBuffer[renderer::ShaderTechnique::VertexColorSkinned].vertex_align =
             alignof(renderer::VertexLayout_Color_Skinned_3D);
-        materialVertexBuffer[renderer::DrawlistStreams::Textured3D].vertex_size =
+        materialVertexBuffer[renderer::ShaderTechnique::Diffuse].vertex_size =
             sizeof(renderer::VertexLayout_Textured_3D);
-        materialVertexBuffer[renderer::DrawlistStreams::Textured3D].vertex_align =
+        materialVertexBuffer[renderer::ShaderTechnique::Diffuse].vertex_align =
             alignof(renderer::VertexLayout_Textured_3D);
-        materialVertexBuffer[renderer::DrawlistStreams::Textured3DAlphaClip].vertex_size =
+        materialVertexBuffer[renderer::ShaderTechnique::CutoutDiffuse].vertex_size =
             sizeof(renderer::VertexLayout_Textured_3D);
-        materialVertexBuffer[renderer::DrawlistStreams::Textured3DAlphaClip].vertex_align =
+        materialVertexBuffer[renderer::ShaderTechnique::CutoutDiffuse].vertex_align =
             alignof(renderer::VertexLayout_Textured_3D);
-        materialVertexBuffer[renderer::DrawlistStreams::Textured3DSkinned].vertex_size =
+        materialVertexBuffer[renderer::ShaderTechnique::DiffuseSkinned].vertex_size =
             sizeof(renderer::VertexLayout_Textured_Skinned_3D);
-        materialVertexBuffer[renderer::DrawlistStreams::Textured3DSkinned].vertex_align =
+        materialVertexBuffer[renderer::ShaderTechnique::DiffuseSkinned].vertex_align =
             alignof(renderer::VertexLayout_Textured_Skinned_3D);
-        materialVertexBuffer[renderer::DrawlistStreams::Textured3DAlphaClipSkinned].vertex_size =
+        materialVertexBuffer[renderer::ShaderTechnique::CutoutDiffuseSkinned].vertex_size =
             sizeof(renderer::VertexLayout_Textured_Skinned_3D);
-        materialVertexBuffer[renderer::DrawlistStreams::Textured3DAlphaClipSkinned].vertex_align =
+        materialVertexBuffer[renderer::ShaderTechnique::CutoutDiffuseSkinned].vertex_align =
             alignof(renderer::VertexLayout_Textured_Skinned_3D);
 
-		for (u32 i = 0; i < renderer::DrawlistStreams::Count; i++) {
+		for (u32 i = 0; i < renderer::ShaderTechnique::Count; i++) {
             DstStreams& stream = materialVertexBuffer[i];
+            if (stream.vertex_size == 0) continue;
             allocator::reserve(stream.vertex, maxVertices, stream.vertex_size,
                                stream.vertex_align, pipelineContext.scratchArena);
             allocator::reserve(stream.index, maxVertices * 3 * 2, pipelineContext.scratchArena);
@@ -491,8 +517,8 @@ bool load_with_materials(
                             // Assume that opacity tied to a texture means that
                             // we should use the alpha clip shader
                             DstStreams& stream = (mesh_mat.material->pbr.opacity.texture_enabled) ?
-                                  materialVertexBuffer[renderer::DrawlistStreams::Textured3DAlphaClipSkinned]
-							    : materialVertexBuffer[renderer::DrawlistStreams::Textured3DSkinned];
+                                  materialVertexBuffer[renderer::ShaderTechnique::CutoutDiffuseSkinned]
+							    : materialVertexBuffer[renderer::ShaderTechnique::DiffuseSkinned];
 
                             assert(!stream.user); // we only support one textured-material of each pass
                             u32 stream_current_offset = (u32)stream.vertex.len;
@@ -513,7 +539,7 @@ bool load_with_materials(
                             }
                             stream.user = mesh_mat.material->pbr.base_color.texture;
                         } else { // material color
-                            DstStreams& stream = materialVertexBuffer[renderer::DrawlistStreams::Color3DSkinned];
+                            DstStreams& stream = materialVertexBuffer[renderer::ShaderTechnique::VertexColorSkinned];
                             u32 stream_current_offset = (u32)stream.vertex.len;
                             add_material_indices_to_stream(
                                 stream, ctx, pipelineContext.scratchArena,
@@ -531,7 +557,7 @@ bool load_with_materials(
                             }
                         }
                     } else if (mesh.vertex_color.exists) { // vertex color
-                        DstStreams& stream = materialVertexBuffer[renderer::DrawlistStreams::Color3DSkinned];
+                        DstStreams& stream = materialVertexBuffer[renderer::ShaderTechnique::VertexColorSkinned];
                         u32 stream_current_offset = (u32)stream.vertex.len;
                         add_material_indices_to_stream(
                             stream, ctx, pipelineContext.scratchArena,
@@ -548,7 +574,7 @@ bool load_with_materials(
                                 mesh, ctx.dstvertex_to_fbxvertex[i]);
                         }
                     } else { // no material info
-                        DstStreams& stream = materialVertexBuffer[renderer::DrawlistStreams::Color3DSkinned];
+                        DstStreams& stream = materialVertexBuffer[renderer::ShaderTechnique::VertexColorSkinned];
                         u32 stream_current_offset = (u32)stream.vertex.len;
                         add_material_indices_to_stream(
                             stream, ctx, pipelineContext.scratchArena,
@@ -570,8 +596,8 @@ bool load_with_materials(
                         if (mesh_mat.material->pbr.base_color.texture_enabled) { // textured
                             // Assume that opacity tied to a texture means that we should use the alpha clip shader
                             DstStreams& stream = (mesh_mat.material->pbr.opacity.texture_enabled) ?
-                                  materialVertexBuffer[renderer::DrawlistStreams::Textured3DAlphaClip]
-                                : materialVertexBuffer[renderer::DrawlistStreams::Textured3D];
+                                  materialVertexBuffer[renderer::ShaderTechnique::CutoutDiffuse]
+                                : materialVertexBuffer[renderer::ShaderTechnique::Diffuse];
                             // we only support one textured-material of each pass
                             assert(!stream.user);
                             u32 stream_current_offset = (u32)stream.vertex.len;
@@ -589,7 +615,7 @@ bool load_with_materials(
                             }
                             stream.user = mesh_mat.material->pbr.base_color.texture;
                         } else { // material color
-                            DstStreams& stream = materialVertexBuffer[renderer::DrawlistStreams::Color3D];
+                            DstStreams& stream = materialVertexBuffer[renderer::ShaderTechnique::VertexColor];
                             u32 stream_current_offset = (u32)stream.vertex.len;
                             add_material_indices_to_stream(
                                 stream, ctx, pipelineContext.scratchArena,
@@ -604,7 +630,7 @@ bool load_with_materials(
                             }
                         }
                     } else if (mesh.vertex_color.exists) { // vertex color
-                        DstStreams& stream = materialVertexBuffer[renderer::DrawlistStreams::Color3D];
+                        DstStreams& stream = materialVertexBuffer[renderer::ShaderTechnique::VertexColor];
                         u32 stream_current_offset = (u32)stream.vertex.len;
                         add_material_indices_to_stream(
                             stream, ctx, pipelineContext.scratchArena,
@@ -618,7 +644,7 @@ bool load_with_materials(
                             dst.color = Color32(c.x, c.y, c.z, c.w).ABGR();
                         }
                     } else { // no material info
-                        DstStreams& stream = materialVertexBuffer[renderer::DrawlistStreams::Color3D];
+                        DstStreams& stream = materialVertexBuffer[renderer::ShaderTechnique::VertexColor];
                         u32 stream_current_offset = (u32)stream.vertex.len;
                         add_material_indices_to_stream(
                             stream, ctx, pipelineContext.scratchArena,
@@ -639,13 +665,7 @@ bool load_with_materials(
         assetToAdd.max = max;
         assetToAdd.min = min;
 
-        const renderer::ShaderTechniques::Enum shaderTechniques[renderer::DrawlistStreams::Count] = {
-            renderer::ShaderTechniques::Color3D, renderer::ShaderTechniques::Color3DSkinned,
-            renderer::ShaderTechniques::Textured3D, renderer::ShaderTechniques::Textured3DAlphaClip,
-            renderer::ShaderTechniques::Textured3DSkinned,
-            renderer::ShaderTechniques::Textured3DAlphaClipSkinned
-        };
-		for (u32 i = 0; i < renderer::DrawlistStreams::Count; i++) {
+		for (u32 i = 0; i < renderer::ShaderTechnique::Count; i++) {
 			DstStreams& stream = materialVertexBuffer[i];
 			if (!stream.vertex.len) { continue; }
 
@@ -661,12 +681,10 @@ bool load_with_materials(
             desc.indexType = gfx::rhi::BufferItemType::U32;
             desc.type = gfx::rhi::BufferTopologyType::Triangles;
 
-            const renderer::ShaderTechniques::Enum shaderTechnique =
-                shaderTechniques[i];
             renderer::DrawMesh& mesh =
                 renderer::alloc_drawMesh(renderCore);
             mesh = {};
-            mesh.shaderTechnique = shaderTechnique;
+            mesh.shaderTechnique = (renderer::ShaderTechnique::Type)i;
             gfx::rhi::create_indexed_vertex_buffer(
                 mesh.vertexBuffer, desc, pipelineContext.vertexAttrs[i],
                 pipelineContext.attr_count[i]);
@@ -677,7 +695,7 @@ bool load_with_materials(
                     mesh.texture,
                     { pipelineContext.scratchArena, texturefile });
             }
-            assetToAdd.meshHandles[i] =
+            assetToAdd.meshHandles[assetToAdd.meshCount++] =
                 handle_from_drawMesh(renderCore, mesh);
 		}
         success = true;
@@ -809,16 +827,9 @@ u32 gatherMirrorTreeRecursive(GatherMirrorTreeContext& ctx, u32 index, const Cam
     memset(mirrorVisibility, 0, ctx.mirrors.count * sizeof(bool));
     if (ctx.mirrors.bvh.nodeCount) {
         memset(mirrorVisibility, 0, ctx.mirrors.count * sizeof(bool));
-        m256_4 planes_256[renderer::Frustum::MAX_PLANE_COUNT];
-        for (u32 p = 0; p < parent.frustum.numPlanes; p++) {
-            planes_256[p].vx = _mm256_set1_ps(parent.frustum.planes[p].x);
-            planes_256[p].vy = _mm256_set1_ps(parent.frustum.planes[p].y);
-            planes_256[p].vz = _mm256_set1_ps(parent.frustum.planes[p].z);
-            planes_256[p].vw = _mm256_set1_ps(parent.frustum.planes[p].w);
-        }
         bvh::findTrianglesIntersectingFrustum(
             ctx.scratchArenaRoot,mirrorVisibility, ctx.mirrors.bvh,
-            planes_256, parent.frustum.numPlanes);
+            parent.frustum.planes, parent.frustum.numPlanes);
     } else {
         memset(mirrorVisibility, 1, ctx.mirrors.count * sizeof(bool));
     }
@@ -859,7 +870,7 @@ u32 gatherMirrorTreeRecursive(GatherMirrorTreeContext& ctx, u32 index, const Cam
         index++;
 
         // compute mirror matrices
-        auto reflectionMatrix = [](float4 p) -> float4x4 { // todo: understand properly
+        auto reflectionMatrix = [](float4 p) -> float4x4 {
             float4x4 o;
             o.col0.x = 1 - 2.f * p.x * p.x; o.col1.x = -2.f * p.x * p.y;    o.col2.x = -2.f * p.x * p.z;        o.col3.x = -2.f * p.x * p.w;
             o.col0.y = -2.f * p.y * p.x;    o.col1.y = 1 - 2.f * p.y * p.y; o.col2.y = -2.f * p.y * p.z;        o.col3.y = -2.f * p.y * p.w;
@@ -957,7 +968,7 @@ void renderSDFScene(
             gfx::rhi::RscCBuffer& cbuffersdf =
                 rsc.cbuffers[renderer::CoreResources::CBuffersMeta::SDF];
 
-            renderer::SDF sdf;
+            renderer::CBufferSDF sdf;
             sdf.near = rsc.perspProjection.config.near;
             sdf.far = rsc.perspProjection.config.far;
             sdf.tanfov = math::tan(rsc.perspProjection.config.fov * 0.5f * math::d2r32);
@@ -979,9 +990,9 @@ void renderSDFScene(
             gfx::rhi::bind_blend_state(rsc.blendStateOn);
             gfx::rhi::bind_DS(ds, camera.depth);
             gfx::rhi::bind_cbuffers(
-                rsc.shaders[renderer::ShaderTechniques::FullscreenBlitSDF].shader,
+                rsc.shaderPrograms[renderer::ShaderPrograms::FullscreenBlitSDFScene].shader,
                 &cbuffersdf, 1);
-            gfx::rhi::bind_shader(rsc.shaders[renderer::ShaderTechniques::FullscreenBlitSDF].shader);
+            gfx::rhi::bind_shader(rsc.shaderPrograms[renderer::ShaderPrograms::FullscreenBlitSDFScene].shader);
             gfx::rhi::draw_fullscreen();
         }
         gfx::rhi::end_event();
@@ -1007,14 +1018,14 @@ void renderBaseScene(RenderSceneContext& sceneCtx) {
 
     gfx::rhi::RscCBuffer& scene_cbuffer =
         rsc.cbuffers[renderer::CoreResources::CBuffersMeta::Scene];
-    SceneData cbufferPerScene;
+    CBufferSceneData cbufferPerScene;
     {
         cbufferPerScene.vpMatrix = 
             math::mult(sceneCtx.camera.projectionMatrix, sceneCtx.camera.viewMatrix);
         gfx::rhi::update_cbuffer(scene_cbuffer, &cbufferPerScene);
     }
 
-    gfx::rhi::start_event("SKY");
+    gfx::rhi::start_event("SKY"); // SDF??
     {
         gfx::rhi::RscCBuffer& clearColor_cbuffer =
             rsc.cbuffers[renderer::CoreResources::CBuffersMeta::ClearColor];
@@ -1022,28 +1033,59 @@ void renderBaseScene(RenderSceneContext& sceneCtx) {
         gfx::rhi::bind_DS(sceneCtx.ds_always, sceneCtx.camera.depth);
         gfx::rhi::bind_RS(rsc.rasterizerStateFillFrontfaces);
         gfx::rhi::bind_cbuffers(
-            rsc.shaders[renderer::ShaderTechniques::FullscreenBlitClearColor].shader,
+            rsc.shaderPrograms[renderer::ShaderPrograms::FullscreenBlitClearColor].shader,
             &clearColor_cbuffer, 1);
-        gfx::rhi::bind_shader(rsc.shaders[renderer::ShaderTechniques::FullscreenBlitClearColor].shader);
+        gfx::rhi::bind_shader(rsc.shaderPrograms[renderer::ShaderPrograms::FullscreenBlitClearColor].shader);
         gfx::rhi::draw_fullscreen();
     }
     gfx::rhi::end_event();
 
-    // Opaque pass
+    // Opaque before shadows pass
     gfx::rhi::bind_RS(sceneCtx.rs);
     {
         allocator::PagedArena scratchArena = sceneCtx.scratchArena;
         Drawlist dl = {};
         u32 maxDrawCalls =
-              (sceneCtx.visibleNodes.visible_nodes_count
-            + (u32)scene.instancedDrawNodes.count) * DrawlistStreams::Count;
+              (sceneCtx.visibleNodes.visible_nodes_count) * countof(Drawable::meshHandles);
         dl.items = ALLOC_ARRAY(scratchArena, DrawCall_Item, maxDrawCalls);
         dl.keys = ALLOC_ARRAY(scratchArena, SortKey, maxDrawCalls);
         addNodesToDrawlistSorted(
             dl, sceneCtx.visibleNodes, sceneCtx.camera.pos, scene, rsc,
-            0, renderer::DrawlistFilter::Alpha, renderer::SortParams::Type::Default);
-        if (dl.count[DrawlistBuckets::Base] + dl.count[DrawlistBuckets::Instanced] > 0) {
-            gfx::rhi::start_event("OPAQUE");
+            renderer::DrawlistType::BeforeShadows, renderer::DrawlistType::Alpha,
+            renderer::SortParams::Type::Default);
+        if (dl.count > 0) {
+            gfx::rhi::start_event("OPAQUE BEFORE SHADOWS");
+            gfx::rhi::bind_DS(sceneCtx.ds_opaque, sceneCtx.camera.depth);
+            Drawlist_Context ctx = {};
+            Drawlist_Overrides overrides = {};
+            ctx.cbuffers[overrides.forced_cbuffer_count++] = scene_cbuffer;
+            draw_drawlist(dl, ctx, overrides);
+            gfx::rhi::end_event();
+        }
+    }
+    // Shadows + opaque after shadows passes (they use the same entities, for now)
+    //gfx::rhi::bind_RS(sceneCtx.rs);
+    {
+        allocator::PagedArena scratchArena = sceneCtx.scratchArena;
+        Drawlist dl = {};
+        u32 maxDrawCalls =
+            (sceneCtx.visibleNodes.visible_nodes_count) * countof(Drawable::meshHandles);
+        dl.items = ALLOC_ARRAY(scratchArena, DrawCall_Item, maxDrawCalls);
+        dl.keys = ALLOC_ARRAY(scratchArena, SortKey, maxDrawCalls);
+        addNodesToDrawlistSorted(
+            dl, sceneCtx.visibleNodes, sceneCtx.camera.pos, scene, rsc,
+            renderer::DrawlistType::AfterShadows, renderer::DrawlistType::Alpha,
+            renderer::SortParams::Type::Default);
+        if (dl.count > 0) {
+            //gfx::rhi::start_event("SHADOWS");
+            //gfx::rhi::bind_DS(sceneCtx.ds_opaque, sceneCtx.camera.depth);
+            //Drawlist_Context ctx = {};
+            //Drawlist_Overrides overrides = {};
+            //ctx.cbuffers[overrides.forced_cbuffer_count++] = scene_cbuffer;
+            //draw_drawlist(dl, ctx, overrides);
+            //gfx::rhi::end_event();
+
+            gfx::rhi::start_event("OPAQUE AFTER SHADOWS");
             gfx::rhi::bind_DS(sceneCtx.ds_opaque, sceneCtx.camera.depth);
             Drawlist_Context ctx = {};
             Drawlist_Overrides overrides = {};
@@ -1069,15 +1111,14 @@ void renderBaseScene(RenderSceneContext& sceneCtx) {
         allocator::PagedArena scratchArena = sceneCtx.scratchArena;
         Drawlist dl = {};
         u32 maxDrawCalls =
-              (sceneCtx.visibleNodes.visible_nodes_count
-            + (u32)scene.instancedDrawNodes.count) * DrawlistStreams::Count;
+              (sceneCtx.visibleNodes.visible_nodes_count) * countof(Drawable::meshHandles);
         dl.items = ALLOC_ARRAY(scratchArena, DrawCall_Item, maxDrawCalls);
         dl.keys = ALLOC_ARRAY(scratchArena, SortKey, maxDrawCalls);
         gfx::rhi::bind_blend_state(rsc.blendStateOn);
         addNodesToDrawlistSorted(
             dl, sceneCtx.visibleNodes, sceneCtx.camera.pos, scene, rsc,
-            renderer::DrawlistFilter::Alpha, 0, renderer::SortParams::Type::BackToFront);
-        if (dl.count[DrawlistBuckets::Base] + dl.count[DrawlistBuckets::Instanced] > 0) {
+            renderer::DrawlistType::Alpha, 0, renderer::SortParams::Type::BackToFront);
+        if (dl.count > 0) {
             gfx::rhi::bind_DS(sceneCtx.ds_alpha, sceneCtx.camera.depth);
             gfx::rhi::start_event("ALPHA");
             Drawlist_Context ctx = {};
@@ -1118,13 +1159,13 @@ void markMirror(RenderMirrorContext& mirrorCtx) {
         gfx::rhi::bind_RS(rasterizerStateParent);
 
         gfx::rhi::bind_blend_state(rsc.blendStateOff);
-
-        const renderer::DrawMesh& mesh =
-            mirrorCtx.camera.drawMesh;
-        gfx::rhi::bind_shader(rsc.shaders[mesh.shaderTechnique].shader);
+        const renderer::DrawMesh& mesh = mirrorCtx.camera.drawMesh;
+        const renderer::ShaderPrograms::Enum program =
+            rsc.shaderTechniques[mesh.shaderTechnique].shaders[renderer::DrawType::Default];
+        gfx::rhi::bind_shader(rsc.shaderPrograms[program].shader);
         gfx::rhi::bind_indexed_vertex_buffer(mesh.vertexBuffer);
         gfx::rhi::RscCBuffer buffers[] = { scene_cbuffer, identity_cbuffer };
-        gfx::rhi::bind_cbuffers(rsc.shaders[mesh.shaderTechnique].shader, buffers, 2);
+        gfx::rhi::bind_cbuffers(rsc.shaderPrograms[program].shader, buffers, 2);
         gfx::rhi::draw_indexed_vertex_buffer(mesh.vertexBuffer);
     }
     gfx::rhi::end_event();
@@ -1144,7 +1185,7 @@ void unmarkMirror(RenderMirrorContext& mirrorCtx) {
         rsc.cbuffers[renderer::CoreResources::CBuffersMeta::NodeIdentity];
 
     {
-        renderer::SceneData cbufferPerScene;
+        renderer::CBufferSceneData cbufferPerScene;
         cbufferPerScene.vpMatrix =
             math::mult(mirrorCtx.parent.projectionMatrix, mirrorCtx.parent.viewMatrix);
         gfx::rhi::update_cbuffer(scene_cbuffer, &cbufferPerScene);
@@ -1156,12 +1197,13 @@ void unmarkMirror(RenderMirrorContext& mirrorCtx) {
         gfx::rhi::bind_RS(rasterizerStateParent);
         gfx::rhi::bind_blend_state(rsc.blendStateOn);
 
-        renderer::DrawMesh mesh = //gfx::drawMesh_from_handle(rsc, mirrorCtx.camera.meshHandle);
-            mirrorCtx.camera.drawMesh;
-        gfx::rhi::bind_shader(rsc.shaders[mesh.shaderTechnique].shader);
+        renderer::DrawMesh mesh = mirrorCtx.camera.drawMesh;
+        const renderer::ShaderPrograms::Enum program =
+            rsc.shaderTechniques[mesh.shaderTechnique].shaders[renderer::DrawType::Default];
+        gfx::rhi::bind_shader(rsc.shaderPrograms[program].shader);
         gfx::rhi::bind_indexed_vertex_buffer(mesh.vertexBuffer);
         gfx::rhi::RscCBuffer buffers[] = { scene_cbuffer, identity_cbuffer };
-        gfx::rhi::bind_cbuffers(rsc.shaders[ShaderTechniques::Color3D].shader, buffers, 2);
+        gfx::rhi::bind_cbuffers(rsc.shaderPrograms[program].shader, buffers, 2);
         gfx::rhi::draw_indexed_vertex_buffer(mesh.vertexBuffer);
     }
     gfx::rhi::end_event();
@@ -1233,8 +1275,8 @@ struct SceneMemory {
     __DEBUGDEF(allocator::PagedArena& debugArena;)
 };
 void load_coreResources(
-        game::Resources& core, SceneMemory& memory,
-        const platform::Screen& screen) {
+    game::Resources& core, SceneMemory& memory,
+    const platform::Screen& screen) {
 
     allocator::PagedArena& persistentArena = memory.persistentArena;
 
@@ -1275,24 +1317,29 @@ void load_coreResources(
     gfx::generate_matrix_persp(
         renderCore.perspProjection.matrix, frustum);
 
-    gfx::rhi::MainRenderTargetParams windowRTparams = {};
-    windowRTparams.depth = true;
-    windowRTparams.width = screen.window_width;
-    windowRTparams.height = screen.window_height;
-    gfx::rhi::create_main_RT(
-        renderCore.windowRT, windowRTparams);
+    // render targets
+    {
+        // main RT (actual window resolution)
+        gfx::rhi::MainRenderTargetParams windowRTparams = {};
+        windowRTparams.depth = true;
+        windowRTparams.width = screen.window_width;
+        windowRTparams.height = screen.window_height;
+        gfx::rhi::create_main_RT(
+            renderCore.windowRT, windowRTparams);
 
-    gfx::rhi::RenderTargetParams gameRTparams;
-    gameRTparams.flags = (gfx::rhi::RenderTargetParams::Flags::EnableDepth);// | gfx::rhi::RenderTargetParams::Flags::ReadDepth);
-    gameRTparams.width = screen.width;
-    gameRTparams.height = screen.height;
-    gameRTparams.textureFormat = gfx::rhi::TextureFormat::V4_8;
-    gameRTparams.textureInternalFormat =
-        gfx::rhi::InternalTextureFormat::V4_8;
-    gameRTparams.textureFormatType =
-        gfx::rhi::Type::Float;
-    gameRTparams.count = 1;
-    gfx::rhi::create_RT(renderCore.gameRT, gameRTparams);
+        // in-game RT (less resolution than actual window)
+        gfx::rhi::RenderTargetParams gameRTparams;
+        gameRTparams.flags = (gfx::rhi::RenderTargetParams::Flags::EnableDepth);// | gfx::rhi::RenderTargetParams::Flags::ReadDepth);
+        gameRTparams.width = screen.width;
+        gameRTparams.height = screen.height;
+        gameRTparams.textureFormat = gfx::rhi::TextureFormat::B8G8R8A8_UNORM;
+        gameRTparams.textureInternalFormat =
+            gfx::rhi::InternalTextureFormat::B8G8R8A8_UNORM;
+        gameRTparams.textureFormatType =
+            gfx::rhi::Type::Float;
+        gameRTparams.count = 1;
+        gfx::rhi::create_RT(renderCore.gameRT, gameRTparams);
+    }
 
     {
         gfx::rhi::BlendStateParams blendState_params;
@@ -1404,28 +1451,28 @@ void load_coreResources(
     // known cbuffers
     gfx::rhi::RscCBuffer& cbufferclear =
         renderCore.cbuffers[renderer::CoreResources::CBuffersMeta::ClearColor];
-    gfx::rhi::create_cbuffer(cbufferclear, { sizeof(renderer::BlitColor) });
-    renderer::BlitColor clearColor = { float4(0.2f, 0.344f, 0.59f, 1.f) };
+    gfx::rhi::create_cbuffer(cbufferclear, { sizeof(renderer::CBufferBlitColor) });
+    renderer::CBufferBlitColor clearColor = { float4(0.2f, 0.344f, 0.59f, 1.f) };
     gfx::rhi::update_cbuffer(cbufferclear, &clearColor);
     gfx::rhi::RscCBuffer& cbuffersdf =
         renderCore.cbuffers[renderer::CoreResources::CBuffersMeta::SDF];
-    gfx::rhi::create_cbuffer(cbuffersdf, { sizeof(renderer::SDF) });
-    renderer::SDF sdf = { };
+    gfx::rhi::create_cbuffer(cbuffersdf, { sizeof(renderer::CBufferSDF) });
+    renderer::CBufferSDF sdf = { };
     gfx::rhi::update_cbuffer(cbuffersdf, &sdf);
     gfx::rhi::RscCBuffer& cbufferscene =
         renderCore.cbuffers[renderer::CoreResources::CBuffersMeta::Scene];
-    gfx::rhi::create_cbuffer(cbufferscene, { sizeof(renderer::SceneData) });
+    gfx::rhi::create_cbuffer(cbufferscene, { sizeof(renderer::CBufferSceneData) });
     gfx::rhi::RscCBuffer& cbufferNodeIdentity =
         renderCore.cbuffers[renderer::CoreResources::CBuffersMeta::NodeIdentity];
-    gfx::rhi::create_cbuffer(cbufferNodeIdentity, { sizeof(renderer::NodeData) });
-    renderer::NodeData nodeIdentity = {};
+    gfx::rhi::create_cbuffer(cbufferNodeIdentity, { sizeof(renderer::CBufferNodeData) });
+    renderer::CBufferNodeData nodeIdentity = {};
     nodeIdentity.groupColor = float4(1.f, 1.f, 1.f, 1.f);
     math::identity4x4(*(Transform*)&nodeIdentity.worldMatrix);
     gfx::rhi::update_cbuffer(cbufferNodeIdentity, &nodeIdentity);
     gfx::rhi::RscCBuffer& cbufferNodeUItext =
         renderCore.cbuffers[renderer::CoreResources::CBuffersMeta::UIText];
-    gfx::rhi::create_cbuffer(cbufferNodeUItext, { sizeof(renderer::NodeData) });
-    renderer::NodeData noteUItext = {};
+    gfx::rhi::create_cbuffer(cbufferNodeUItext, { sizeof(renderer::CBufferNodeData) });
+    renderer::CBufferNodeData noteUItext = {};
     noteUItext.groupColor = float4(1.f, 1.f, 1.f, 1.f);
     math::identity4x4(*(Transform*)&noteUItext.worldMatrix);
     gfx::rhi::update_cbuffer(cbufferNodeUItext, &noteUItext);
@@ -1434,75 +1481,10 @@ void load_coreResources(
     gfx::rhi::create_cbuffer(cbufferinstances64, { u32(sizeof(float4x4)) * 64 });
 
     // input layouts
-    const gfx::rhi::VertexAttribDesc attribs_2d[] = {
-        gfx::rhi::make_vertexAttribDesc(
-            "POSITION", offsetof(renderer::VertexLayout_Color_2D, pos),
-            sizeof(renderer::VertexLayout_Color_2D),
-            gfx::rhi::BufferAttributeFormat::R32G32_FLOAT),
-        gfx::rhi::make_vertexAttribDesc(
-            "COLOR", offsetof(renderer::VertexLayout_Color_2D, color),
-            sizeof(renderer::VertexLayout_Color_2D),
-            gfx::rhi::BufferAttributeFormat::R8G8B8A8_UNORM) };
-    const gfx::rhi::VertexAttribDesc attribs_3d[] = {
-        gfx::rhi::make_vertexAttribDesc(
-            "POSITION", 0,
-            sizeof(float3),
-            gfx::rhi::BufferAttributeFormat::R32G32B32_FLOAT) };
-    const gfx::rhi::VertexAttribDesc attribs_color3d[] = {
-        gfx::rhi::make_vertexAttribDesc(
-			"POSITION", offsetof(renderer::VertexLayout_Color_3D, pos),
-            sizeof(renderer::VertexLayout_Color_3D),
-            gfx::rhi::BufferAttributeFormat::R32G32B32_FLOAT),
-        gfx::rhi::make_vertexAttribDesc(
-			"COLOR", offsetof(renderer::VertexLayout_Color_3D, color),
-            sizeof(renderer::VertexLayout_Color_3D),
-            gfx::rhi::BufferAttributeFormat::R8G8B8A8_UNORM) };
-    const gfx::rhi::VertexAttribDesc attribs_color3d_skinned[] = {
-        gfx::rhi::make_vertexAttribDesc(
-			"POSITION", offsetof(renderer::VertexLayout_Color_Skinned_3D, pos),
-            sizeof(renderer::VertexLayout_Color_Skinned_3D),
-            gfx::rhi::BufferAttributeFormat::R32G32B32_FLOAT),
-        gfx::rhi::make_vertexAttribDesc(
-			"COLOR", offsetof(renderer::VertexLayout_Color_Skinned_3D, color),
-            sizeof(renderer::VertexLayout_Color_Skinned_3D),
-            gfx::rhi::BufferAttributeFormat::R8G8B8A8_UNORM),
-        gfx::rhi::make_vertexAttribDesc(
-			"JOINTINDICES", offsetof(renderer::VertexLayout_Color_Skinned_3D, joint_indices),
-            sizeof(renderer::VertexLayout_Color_Skinned_3D),
-            gfx::rhi::BufferAttributeFormat::R8G8B8A8_SINT),
-        gfx::rhi::make_vertexAttribDesc(
-			"JOINTWEIGHTS", offsetof(renderer::VertexLayout_Color_Skinned_3D, joint_weights),
-            sizeof(renderer::VertexLayout_Color_Skinned_3D),
-            gfx::rhi::BufferAttributeFormat::R8G8B8A8_UNORM) };
-    const gfx::rhi::VertexAttribDesc attribs_textured3d[] = {
-        gfx::rhi::make_vertexAttribDesc(
-			"POSITION", offsetof(renderer::VertexLayout_Textured_3D, pos),
-            sizeof(renderer::VertexLayout_Textured_3D),
-            gfx::rhi::BufferAttributeFormat::R32G32B32_FLOAT),
-        gfx::rhi::make_vertexAttribDesc(
-			"TEXCOORD", offsetof(renderer::VertexLayout_Textured_3D, uv),
-            sizeof(renderer::VertexLayout_Textured_3D),
-            gfx::rhi::BufferAttributeFormat::R32G32_FLOAT) };
-    const gfx::rhi::VertexAttribDesc attribs_textured3d_skinned[] = {
-        gfx::rhi::make_vertexAttribDesc(
-			"POSITION", offsetof(renderer::VertexLayout_Textured_Skinned_3D, pos),
-            sizeof(renderer::VertexLayout_Textured_Skinned_3D),
-            gfx::rhi::BufferAttributeFormat::R32G32B32_FLOAT),
-        gfx::rhi::make_vertexAttribDesc(
-			"TEXCOORD", offsetof(renderer::VertexLayout_Textured_Skinned_3D, uv),
-            sizeof(renderer::VertexLayout_Textured_Skinned_3D),
-            gfx::rhi::BufferAttributeFormat::R32G32_FLOAT),
-        gfx::rhi::make_vertexAttribDesc(
-			"JOINTINDICES", offsetof(renderer::VertexLayout_Textured_Skinned_3D, joint_indices),
-            sizeof(renderer::VertexLayout_Textured_Skinned_3D),
-            gfx::rhi::BufferAttributeFormat::R8G8B8A8_SINT),
-        gfx::rhi::make_vertexAttribDesc(
-			"JOINTWEIGHTS", offsetof(renderer::VertexLayout_Textured_Skinned_3D, joint_weights),
-            sizeof(renderer::VertexLayout_Textured_Skinned_3D),
-            gfx::rhi::BufferAttributeFormat::R8G8B8A8_UNORM)
-    };
+    LOAD_VERTEX_LAYOUT_ATTRIBS;
 
     // cbuffer bindings
+    const gfx::rhi::CBufferBindingDesc* bufferBindings_null = nullptr;
     const gfx::rhi::CBufferBindingDesc bufferBindings_blit_clear_color[] = {
         { "type_BlitColor", gfx::rhi::CBufferStageMask::PS }
     };
@@ -1536,254 +1518,129 @@ void load_coreResources(
     };
 
     // texture bindings
+    const gfx::rhi::TextureBindingDesc* textureBindings_null = nullptr;
     const gfx::rhi::TextureBindingDesc textureBindings_base[] = { { "texDiffuse" } };
     const gfx::rhi::TextureBindingDesc textureBindings_fullscreenblit[] = { { "texSrc" } };
     const gfx::rhi::TextureBindingDesc textureBindings_fullscreenblit_depth[] = { { "texSrc" }, { "depthSrc" }};
 
     // shaders
-    {
-        #if __DEBUG
-            #define LOAD_SHADER_PARAMS(shader)         \
-                shader.vs_srcFile = vs_params.srcFile; \
-                shader.vs_binFile = vs_params.binFile; \
-                shader.ps_srcFile = ps_params.srcFile; \
-                shader.ps_binFile = ps_params.binFile; \
-                shader.vs_lastCompileTime = shader.ps_lastCompileTime = 0;
-        #else 
-            #define LOAD_SHADER_PARAMS(shader)
-        #endif
-        {
-            gfx::ShaderDesc desc = {};
-            gfx::rhi::VertexShaderRuntimeCompileParams& vs_params = desc.vs_params;
-            gfx::rhi::PixelShaderRuntimeCompileParams& ps_params = desc.ps_params;
-            vs_params.attribs = attribs_3d;
-            vs_params.attrib_count = countof(attribs_3d);
-            POPULATE_VSSHADER_PARAMS(vs_params, gfx::shaders::vs_fullscreen_bufferless_clear_blit)
-            POPULATE_PSSHADER_PARAMS(ps_params, gfx::shaders::ps_fullscreen_blit_clear_colored)
-            desc.textureBindings = nullptr;
-            desc.textureBinding_count = 0;
-            desc.bufferBindings = bufferBindings_blit_clear_color;
-            desc.bufferBinding_count = countof(bufferBindings_blit_clear_color);
-            renderer::ReloadableShader& shader =
-                renderCore.shaders[renderer::ShaderTechniques::FullscreenBlitClearColor];
-            gfx::compile_shader(shader.shader, desc);
-            LOAD_SHADER_PARAMS(shader);
+#define LOAD_SHADER(vsname, psname, programType, attrs, buffBindings, textBindings) { \
+        gfx::ShaderDesc desc = {}; \
+        gfx::rhi::VertexShaderRuntimeCompileParams& vs_params = desc.vs_params; \
+        gfx::rhi::PixelShaderRuntimeCompileParams& ps_params = desc.ps_params; \
+        vs_params.attribs = attrs; \
+        vs_params.attrib_count = countof(attrs); \
+        POPULATE_VSSHADER_PARAMS(vs_params, vsname) \
+        POPULATE_PSSHADER_PARAMS(ps_params, psname) \
+        desc.textureBindings = textBindings ? textBindings : nullptr; \
+        desc.textureBinding_count = textBindings ? countof(textBindings) : 0; \
+        desc.bufferBindings = buffBindings ? buffBindings : nullptr; \
+        desc.bufferBinding_count = buffBindings ? countof(buffBindings) : 0; \
+        renderer::ReloadableShader& shader = renderCore.shaderPrograms[programType]; \
+        gfx::compile_shader(shader.shader, desc); \
+        __DEBUGDEF(shader.vs_srcFile = vs_params.srcFile; \
+                   shader.vs_binFile = vs_params.binFile; \
+                   shader.ps_srcFile = ps_params.srcFile; \
+                   shader.ps_binFile = ps_params.binFile; \
+                   shader.vs_lastCompileTime = shader.ps_lastCompileTime = 0;) \
         }
-        {
-            gfx::ShaderDesc desc = {};
-            gfx::rhi::VertexShaderRuntimeCompileParams& vs_params = desc.vs_params;
-            gfx::rhi::PixelShaderRuntimeCompileParams& ps_params = desc.ps_params;
-            vs_params.attribs = attribs_3d;
-            vs_params.attrib_count = countof(attribs_3d);
-            POPULATE_VSSHADER_PARAMS(vs_params, gfx::shaders::vs_fullscreen_bufferless_textured_blit)
-            POPULATE_PSSHADER_PARAMS(ps_params, gfx::shaders::ps_fullscreen_blit_sdf)
-            desc.textureBindings = nullptr;
-            desc.textureBinding_count = 0;
-            desc.bufferBindings = bufferBindings_blit_sdf;
-            desc.bufferBinding_count = countof(bufferBindings_blit_sdf);
-            renderer::ReloadableShader& shader =
-                renderCore.shaders[renderer::ShaderTechniques::FullscreenBlitSDF];
-            gfx::compile_shader(shader.shader, desc);
-            LOAD_SHADER_PARAMS(shader);
-        }
-        {
-            gfx::ShaderDesc desc = {};
-            gfx::rhi::VertexShaderRuntimeCompileParams& vs_params = desc.vs_params;
-            gfx::rhi::PixelShaderRuntimeCompileParams& ps_params = desc.ps_params;
-            vs_params.attribs = attribs_textured3d;
-            vs_params.attrib_count = countof(attribs_textured3d);
-            POPULATE_VSSHADER_PARAMS(vs_params, gfx::shaders::vs_fullscreen_bufferless_textured_blit)
-            POPULATE_PSSHADER_PARAMS(ps_params, gfx::shaders::ps_fullscreen_blit_textured)
-            desc.textureBindings = textureBindings_fullscreenblit;
-            desc.textureBinding_count = countof(textureBindings_fullscreenblit);
-            desc.bufferBindings = bufferBindings_blit_sdf;
-            desc.bufferBinding_count = countof(bufferBindings_blit_sdf);
-            renderer::ReloadableShader& shader =
-                renderCore.shaders[renderer::ShaderTechniques::FullscreenBlitTextured];
-            gfx::compile_shader(shader.shader, desc);
-            LOAD_SHADER_PARAMS(shader);
-        }
-        {
-            gfx::ShaderDesc desc = {};
-            gfx::rhi::VertexShaderRuntimeCompileParams& vs_params = desc.vs_params;
-            gfx::rhi::PixelShaderRuntimeCompileParams& ps_params = desc.ps_params;
-            vs_params.attribs = attribs_textured3d;
-            vs_params.attrib_count = countof(attribs_textured3d);
-            POPULATE_VSSHADER_PARAMS(vs_params, gfx::shaders::vs_fullscreen_bufferless_textured_blit)
-            POPULATE_PSSHADER_PARAMS(ps_params, gfx::shaders::ps_fullscreen_blit_textured_depth)
-            desc.textureBindings = textureBindings_fullscreenblit_depth;
-            desc.textureBinding_count = countof(textureBindings_fullscreenblit_depth);
-            desc.bufferBindings = bufferBindings_blit_sdf;
-            desc.bufferBinding_count = countof(textureBindings_fullscreenblit);
-            renderer::ReloadableShader& shader =
-                renderCore.shaders[renderer::ShaderTechniques::FullscreenBlitTexturedDepth];
-            gfx::compile_shader(shader.shader, desc);
-            LOAD_SHADER_PARAMS(shader);
-        }
-        {
-            gfx::ShaderDesc desc = {};
-            gfx::rhi::VertexShaderRuntimeCompileParams& vs_params = desc.vs_params;
-            gfx::rhi::PixelShaderRuntimeCompileParams& ps_params = desc.ps_params;
-            vs_params.attribs = attribs_2d;
-            vs_params.attrib_count = countof(attribs_2d);
-            POPULATE_VSSHADER_PARAMS(vs_params, gfx::shaders::vs_color2d_base)
-            POPULATE_PSSHADER_PARAMS(ps_params, gfx::shaders::ps_color3d_unlit)
-            desc.textureBindings = nullptr;
-            desc.textureBinding_count = 0;
-            desc.bufferBindings = bufferBindings_untextured_base;
-            desc.bufferBinding_count = countof(bufferBindings_untextured_base);
-            renderer::ReloadableShader& shader =
-                renderCore.shaders[renderer::ShaderTechniques::Color2D];
-            gfx::compile_shader(shader.shader, desc);
-            LOAD_SHADER_PARAMS(shader);
-        }
-        {
-            gfx::ShaderDesc desc = {};
-            gfx::rhi::VertexShaderRuntimeCompileParams& vs_params = desc.vs_params;
-            gfx::rhi::PixelShaderRuntimeCompileParams& ps_params = desc.ps_params;
-            vs_params.attribs = attribs_3d;
-            vs_params.attrib_count = countof(attribs_3d);
-            POPULATE_VSSHADER_PARAMS(vs_params, gfx::shaders::vs_3d_instanced_base)
-            POPULATE_PSSHADER_PARAMS(ps_params, gfx::shaders::ps_color3d_unlit)
-            desc.textureBindings = nullptr;
-            desc.textureBinding_count = 0;
-            desc.bufferBindings = bufferBindings_instanced_base;
-            desc.bufferBinding_count = countof(bufferBindings_instanced_base);
-            renderer::ReloadableShader& shader =
-                renderCore.shaders[renderer::ShaderTechniques::Instanced3D];
-            gfx::compile_shader(shader.shader, desc);
-            LOAD_SHADER_PARAMS(shader);
-        }
-        {
-            gfx::ShaderDesc desc = {};
-            gfx::rhi::VertexShaderRuntimeCompileParams& vs_params = desc.vs_params;
-            gfx::rhi::PixelShaderRuntimeCompileParams& ps_params = desc.ps_params;
-            vs_params.attribs = attribs_color3d;
-            vs_params.attrib_count = countof(attribs_color3d);
-            POPULATE_VSSHADER_PARAMS(vs_params, gfx::shaders::vs_color3d_base)
-            POPULATE_PSSHADER_PARAMS(ps_params, gfx::shaders::ps_color3d_unlit)
-            desc.textureBindings = nullptr;
-            desc.textureBinding_count = 0;
-            desc.bufferBindings = bufferBindings_untextured_base;
-            desc.bufferBinding_count = countof(bufferBindings_untextured_base);
-            renderer::ReloadableShader& shader =
-                renderCore.shaders[renderer::ShaderTechniques::Color3D];
-            gfx::compile_shader(shader.shader, desc);
-            LOAD_SHADER_PARAMS(shader);
-        }
-        {
-            gfx::ShaderDesc desc = {};
-            gfx::rhi::VertexShaderRuntimeCompileParams& vs_params = desc.vs_params;
-            gfx::rhi::PixelShaderRuntimeCompileParams& ps_params = desc.ps_params;
-            vs_params.attribs = attribs_color3d_skinned;
-            vs_params.attrib_count = countof(attribs_color3d_skinned);
-            POPULATE_VSSHADER_PARAMS(vs_params, gfx::shaders::vs_color3d_skinned_base)
-            POPULATE_PSSHADER_PARAMS(ps_params, gfx::shaders::ps_color3d_unlit)
-            desc.textureBindings = nullptr;
-            desc.textureBinding_count = 0;
-            desc.bufferBindings = bufferBindings_skinned_untextured_base;
-            desc.bufferBinding_count = countof(bufferBindings_skinned_untextured_base);
-            renderer::ReloadableShader& shader =
-                renderCore.shaders[renderer::ShaderTechniques::Color3DSkinned];
-            gfx::compile_shader(shader.shader, desc);
-            LOAD_SHADER_PARAMS(shader);
-        }
-        {
-            gfx::ShaderDesc desc = {};
-            gfx::rhi::VertexShaderRuntimeCompileParams& vs_params = desc.vs_params;
-            gfx::rhi::PixelShaderRuntimeCompileParams& ps_params = desc.ps_params;
-            vs_params.attribs = attribs_textured3d;
-            vs_params.attrib_count = countof(attribs_textured3d);
-            POPULATE_VSSHADER_PARAMS(vs_params, gfx::shaders::vs_textured3d_base)
-            POPULATE_PSSHADER_PARAMS(ps_params, gfx::shaders::ps_textured3d_base)
-            desc.textureBindings = textureBindings_base;
-            desc.textureBinding_count = countof(textureBindings_base);
-            desc.bufferBindings = bufferBindings_textured_base;
-            desc.bufferBinding_count = countof(bufferBindings_textured_base);
-            renderer::ReloadableShader& shader =
-                renderCore.shaders[renderer::ShaderTechniques::Textured3D];
-            gfx::compile_shader(shader.shader, desc);
-            LOAD_SHADER_PARAMS(shader);
-        }
-        {
-            gfx::ShaderDesc desc = {};
-            gfx::rhi::VertexShaderRuntimeCompileParams& vs_params = desc.vs_params;
-            gfx::rhi::PixelShaderRuntimeCompileParams& ps_params = desc.ps_params;
-            vs_params.attribs = attribs_textured3d;
-            vs_params.attrib_count = countof(attribs_textured3d);
-            POPULATE_VSSHADER_PARAMS(vs_params, gfx::shaders::vs_textured3d_base)
-            POPULATE_PSSHADER_PARAMS(ps_params, gfx::shaders::ps_textured3dalphaclip_base)
-            desc.textureBindings = textureBindings_base;
-            desc.textureBinding_count = countof(textureBindings_base);
-            desc.bufferBindings = bufferBindings_textured_base;
-            desc.bufferBinding_count = countof(bufferBindings_textured_base);
-            renderer::ReloadableShader& shader =
-                renderCore.shaders[renderer::ShaderTechniques::Textured3DAlphaClip];
-            gfx::compile_shader(shader.shader, desc);
-            LOAD_SHADER_PARAMS(shader);
-        }
-        {
-            gfx::ShaderDesc desc = {};
-            gfx::rhi::VertexShaderRuntimeCompileParams& vs_params = desc.vs_params;
-            gfx::rhi::PixelShaderRuntimeCompileParams& ps_params = desc.ps_params;
-            vs_params.attribs = attribs_textured3d_skinned;
-            vs_params.attrib_count = countof(attribs_textured3d_skinned);
-            POPULATE_VSSHADER_PARAMS(vs_params, gfx::shaders::vs_textured3d_skinned_base)
-            POPULATE_PSSHADER_PARAMS(ps_params, gfx::shaders::ps_textured3d_base)
-            desc.textureBindings = textureBindings_base;
-            desc.textureBinding_count = countof(textureBindings_base);
-            desc.bufferBindings = bufferBindings_skinned_textured_base;
-            desc.bufferBinding_count = countof(bufferBindings_skinned_textured_base);
-            renderer::ReloadableShader& shader =
-                renderCore.shaders[renderer::ShaderTechniques::Textured3DSkinned];
-            gfx::compile_shader(shader.shader, desc);
-            LOAD_SHADER_PARAMS(shader);
-        }
-        {
-            gfx::ShaderDesc desc = {};
-            gfx::rhi::VertexShaderRuntimeCompileParams& vs_params = desc.vs_params;
-            gfx::rhi::PixelShaderRuntimeCompileParams& ps_params = desc.ps_params;
-            vs_params.attribs = attribs_textured3d_skinned;
-            vs_params.attrib_count = countof(attribs_textured3d_skinned);
-            POPULATE_VSSHADER_PARAMS(vs_params, gfx::shaders::vs_textured3d_skinned_base)
-            POPULATE_PSSHADER_PARAMS(ps_params, gfx::shaders::ps_textured3dalphaclip_base)
-            desc.textureBindings = textureBindings_base;
-            desc.textureBinding_count = countof(textureBindings_base);
-            desc.bufferBindings = bufferBindings_skinned_textured_base;
-            desc.bufferBinding_count = countof(bufferBindings_skinned_textured_base);
-            renderer::ReloadableShader& shader =
-                renderCore.shaders[renderer::ShaderTechniques::Textured3DAlphaClipSkinned];
-            gfx::compile_shader(shader.shader, desc);
-            LOAD_SHADER_PARAMS(shader);
-        }
-    }
+
+    LOAD_SHADER(
+        gfx::shaders::vs_fullscreen_bufferless_clear_blit,
+        gfx::shaders::ps_fullscreen_blit_clear_colored,
+        renderer::ShaderPrograms::FullscreenBlitClearColor,
+        attribs_3d, bufferBindings_blit_clear_color, textureBindings_null);
+    LOAD_SHADER(
+        gfx::shaders::vs_fullscreen_bufferless_textured_blit,
+        gfx::shaders::ps_fullscreen_blit_sdf,
+        renderer::ShaderPrograms::FullscreenBlitSDFScene,
+        attribs_3d, bufferBindings_blit_sdf, textureBindings_null);
+    LOAD_SHADER(
+        gfx::shaders::vs_fullscreen_bufferless_textured_blit,
+        gfx::shaders::ps_fullscreen_blit_textured,
+        renderer::ShaderPrograms::FullscreenBlitTextured,
+        attribs_textured3d, bufferBindings_null, textureBindings_fullscreenblit);
+    LOAD_SHADER(
+        gfx::shaders::vs_fullscreen_bufferless_textured_blit,
+        gfx::shaders::ps_fullscreen_blit_textured_depth,
+        renderer::ShaderPrograms::FullscreenBlitTexturedDepth,
+        attribs_textured3d, bufferBindings_null, textureBindings_fullscreenblit_depth);
+    LOAD_SHADER(
+        gfx::shaders::vs_color2d_base,
+        gfx::shaders::ps_color3d_unlit,
+        renderer::ShaderPrograms::DefaultColor2D,
+        attribs_2d, bufferBindings_untextured_base, textureBindings_null);
+    LOAD_SHADER(
+        gfx::shaders::vs_3d_instanced_base,
+        gfx::shaders::ps_color3d_unlit,
+        renderer::ShaderPrograms::DefaultInstanced3D,
+        attribs_3d, bufferBindings_instanced_base, textureBindings_null);
+    LOAD_SHADER(
+        gfx::shaders::vs_color3d_base,
+        gfx::shaders::ps_color3d_unlit,
+        renderer::ShaderPrograms::DefaultColor3D,
+        attribs_color3d, bufferBindings_untextured_base, textureBindings_null);
+    LOAD_SHADER(
+        gfx::shaders::vs_color3d_skinned_base,
+        gfx::shaders::ps_color3d_unlit,
+        renderer::ShaderPrograms::DefaultColor3DSkinned,
+        attribs_color3d_skinned, bufferBindings_skinned_untextured_base, textureBindings_null);
+    LOAD_SHADER(
+        gfx::shaders::vs_textured3d_base,
+        gfx::shaders::ps_textured3d_base,
+        renderer::ShaderPrograms::DefaultTextured3D,
+        attribs_textured3d, bufferBindings_textured_base, textureBindings_base);
+    LOAD_SHADER(
+        gfx::shaders::vs_textured3d_base,
+        gfx::shaders::ps_textured3dalphaclip_base,
+        renderer::ShaderPrograms::DefaultTextured3DAlphaClip,
+        attribs_textured3d, bufferBindings_textured_base, textureBindings_base);
+    LOAD_SHADER(
+        gfx::shaders::vs_textured3d_skinned_base,
+        gfx::shaders::ps_textured3d_base,
+        renderer::ShaderPrograms::DefaultTextured3DSkinned,
+        attribs_textured3d_skinned, bufferBindings_skinned_textured_base, textureBindings_base);
+    LOAD_SHADER(
+        gfx::shaders::vs_textured3d_skinned_base,
+        gfx::shaders::ps_textured3dalphaclip_base,
+        renderer::ShaderPrograms::DefaultTextured3DAlphaClipSkinned,
+        attribs_textured3d_skinned, bufferBindings_skinned_textured_base, textureBindings_base);
+
+    // todo: actually implement alpha
+    renderCore.shaderTechniques[renderer::ShaderTechnique::Instanced] = { { renderer::ShaderPrograms::DefaultInstanced3D, renderer::ShaderPrograms::DefaultInstanced3D } };
+    renderCore.shaderTechniques[renderer::ShaderTechnique::VertexColor] = { { renderer::ShaderPrograms::DefaultColor3D, renderer::ShaderPrograms::DefaultColor3D } };
+    renderCore.shaderTechniques[renderer::ShaderTechnique::VertexColorSkinned] = { { renderer::ShaderPrograms::DefaultColor3DSkinned, renderer::ShaderPrograms::DefaultColor3DSkinned } };
+    renderCore.shaderTechniques[renderer::ShaderTechnique::Diffuse] = { { renderer::ShaderPrograms::DefaultTextured3D, renderer::ShaderPrograms::DefaultTextured3DAlphaClip } };
+    renderCore.shaderTechniques[renderer::ShaderTechnique::DiffuseSkinned] = { { renderer::ShaderPrograms::DefaultTextured3DSkinned,renderer::ShaderPrograms::DefaultTextured3DAlphaClipSkinned } };
+    renderCore.shaderTechniques[renderer::ShaderTechnique::CutoutDiffuse] = { { renderer::ShaderPrograms::DefaultTextured3DAlphaClip, renderer::ShaderPrograms::DefaultTextured3DAlphaClip } };
+    renderCore.shaderTechniques[renderer::ShaderTechnique::CutoutDiffuseSkinned] = { { renderer::ShaderPrograms::DefaultTextured3DAlphaClipSkinned, renderer::ShaderPrograms::DefaultTextured3DAlphaClipSkinned } };
 
     allocator::PagedArena scratchArena = memory.scratchArena; // explicit copy
 
     fbx::PipelineAssetContext ctx = { scratchArena, persistentArena };
-    ctx.vertexAttrs[renderer::DrawlistStreams::Color3D]
+    ctx.vertexAttrs[renderer::ShaderTechnique::VertexColor]
 		= attribs_color3d;
-    ctx.attr_count[renderer::DrawlistStreams::Color3D]
+    ctx.attr_count[renderer::ShaderTechnique::VertexColor]
 		= countof(attribs_color3d);
-    ctx.vertexAttrs[renderer::DrawlistStreams::Color3DSkinned]
+    ctx.vertexAttrs[renderer::ShaderTechnique::VertexColorSkinned]
 		= attribs_color3d_skinned;
-    ctx.attr_count[renderer::DrawlistStreams::Color3DSkinned]
+    ctx.attr_count[renderer::ShaderTechnique::VertexColorSkinned]
 		= countof(attribs_color3d_skinned);
-    ctx.vertexAttrs[renderer::DrawlistStreams::Textured3D]
+    ctx.vertexAttrs[renderer::ShaderTechnique::Diffuse]
 		= attribs_textured3d;
-    ctx.attr_count[renderer::DrawlistStreams::Textured3D]
+    ctx.attr_count[renderer::ShaderTechnique::Diffuse]
 		= countof(attribs_textured3d);
-    ctx.vertexAttrs[renderer::DrawlistStreams::Textured3DAlphaClip]
+    ctx.vertexAttrs[renderer::ShaderTechnique::CutoutDiffuse]
 		= attribs_textured3d;
-    ctx.attr_count[renderer::DrawlistStreams::Textured3DAlphaClip]
+    ctx.attr_count[renderer::ShaderTechnique::CutoutDiffuse]
 		= countof(attribs_textured3d);
-    ctx.vertexAttrs[renderer::DrawlistStreams::Textured3DSkinned]
+    ctx.vertexAttrs[renderer::ShaderTechnique::DiffuseSkinned]
 		= attribs_textured3d_skinned;
-    ctx.attr_count[renderer::DrawlistStreams::Textured3DSkinned]
+    ctx.attr_count[renderer::ShaderTechnique::DiffuseSkinned]
 		= countof(attribs_textured3d_skinned);
-    ctx.vertexAttrs[renderer::DrawlistStreams::Textured3DAlphaClipSkinned]
+    ctx.vertexAttrs[renderer::ShaderTechnique::CutoutDiffuseSkinned]
 		= attribs_textured3d_skinned;
-    ctx.attr_count[renderer::DrawlistStreams::Textured3DAlphaClipSkinned]
+    ctx.attr_count[renderer::ShaderTechnique::CutoutDiffuseSkinned]
 		= countof(attribs_textured3d_skinned);
     for (u32 asset_idx = 0; asset_idx < countof(assets); asset_idx++) {
 		ctx.scratchArena = scratchArena; // explicit copy
@@ -1796,7 +1653,7 @@ void load_coreResources(
     {
         renderer::DrawMesh& mesh = renderer::alloc_drawMesh(renderCore);
         mesh = {};
-        mesh.shaderTechnique = renderer::ShaderTechniques::Instanced3D;
+        mesh.shaderTechnique = renderer::ShaderTechnique::Instanced;
         gfx::UntexturedCube cube;
         gfx::create_cube_coords(
             (uintptr_t)cube.vertices, sizeof(cube.vertices[0]),
@@ -1811,7 +1668,7 @@ void load_coreResources(
     {
         renderer::DrawMesh& mesh = renderer::alloc_drawMesh(renderCore);
         mesh = {};
-        mesh.shaderTechnique = renderer::ShaderTechniques::Instanced3D;
+        mesh.shaderTechnique = renderer::ShaderTechnique::Instanced;
         gfx::UntexturedSphere sphere;
         gfx::create_sphere_coords(
             (uintptr_t)sphere.vertices, sizeof(sphere.vertices[0]),
@@ -1826,7 +1683,7 @@ void load_coreResources(
     {
         renderer::DrawMesh& mesh = renderer::alloc_drawMesh(renderCore);
         mesh = {};
-        mesh.shaderTechnique = renderer::ShaderTechniques::Color3D;
+        mesh.shaderTechnique = renderer::ShaderTechnique::VertexColor;
         f32 w = 30.f, h = 30.f;
         u32 c = Color32(0.13f, 0.51f, 0.23f, 1.f).ABGR();
         renderer::VertexLayout_Color_3D v[] = {
@@ -1869,8 +1726,17 @@ void load_coreResources(
         ground = {};
         ground.min = float3(-w, -h, 0.f);
         ground.max = float3(w, h, 0.f);
-        ground.meshHandles[0] = renderer::handle_from_drawMesh(renderCore, mesh);
+        ground.meshHandles[ground.meshCount++] = renderer::handle_from_drawMesh(renderCore, mesh);
         ground.skeleton.jointCount = 0;
+
+        for (u32 curr = 0; curr < bufferParams.indexCount; curr += 3) {
+            physics::StaticObject_Tri tri = {
+                v[i[curr + 2]].pos,
+                v[i[curr + 1]].pos,
+                v[i[curr + 0]].pos
+            };
+            physics::scene.tris[physics::scene.tri_count++] = tri;
+        }
     }
 
     // Hall of mirrors
@@ -1965,7 +1831,7 @@ void load_coreResources(
         // back mirror
         renderer::DrawMesh& mesh = renderer::alloc_drawMesh(renderCore);
         mesh = {};
-        mesh.shaderTechnique = renderer::ShaderTechniques::Color3D;
+        mesh.shaderTechnique = renderer::ShaderTechnique::VertexColor;
         bufferParams = {};
         bufferParams.vertexData = verticesBack;
         bufferParams.indexData = indicesBack;
@@ -1980,12 +1846,12 @@ void load_coreResources(
         gfx::rhi::create_indexed_vertex_buffer(
             mesh.vertexBuffer, bufferParams, attribs, countof(attribs));
 
-        game::AssetInMemory& ground = core.assets[game::Resources::AssetsMeta::BackMirrors];
-        ground = {};
-        ground.min = float3(-30.f, -30.f, 0.f);
-        ground.max = float3(30.f, 30.f, 0.f);
-        ground.meshHandles[0] = renderer::handle_from_drawMesh(renderCore, mesh);
-        ground.skeleton.jointCount = 0;
+        game::AssetInMemory& backMirrors = core.assets[game::Resources::AssetsMeta::BackMirrors];
+        backMirrors = {};
+        backMirrors.min = float3(-30.f, -30.f, 0.f);
+        backMirrors.max = float3(30.f, 30.f, 0.f);
+        backMirrors.meshHandles[backMirrors.meshCount++] = renderer::handle_from_drawMesh(renderCore, mesh);
+        backMirrors.skeleton.jointCount = 0;
     }
 
     // UI text
@@ -2107,94 +1973,84 @@ void spawn_scene_mirrorRoom(
 
     renderer::Scene& renderScene = scene.renderScene;
     animation::Scene& animScene = scene.animScene;
-    physics::Scene& physicsScene = scene.physicsScene;
+    physics::Scene& physicsScene = physics::scene;
 
     struct AssetData {
         game::Resources::AssetsMeta::Enum assetId;
         float3 asset_init_pos;
         u32 count;
+        renderer::DrawlistType::Enum drawlistType;
         bool player; // only first count
         bool physicsObstacle;
     };
     const AssetData assetDefs[] = {
-          { game::Resources::AssetsMeta::Bird, { 9.f, 6.f, 2.23879f }, 1, true, true }
-        , { game::Resources::AssetsMeta::Ground, { 0.f, 0.f, 0.f }, 1, false, false }
-        , { game::Resources::AssetsMeta::BackMirrors, { 0.f, 0.f, 0.f }, 1, false, false }
+          { game::Resources::AssetsMeta::Bird, { 9.f, 6.f, 2.23879f }, 1,
+            renderer::DrawlistType::AfterShadows, true, true }
+        , { game::Resources::AssetsMeta::Ground, { 0.f, 0.f, 0.f }, 1,
+            renderer::DrawlistType::BeforeShadows, false, false }
+        , { game::Resources::AssetsMeta::BackMirrors, { 0.f, 0.f, 0.f }, 1,
+            renderer::DrawlistType::BeforeShadows, false, false }
     };
 
-    size_t maxDrawNodes = countof(assetDefs); 
-    size_t maxInstancedNodes = game::Scene::InstancedTypes::Count; 
-    size_t cbufferCount = (maxDrawNodes + maxInstancedNodes) * 2;
+    size_t maxDrawables = math::max(countof(assetDefs), (size_t)1024);
+    size_t maxRenderData = 1024 * sizeof(float4x4);
+    size_t maxInstancedNodes = game::Scene::RenderedTypes::Count; 
+    size_t cbufferCount = (maxDrawables + maxInstancedNodes) * 2;
     size_t maxAnimNodes = countof(assetDefs);
     allocator::init_pool(renderScene.cbuffers, cbufferCount, sceneArena);
 	__DEBUGDEF(renderScene.cbuffers.name = "cbuffers";)
-    allocator::init_pool(renderScene.instancedDrawNodes, maxInstancedNodes, sceneArena);
-	__DEBUGDEF(renderScene.instancedDrawNodes.name = "instanced draw nodes";)
-    allocator::init_pool(renderScene.drawNodes, maxDrawNodes, sceneArena);
-	__DEBUGDEF(renderScene.drawNodes.name = "draw nodes";)
+    allocator::init_pool(renderScene.drawables, maxDrawables, sceneArena);
+	__DEBUGDEF(renderScene.drawables.name = "drawables";)
     allocator::init_pool(animScene.nodes, maxAnimNodes, sceneArena);
 	__DEBUGDEF(animScene.nodes.name = "anim nodes";)
 
     // physics
-    if (roomDef.physicsBalls)
-    {
-        struct BallAssets {
-            float3 position;
-            float radius;
-            float3 velocity;
-            float mass;
-        };
-        BallAssets ballAssets[8];
-        const f32 w = 30.f;
-        const f32 h = 30.f;
-        const f32 maxspeed = 20.f;
-        //physicsScene.dt = 1 / 60.f;
-        physicsScene.ball_count = 8;
-        physicsScene.bounds = float2(w, h);
-        physicsScene.restitution = 1.f;
-        const float origin_x = w - 5.f; const float origin_y = h - 5.f;
-        float2 positions[8] = {
-            float2(0.f, 1.f), float2(0.5f, 0.5f),
-            float2(1.f, 0.f), float2(0.5f, -0.5f),
-            float2(0.f, -1.f), float2(-0.5f, -0.5f),
-            float2(-1.f, 0.f), float2(-0.5f, 0.5f),
-        };
-        for (u32 i = 0; i < physicsScene.ball_count; i++) {
-            physics::DynamicObject_Sphere& ball = physicsScene.balls[i];
-            ball.radius = (math::rand() + 1.f) * 2.f;
-            ball.mass = math::pi32 * ball.radius * ball.radius;
-            const float2 pos_xy = math::scale(positions[i], float2(origin_x, origin_y));
-            ball.pos =
-                float3(pos_xy, ball.radius * 0.5f);
-            ball.vel =
-                float3(
-                    maxspeed * (-1.f + 2.f * math::rand()),
-                    maxspeed * (-1.f + 2.f * math::rand()),
-                    0.f);
-        }
-
-        renderer::DrawNodeInstanced& node = allocator::alloc_pool(renderScene.instancedDrawNodes);
-        node = {};
-        node.meshHandles[0] = core.instancedUnitSphereMesh;
-        math::identity4x4(*(Transform*)&(node.nodeData.worldMatrix));
-        node.nodeData.groupColor = Color32(0.72f, 0.74f, 0.12f, 1.f).RGBAv4();
-        node.instanceCount = physicsScene.ball_count;
-        gfx::rhi::RscCBuffer& cbuffercore = allocator::alloc_pool(renderScene.cbuffers);
-        node.cbuffer_node = handle_from_cbuffer(renderScene, cbuffercore);
-        gfx::rhi::create_cbuffer(cbuffercore, { sizeof(renderer::NodeData) });
-        gfx::rhi::RscCBuffer& cbufferinstances =
-            allocator::alloc_pool(renderScene.cbuffers);
-        node.cbuffer_instances =
-            handle_from_cbuffer(renderScene, cbufferinstances);
-        gfx::rhi::create_cbuffer(
-            cbufferinstances, { u32(sizeof(float4x4)) * physicsScene.ball_count });
-        for (u32 m = 0; m < countof(node.instanceMatrices.data); m++) {
-            float4x4& matrix = node.instanceMatrices.data[m];
-            math::identity4x4(*(Transform*)&(matrix));
-        }
-        scene.instancedNodesHandles[game::Scene::InstancedTypes::PhysicsBalls] =
-            handle_from_instanced_node(renderScene, node);
+    struct BallAssets {
+        float3 position;
+        float radius;
+        float3 velocity;
+        float mass;
+    };
+    physicsScene = {};
+    BallAssets ballAssets[8];
+    const f32 w = 30.f;
+    const f32 h = 30.f;
+    const f32 maxspeed = 20.f;
+    //physicsScene.dt = 1 / 60.f;
+    physicsScene.ball_count = 8;
+    physicsScene.bounds = float2(w, h);
+    physicsScene.restitution = 1.f;
+    const float origin_x = w - 5.f; const float origin_y = h - 5.f;
+    float2 positions[8] = {
+        float2(0.f, 1.f), float2(0.5f, 0.5f),
+        float2(1.f, 0.f), float2(0.5f, -0.5f),
+        float2(0.f, -1.f), float2(-0.5f, -0.5f),
+        float2(-1.f, 0.f), float2(-0.5f, 0.5f),
+    };
+    for (u32 i = 0; i < physicsScene.ball_count; i++) {
+        physics::DynamicObject_Sphere& ball = physicsScene.balls[i];
+        ball.radius = (math::rand() + 1.f) * 2.f;
+        ball.mass = math::pi32 * ball.radius * ball.radius;
+        const float2 pos_xy = math::scale(positions[i], float2(origin_x, origin_y));
+        ball.pos =
+            float3(pos_xy, ball.radius);
+        ball.vel =
+            float3(
+                maxspeed * (-1.f + 2.f * math::rand()),
+                maxspeed * (-1.f + 2.f * math::rand()),
+                0.f);
     }
+
+    u32 renderHandle, animHandle;
+    allocateDrawable(sceneArena, renderHandle, animHandle, scene, {
+            float3(-FLT_MAX), float3(FLT_MAX), // min/max
+            1, { core.instancedUnitSphereMesh }, // meshCount / mesh handles
+            {}, nullptr, 0, // animation data
+            physicsScene.ball_count // instances
+        },
+        float3(0.f), Color32(0.72f, 0.74f, 0.12f, 1.f), // spawn pos / color
+        renderer::DrawlistType::AfterShadows);
+    scene.renderHandles[game::Scene::RenderedTypes::PhysicsBalls] = renderHandle;
 
     for (u32 asset_idx = 0; asset_idx < countof(assetDefs); asset_idx++) {
         const AssetData& assetDef = assetDefs[asset_idx];
@@ -2216,16 +2072,18 @@ void spawn_scene_mirrorRoom(
 
             renderer::DrawNodeHandle renderHandle = {};
             animation::Handle animHandle = {};
-            spawnAsset(renderHandle, animHandle, scene, asset, asset_init_pos); 
+            allocateDrawable(
+                sceneArena, renderHandle, animHandle, scene, asset,
+                asset_init_pos, Color32(0xFFFFFF), assetDef.drawlistType);
 
             if (assetDef.player) {
                 scene.playerAnimatedNodeHandle = animHandle;
-                scene.playerDrawNodeHandle = renderHandle;
+                scene.renderHandles[game::Scene::RenderedTypes::Player] = renderHandle;
                 math::identity4x4(scene.player.transform);
                 scene.player.transform.pos = asset_init_pos;
             }
 
-            if (roomDef.physicsBalls && assetDef.physicsObstacle) {
+            if (assetDef.physicsObstacle) {
                 physics::StaticObject_Sphere& o =
                     physicsScene.obstacles[physicsScene.obstacle_count++];
                 o = {};
@@ -2236,7 +2094,7 @@ void spawn_scene_mirrorRoom(
                 o.radius = radius;
 
                 if (assetDef.player) {
-                    scene.playerPhysicsNodeHandle = physics::handleFromObject(o, physicsScene);
+                    scene.playerPhysicsNodeHandle = physics::handleFromObject(o);
                 }
             }
         }
@@ -2244,27 +2102,16 @@ void spawn_scene_mirrorRoom(
 
     // unit cubes behind player when running
     {
-        renderer::DrawNodeInstanced& node = allocator::alloc_pool(renderScene.instancedDrawNodes);
-        node = {};
-		node.meshHandles[0] = core.instancedUnitCubeMesh;
-        math::identity4x4(*(Transform*)&(node.nodeData.worldMatrix));
-        node.nodeData.groupColor = Color32(0.68f, 0.69f, 0.71f, 1.f).RGBAv4();
-        node.instanceCount = 4;
-        gfx::rhi::RscCBuffer& cbuffercore = allocator::alloc_pool(renderScene.cbuffers);
-        node.cbuffer_node = handle_from_cbuffer(renderScene, cbuffercore);
-        gfx::rhi::create_cbuffer(cbuffercore, { sizeof(renderer::NodeData) });
-        gfx::rhi::RscCBuffer& cbufferinstances =
-            allocator::alloc_pool(renderScene.cbuffers);
-        node.cbuffer_instances = handle_from_cbuffer(renderScene, cbufferinstances);
-        gfx::rhi::create_cbuffer(
-            cbufferinstances,
-            { (u32) sizeof(float4x4) * node.instanceCount });
-        for (u32 m = 0; m < countof(node.instanceMatrices.data); m++) {
-            float4x4& matrix = node.instanceMatrices.data[m];
-            math::identity4x4(*(Transform*)&(matrix));
-        }
-        scene.instancedNodesHandles[game::Scene::InstancedTypes::PlayerTrail] =
-            handle_from_instanced_node(renderScene, node);
+        u32 renderHandle, animHandle;
+        allocateDrawable(sceneArena, renderHandle, animHandle, scene, {
+            float3(-FLT_MAX), float3(FLT_MAX), // min/max
+            1, { core.instancedUnitCubeMesh }, // meshCount / mesh handles
+            {}, nullptr, 0, // animation data
+            4 // instances
+            },
+            float3(0.f), Color32(0.68f, 0.69f, 0.71f, 1.f), // spawn pos / color
+            renderer::DrawlistType::AfterShadows);
+        scene.renderHandles[game::Scene::RenderedTypes::PlayerTrail] = renderHandle;
     }
 
     // instanced bars around scene
@@ -2286,10 +2133,12 @@ void spawn_scene_mirrorRoom(
         {
             u32 prev = countof(ground) - 1;
             for (u32 i = 0; i < countof(ground); i++) {
-                physics::StaticObject_Line& wall = physicsScene.walls[physicsScene.wall_count++];
+                physics::StaticObject_Wall& wall = physicsScene.walls[physicsScene.wall_count++];
                 wall = {};
-                wall.start = float3(ground[prev], 0.f);
-                wall.end = float3(ground[i], 0.f);
+                float3 ab = float3(math::subtract(ground[i], ground[prev]), 0.f);
+                float3 normal = math::normalize(float3(-ab.y, ab.x, ab.z));
+                wall.plane.xyz = normal;
+                wall.plane.w = -math::dot(normal, float3(ground[i], 0.f));
 
                 prev = i;
             }
@@ -2297,27 +2146,18 @@ void spawn_scene_mirrorRoom(
 
         // render setup
         {
-            renderer::DrawNodeInstanced& node = allocator::alloc_pool(renderScene.instancedDrawNodes);
-            node = {};
-            node.meshHandles[0] = core.instancedUnitCubeMesh;
-            math::identity4x4(*(Transform*)&(node.nodeData.worldMatrix));
-            node.nodeData.groupColor = Color32(0.82f, 0.64f, 0.12f, 1.f).RGBAv4();
-            node.instanceCount = 2 * game::Resources::MirrorHallMeta::Count + 1;
-            gfx::rhi::RscCBuffer& cbuffercore = allocator::alloc_pool(renderScene.cbuffers);
-            node.cbuffer_node = handle_from_cbuffer(renderScene, cbuffercore);
-            gfx::rhi::create_cbuffer(cbuffercore, { sizeof(renderer::NodeData) });
-            gfx::rhi::RscCBuffer& cbufferinstances =
-                allocator::alloc_pool(renderScene.cbuffers);
-            node.cbuffer_instances = handle_from_cbuffer(renderScene, cbufferinstances);
-            gfx::rhi::create_cbuffer(
-                cbufferinstances,
-                { (u32)sizeof(float4x4) * node.instanceCount });
+            u32 renderHandle, animHandle;
+            renderer::Drawable& drawable = allocateDrawable(
+                sceneArena, renderHandle, animHandle, scene, {
+                    float3(-FLT_MAX), float3(FLT_MAX), // min/max
+                    1, { core.instancedUnitCubeMesh }, // meshCount / mesh handles
+                    {}, nullptr, 0, // animation data
+                    2 * game::Resources::MirrorHallMeta::Count + 1 // instances
+                },
+                float3(0.f), Color32(0.82f, 0.64f, 0.12f, 1.f), // spawn pos / color
+                renderer::DrawlistType::BeforeShadows);
 
-            // initialize whole buffer
-            for (u32 m = 0; m < countof(node.instanceMatrices.data); m++) {
-                float4x4& matrix = node.instanceMatrices.data[m];
-                math::identity4x4(*(Transform*)&(matrix));
-            }
+            float4x4* instancedMatrices = (float4x4*)drawable.ext_data;
             // set up the horizontal instances
             u32 maxBars = math::min(u32(game::Resources::MirrorHallMeta::Count), (u32)countof(ground));
             u32 prev = countof(ground) - 1;
@@ -2326,7 +2166,7 @@ void spawn_scene_mirrorRoom(
                 float3 segment = float3(math::subtract(ground[m], ground[prev]), 0.f);
                 float3 dir = math::invScale(segment, 2.f * width);
 
-                float4x4& matrix = node.instanceMatrices.data[m];
+                float4x4& matrix = instancedMatrices[m];
                 Transform& t = *(Transform*)&(matrix);
                 t.right = dir;
                 t.up = float3(0.f, 0.f, 1.f);
@@ -2348,7 +2188,7 @@ void spawn_scene_mirrorRoom(
                 float2 segment = math::subtract(ground[m], ground[prev]);
                 float3 columnDir = math::normalize(float3(math::add(segment, prevSegment), 0.f));
 
-                float4x4& matrix = node.instanceMatrices.data[m + maxBars];
+                float4x4& matrix = instancedMatrices[m + maxBars];
                 Transform& t = *(Transform*)&(matrix);
                 t.right = columnDir;
                 t.front = float3(-t.right.y, t.right.x, 0.f);
@@ -2362,8 +2202,7 @@ void spawn_scene_mirrorRoom(
                 prev = m;
                 prevSegment = segment;
             }
-            scene.instancedNodesHandles[game::Scene::InstancedTypes::SceneLimits] =
-                handle_from_instanced_node(renderScene, node);
+            gfx::rhi::update_cbuffer(cbuffer_from_handle(renderScene, drawable.cbuffer_ext), instancedMatrices);
         }
     }
 

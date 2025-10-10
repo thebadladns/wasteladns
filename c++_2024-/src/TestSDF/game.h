@@ -9,7 +9,7 @@ const size_t scratchArenaSize = 4 * 1024 * 1024;
 #if __DEBUG
 struct CameraNode;
 namespace debug {
-struct DebugMenus { enum Enum { Main, Arenas, Count }; };
+struct DebugMenus { enum Enum { Main, Arenas, Gamepads, Count }; };
 struct VisualizationModes { enum Enum { Physics, Culling, BVH, Count }; };
 bool visualizationModes[VisualizationModes::Count] = {};
 bool debugMenus[DebugMenus::Count] = { true, false };
@@ -25,6 +25,7 @@ EventText eventLabel = {};
 bool capture_cameras_next_frame = false;
 im::Pane debugPane;
 im::Pane arenasPane;
+im::Pane gamepadsPane;
 
 }
 #endif
@@ -159,6 +160,11 @@ void start(Instance& game, platform::GameConfig& config) {
     im::make_pane(
         debug::arenasPane, "ARENAS MENU",
         float2(0.f, game.resources.renderCore.windowProjection.config.top - im::ui.scale * 35));
+    im::make_pane(
+        debug::gamepadsPane, "GAMEPADS MENU",
+        float2(
+            game.resources.renderCore.windowProjection.config.right - im::ui.scale * 200,
+            game.resources.renderCore.windowProjection.config.top - im::ui.scale * 35));
 #endif
 }
 
@@ -245,6 +251,8 @@ void update(Instance& game, platform::GameConfig& config) {
 
             // enforce player movement
             {
+                physics::Scene& physicsScene = physics::scene;
+
                 Transform33 movementTransform = 
                     math::fromUpTowardsFront(
                         game.scene.player.transform.up, game.scene.camera.transform.front);
@@ -272,14 +280,14 @@ void update(Instance& game, platform::GameConfig& config) {
 
                 float3 pos = math::add(game.scene.player.transform.pos, desiredMovement);
                 u32 playerObstacleIndex = (game.scene.playerPhysicsNodeHandle) >> physics::ObjectType::Bits;
-                const float radius = game.scene.physicsScene.obstacles[playerObstacleIndex].radius;
+                const float radius = physicsScene.obstacles[playerObstacleIndex].radius;
 
                 // hack: update player movement in physics
-                for (u32 i = 0; i < game.scene.physicsScene.obstacle_count; i++) {
+                for (u32 i = 0; i < physicsScene.obstacle_count; i++) {
 
                     if (i == playerObstacleIndex) continue;
 
-                    physics::StaticObject_Sphere& o = game.scene.physicsScene.obstacles[i];
+                    physics::StaticObject_Sphere& o = physicsScene.obstacles[i];
                     float3 collisionDir = math::subtract(pos, o.pos);
                     collisionDir.z = 0.f;
                     f32 dist = math::mag(collisionDir);
@@ -288,34 +296,25 @@ void update(Instance& game, platform::GameConfig& config) {
                     f32 correction = radius + o.radius - dist;
                     pos = math::add(pos, math::scale(collisionDir, correction));
                 }
-                for (u32 i = 0; i < game.scene.physicsScene.wall_count; i++) {
+                for (u32 i = 0; i < physicsScene.wall_count; i++) {
 
-                    physics::StaticObject_Line& w = game.scene.physicsScene.walls[i];
+                    physics::StaticObject_Wall& w = physicsScene.walls[i];
 
                     // distance to wall
-                    float3 ab = math::subtract(w.end, w.start);
-                    f32 t = math::max(0.f,
-                        math::min(1.f,
-                            (math::dot(math::subtract(pos, w.start), ab)) / math::dot(ab, ab)));
-                    float3 col = math::add(w.start, math::scale(ab, t));
-                    float3 d = math::subtract(pos, col);
-                    d.z = 0.f;
-                    f32 dist = math::mag(d);
-                    float3 normal(-ab.y, ab.x, ab.z);
+                    f32 dist = w.plane.w + math::dot(pos, w.plane.xyz);
+                    float3 normal = w.plane.xyz;
+                    normal.z = 0.f;
 
                     // push out
-                    if (dist == 0.f) {
-                        d = normal;
-                        dist = math::mag(normal);
-                    }
-                    d = math::invScale(d, dist);
-                    if (math::dot(d, normal) >= 0.f) { // outside the wall
+                    float3 d = normal;
+                    if (dist >= 0.f) { // outside the wall
                         if (dist > radius) continue;
                         pos = math::add(pos, math::scale(d, radius - dist));
                     }
                     else { // inside the wall
                         pos = math::add(pos, math::scale(d, -(radius + dist)));
                     }
+
                 }
 
                 if (game.scene.player.control.mag > math::eps32) {
@@ -333,7 +332,8 @@ void update(Instance& game, platform::GameConfig& config) {
 
 
             // update player render
-            renderer::NodeData& nodeData = renderer::node_from_handle(game.scene.renderScene, game.scene.playerDrawNodeHandle).nodeData;
+            renderer::CBufferNodeData& nodeData =
+                renderer::drawable_from_handle(game.scene.renderScene, game.scene.renderHandles[Scene::RenderedTypes::Player]).nodeData;
             nodeData.worldMatrix = game.scene.player.transform.matrix;
 
             { // animation hack
@@ -396,13 +396,11 @@ void update(Instance& game, platform::GameConfig& config) {
                 }
 
                 // dust particles hack
-                renderer::Matrices64* instance_matrices;
-                u32* instance_count;
-                renderer::instanced_node_from_handle(
-                        instance_matrices, instance_count,
+                renderer::Drawable& drawable = renderer::drawable_from_handle(
                         game.scene.renderScene,
-                        game.scene.instancedNodesHandles[Scene::InstancedTypes::PlayerTrail]);
-                for (u32 i = 0; i < *instance_count; i++) {
+                        game.scene.renderHandles[Scene::RenderedTypes::PlayerTrail]);
+                float4x4* instancedMatrices = (float4x4*)drawable.ext_data;
+                for (u32 i = 0; i < drawable.instanceCount; i++) {
 
                     const f32 scaley = particle_scaley;
                     const f32 scalez = particle_scalez;
@@ -425,30 +423,34 @@ void update(Instance& game, platform::GameConfig& config) {
                     t.matrix.col1 = math::scale(t.matrix.col1, scale);
                     t.matrix.col2 = math::scale(t.matrix.col2, scale);
 
-                    instance_matrices->data[i] = t.matrix;
+                    instancedMatrices[i] = t.matrix;
                 }
             }
         }
 
         // physics update
-        if (game.scene.instancedNodesHandles[Scene::InstancedTypes::PhysicsBalls])
+        if (game.scene.renderHandles[Scene::RenderedTypes::PhysicsBalls])
         {
+            physics::Scene& physicsScene = physics::scene;
+
             physics::updatePositionFromHandle(
-                game.scene.physicsScene,
                 game.scene.playerPhysicsNodeHandle,
                 game.scene.player.transform.pos, (f32)game.time.lastFrameDelta);
 
-            physics::updatePhysics(game.scene.physicsScene, dt);
+            physics::updatePhysics(dt);
 
             // update draw positions
-            renderer::Matrices64* instance_matrices; u32* instance_count;
-            renderer::instanced_node_from_handle(instance_matrices, instance_count, game.scene.renderScene, game.scene.instancedNodesHandles[Scene::InstancedTypes::PhysicsBalls]);
-            for (u32 i = 0; i < *instance_count; i++) {
-                float4x4& m = instance_matrices->data[i];
-                m.col3.xyz = game.scene.physicsScene.balls[i].pos;
-                m.col0.x = game.scene.physicsScene.balls[i].radius;
-                m.col1.y = game.scene.physicsScene.balls[i].radius;
-                m.col2.z = game.scene.physicsScene.balls[i].radius;
+            renderer::Drawable& drawable = renderer::drawable_from_handle(
+                game.scene.renderScene,
+                game.scene.renderHandles[Scene::RenderedTypes::PhysicsBalls]);
+
+            float4x4* instancedMatrices = (float4x4*)drawable.ext_data;
+            for (u32 i = 0; i < drawable.instanceCount; i++) {
+                float4x4& m = instancedMatrices[i];
+                m.col3.xyz = physicsScene.balls[i].pos;
+                m.col0.x = physicsScene.balls[i].radius;
+                m.col1.y = physicsScene.balls[i].radius;
+                m.col2.z = physicsScene.balls[i].radius;
             }
         }
 
@@ -460,10 +462,10 @@ void update(Instance& game, platform::GameConfig& config) {
 
         // camera update
         {
+            game::orbitInputFromPad(game.scene.orbitCamera, platform::state.input.pads[0]);
             bool mousecontrols = true;
             __DEBUGDEF(mousecontrols = !im::is_mouse_captured();)
             if (mousecontrols) {
-                game::orbitInputFromPad(game.scene.orbitCamera, platform::state.input.pads[0]);
                 game::orbitInputFromMouse(game.scene.orbitCamera, platform::state.input.mouse);
             }
             game::updateOrbit(game.scene.camera.transform, game.scene.orbitCamera);
@@ -543,12 +545,12 @@ void update(Instance& game, platform::GameConfig& config) {
 
                 // figure out which nodes are visible among all of the visibility lists
                 u32* isEachNodeVisible =
-                    ALLOC_ARRAY(game.memory.frameArena, u32, scene.drawNodes.count);
-                memset(isEachNodeVisible, 0, scene.drawNodes.count * sizeof(bool));
+                    ALLOC_ARRAY(game.memory.frameArena, u32, scene.drawables.count);
+                memset(isEachNodeVisible, 0, scene.drawables.count * sizeof(bool));
                 visibleNodesTree = // todo: in function??
                     ALLOC_ARRAY(game.memory.frameArena, VisibleNodes, numCameras);
                 visibleNodesTree[0].visible_nodes =
-                    ALLOC_ARRAY(game.memory.frameArena, u32, scene.drawNodes.count);
+                    ALLOC_ARRAY(game.memory.frameArena, u32, scene.drawables.count);
                 visibleNodesTree[0].visible_nodes_count = 0;
                 renderer::CullEntries cullEntries = {};
                 allocCullEntries(scratchArena, cullEntries, scene);
@@ -560,12 +562,13 @@ void update(Instance& game, platform::GameConfig& config) {
                         cameraTree[i].frustum, cullEntries);
                 }
                 
-                // update cbuffers of all visible nodes
-                for (u32 n = 0, count = 0; n < scene.drawNodes.cap && count < scene.drawNodes.count; n++) {
-                    if (scene.drawNodes.data[n].alive == 0) { continue; }
+                // update all visible nodes cbuffers
+                for (u32 n = 0, count = 0; n < scene.drawables.cap && count < scene.drawables.count; n++) {
+                    if (scene.drawables.data[n].alive == 0) { continue; }
                     count++;
                     if (!isEachNodeVisible[n]) { continue; }
-                    const DrawNode& node = scene.drawNodes.data[n].state.live;
+
+                    Drawable& node = scene.drawables.data[n].state.live;
                     gfx::rhi::update_cbuffer(
                             cbuffer_from_handle(scene, node.cbuffer_node),
                             &node.nodeData);
@@ -575,16 +578,35 @@ void update(Instance& game, platform::GameConfig& config) {
                                 node.ext_data);
                     }
                 }
-                for (u32 n = 0, count = 0; n < scene.instancedDrawNodes.cap && count < scene.instancedDrawNodes.count; n++) {
-                    if (scene.instancedDrawNodes.data[n].alive == 0) { continue; }
+
+                // update all visible nodes physics properties
+                for (u32 n = 0, count = 0; n < scene.drawables.cap && count < scene.drawables.count; n++) {
+                    if (scene.drawables.data[n].alive == 0) { continue; }
                     count++;
-                    const DrawNodeInstanced& node = scene.instancedDrawNodes.data[n].state.live;
+                    if (!isEachNodeVisible[n]) { continue; }
+
+                    Drawable& node = scene.drawables.data[n].state.live;
                     gfx::rhi::update_cbuffer(
-                            cbuffer_from_handle(scene, node.cbuffer_node),
-                            &node.nodeData);
-                    gfx::rhi::update_cbuffer(
-                            cbuffer_from_handle(scene, node.cbuffer_instances),
-                            &node.instanceMatrices);
+                        cbuffer_from_handle(scene, node.cbuffer_node),
+                        &node.nodeData);
+                    if (node.cbuffer_ext) {
+                        gfx::rhi::update_cbuffer(
+                            cbuffer_from_handle(scene, node.cbuffer_ext),
+                            node.ext_data);
+                    }
+
+                    // ground z, if they cast shadows (maybe should done before this)
+                    float3 sundir(0.f, -1.f, -1.f);
+                    sundir = math::scale(sundir, 1000.f);
+                    if (node.drawlistType == renderer::DrawlistType::AfterShadows) {
+                        // todo: handle instances
+                        physics::RaycastResult result = physics::raycast(
+                            node.nodeData.worldMatrix.col3.xyz,
+                            math::add(node.nodeData.worldMatrix.col3.xyz, sundir));
+                        if (result.valid) {
+                            node.shadowpos = result.hitpos;
+                        }
+                    }
                 }
             }
 
@@ -650,9 +672,7 @@ void update(Instance& game, platform::GameConfig& config) {
                         const DrawNode n = nodeStack[--stackCount];
                         const bvh::Node& node = bvh.nodes[n.nodeid];
                         if (n.depth == debug::bvhDepth || node.isLeaf) {
-                            float3 min, max;
-                            bvh::ymm_to_minmax(
-                                min, max, node.xcoords_256, node.ycoords_256, node.zcoords_256);
+                            float3 min = node.min, max = node.max;
                             float3 center = math::scale(math::add(min, max), 0.5f);
                             float3 scale = math::scale(math::subtract(max, min), 0.5f);
                             allocator::push(aabbs, scratchArena) = { center, scale };
@@ -671,7 +691,7 @@ void update(Instance& game, platform::GameConfig& config) {
                     gfx::rhi::RscCBuffer& instanced_cbuffer =
                         renderCore.cbuffers[renderer::CoreResources::CBuffersMeta::Instances64];
 
-                    renderer::NodeData nodeColor = {};
+                    renderer::CBufferNodeData nodeColor = {};
                     math::identity4x4(*(Transform*)&nodeColor.worldMatrix);
                     nodeColor.groupColor = Color32(0.4f, 0.54f, 1.f, 0.3f).RGBAv4();
                     gfx::rhi::update_cbuffer(node_cbuffer, &nodeColor);
@@ -682,12 +702,16 @@ void update(Instance& game, platform::GameConfig& config) {
                         renderer::drawMesh_from_handle(
                             renderCore, game.resources.instancedUnitCubeMesh);
 
+                    gfx::rhi::RscShaderSet& shader =
+                        renderCore.shaderPrograms[
+                            renderCore.shaderTechniques[drawMesh.shaderTechnique]
+                                .shaders[renderer::DrawType::Default]
+                        ].shader;
                     gfx::rhi::bind_DS(renderCore.depthStateOn);
-                    gfx::rhi::bind_shader(renderCore.shaders[drawMesh.shaderTechnique].shader);
+                    gfx::rhi::bind_shader(shader);
                     gfx::rhi::bind_RS(renderCore.rasterizerStateLine);
                     gfx::rhi::bind_indexed_vertex_buffer(drawMesh.vertexBuffer);
-                    gfx::rhi::bind_cbuffers(
-                        renderCore.shaders[drawMesh.shaderTechnique].shader, cbuffers, countof(cbuffers));
+                    gfx::rhi::bind_cbuffers(shader, cbuffers, countof(cbuffers));
 
                     // round up, the last block will have less than or equal max elems
                     u32 blockCount = ((u32)aabbs.len + 64 - 1) / 64;
@@ -696,7 +720,7 @@ void update(Instance& game, platform::GameConfig& config) {
                         u32 end = math::min(begin + 64, (u32)aabbs.len);
 
                         u32 bufferId = 0;
-                        renderer::Matrices64 matrices = {};
+                        float4x4 matrices[64] = {};
                         for (u32 i = begin; i < end; i++) {
                             Transform t;
                             math::identity4x4(t);
@@ -704,7 +728,7 @@ void update(Instance& game, platform::GameConfig& config) {
                             t.matrix.col0.x = aabbs.data[i].scale.x;
                             t.matrix.col1.y = aabbs.data[i].scale.y;
                             t.matrix.col2.z = aabbs.data[i].scale.z;
-                            matrices.data[bufferId++] = t.matrix;
+                            matrices[bufferId++] = t.matrix;
                         }
                         gfx::rhi::update_cbuffer(instanced_cbuffer, &matrices);
                         gfx::rhi::draw_instances_indexed_vertex_buffer(
@@ -717,16 +741,40 @@ void update(Instance& game, platform::GameConfig& config) {
                 }
                 gfx::rhi::end_event();
             }
-
             
             if (debug::visualizationModes[debug::VisualizationModes::Physics]) {
-                physics::Scene& pScene = game.scene.physicsScene;
+                physics::Scene& pScene = physics::scene;
                 for (u32 i = 0; i < pScene.wall_count; i++) {
-                    im::segment(pScene.walls[i].start, pScene.walls[i].end, Color32(1.f, 1.f, 1.f, 1.f));
+                    im::plane(pScene.walls[i].plane, Color32(1.f, 1.f, 1.f, 1.f));
                 }
                 for (u32 i = 0; i < pScene.obstacle_count; i++) {
                     im::sphere(pScene.obstacles[i].pos, pScene.obstacles[i].radius, Color32(1.f, 1.f, 1.f, 1.f));
                     im::sphere(pScene.obstacles[i].pos, pScene.obstacles[i].radius + 1.f, Color32(1.f, 1.f, 1.f, 0.25f));
+                }
+                for (u32 i = 0; i < pScene.ball_count; i++) {
+                    im::sphere(pScene.balls[i].pos, pScene.balls[i].radius, Color32(1.f, 1.f, 1.f, 1.f));
+                    im::sphere(pScene.balls[i].pos, pScene.balls[i].radius + 1.f, Color32(1.f, 1.f, 1.f, 0.25f));
+                }
+                for (u32 i = 0; i < pScene.tri_count; i++) {
+                    float3 poly[] = { pScene.tris[i].a, pScene.tris[i].b, pScene.tris[i].c };
+                    im::poly(poly, 3, Color32(1.f, 1.f, 1.f, 1.f));
+                }
+
+                {
+                    float3 pos = camera::screenPosToWorldPos(
+                        platform::state.input.mouse.x, platform::state.input.mouse.y,
+                        platform::state.screen.window_width, platform::state.screen.window_height,
+                        game.resources.renderCore.perspProjection.config, game.scene.camera.viewMatrix);
+                    float3 dir = math::normalize(math::subtract(pos, game.scene.camera.transform.pos));
+
+                    float3 end = math::add(pos, math::scale(dir, 200.f));
+                    physics::RaycastResult result = physics::raycast(pos, end);
+                    if (result.valid) {
+                        im::sphere(result.hitpos, 0.5f, Color32(1.f, 0.f, 0.f, 1.f));
+                        im::segment(
+                            result.hitpos, math::add(
+                                result.hitpos, math::scale(result.hitnormal, 5.f)), Color32(1.f, 0.f, 0.f, 1.f));
+                    }
                 }
             }
 
@@ -736,13 +784,13 @@ void update(Instance& game, platform::GameConfig& config) {
                 
                 if (debug::capturedCameras) {
                     allocator::PagedArena scratchArena = game.memory.scratchArenaRoot; // explicit copy
-                    u32* isEachNodeVisible = ALLOC_ARRAY(scratchArena, u32, scene.drawNodes.count);
-                    memset(isEachNodeVisible, 0, scene.drawNodes.count * sizeof(bool));
+                    u32* isEachNodeVisible = ALLOC_ARRAY(scratchArena, u32, scene.drawables.count);
+                    memset(isEachNodeVisible, 0, scene.drawables.count * sizeof(bool));
                     renderer::VisibleNodes visibleNodesDebug = {};
                     CameraNode& cameraNode = debug::capturedCameras[debug::debugCameraStage];
                     if (debug::debugCameraStage == 0) {
                         // render culled nodes
-                        visibleNodesDebug.visible_nodes = ALLOC_ARRAY(scratchArena, u32, scene.drawNodes.count);
+                        visibleNodesDebug.visible_nodes = ALLOC_ARRAY(scratchArena, u32, scene.drawables.count);
                         visibleNodesDebug.visible_nodes_count = 0;
                         float4x4 vpMatrix =
                             math::mult(cameraNode.projectionMatrix, cameraNode.viewMatrix);
@@ -794,7 +842,7 @@ void update(Instance& game, platform::GameConfig& config) {
                     }
                     for (u32 i = 0; i < visibleNodesDebug.visible_nodes_count; i++) {
                         u32 n = visibleNodesDebug.visible_nodes[i];
-                        const renderer::DrawNode& node = scene.drawNodes.data[n].state.live;
+                        const renderer::Drawable& node = scene.drawables.data[n].state.live;
                         im::obb(node.nodeData.worldMatrix, node.min, node.max, bbColor);
                     }
                 }
@@ -872,6 +920,8 @@ void update(Instance& game, platform::GameConfig& config) {
                     im::checkbox(
                         "Toggle memory arenas menu", &debug::debugMenus[debug::DebugMenus::Arenas]);
                     im::checkbox(
+                        "Toggle gamepads menu", &debug::debugMenus[debug::DebugMenus::Gamepads]);
+                    im::checkbox(
                         "Toggle BVH debugging",
                         &debug::visualizationModes[debug::VisualizationModes::BVH]);
                     if (debug::visualizationModes[debug::VisualizationModes::BVH]) {
@@ -927,45 +977,49 @@ void update(Instance& game, platform::GameConfig& config) {
                 }
                 im::pane_end();
             }
-            im::reset_frame();
 
-            // todo: retest with a pad
-            //if (debug::overlaymode == debug::OverlayMode::All
-            //    || debug::overlaymode == debug::OverlayMode::HelpOnly) {
-            //    for (u32 i = 0; i < platform::state.input.padCount; i++)
-            //    {
-            //        const ::input::gamepad::State& pad = platform::state.input.pads[i];
-            //        im::text2d(textParamsLeft, "Pad: %s", pad.name);
-            //        textParamsLeft.pos.y -= lineheight;
-            //        im::text2d(textParamsLeft
-            //            , "Pad: L:(%.3f,%.3f) R:(%.3f,%.3f) L2:%.3f R2:%.3f"
-            //            , pad.sliders[::input::gamepad::Sliders::AXIS_X_LEFT], pad.sliders[::input::gamepad::Sliders::AXIS_Y_LEFT]
-            //            , pad.sliders[::input::gamepad::Sliders::AXIS_X_RIGHT], pad.sliders[::input::gamepad::Sliders::AXIS_Y_RIGHT]
-            //            , pad.sliders[::input::gamepad::Sliders::TRIGGER_LEFT], pad.sliders[::input::gamepad::Sliders::TRIGGER_RIGHT]
-            //        );
+            if (debug::debugMenus[debug::DebugMenus::Gamepads])
+            {
+                im::pane_start(debug::gamepadsPane);
+                {
+                    for (u32 i = 0; i < platform::state.input.padCount; i++)
+                    {
+                        const ::input::gamepad::State& pad = platform::state.input.pads[i];
+                        im::label_format("Pad: %s", pad.name);
+                        im::label_format(
+                              "Pad: L:(%.3f,%.3f) R:(%.3f,%.3f) L2:%.3f R2:%.3f"
+                            , pad.sliders[::input::gamepad::Sliders::AXIS_X_LEFT]
+                            , pad.sliders[::input::gamepad::Sliders::AXIS_Y_LEFT]
+                            , pad.sliders[::input::gamepad::Sliders::AXIS_X_RIGHT]
+                            , pad.sliders[::input::gamepad::Sliders::AXIS_Y_RIGHT]
+                            , pad.sliders[::input::gamepad::Sliders::TRIGGER_LEFT]
+                            , pad.sliders[::input::gamepad::Sliders::TRIGGER_RIGHT]
+                        );
 
-            //        {
-            //            io::StrBuilder padStr{ appendBuff, sizeof(appendBuff) };
-            //            textParamsLeft.pos.y -= lineheight;
-            //            io::append(padStr.curr, padStr.last, "Keys: ");
-            //            const char* key_names[] = {
-            //                  "BUTTON_N", "BUTTON_S", "BUTTON_W", "BUTTON_E"
-            //                , "DPAD_UP", "DPAD_DOWN", "DPAD_LEFT", "DPAD_RIGHT"
-            //                , "START", "SELECT"
-            //                , "L1", "R1", "L2", "R2"
-            //                , "LEFT_THUMB", "RIGHT_THUMB"
-            //            };
-            //            for (u32 key = 0; key < ::input::gamepad::KeyMask::COUNT && !padStr.full(); key++) {
-            //                if (pad.down((::input::gamepad::KeyMask::Enum)(1 << key))) {
-            //                    io::append(
-            //                        padStr.curr, padStr.last, "%s ", key_names[key]);
-            //                }
-            //            }
-            //            im::text2d(textParamsLeft, padStr.str);
-            //            textParamsLeft.pos.y -= lineheight;
-            //        }
-            //    }
-            //}
+                        {
+                            char appendBuff[1024];
+                            io::StrBuilder padStr{ appendBuff, sizeof(appendBuff) };
+                            io::append(padStr.curr, padStr.last, "Keys: ");
+                            const char* key_names[] = {
+                                  "BUTTON_N", "BUTTON_S", "BUTTON_W", "BUTTON_E"
+                                , "DPAD_UP", "DPAD_DOWN", "DPAD_LEFT", "DPAD_RIGHT"
+                                , "START", "SELECT"
+                                , "L1", "R1", "L2", "R2"
+                                , "LEFT_THUMB", "RIGHT_THUMB"
+                            };
+                            for (u32 key = 0; key < ::input::gamepad::KeyMask::COUNT && !padStr.full(); key++) {
+                                if (pad.down((::input::gamepad::KeyMask::Enum)(1 << key))) {
+                                    io::append(
+                                        padStr.curr, padStr.last, "%s ", key_names[key]);
+                                }
+                            }
+                            im::label_format(padStr.str);
+                        }
+                    }
+                }
+                im::pane_end();
+
+            }
 
             if (debug::debugMenus[debug::DebugMenus::Arenas])
             {
@@ -1111,6 +1165,8 @@ void update(Instance& game, platform::GameConfig& config) {
                 im::pane_end();
             }
 
+            im::reset_frame();
+
             // event label
             if (debug::eventLabel.time != 0.f) {
 
@@ -1134,29 +1190,30 @@ void update(Instance& game, platform::GameConfig& config) {
 
                 bool outofdate = false;
                 const renderer::CoreResources& rsc = game.resources.renderCore;
-                for (u32 i = 0; i < renderer::ShaderTechniques::Count && !outofdate; i++) {
+                for (u32 i = 0; i < renderer::ShaderPrograms::Count && !outofdate; i++) {
                     struct stat binFile_lastModified;
                     char buff[1024];
                     errno_t err;
-                    io::format(buff, sizeof(buff), SRC_PATH_FROM_BIN"%s", rsc.shaders[i].vs_binFile);
+                    const renderer::ReloadableShader& shader = rsc.shaderPrograms[i];
+                    io::format(buff, sizeof(buff), SRC_PATH_FROM_BIN"%s", shader.vs_binFile);
                     err = stat(buff, &binFile_lastModified);
                     if (err == 0) {
                         struct stat srcFile_lastModified;
-                        io::format(buff, sizeof(buff), SRC_PATH_FROM_BIN"%s", rsc.shaders[i].vs_srcFile);
+                        io::format(buff, sizeof(buff), SRC_PATH_FROM_BIN"%s", shader.vs_srcFile);
                         err = stat(buff, &srcFile_lastModified);
                         if (err == 0 &&
-                            math::max(binFile_lastModified.st_mtime, rsc.shaders[i].vs_lastCompileTime) < srcFile_lastModified.st_mtime) {
+                            math::max(binFile_lastModified.st_mtime, shader.vs_lastCompileTime) < srcFile_lastModified.st_mtime) {
                             outofdate = true;
                         }
                     }
-                    io::format(buff, sizeof(buff), SRC_PATH_FROM_BIN"%s", rsc.shaders[i].ps_binFile);
+                    io::format(buff, sizeof(buff), SRC_PATH_FROM_BIN"%s", shader.ps_binFile);
                     err = stat(buff, &binFile_lastModified);
                     if (err == 0) {
                         struct stat srcFile_lastModified;
-                        io::format(buff, sizeof(buff), SRC_PATH_FROM_BIN"%s", rsc.shaders[i].ps_srcFile);
+                        io::format(buff, sizeof(buff), SRC_PATH_FROM_BIN"%s", shader.ps_srcFile);
                         err = stat(buff, &srcFile_lastModified);
                         if (err == 0 &&
-                            math::max(binFile_lastModified.st_mtime, rsc.shaders[i].ps_lastCompileTime) < srcFile_lastModified.st_mtime) {
+                            math::max(binFile_lastModified.st_mtime, shader.ps_lastCompileTime) < srcFile_lastModified.st_mtime) {
                             outofdate = true;
                         }
                     }
@@ -1195,10 +1252,10 @@ void update(Instance& game, platform::GameConfig& config) {
                 gfx::rhi::bind_RS( game.resources.renderCore.rasterizerStateFillFrontfaces);
                 gfx::rhi::bind_main_RT(game.resources.renderCore.windowRT);
 
-                gfx::rhi::bind_shader(game.resources.renderCore.shaders[renderer::ShaderTechniques::FullscreenBlitTextured].shader);
+                gfx::rhi::bind_shader(game.resources.renderCore.shaderPrograms[renderer::ShaderPrograms::FullscreenBlitTextured].shader);
                 gfx::rhi::RscTexture textures[] = {
                     game.resources.renderCore.gameRT.textures[0],
-                    //game.resources.renderCore.gameRT.depthStencil // todo: make work in opengl
+                    //game.resources.renderCore.gameRT.depthStencil
                 };
                 gfx::rhi::bind_textures(textures, countof(textures));
                 gfx::rhi::draw_fullscreen();
@@ -1229,20 +1286,20 @@ void update(Instance& game, platform::GameConfig& config) {
                 gfx::rhi::RscCBuffer& uitext_cbuffer =
                     rsc.cbuffers[renderer::CoreResources::CBuffersMeta::UIText];
 
-                renderer::SceneData cbufferPerScene;
+                renderer::CBufferSceneData cbufferPerScene;
                 cbufferPerScene.vpMatrix = rsc.windowProjection.matrix;
                 gfx::rhi::update_cbuffer(scene_cbuffer, &cbufferPerScene);
 
                 gfx::rhi::bind_RS(game.resources.renderCore.rasterizerStateFillFrontfaces);
                 gfx::rhi::bind_DS(game.resources.renderCore.depthStateOff);
 
-                gfx::rhi::bind_shader(rsc.shaders[renderer::ShaderTechniques::Color2D].shader);
+                gfx::rhi::bind_shader(rsc.shaderPrograms[renderer::ShaderPrograms::DefaultColor2D].shader);
                 gfx::rhi::RscCBuffer cbuffers[] = { scene_cbuffer, uitext_cbuffer };
-                gfx::rhi::bind_cbuffers(rsc.shaders[renderer::ShaderTechniques::Color2D].shader, cbuffers, 2);
+                gfx::rhi::bind_cbuffers(rsc.shaderPrograms[renderer::ShaderPrograms::DefaultColor2D].shader, cbuffers, 2);
                 
                 #if __DEBUG
                 {
-                    renderer::NodeData noteUItext = {};
+                    renderer::CBufferNodeData noteUItext = {};
                     noteUItext.groupColor =
                         platform::state.input.keyboard.pressed(input::TOGGLE_DEBUG) ?
                         float4(1.f, 0.f, 0.f, 1.f)
@@ -1255,7 +1312,7 @@ void update(Instance& game, platform::GameConfig& config) {
                 }
                 #endif
                 {
-                    renderer::NodeData noteUItext = {};
+                    renderer::CBufferNodeData noteUItext = {};
                     noteUItext.groupColor = float4(1.f, 1.f, 1.f, 1.f);
                     math::identity4x4(*(Transform*)&noteUItext.worldMatrix);
                     gfx::rhi::update_cbuffer(uitext_cbuffer, &noteUItext);
@@ -1264,7 +1321,7 @@ void update(Instance& game, platform::GameConfig& config) {
                     gfx::rhi::draw_indexed_vertex_buffer(game.resources.gpuBufferHeaderText);
                 }
                 {
-                    renderer::NodeData noteUItext = {};
+                    renderer::CBufferNodeData noteUItext = {};
                     noteUItext.groupColor =
                         (platform::state.input.mouse.scrolldy != 0) ?
                             float4(1.f, 0.f, 0.f, 1.f)
@@ -1276,7 +1333,7 @@ void update(Instance& game, platform::GameConfig& config) {
                     gfx::rhi::draw_indexed_vertex_buffer(game.resources.gpuBufferScaleText);
                 }
                 {
-                    renderer::NodeData noteUItext = {};
+                    renderer::CBufferNodeData noteUItext = {};
                     noteUItext.groupColor =
                         platform::state.input.mouse.down(::input::mouse::Keys::BUTTON_RIGHT) ?
                             float4(1.f, 0.f, 0.f, 1.f)
@@ -1288,7 +1345,7 @@ void update(Instance& game, platform::GameConfig& config) {
                     gfx::rhi::draw_indexed_vertex_buffer(game.resources.gpuBufferPanText);
                 }
                 {
-                    renderer::NodeData noteUItext = {};
+                    renderer::CBufferNodeData noteUItext = {};
                     noteUItext.groupColor =
                         platform::state.input.mouse.down(::input::mouse::Keys::BUTTON_LEFT) ?
                             float4(1.f, 0.f, 0.f, 1.f)

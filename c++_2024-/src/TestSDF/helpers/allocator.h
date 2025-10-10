@@ -47,6 +47,7 @@ void init_arena(PagedArena& arena, size_t capacity) {
     arena.highmark = nullptr;
 }
 void* alloc_arena(PagedArena& arena, ptrdiff_t size, ptrdiff_t align) {
+    assert(size > 0);
     assert((align & (align - 1)) == 0); // Alignment needs to be a power of two
     uintptr_t curr_aligned = ((uintptr_t)arena.curr + (align - 1)) & -align;
     uintptr_t end_aligned = curr_aligned + size;
@@ -153,6 +154,13 @@ struct Pool {
 	ptrdiff_t cap;
     ptrdiff_t count;
 };
+
+template<typename T>
+u32 get_pool_index(Pool<T>& pool, T& slot)
+{ return (u32)(((typename Pool<T>::Slot*)&slot) - pool.data); }
+template<typename T>
+T& get_pool_slot(Pool<T>& pool, const u32 index) { return pool.data[index].state.live; }
+
 template<typename T>
 void init_pool(Pool<T>& pool, ptrdiff_t cap, PagedArena& arena) {
 	typedef typename Pool<T>::Slot Slot;
@@ -182,11 +190,6 @@ void free_pool(Pool<T>& pool, T& slot) {
     pool.firstAvailable = (Slot*)slot;
 	pool.count--;
 }
-template<typename T>
-u32 get_pool_index(Pool<T>& pool, T& slot)
-{ return (u32)(((typename Pool<T>::Slot*)&slot) - pool.data); }
-template<typename T>
-T& get_pool_slot(Pool<T>& pool, const u32 index) { return pool.data[index].state.live; }
 
 }
 

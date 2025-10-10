@@ -15,9 +15,13 @@ namespace rhi { // render hardware interface
 
 enum class Type : u32 { Float }; // unused, compatibility-only
 enum class InternalTextureFormat : u32 {
-    V4_8 = DXGI_FORMAT_B8G8R8A8_UNORM, V316 = DXGI_FORMAT_R16G16B16A16_FLOAT };
+    B8G8R8A8_UNORM = DXGI_FORMAT_B8G8R8A8_UNORM,
+    R16G16B16A16_FLOAT = DXGI_FORMAT_R16G16B16A16_FLOAT,
+    R8_UNORM = DXGI_FORMAT_R8_UNORM };
 enum class TextureFormat : u32 {
-    V4_8 = DXGI_FORMAT_B8G8R8A8_UNORM, V4_16 = DXGI_FORMAT_R16G16B16A16_FLOAT };
+    B8G8R8A8_UNORM = DXGI_FORMAT_B8G8R8A8_UNORM,
+    R16G16B16A16_FLOAT = DXGI_FORMAT_R16G16B16A16_FLOAT,
+    R8_UNORM = DXGI_FORMAT_R8_UNORM };
 enum class RenderTargetClearFlags : u32 {
     Stencil = D3D11_CLEAR_STENCIL, Depth = D3D11_CLEAR_DEPTH, Color = 0x4L };
 enum class RenderTargetWriteMask : u32 {

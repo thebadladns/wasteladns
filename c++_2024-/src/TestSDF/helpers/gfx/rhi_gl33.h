@@ -16,8 +16,8 @@ namespace gfx {
 namespace rhi { // render hardware interface
 
 enum class Type : u32 { Float = GL_FLOAT };
-enum class InternalTextureFormat : u32 { V4_8 = GL_RGB8, V316 = GL_RGB16F };
-enum class TextureFormat : u32 { V4_8 = GL_RGB, V4_16 = GL_RGB };
+enum class InternalTextureFormat : u32 { B8G8R8A8_UNORM = GL_RGB8 };
+enum class TextureFormat : u32 { B8G8R8A8_UNORM = GL_RGB, R16G16B16A16_FLOAT = GL_RGB };
 enum class RenderTargetClearFlags : u32 {
     Stencil = GL_STENCIL_BUFFER_BIT, Depth = GL_DEPTH_BUFFER_BIT,
     Color = GL_COLOR_BUFFER_BIT };

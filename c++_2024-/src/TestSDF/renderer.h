@@ -3,6 +3,8 @@
 
 namespace renderer {
 
+// vertex input layouts
+
 struct VertexLayout_Color_2D { float2 pos; u32 color; };
 struct VertexLayout_Color_3D { float3 pos; u32 color; };
 struct VertexLayout_Textured_3D { float3 pos; float2 uv; };
@@ -18,12 +20,84 @@ struct VertexLayout_Textured_Skinned_3D {
     u8 joint_indices[4];
     u8 joint_weights[4];
 };
+// create the input layout attributes for each vertex layout, as variables on the stack
+#define LOAD_VERTEX_LAYOUT_ATTRIBS \
+    const gfx::rhi::VertexAttribDesc attribs_2d[] = { \
+        gfx::rhi::make_vertexAttribDesc( \
+            "POSITION", offsetof(renderer::VertexLayout_Color_2D, pos), \
+            sizeof(renderer::VertexLayout_Color_2D), \
+            gfx::rhi::BufferAttributeFormat::R32G32_FLOAT), \
+        gfx::rhi::make_vertexAttribDesc( \
+            "COLOR", offsetof(renderer::VertexLayout_Color_2D, color), \
+            sizeof(renderer::VertexLayout_Color_2D), \
+            gfx::rhi::BufferAttributeFormat::R8G8B8A8_UNORM) }; \
+    const gfx::rhi::VertexAttribDesc attribs_3d[] = { \
+        gfx::rhi::make_vertexAttribDesc( \
+            "POSITION", 0, \
+            sizeof(float3), \
+            gfx::rhi::BufferAttributeFormat::R32G32B32_FLOAT) }; \
+    const gfx::rhi::VertexAttribDesc attribs_color3d[] = { \
+        gfx::rhi::make_vertexAttribDesc( \
+			"POSITION", offsetof(renderer::VertexLayout_Color_3D, pos), \
+            sizeof(renderer::VertexLayout_Color_3D), \
+            gfx::rhi::BufferAttributeFormat::R32G32B32_FLOAT), \
+        gfx::rhi::make_vertexAttribDesc( \
+			"COLOR", offsetof(renderer::VertexLayout_Color_3D, color), \
+            sizeof(renderer::VertexLayout_Color_3D), \
+            gfx::rhi::BufferAttributeFormat::R8G8B8A8_UNORM) }; \
+    const gfx::rhi::VertexAttribDesc attribs_color3d_skinned[] = { \
+        gfx::rhi::make_vertexAttribDesc( \
+			"POSITION", offsetof(renderer::VertexLayout_Color_Skinned_3D, pos), \
+            sizeof(renderer::VertexLayout_Color_Skinned_3D), \
+            gfx::rhi::BufferAttributeFormat::R32G32B32_FLOAT), \
+        gfx::rhi::make_vertexAttribDesc( \
+			"COLOR", offsetof(renderer::VertexLayout_Color_Skinned_3D, color), \
+            sizeof(renderer::VertexLayout_Color_Skinned_3D), \
+            gfx::rhi::BufferAttributeFormat::R8G8B8A8_UNORM), \
+        gfx::rhi::make_vertexAttribDesc( \
+			"JOINTINDICES", offsetof(renderer::VertexLayout_Color_Skinned_3D, joint_indices), \
+            sizeof(renderer::VertexLayout_Color_Skinned_3D), \
+            gfx::rhi::BufferAttributeFormat::R8G8B8A8_SINT), \
+        gfx::rhi::make_vertexAttribDesc( \
+			"JOINTWEIGHTS", offsetof(renderer::VertexLayout_Color_Skinned_3D, joint_weights), \
+            sizeof(renderer::VertexLayout_Color_Skinned_3D), \
+            gfx::rhi::BufferAttributeFormat::R8G8B8A8_UNORM) }; \
+    const gfx::rhi::VertexAttribDesc attribs_textured3d[] = { \
+        gfx::rhi::make_vertexAttribDesc( \
+			"POSITION", offsetof(renderer::VertexLayout_Textured_3D, pos), \
+            sizeof(renderer::VertexLayout_Textured_3D), \
+            gfx::rhi::BufferAttributeFormat::R32G32B32_FLOAT), \
+        gfx::rhi::make_vertexAttribDesc( \
+			"TEXCOORD", offsetof(renderer::VertexLayout_Textured_3D, uv), \
+            sizeof(renderer::VertexLayout_Textured_3D), \
+            gfx::rhi::BufferAttributeFormat::R32G32_FLOAT) }; \
+    const gfx::rhi::VertexAttribDesc attribs_textured3d_skinned[] = { \
+        gfx::rhi::make_vertexAttribDesc( \
+			"POSITION", offsetof(renderer::VertexLayout_Textured_Skinned_3D, pos), \
+            sizeof(renderer::VertexLayout_Textured_Skinned_3D), \
+            gfx::rhi::BufferAttributeFormat::R32G32B32_FLOAT), \
+        gfx::rhi::make_vertexAttribDesc( \
+			"TEXCOORD", offsetof(renderer::VertexLayout_Textured_Skinned_3D, uv), \
+            sizeof(renderer::VertexLayout_Textured_Skinned_3D), \
+            gfx::rhi::BufferAttributeFormat::R32G32_FLOAT), \
+        gfx::rhi::make_vertexAttribDesc( \
+			"JOINTINDICES", offsetof(renderer::VertexLayout_Textured_Skinned_3D, joint_indices), \
+            sizeof(renderer::VertexLayout_Textured_Skinned_3D), \
+            gfx::rhi::BufferAttributeFormat::R8G8B8A8_SINT), \
+        gfx::rhi::make_vertexAttribDesc( \
+			"JOINTWEIGHTS", offsetof(renderer::VertexLayout_Textured_Skinned_3D, joint_weights), \
+            sizeof(renderer::VertexLayout_Textured_Skinned_3D), \
+            gfx::rhi::BufferAttributeFormat::R8G8B8A8_UNORM) \
+    };
+
+// cbuffers
 
 struct CBuffer_Binding { enum { Binding_0 = 0, Binding_1 = 1, Binding_2 = 2, Count }; };
-struct BlitColor {
+
+struct CBufferBlitColor {
     float4 color;
 };
-struct SDF {
+struct CBufferSDF {
     float4 viewMatrix0;
     float4 viewMatrix1;
     float4 viewMatrix2;
@@ -34,18 +108,12 @@ struct SDF {
     float tanfov; float aspect; float near; float far;
     float time; float platformSize; float2 padding;
 };
-struct SceneData {
+struct CBufferSceneData {
     float4x4 vpMatrix;
 };
-struct NodeData {
+struct CBufferNodeData {
     float4x4 worldMatrix;
     float4 groupColor;
-};
-struct Matrices32 {
-    float4x4 data[32];
-};
-struct Matrices64 {
-    float4x4 data[64];
 };
 
 struct Drawlist_Context {
@@ -82,66 +150,73 @@ struct DrawNodeMeta { enum Enum : u32 {
 typedef u32 InstancedNodeHandle;
 
 struct SortKey { SortKeyValue v; s32 idx; };
-struct DrawlistFilter { enum Enum { Alpha = 1 }; };
-struct DrawlistBuckets { enum Enum { Base, Instanced, Count }; };
+struct DrawlistType { enum Enum {
+    Alpha = 1 << 0, BeforeShadows = 1 << 1, AfterShadows = 1 << 2}; };
+
 struct Drawlist {
     SortKey* keys;
     DrawCall_Item* items;
-    u32 count[DrawlistBuckets::Count];
+    u32 count;
 };
-struct DrawlistStreams { enum Enum {
-    Color3D, Color3DSkinned, Textured3D, Textured3DAlphaClip,
-    Textured3DSkinned, Textured3DAlphaClipSkinned, Count }; };
 
 typedef u32 MeshHandle;
-struct ShaderTechniques { enum Enum {
-        FullscreenBlitClearColor, FullscreenBlitTextured, FullscreenBlitTexturedDepth, FullscreenBlitSDF,
-        Color2D, Instanced3D,
-        Color3D, Color3DSkinned,
-        Textured3D, Textured3DAlphaClip, Textured3DSkinned, Textured3DAlphaClipSkinned,
-        Count, Bits = math::ceillog2(Count)
-}; };
-const char* shaderNames[] = {
-    "FullscreenBlitClearColor", "FullscreenBlitTextured", "FullscreenBlitTexturedDepth", "FullscreenBlitSDF",
-    "Color2D", "Instanced3D",
-    "Color3D", "Color3DSkinned",
+
+struct ShaderPrograms { enum Enum { NullShader = -1,
+    FullscreenBlitClearColor = 0, FullscreenBlitSDFScene,
+    FullscreenBlitTextured, FullscreenBlitTexturedDepth,
+    DefaultColor2D, DefaultInstanced3D, DefaultColor3D, DefaultColor3DSkinned,
+    DefaultTextured3D, DefaultTextured3DAlphaClip,
+    DefaultTextured3DSkinned, DefaultTextured3DAlphaClipSkinned,
+    Count, Bits = math::ceillog2(Count) }; };
+
+const char* shaderProgramNames[] = {
+    "FullscreenBlitClearColor", "FullscreenBlitSDFScene",
+    "FullscreenBlitTextured", "FullscreenBlitTexturedDepth",
+    "Color2D", "Instanced3D", "Color3D", "Color3DSkinned",
     "Textured3D", "Textured3DAlphaClip", "Textured3DSkinned", "Textured3DAlphaClipSkinned"
 };
-static_assert(countof(shaderNames) == ShaderTechniques::Count, 
-    "Make sure there are enough shaderNames strings as there are ShaderTechniques::Enum values");
+
+static_assert(countof(shaderProgramNames) == ShaderPrograms::Count,
+    "Make sure there are enough shaderShaderProgramNames strings as there are ShaderPrograms::Enum values");
+
+// the different ways a technique can render
+struct DrawType { enum Enum { Default, DefaultAlphaClip, Count }; };
+
+// materials, of sorts
+struct ShaderTechnique {
+    enum Type { 
+        Instanced, VertexColor, VertexColorSkinned,
+        Diffuse, DiffuseSkinned, CutoutDiffuse, CutoutDiffuseSkinned, Count };
+    ShaderPrograms::Enum shaders[DrawType::Count];
+};
 
 struct DrawMesh { // id of a piece of geometry loaded on the gpu
-    ShaderTechniques::Enum shaderTechnique;
+    ShaderTechnique::Type shaderTechnique;
     gfx::rhi::RscIndexedVertexBuffer vertexBuffer;
     gfx::rhi::RscTexture texture; // should this be here?
 };
-struct CPUMesh {
+struct CPUMesh { // representation of a mesh, where all the vertices are on the cpu
     float3* vertices;
     u16* indices;
     u32 vertexCount;
     u32 indexCount;
 };
-struct DrawNode { // List of meshes (one of each type), and their render data in the scene
+struct Drawable {
     void* ext_data;
     float3 min;
     float3 max;
+    float3 shadowpos;
+    u32 instanceCount;
     u32 cbuffer_node;
     u32 cbuffer_ext;
-    MeshHandle meshHandles[DrawlistStreams::Count];
-    NodeData nodeData;
-};
-struct DrawNodeInstanced {
-    u32 cbuffer_node;
-    u32 cbuffer_instances;
-    u32 instanceCount;
-    MeshHandle meshHandles[DrawlistStreams::Count];
-    NodeData nodeData;
-    Matrices64 instanceMatrices; // todo: dynamic per system?
+    u32 meshCount;
+    MeshHandle meshHandles[8];
+    CBufferNodeData nodeData;
+    DrawlistType::Enum drawlistType;
 };
 
 void draw_drawlist(Drawlist& dl, Drawlist_Context& ctx, const Drawlist_Overrides& overrides) {
-	u32 count = dl.count[DrawlistBuckets::Base] + dl.count[DrawlistBuckets::Instanced];
-    for (u32 i = 0; i < count; i++) {
+    for (u32 i = 0; i < dl.count; i++) {
         DrawCall_Item& item = dl.items[dl.keys[i].idx];
         gfx::rhi::start_event(item.name);
         if (!overrides.forced_shader && ctx.shader != &item.shader) {
@@ -187,12 +262,12 @@ struct ReloadableShader {
 };
 
 struct Scene {
-    allocator::Pool<DrawNode> drawNodes;
-    allocator::Pool<DrawNodeInstanced> instancedDrawNodes;
+    allocator::Pool<Drawable> drawables;
     allocator::Pool<gfx::rhi::RscCBuffer> cbuffers;
 };
 struct CoreResources {
-    ReloadableShader shaders[ShaderTechniques::Count];
+    ReloadableShader shaderPrograms[ShaderPrograms::Count]; // raw shader programs used in draw calls
+    ShaderTechnique shaderTechniques[ShaderTechnique::Count]; // techniques compiling several programs
     DrawMesh* meshes;
     u32 num_meshes;
     struct CBuffersMeta { enum {
@@ -220,19 +295,11 @@ struct CoreResources {
     camera::PerspProjection perspProjection;
 };
 
-force_inline DrawNodeHandle handle_from_node(Scene& scene, DrawNode& node) {
-    return allocator::get_pool_index(scene.drawNodes, node) + 1;
+force_inline DrawNodeHandle handle_from_drawable(Scene& scene, Drawable& node) {
+    return allocator::get_pool_index(scene.drawables, node) + 1;
 }
-force_inline DrawNode& node_from_handle(Scene& scene, const DrawNodeHandle handle) {
-    return allocator::get_pool_slot(scene.drawNodes, handle - 1);
-}
-force_inline DrawNodeHandle handle_from_instanced_node(Scene& scene, DrawNodeInstanced& node) {
-    return allocator::get_pool_index(scene.instancedDrawNodes, node) + 1;
-}
-force_inline void instanced_node_from_handle(Matrices64*& matrices, u32*& count, Scene& scene, const u32 handle) {
-    DrawNodeInstanced& node = allocator::get_pool_slot(scene.instancedDrawNodes, handle - 1);
-    matrices = &node.instanceMatrices;
-	count = &node.instanceCount;
+force_inline Drawable& drawable_from_handle(Scene& scene, const DrawNodeHandle handle) {
+    return allocator::get_pool_slot(scene.drawables, handle - 1);
 }
 force_inline DrawMesh& alloc_drawMesh(CoreResources& core) {
     return core.meshes[core.num_meshes++];
@@ -265,14 +332,14 @@ struct CullEntries {
 };
 void allocCullEntries(allocator::PagedArena scratchArena, CullEntries& cullEntries, const Scene& scene) {
     
-    cullEntries.entries = ALLOC_ARRAY(scratchArena, CullEntry, scene.drawNodes.count);
+    cullEntries.entries = ALLOC_ARRAY(scratchArena, CullEntry, scene.drawables.count);
 
-    for (u32 n = 0, count = 0; n < scene.drawNodes.cap && count < scene.drawNodes.count; n++) {
-        if (scene.drawNodes.data[n].alive == 0) { continue; }
+    for (u32 n = 0, count = 0; n < scene.drawables.cap && count < scene.drawables.count; n++) {
+        if (scene.drawables.data[n].alive == 0) { continue; }
         count++;
 
         CullEntry& entry = cullEntries.entries[cullEntries.count++];
-        const DrawNode& node = scene.drawNodes.data[n].state.live;
+        const Drawable& node = scene.drawables.data[n].state.live;
         const float4 boxPointsLS[8] = {
             { node.min.x, node.min.y, node.min.z, 1.f },
             { node.max.x, node.min.y, node.min.z, 1.f },
@@ -430,11 +497,11 @@ void computeVisibilityCS(VisibleNodes& visibleNodes, u32* isEachNodeVisible, flo
         return true;
     };
 
-    for (u32 n = 0, count = 0; n < scene.drawNodes.cap && count < scene.drawNodes.count; n++) {
-        if (scene.drawNodes.data[n].alive == 0) { continue; }
+    for (u32 n = 0, count = 0; n < scene.drawables.cap && count < scene.drawables.count; n++) {
+        if (scene.drawables.data[n].alive == 0) { continue; }
         count++;
 
-        const DrawNode& node = scene.drawNodes.data[n].state.live;
+        const Drawable& node = scene.drawables.data[n].state.live;
         if (cull_isVisible(math::mult(vpMatrix, node.nodeData.worldMatrix), node.min, node.max)) {
             visibleNodes.visible_nodes[visibleNodes.visible_nodes_count++] = n;
             isEachNodeVisible[n] = true;
@@ -460,7 +527,7 @@ void makeSortKeyBitParams(
 {
     params.drawNodeBits = DrawNodeMeta::HandleBits;
     params.drawNodeMask = (1 << params.drawNodeBits) - 1;
-    params.shaderTechniqueBits = ShaderTechniques::Bits;
+    params.shaderTechniqueBits = ShaderPrograms::Bits;
     params.shaderTechniqueMask = (1 << params.shaderTechniqueBits) - 1;
     params.type = sortType;
     switch (sortType) {
@@ -470,7 +537,7 @@ void makeSortKeyBitParams(
         params.depthMask = (1 << params.depthBits) - 1;
         params.maxDistValue = (1 << params.depthBits) - 1;
         params.maxDistSq = 1000.f * 1000.f;
-        assert(DrawNodeMeta::HandleBits + ShaderTechniques::Bits + 10 < sizeof(SortKeyValue) * 8);
+        assert(DrawNodeMeta::HandleBits + ShaderPrograms::Bits + 10 < sizeof(SortKeyValue) * 8);
     }
     break;
     case SortParams::Type::BackToFront: {
@@ -480,7 +547,7 @@ void makeSortKeyBitParams(
         params.depthMask = (1 << params.depthBits) - 1;
         params.maxDistValue = (1 << params.depthBits) - 1;
         params.maxDistSq = 1000.f * 1000.f; // todo: based on camera distance?
-        assert(DrawNodeMeta::HandleBits + ShaderTechniques::Bits + 10 < sizeof(SortKeyValue) * 8);
+        assert(DrawNodeMeta::HandleBits + ShaderPrograms::Bits + 10 < sizeof(SortKeyValue) * 8);
     }
     break;
     };
@@ -497,25 +564,27 @@ void makeSortKeyDistParams(SortParams& params, const f32 distSq) {
     } break;
     }
 }
-SortKeyValue makeSortKey(const u32 nodeIdx, const u32 meshType, const SortParams& params) {
+SortKeyValue makeSortKey(const u32 nodeIdx, const u32 shaderProgram, const SortParams& params) {
     SortKeyValue key = 0;
     SortKeyValue curr_shift = 0;
     switch (params.type) {
     case SortParams::Type::Default: {
         key |= (nodeIdx & params.drawNodeMask) << curr_shift;
         curr_shift += params.drawNodeBits;
-        key |= (meshType & params.shaderTechniqueMask) << curr_shift;
+        key |= (shaderProgram & params.shaderTechniqueMask) << curr_shift;
         curr_shift += params.shaderTechniqueBits;
-        //if (params.drawNodeType != DrawNodeMeta::TypeInstanced) {
-        //    key |= (params.distSqNormalized & params.depthMask) << curr_shift;
-        //    curr_shift += params.depthBits;
-        //}
+        #if 0 // no depth sorting on opaques
+        if (params.drawNodeType != DrawNodeMeta::TypeInstanced) {
+            key |= (params.distSqNormalized & params.depthMask) << curr_shift;
+            curr_shift += params.depthBits;
+        }
+        #endif
     }
     break;
     case SortParams::Type::BackToFront: {
         key |= (nodeIdx & params.drawNodeMask) << curr_shift;
         curr_shift += params.drawNodeBits;
-        key |= (meshType & params.shaderTechniqueMask) << curr_shift;
+        key |= (shaderProgram & params.shaderTechniqueMask) << curr_shift;
         curr_shift += params.shaderTechniqueBits;
         key |= (params.distSqNormalized & params.depthMask) << curr_shift;
         curr_shift += params.depthBits;
@@ -568,24 +637,44 @@ void addNodesToDrawlistSorted(
         
     for (u32 i = 0; i < visibleNodes.visible_nodes_count; i++) {
         u32 n = visibleNodes.visible_nodes[i];
-        DrawNode& node = scene.drawNodes.data[n].state.live;
+        Drawable& node = scene.drawables.data[n].state.live;
             
-        if (includeFilter & DrawlistFilter::Alpha && node.nodeData.groupColor.w == 1.f) continue;
-        if (excludeFilter & DrawlistFilter::Alpha && node.nodeData.groupColor.w < 1.f) continue;
+        // alpha filter is computed based on the current group color
+        u32 nodeDrawlistType = node.drawlistType;
+        if (node.nodeData.groupColor.w < 1.f) { nodeDrawlistType |= DrawlistType::Alpha; }
+        else { nodeDrawlistType &= ~DrawlistType::Alpha; }
+
+        if ((includeFilter & nodeDrawlistType) == 0) { continue; }
+        if ((excludeFilter & nodeDrawlistType) != 0) { continue; }
             
         f32 distSq = math::magSq(math::subtract(node.nodeData.worldMatrix.col3.xyz, cameraPos));
         makeSortKeyDistParams(sortParams, distSq);
+
+        // if on an alpha drawlist, or not an instanced draw, select alpha draw technique
+        DrawType::Enum drawType =
+            ((nodeDrawlistType & DrawlistType::Alpha) != 0 || node.instanceCount > 0) ?
+            DrawType::Default : DrawType::DefaultAlphaClip;
             
-        for (u32 m = 0; m < countof(node.meshHandles); m++) {
-            if (node.meshHandles[m] == 0) { continue; }
-            u32 dl_index = dl.count[DrawlistBuckets::Base]++;
+        for (u32 m = 0; m < node.meshCount; m++) {
+            u32 dl_index = dl.count++;
             DrawCall_Item& item = dl.items[dl_index];
             item = {};
             SortKey& key = dl.keys[dl_index];
             key.idx = dl_index;
             const DrawMesh& mesh = drawMesh_from_handle(rsc, node.meshHandles[m]);
-            key.v = makeSortKey(n, mesh.shaderTechnique, sortParams);
-            item.shader = rsc.shaders[mesh.shaderTechnique].shader;
+            const ShaderTechnique& shaderTechnique = rsc.shaderTechniques[mesh.shaderTechnique];
+            ShaderPrograms::Enum shaderProgram = shaderTechnique.shaders[drawType];
+
+            // todo: do not hardcore this here
+            gfx::rhi::RscBlendState bs = (mesh.shaderTechnique == ShaderTechnique::CutoutDiffuse 
+                || mesh.shaderTechnique == ShaderTechnique::CutoutDiffuseSkinned
+                || drawType == DrawType::DefaultAlphaClip)
+                ? item.blendState = rsc.blendStateOn
+                : item.blendState = rsc.blendStateBlendOff;
+
+            key.v = makeSortKey(n, shaderProgram, sortParams);
+
+            item.shader = rsc.shaderPrograms[shaderProgram].shader;
             item.vertexBuffer = mesh.vertexBuffer;
             item.cbuffers[item.cbuffer_count++] = cbuffer_from_handle(scene, node.cbuffer_node);
             if (node.cbuffer_ext) {
@@ -593,105 +682,63 @@ void addNodesToDrawlistSorted(
                     cbuffer_from_handle(scene, node.cbuffer_ext);
             }
             item.texture = mesh.texture;
-            if (mesh.shaderTechnique == ShaderTechniques::Textured3DAlphaClip
-                || mesh.shaderTechnique == ShaderTechniques::Textured3DAlphaClipSkinned) {
-                item.blendState = rsc.blendStateOn;
-            } else {
-                item.blendState = rsc.blendStateBlendOff;
-            }
-            item.name = shaderNames[mesh.shaderTechnique];
-        }
-    }
-    const bool addInstancedNodes = true;
-    if (addInstancedNodes) {
-        for (u32 n = 0, count = 0;n < scene.instancedDrawNodes.cap && count < scene.instancedDrawNodes.count; n++) {
-            if (scene.instancedDrawNodes.data[n].alive == 0) { continue; }
-            count++;
-            
-            const DrawNodeInstanced& node = scene.instancedDrawNodes.data[n].state.live;
-            
-            if (includeFilter & DrawlistFilter::Alpha && node.nodeData.groupColor.w == 1.f) continue; 
-            if (excludeFilter & DrawlistFilter::Alpha && node.nodeData.groupColor.w < 1.f) continue;
-            
-            for (u32 m = 0; m < countof(node.meshHandles); m++) {
-                if (node.meshHandles[m] == 0) { continue; }
-                u32 dl_index =
-                    dl.count[DrawlistBuckets::Instanced]++ + dl.count[DrawlistBuckets::Base];
-                DrawCall_Item& item = dl.items[dl_index];
-                item = {};
-                SortKey& key = dl.keys[dl_index];
-                key = {};
-                key.idx = dl_index;
-                const DrawMesh& mesh = drawMesh_from_handle(rsc, node.meshHandles[m]);
-                key.v = makeSortKey(n, mesh.shaderTechnique, sortParams);
-                item.shader = rsc.shaders[mesh.shaderTechnique].shader;
-                item.vertexBuffer = mesh.vertexBuffer;
-                item.cbuffers[item.cbuffer_count++] =
-                    cbuffer_from_handle(scene, node.cbuffer_node);
-                item.cbuffers[item.cbuffer_count++] =
-                    cbuffer_from_handle(scene, node.cbuffer_instances);
-                item.texture = mesh.texture;
-                item.blendState = rsc.blendStateBlendOff; // todo: support blendstates?
-                item.drawcount = node.instanceCount;
-                item.name = shaderNames[mesh.shaderTechnique];
-            }
+            item.blendState = bs;
+            item.name = shaderProgramNames[shaderProgram];
+            item.drawcount = node.instanceCount;
         }
     }
 
-    qsort_s64(dl.keys,
-              0,
-              dl.count[DrawlistBuckets::Base] - 1);
-    qsort_s64(dl.keys,
-              dl.count[DrawlistBuckets::Base],
-              dl.count[DrawlistBuckets::Base] + dl.count[DrawlistBuckets::Instanced] - 1);
+    qsort_s64(dl.keys, 0, dl.count - 1);
 }
 
 #if __DEBUG
 void recompileShaders(CoreResources& rsc) {
 
-    for (u32 i = 0; i < ShaderTechniques::Count; i++) {
+    for (u32 i = 0; i < ShaderPrograms::Count; i++) {
 
         struct stat binFile_lastModified;
         char buff[1024];
         errno_t err;
 
+        renderer::ReloadableShader& shader = rsc.shaderPrograms[i];
+
         // recompile vertex shaders
-        io::format(buff, sizeof(buff), SRC_PATH_FROM_BIN"%s", rsc.shaders[i].vs_binFile);
+        io::format(buff, sizeof(buff), SRC_PATH_FROM_BIN"%s", shader.vs_binFile);
         err = stat(buff, &binFile_lastModified);
         if (err == 0) {
             struct stat srcFile_lastModified;
-            io::format(buff, sizeof(buff), SRC_PATH_FROM_BIN"%s", rsc.shaders[i].vs_srcFile);
+            io::format(buff, sizeof(buff), SRC_PATH_FROM_BIN"%s", shader.vs_srcFile);
             err = stat(buff, &srcFile_lastModified);
             if (err == 0 &&
-                math::max(binFile_lastModified.st_mtime, rsc.shaders[i].vs_lastCompileTime) < srcFile_lastModified.st_mtime) {
+                math::max(binFile_lastModified.st_mtime, shader.vs_lastCompileTime) < srcFile_lastModified.st_mtime) {
 
                 gfx::rhi::ShaderResult result = 
-                    gfx::rhi::recompile_shaderfile_vs(rsc.shaders[i].shader, buff);
+                    gfx::rhi::recompile_shaderfile_vs(shader.shader, buff);
                 if (result.compiled) {
-                    rsc.shaders[i].vs_lastCompileTime = srcFile_lastModified.st_mtime;
+                    shader.vs_lastCompileTime = srcFile_lastModified.st_mtime;
                 } else {
-                    io::debuglog("%s: %s\n", rsc.shaders[i].vs_srcFile, result.error);
+                    io::debuglog("%s: %s\n", shader.vs_srcFile, result.error);
                 }
             }
         }
 
         // recompile pixel shaders
-        io::format(buff, sizeof(buff), SRC_PATH_FROM_BIN"%s", rsc.shaders[i].ps_binFile);
+        io::format(buff, sizeof(buff), SRC_PATH_FROM_BIN"%s", shader.ps_binFile);
         err = stat(buff, &binFile_lastModified);
         if (err == 0) {
             struct stat srcFile_lastModified;
-            io::format(buff, sizeof(buff), SRC_PATH_FROM_BIN"%s", rsc.shaders[i].ps_srcFile);
+            io::format(buff, sizeof(buff), SRC_PATH_FROM_BIN"%s", shader.ps_srcFile);
             err = stat(buff, &srcFile_lastModified);
             if (err == 0 &&
-                math::max(binFile_lastModified.st_mtime, rsc.shaders[i].ps_lastCompileTime) < srcFile_lastModified.st_mtime) {
+                math::max(binFile_lastModified.st_mtime, shader.ps_lastCompileTime) < srcFile_lastModified.st_mtime) {
 
                 gfx::rhi::ShaderResult result =
-                    gfx::rhi::recompile_shaderfile_ps(rsc.shaders[i].shader, buff);
+                    gfx::rhi::recompile_shaderfile_ps(shader.shader, buff);
                 if (result.compiled) {
-                    rsc.shaders[i].ps_lastCompileTime = srcFile_lastModified.st_mtime;
+                    shader.ps_lastCompileTime = srcFile_lastModified.st_mtime;
                 }
                 else {
-                    io::debuglog("%s: %s\n", rsc.shaders[i].vs_srcFile, result.error);
+                    io::debuglog("%s: %s\n", shader.vs_srcFile, result.error);
                 }
             }
         }
