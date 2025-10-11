@@ -53,3 +53,7 @@ The SDF scene could handle its own reflections, but it wouldn't have a way to bl
 This test also uses a new zero-memory immediate mode UI, based on Casey Muratori's and Sean Barrett's work. Feel free to look at `im::WindowContext` and related code inside `helpers/immediate_mode.h`.
 
 ![](breakdown_2.gif)
+
+One last thing: there's some simple drop shadows under each moving entity. They are simple shadow volumes (spheres places at a raycasted position along the light direction, used as a mask on the depth buffer), very similar to [some of the ones described in the Shadow Test](../TestShadows/README.md).
+
+![](breakdown_3.jpg)

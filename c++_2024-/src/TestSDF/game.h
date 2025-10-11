@@ -1266,10 +1266,12 @@ void update(Instance& game, platform::GameConfig& config) {
                 }
 
                 gfx::rhi::bind_blend_state(game.resources.renderCore.blendStateBlendOff);
+                //gfx::rhi::bind_DS(game.resources.renderCore.depthStateAlways);
                 gfx::rhi::bind_DS(game.resources.renderCore.depthStateOff);
                 gfx::rhi::bind_RS(game.resources.renderCore.rasterizerStateFillFrontfaces);
                 gfx::rhi::bind_main_RT(game.resources.renderCore.windowRT);
 
+                //gfx::rhi::bind_shader(game.resources.renderCore.shaderPrograms[renderer::ShaderPrograms::FullscreenBlitTexturedDepth].shader);
                 gfx::rhi::bind_shader(game.resources.renderCore.shaderPrograms[renderer::ShaderPrograms::FullscreenBlitTextured].shader);
                 gfx::rhi::RscTexture textures[] = {
                     game.resources.renderCore.gameRT.textures[0],

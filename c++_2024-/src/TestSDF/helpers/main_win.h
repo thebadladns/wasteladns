@@ -136,6 +136,7 @@ PFNWGLGETPIXELFORMATARBPROC wglChoosePixelFormatARB;
 #define WGL_FULL_ACCELERATION_ARB 0x2027
 #define WGL_TYPE_RGBA_ARB 0x202B
 
+LogData logLevel = {};
 HDC dc;
 bool createRenderContext(HWND hWnd) {
 
@@ -208,7 +209,6 @@ bool createRenderContext(HWND hWnd) {
 
 #if __GPU_DEBUG
     if (glDebugMessageCallback) {//GLAD_GL_KHR_debug) {
-        LogData logLevel = {};
         logLevel.minLevel = LogLevel::Debug;
         glEnable(GL_DEBUG_OUTPUT);
         glDebugMessageCallback(debugMessageCallback, &logLevel);

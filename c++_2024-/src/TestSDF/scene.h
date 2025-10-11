@@ -1095,7 +1095,6 @@ void renderBaseScene(RenderSceneContext& sceneCtx) {
     renderSDFScene(sceneCtx.camera, rsc, sceneCtx.ds_opaque);
 
     // Shadows + opaque after shadows passes (they use the same entities, for now)
-    gfx::rhi::bind_RS(sceneCtx.rs);
     {
         allocator::PagedArena scratchArena = sceneCtx.scratchArena;
         Drawlist dl = {};
@@ -1169,6 +1168,7 @@ void renderBaseScene(RenderSceneContext& sceneCtx) {
             gfx::rhi::end_event();
 
             gfx::rhi::start_event("OPAQUE AFTER SHADOWS");
+            gfx::rhi::bind_RS(sceneCtx.rs);
             gfx::rhi::bind_DS(sceneCtx.ds_opaque, sceneCtx.camera.depth);
             Drawlist_Context ctx = {};
             Drawlist_Overrides overrides = {};
@@ -1412,7 +1412,7 @@ void load_coreResources(
 
         // in-game RT (less resolution than actual window)
         gfx::rhi::RenderTargetParams gameRTparams;
-        gameRTparams.flags = (gfx::rhi::RenderTargetParams::Flags::EnableDepth);// | gfx::rhi::RenderTargetParams::Flags::ReadDepth;
+        gameRTparams.flags = gfx::rhi::RenderTargetParams::Flags::EnableDepth;// | gfx::rhi::RenderTargetParams::Flags::ReadDepth;
         gameRTparams.width = screen.width;
         gameRTparams.height = screen.height;
         gameRTparams.textureFormat = gfx::rhi::TextureFormat::B8G8R8A8_UNORM;
