@@ -54,6 +54,6 @@ This test also uses a new zero-memory immediate mode UI, based on Casey Muratori
 
 ![](breakdown_2.gif)
 
-One last thing: there's some simple drop shadows under each moving entity. They are simple shadow volumes (spheres places at a raycasted position along the light direction, used as a mask on the depth buffer), very similar to [some of the ones described in the Shadow Test](../TestShadows/README.md).
+One last thing: there's some simple drop shadows under each moving entity. They are simple shadow volumes (spheres placed at a raycasted ground position along the light direction, used to mask the shadow circle intersection with the depth buffer), similar to [some of the ones described in the Shadow Test](../TestShadows/README.md).
 
 ![](breakdown_3.jpg)
