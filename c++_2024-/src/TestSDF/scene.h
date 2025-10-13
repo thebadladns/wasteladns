@@ -2143,7 +2143,6 @@ void spawn_scene_mirrorRoom(
     };
 
     size_t maxDrawables = math::max(game::EntityTypes::Count, 1024);
-    size_t maxRenderData = 1024 * sizeof(float4x4);
     size_t cbufferCount = maxDrawables * 2;
     size_t maxAnimNodes = countof(assetDefs);
     allocator::init_pool(renderScene.cbuffers, cbufferCount, sceneArena);
@@ -2218,8 +2217,6 @@ void spawn_scene_mirrorRoom(
 
             const game::AssetInMemory& asset = core.assets[assetDef.assetId];
 
-            renderer::DrawableHandle renderHandle = {};
-            animation::Handle animHandle = {};
             allocateEntity(
                 sceneArena, scene, assetDef.entityId, asset,
                 asset_init_pos, Color32(0xFFFFFF), assetDef.drawlistType, assetDef.castShadow);
