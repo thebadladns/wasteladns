@@ -1,6 +1,22 @@
 #ifndef __WASTELADNS_RENDERER_H__
 #define __WASTELADNS_RENDERER_H__
 
+// Pool type definitions 
+namespace renderer {
+    struct Drawable;
+    struct DrawMesh;
+}
+namespace allocator {
+    template<> struct PoolHandle<renderer::Drawable> : PoolHandle_Base<24, 8> {};
+    template<> struct PoolHandle<renderer::DrawMesh> : PoolHandle_Base<24, 8> {};
+    template<> struct PoolHandle<gfx::rhi::RscCBuffer> : PoolHandle_Base<24, 8> {};
+}
+namespace renderer {
+    typedef allocator::PoolHandle<Drawable> DrawableHandle;
+    typedef allocator::PoolHandle<DrawMesh> MeshHandle;
+    typedef allocator::PoolHandle<gfx::rhi::RscCBuffer> CBufferHandle;
+}
+
 namespace renderer {
 
 // vertex input layouts
@@ -38,54 +54,54 @@ struct VertexLayout_Textured_Skinned_3D {
             gfx::rhi::BufferAttributeFormat::R32G32B32_FLOAT) }; \
     const gfx::rhi::VertexAttribDesc attribs_color3d[] = { \
         gfx::rhi::make_vertexAttribDesc( \
-			"POSITION", offsetof(renderer::VertexLayout_Color_3D, pos), \
+            "POSITION", offsetof(renderer::VertexLayout_Color_3D, pos), \
             sizeof(renderer::VertexLayout_Color_3D), \
             gfx::rhi::BufferAttributeFormat::R32G32B32_FLOAT), \
         gfx::rhi::make_vertexAttribDesc( \
-			"COLOR", offsetof(renderer::VertexLayout_Color_3D, color), \
+            "COLOR", offsetof(renderer::VertexLayout_Color_3D, color), \
             sizeof(renderer::VertexLayout_Color_3D), \
             gfx::rhi::BufferAttributeFormat::R8G8B8A8_UNORM) }; \
     const gfx::rhi::VertexAttribDesc attribs_color3d_skinned[] = { \
         gfx::rhi::make_vertexAttribDesc( \
-			"POSITION", offsetof(renderer::VertexLayout_Color_Skinned_3D, pos), \
+            "POSITION", offsetof(renderer::VertexLayout_Color_Skinned_3D, pos), \
             sizeof(renderer::VertexLayout_Color_Skinned_3D), \
             gfx::rhi::BufferAttributeFormat::R32G32B32_FLOAT), \
         gfx::rhi::make_vertexAttribDesc( \
-			"COLOR", offsetof(renderer::VertexLayout_Color_Skinned_3D, color), \
+            "COLOR", offsetof(renderer::VertexLayout_Color_Skinned_3D, color), \
             sizeof(renderer::VertexLayout_Color_Skinned_3D), \
             gfx::rhi::BufferAttributeFormat::R8G8B8A8_UNORM), \
         gfx::rhi::make_vertexAttribDesc( \
-			"JOINTINDICES", offsetof(renderer::VertexLayout_Color_Skinned_3D, joint_indices), \
+            "JOINTINDICES", offsetof(renderer::VertexLayout_Color_Skinned_3D, joint_indices), \
             sizeof(renderer::VertexLayout_Color_Skinned_3D), \
             gfx::rhi::BufferAttributeFormat::R8G8B8A8_SINT), \
         gfx::rhi::make_vertexAttribDesc( \
-			"JOINTWEIGHTS", offsetof(renderer::VertexLayout_Color_Skinned_3D, joint_weights), \
+            "JOINTWEIGHTS", offsetof(renderer::VertexLayout_Color_Skinned_3D, joint_weights), \
             sizeof(renderer::VertexLayout_Color_Skinned_3D), \
             gfx::rhi::BufferAttributeFormat::R8G8B8A8_UNORM) }; \
     const gfx::rhi::VertexAttribDesc attribs_textured3d[] = { \
         gfx::rhi::make_vertexAttribDesc( \
-			"POSITION", offsetof(renderer::VertexLayout_Textured_3D, pos), \
+            "POSITION", offsetof(renderer::VertexLayout_Textured_3D, pos), \
             sizeof(renderer::VertexLayout_Textured_3D), \
             gfx::rhi::BufferAttributeFormat::R32G32B32_FLOAT), \
         gfx::rhi::make_vertexAttribDesc( \
-			"TEXCOORD", offsetof(renderer::VertexLayout_Textured_3D, uv), \
+            "TEXCOORD", offsetof(renderer::VertexLayout_Textured_3D, uv), \
             sizeof(renderer::VertexLayout_Textured_3D), \
             gfx::rhi::BufferAttributeFormat::R32G32_FLOAT) }; \
     const gfx::rhi::VertexAttribDesc attribs_textured3d_skinned[] = { \
         gfx::rhi::make_vertexAttribDesc( \
-			"POSITION", offsetof(renderer::VertexLayout_Textured_Skinned_3D, pos), \
+            "POSITION", offsetof(renderer::VertexLayout_Textured_Skinned_3D, pos), \
             sizeof(renderer::VertexLayout_Textured_Skinned_3D), \
             gfx::rhi::BufferAttributeFormat::R32G32B32_FLOAT), \
         gfx::rhi::make_vertexAttribDesc( \
-			"TEXCOORD", offsetof(renderer::VertexLayout_Textured_Skinned_3D, uv), \
+            "TEXCOORD", offsetof(renderer::VertexLayout_Textured_Skinned_3D, uv), \
             sizeof(renderer::VertexLayout_Textured_Skinned_3D), \
             gfx::rhi::BufferAttributeFormat::R32G32_FLOAT), \
         gfx::rhi::make_vertexAttribDesc( \
-			"JOINTINDICES", offsetof(renderer::VertexLayout_Textured_Skinned_3D, joint_indices), \
+            "JOINTINDICES", offsetof(renderer::VertexLayout_Textured_Skinned_3D, joint_indices), \
             sizeof(renderer::VertexLayout_Textured_Skinned_3D), \
             gfx::rhi::BufferAttributeFormat::R8G8B8A8_SINT), \
         gfx::rhi::make_vertexAttribDesc( \
-			"JOINTWEIGHTS", offsetof(renderer::VertexLayout_Textured_Skinned_3D, joint_weights), \
+            "JOINTWEIGHTS", offsetof(renderer::VertexLayout_Textured_Skinned_3D, joint_weights), \
             sizeof(renderer::VertexLayout_Textured_Skinned_3D), \
             gfx::rhi::BufferAttributeFormat::R8G8B8A8_UNORM) \
     };
@@ -143,11 +159,6 @@ struct DrawCall_Item {
 };
 
 typedef u64 SortKeyValue;
-typedef u32 DrawableHandle;
-struct DrawableMeta { enum Enum : u32 {
-    HandleBits = 32, HandleMask = 0xffffffff, MaxNodes = HandleMask - 1
-}; };
-
 struct SortKey { SortKeyValue v; s32 idx; };
 struct DrawlistType { enum Enum {
     Alpha = 1 << 0, BeforeShadows = 1 << 1, AfterShadows = 1 << 2}; };
@@ -157,8 +168,6 @@ struct Drawlist {
     DrawCall_Item* items;
     u32 count;
 };
-
-typedef u32 MeshHandle;
 
 struct ShaderPrograms { enum Enum { NullShader = -1,
     FullscreenBlitClearColor = 0, FullscreenBlitSDFScene,
@@ -206,8 +215,8 @@ struct Drawable {
     float3 min;
     float3 max;
     u32 instanceCount;
-    u32 cbuffer_node;
-    u32 cbuffer_ext;
+    CBufferHandle cbuffer_node;
+    CBufferHandle cbuffer_ext;
     u32 meshCount;
     MeshHandle meshHandles[8];
     CBufferNodeData nodeData;
@@ -222,10 +231,10 @@ void draw_drawlist(Drawlist& dl, Drawlist_Context& ctx, const Drawlist_Overrides
             gfx::rhi::bind_shader(item.shader);
             ctx.shader = &item.shader;
         }
-		if (!overrides.forced_blendState && ctx.blendState != &item.blendState) {
-			gfx::rhi::bind_blend_state(item.blendState);
-			ctx.blendState = &item.blendState;
-		}
+        if (!overrides.forced_blendState && ctx.blendState != &item.blendState) {
+            gfx::rhi::bind_blend_state(item.blendState);
+            ctx.blendState = &item.blendState;
+        }
         if (!overrides.forced_texture && ctx.texture != &item.texture) {
             gfx::rhi::bind_textures(&item.texture, 1);
             ctx.texture = &item.texture;
@@ -239,7 +248,7 @@ void draw_drawlist(Drawlist& dl, Drawlist_Context& ctx, const Drawlist_Overrides
         }
         gfx::rhi::bind_cbuffers(
             *ctx.shader, ctx.cbuffers,item.cbuffer_count + overrides.forced_cbuffer_count);
-		if (item.drawcount) {
+        if (item.drawcount) {
             gfx::rhi::draw_instances_indexed_vertex_buffer(item.vertexBuffer, item.drawcount);
         } else {
             gfx::rhi::draw_indexed_vertex_buffer(item.vertexBuffer);
@@ -267,8 +276,7 @@ struct Scene {
 struct CoreResources {
     ReloadableShader shaderPrograms[ShaderPrograms::Count]; // raw shader programs used in draw calls
     ShaderTechnique shaderTechniques[ShaderTechnique::Count]; // techniques compiling several programs
-    DrawMesh* meshes;
-    u32 num_meshes;
+    allocator::Pool<DrawMesh> meshes;
     struct CBuffersMeta { enum {
         SDF, ClearColor, Scene, NodeIdentity, UIText, Instances64, Count }; };
     gfx::rhi::RscCBuffer cbuffers[CBuffersMeta::Count];
@@ -298,28 +306,6 @@ struct CoreResources {
     camera::WindowProjection windowProjection;
     camera::PerspProjection perspProjection;
 };
-
-force_inline DrawableHandle handle_from_drawable(Scene& scene, Drawable& node) {
-    return allocator::get_pool_index(scene.drawables, node) + 1;
-}
-force_inline Drawable& drawable_from_handle(Scene& scene, const DrawableHandle handle) {
-    return allocator::get_pool_slot(scene.drawables, handle - 1);
-}
-force_inline DrawMesh& alloc_drawMesh(CoreResources& core) {
-    return core.meshes[core.num_meshes++];
-}
-force_inline DrawMesh& drawMesh_from_handle(CoreResources& core, const u32 handle) {
-    return core.meshes[handle - 1];
-}
-force_inline u32 handle_from_drawMesh(CoreResources& core, DrawMesh& mesh) {
-    return u32(&mesh - &core.meshes[0]) + 1;
-}
-force_inline gfx::rhi::RscCBuffer& cbuffer_from_handle(Scene& scene, const u32 handle) {
-    return allocator::get_pool_slot(scene.cbuffers, handle - 1);
-}
-force_inline u32 handle_from_cbuffer(Scene& scene, gfx::rhi::RscCBuffer& cbuffer) {
-    return allocator::get_pool_index(scene.cbuffers, cbuffer) + 1;
-}
 
 struct Frustum {
     enum { MAX_PLANE_COUNT = 10 };
@@ -452,51 +438,51 @@ void computeVisibilityCS(VisibleNodes& visibleNodes, u32* isEachNodeVisible, flo
         if (out == 8) return false;
         // left {1.f,0.f,0.f,1.f} -> dot(p,box) = box.x + box.w -> box.x < -box.w
         out = 0;
-		for (u32 corner_id = 0; corner_id < 8; corner_id++) 
+        for (u32 corner_id = 0; corner_id < 8; corner_id++) 
         { if (box_CS[corner_id].x < -box_CS[corner_id].w) { out++; } }
-		if (out == 8) return false;
+        if (out == 8) return false;
         // right {1.f,0.f,0.f,1.f} -> dot(p,box) = -box.x + box.w -> box.x > box.w
         out = 0;
-		for (u32 corner_id = 0; corner_id < 8; corner_id++) 
-	    { if (box_CS[corner_id].x > box_CS[corner_id].w) { out++; } }
-		if (out == 8) return false;
+        for (u32 corner_id = 0; corner_id < 8; corner_id++) 
+        { if (box_CS[corner_id].x > box_CS[corner_id].w) { out++; } }
+        if (out == 8) return false;
         // bottom {0.f,1.f,0.f,1.f} -> dot(p,box) = box.y + box.w -> box.y < -box.w
         out = 0;
-		for (u32 corner_id = 0; corner_id < 8; corner_id++) 
-		{ if (box_CS[corner_id].y < -box_CS[corner_id].w) { out++; } }
-		if (out == 8) return false;
+        for (u32 corner_id = 0; corner_id < 8; corner_id++) 
+        { if (box_CS[corner_id].y < -box_CS[corner_id].w) { out++; } }
+        if (out == 8) return false;
         // top {0.f,-1.f,0.f,1.f} -> dot(p,box) = -box.y + box.w -> box.y > box.w
         out = 0;
-		for (u32 corner_id = 0; corner_id < 8; corner_id++) 
-		{ if (box_CS[corner_id].y > box_CS[corner_id].w) { out++; } }
-		if (out == 8) return false;
+        for (u32 corner_id = 0; corner_id < 8; corner_id++) 
+        { if (box_CS[corner_id].y > box_CS[corner_id].w) { out++; } }
+        if (out == 8) return false;
 
         // check whether the frustum is fully out at least one plane of the box
         // todo: figure out whether ndc check here introduces issues with points behind the camera
         out = 0;
-		for (u32 corner_id = 0; corner_id < 8; corner_id++) 
-		{ if (frustum[corner_id].z < boxmin_NDC.z) { out++; } }
-		if (out == 8) return false;
+        for (u32 corner_id = 0; corner_id < 8; corner_id++) 
+        { if (frustum[corner_id].z < boxmin_NDC.z) { out++; } }
+        if (out == 8) return false;
         out = 0;
-		for (u32 corner_id = 0; corner_id < 8; corner_id++) 
-	    { if (frustum[corner_id].z > boxmax_NDC.z) { out++; } }
-		if (out == 8) return false;
+        for (u32 corner_id = 0; corner_id < 8; corner_id++) 
+        { if (frustum[corner_id].z > boxmax_NDC.z) { out++; } }
+        if (out == 8) return false;
         out = 0;
-		for (u32 corner_id = 0; corner_id < 8; corner_id++) 
-		{ if (frustum[corner_id].x < boxmin_NDC.z) { out++; } }
-		if (out == 8) return false;
+        for (u32 corner_id = 0; corner_id < 8; corner_id++) 
+        { if (frustum[corner_id].x < boxmin_NDC.z) { out++; } }
+        if (out == 8) return false;
         out = 0;
-		for (u32 corner_id = 0; corner_id < 8; corner_id++) 
-		{ if (frustum[corner_id].x > boxmax_NDC.z) { out++; } }
-		if (out == 8) return false;
+        for (u32 corner_id = 0; corner_id < 8; corner_id++) 
+        { if (frustum[corner_id].x > boxmax_NDC.z) { out++; } }
+        if (out == 8) return false;
         out = 0;
-		for (u32 corner_id = 0; corner_id < 8; corner_id++) 
+        for (u32 corner_id = 0; corner_id < 8; corner_id++) 
         { if (frustum[corner_id].y < boxmin_NDC.z) { out++; } }
-		if (out == 8) return false;
+        if (out == 8) return false;
         out = 0;
-		for (u32 corner_id = 0; corner_id < 8; corner_id++) 
-		{ if (frustum[corner_id].y > boxmax_NDC.z) { out++; } }
-		if (out == 8) return false;
+        for (u32 corner_id = 0; corner_id < 8; corner_id++) 
+        { if (frustum[corner_id].y > boxmax_NDC.z) { out++; } }
+        if (out == 8) return false;
 
         return true;
     };
@@ -529,7 +515,7 @@ void makeSortKeyBitParams(
     SortParams& params,
     const SortParams::Type::Enum sortType)
 {
-    params.drawNodeBits = DrawableMeta::HandleBits;
+    params.drawNodeBits = DrawableHandle::TotalBits;
     params.drawNodeMask = (1 << params.drawNodeBits) - 1;
     params.shaderTechniqueBits = ShaderPrograms::Bits;
     params.shaderTechniqueMask = (1 << params.shaderTechniqueBits) - 1;
@@ -541,7 +527,7 @@ void makeSortKeyBitParams(
         params.depthMask = (1 << params.depthBits) - 1;
         params.maxDistValue = (1 << params.depthBits) - 1;
         params.maxDistSq = 1000.f * 1000.f;
-        assert(DrawableMeta::HandleBits + ShaderPrograms::Bits + 10 < sizeof(SortKeyValue) * 8);
+        assert(DrawableHandle::TotalBits + ShaderPrograms::Bits + 10 < sizeof(SortKeyValue) * 8);
     }
     break;
     case SortParams::Type::BackToFront: {
@@ -551,7 +537,7 @@ void makeSortKeyBitParams(
         params.depthMask = (1 << params.depthBits) - 1;
         params.maxDistValue = (1 << params.depthBits) - 1;
         params.maxDistSq = 1000.f * 1000.f; // todo: based on camera distance?
-        assert(DrawableMeta::HandleBits + ShaderPrograms::Bits + 10 < sizeof(SortKeyValue) * 8);
+        assert(DrawableHandle::TotalBits + ShaderPrograms::Bits + 10 < sizeof(SortKeyValue) * 8);
     }
     break;
     };
@@ -577,12 +563,6 @@ SortKeyValue makeSortKey(const u32 nodeIdx, const u32 shaderProgram, const SortP
         curr_shift += params.drawNodeBits;
         key |= (shaderProgram & params.shaderTechniqueMask) << curr_shift;
         curr_shift += params.shaderTechniqueBits;
-        #if 0 // no depth sorting on opaques
-        if (params.drawNodeType != DrawableMeta::TypeInstanced) {
-            key |= (params.distSqNormalized & params.depthMask) << curr_shift;
-            curr_shift += params.depthBits;
-        }
-        #endif
     }
     break;
     case SortParams::Type::BackToFront: {
@@ -665,7 +645,7 @@ void addNodesToDrawlistSorted(
             item = {};
             SortKey& key = dl.keys[dl_index];
             key.idx = dl_index;
-            const DrawMesh& mesh = drawMesh_from_handle(rsc, node.meshHandles[m]);
+            const DrawMesh& mesh = *allocator::resolve_pool_handle(rsc.meshes, node.meshHandles[m]);
             const ShaderTechnique& shaderTechnique = rsc.shaderTechniques[mesh.shaderTechnique];
             ShaderPrograms::Enum shaderProgram = shaderTechnique.shaders[drawType];
 
@@ -680,10 +660,11 @@ void addNodesToDrawlistSorted(
 
             item.shader = rsc.shaderPrograms[shaderProgram].shader;
             item.vertexBuffer = mesh.vertexBuffer;
-            item.cbuffers[item.cbuffer_count++] = cbuffer_from_handle(scene, node.cbuffer_node);
-            if (node.cbuffer_ext) {
+            item.cbuffers[item.cbuffer_count++] = 
+                *allocator::resolve_pool_handle(scene.cbuffers, node.cbuffer_node);
+            if (node.cbuffer_ext.data) {
                 item.cbuffers[item.cbuffer_count++] =
-                    cbuffer_from_handle(scene, node.cbuffer_ext);
+                    *allocator::resolve_pool_handle(scene.cbuffers, node.cbuffer_ext);
             }
             item.texture = mesh.texture;
             item.blendState = bs;
@@ -714,7 +695,8 @@ void recompileShaders(CoreResources& rsc) {
             io::format(buff, sizeof(buff), SRC_PATH_FROM_BIN"%s", shader.vs_srcFile);
             err = stat(buff, &srcFile_lastModified);
             if (err == 0 &&
-                math::max(binFile_lastModified.st_mtime, shader.vs_lastCompileTime) < srcFile_lastModified.st_mtime) {
+                math::max(binFile_lastModified.st_mtime, shader.vs_lastCompileTime)
+                < srcFile_lastModified.st_mtime) {
 
                 gfx::rhi::ShaderResult result = 
                     gfx::rhi::recompile_shaderfile_vs(shader.shader, buff);
@@ -734,7 +716,8 @@ void recompileShaders(CoreResources& rsc) {
             io::format(buff, sizeof(buff), SRC_PATH_FROM_BIN"%s", shader.ps_srcFile);
             err = stat(buff, &srcFile_lastModified);
             if (err == 0 &&
-                math::max(binFile_lastModified.st_mtime, shader.ps_lastCompileTime) < srcFile_lastModified.st_mtime) {
+                math::max(binFile_lastModified.st_mtime, shader.ps_lastCompileTime)
+                < srcFile_lastModified.st_mtime) {
 
                 gfx::rhi::ShaderResult result =
                     gfx::rhi::recompile_shaderfile_ps(shader.shader, buff);

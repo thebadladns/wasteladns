@@ -26,7 +26,7 @@ struct Entity {
     renderer::DrawableHandle renderHandle;
     animation::Handle animhandle;
     physics::Handle physicsHandle;
-    u32 shadow_cbuffer;
+    renderer::CBufferHandle shadow_cbuffer;
     void* shadowData;
 };
 
@@ -92,72 +92,72 @@ renderer::Drawable& allocateEntity(
 
     // render data
     renderer::Scene& renderScene = scene.renderScene;
-    renderer::Drawable& drawable = allocator::alloc_pool(renderScene.drawables);
+    auto drawable_alloc = allocator::alloc_pool(renderScene.drawables);
 
     game::Entity* entity = (entityId != game::EntityTypes::Null) ? &(scene.entities[entityId]) : nullptr;
-    if (entity) { entity->renderHandle = renderer::handle_from_drawable(renderScene, drawable); }
-    drawable = {};
-    math::identity4x4(*(Transform*)&(drawable.nodeData.worldMatrix));
-    drawable.nodeData.worldMatrix.col3.xyz = { spawnPos };
-    drawable.nodeData.groupColor = color.RGBAv4();
+    if (entity) { entity->renderHandle = drawable_alloc.handle; }
+    *drawable_alloc.elem = {};
+    math::identity4x4(*(Transform*)&(drawable_alloc.elem->nodeData.worldMatrix));
+    drawable_alloc.elem->nodeData.worldMatrix.col3.xyz = { spawnPos };
+    drawable_alloc.elem->nodeData.groupColor = color.RGBAv4();
     if (entity && castShadow) {
         entity->shadowData = ALLOC_ARRAY(sceneArena, renderer::CBufferNodeData, 1);
         renderer::CBufferNodeData& sd = *(renderer::CBufferNodeData*)(entity->shadowData);
         math::identity4x4(*(Transform*)&(sd.worldMatrix));
         sd.groupColor = Color32(1.f, 1.f, 1.f, 1.f).RGBAv4();
-        gfx::rhi::RscCBuffer& cbuffershadow = allocator::alloc_pool(renderScene.cbuffers);
-        entity->shadow_cbuffer = handle_from_cbuffer(renderScene, cbuffershadow);
-        gfx::rhi::create_cbuffer(cbuffershadow, { (u32)sizeof(renderer::CBufferNodeData) });
+        auto cbuffersshadow_alloc = allocator::alloc_pool(renderScene.cbuffers);
+        entity->shadow_cbuffer = cbuffersshadow_alloc.handle;
+        gfx::rhi::create_cbuffer(*cbuffersshadow_alloc.elem, { (u32)sizeof(renderer::CBufferNodeData) });
     }
     // reduce bounds a bit to prevent floating point issues when culling (todo: reverse z?)
-    drawable.min = math::max(def.min, float3(-500.f));
-    drawable.max = math::min(def.max, float3(500.f));
-    drawable.drawlistType = drawlistType;
-    memcpy(drawable.meshHandles, def.meshHandles, sizeof(drawable.meshHandles));
-    drawable.meshCount = def.meshCount;
-    gfx::rhi::RscCBuffer& cbuffercore = allocator::alloc_pool(renderScene.cbuffers);
-    drawable.cbuffer_node = handle_from_cbuffer(renderScene, cbuffercore);
-    gfx::rhi::create_cbuffer(cbuffercore, { sizeof(renderer::CBufferNodeData) });
+    drawable_alloc.elem->min = math::max(def.min, float3(-500.f));
+    drawable_alloc.elem->max = math::min(def.max, float3(500.f));
+    drawable_alloc.elem->drawlistType = drawlistType;
+    memcpy(drawable_alloc.elem->meshHandles, def.meshHandles, sizeof(drawable_alloc.elem->meshHandles));
+    drawable_alloc.elem->meshCount = def.meshCount;
+    auto cbuffercore_alloc = allocator::alloc_pool(renderScene.cbuffers);
+    drawable_alloc.elem->cbuffer_node = cbuffercore_alloc.handle;
+    gfx::rhi::create_cbuffer(*cbuffercore_alloc.elem, { sizeof(renderer::CBufferNodeData) });
     if (def.skeleton.jointCount) {
         animation::Scene& animScene = scene.animScene;
-        animation::Node& animNode = allocator::alloc_pool(animScene.nodes);
-        if (entity) { entity->animhandle = animation::handle_from_drawable(animScene, animNode); }
-        animNode = {};
-        animNode.skeleton = def.skeleton;
-        animNode.clips = def.clips;
-        animNode.clipCount = def.clipCount;
-        animNode.state.animIndex = 0;
-        animNode.state.time = 0.f;
-        animNode.state.scale = 1.f;
-        for (u32 m = 0; m < animNode.skeleton.jointCount; m++) {
-            float4x4& matrix = animNode.state.skinning[m];
+        auto animNode_alloc = allocator::alloc_pool(animScene.nodes);
+        if (entity) { entity->animhandle = animNode_alloc.handle; }
+        *animNode_alloc.elem = {};
+        animNode_alloc.elem->skeleton = def.skeleton;
+        animNode_alloc.elem->clips = def.clips;
+        animNode_alloc.elem->clipCount = def.clipCount;
+        animNode_alloc.elem->state.animIndex = 0;
+        animNode_alloc.elem->state.time = 0.f;
+        animNode_alloc.elem->state.scale = 1.f;
+        for (u32 m = 0; m < animNode_alloc.elem->skeleton.jointCount; m++) {
+            float4x4& matrix = animNode_alloc.elem->state.skinning[m];
             math::identity4x4(*(Transform*)&(matrix));
         }
         // skinning data for rendering
-        gfx::rhi::RscCBuffer& cbufferskinning =
+        auto cbufferskinning_alloc =
             allocator::alloc_pool(renderScene.cbuffers);
-        drawable.cbuffer_ext = handle_from_cbuffer(renderScene, cbufferskinning);
-        gfx::rhi::create_cbuffer(cbufferskinning,
-            { (u32) sizeof(float4x4) * animNode.skeleton.jointCount });
-        drawable.ext_data = animNode.state.skinning;
+        drawable_alloc.elem->cbuffer_ext = cbufferskinning_alloc.handle;
+        gfx::rhi::create_cbuffer(*cbufferskinning_alloc.elem,
+            { (u32) sizeof(float4x4) * animNode_alloc.elem->skeleton.jointCount });
+        drawable_alloc.elem->ext_data = animNode_alloc.elem->state.skinning;
     }
     else if (def.instanceCount > 0) {
-        drawable.instanceCount = def.instanceCount;
+        drawable_alloc.elem->instanceCount = def.instanceCount;
 
-        float4x4* matrices = ALLOC_ARRAY(sceneArena, float4x4, drawable.instanceCount);
-        for (u32 m = 0; m < drawable.instanceCount; m++) {
+        float4x4* matrices = ALLOC_ARRAY(sceneArena, float4x4, drawable_alloc.elem->instanceCount);
+        for (u32 m = 0; m < drawable_alloc.elem->instanceCount; m++) {
             float4x4& matrix = matrices[m];
             math::identity4x4(*(Transform*)&(matrix));
         }
-        gfx::rhi::RscCBuffer& cbufferInstances =
+        auto cbufferInstances_alloc =
             allocator::alloc_pool(renderScene.cbuffers);
-        drawable.cbuffer_ext = handle_from_cbuffer(renderScene, cbufferInstances);
-        gfx::rhi::create_cbuffer(cbufferInstances,
-            { (u32)sizeof(float4x4) * drawable.instanceCount });
-        drawable.ext_data = matrices;
+        drawable_alloc.elem->cbuffer_ext = cbufferInstances_alloc.handle;
+        gfx::rhi::create_cbuffer(*cbufferInstances_alloc.elem,
+            { (u32)sizeof(float4x4) * drawable_alloc.elem->instanceCount });
+        drawable_alloc.elem->ext_data = matrices;
     }
 
-    return drawable;
+    return *drawable_alloc.elem;
 }
 
 void spawn_model_as_mirrors(
@@ -300,7 +300,7 @@ void extract_anim_data(game::AssetInMemory& assetToAdd,
         clip.timeEnd = (f32)stack.time_end;
         for (u32 joint_index = 0; joint_index < jointCount; joint_index++) {
             ufbx_node* node = scene.nodes.data[node_indices_skeleton[joint_index]];
-			animation::JointKeyframes& joint = clip.joints[joint_index];
+            animation::JointKeyframes& joint = clip.joints[joint_index];
             joint.joint_to_parent_trs =
                 ALLOC_ARRAY(persistentArena, animation::Joint_TRS, numFrames);
             for (u32 f = 0; f < numFrames; f++) {
@@ -395,9 +395,9 @@ bool load_with_materials(
             u32 vertex_align;
         };
         DstStreams materialVertexBuffer[renderer::ShaderTechnique::FBXLoadCount] = {};
-		materialVertexBuffer[renderer::ShaderTechnique::VertexColor].vertex_size =
+        materialVertexBuffer[renderer::ShaderTechnique::VertexColor].vertex_size =
             sizeof(renderer::VertexLayout_Color_3D);
-		materialVertexBuffer[renderer::ShaderTechnique::VertexColor].vertex_align =
+        materialVertexBuffer[renderer::ShaderTechnique::VertexColor].vertex_align =
             alignof(renderer::VertexLayout_Color_3D);
         materialVertexBuffer[renderer::ShaderTechnique::VertexColorSkinned].vertex_size =
             sizeof(renderer::VertexLayout_Color_Skinned_3D);
@@ -420,13 +420,13 @@ bool load_with_materials(
         materialVertexBuffer[renderer::ShaderTechnique::CutoutDiffuseSkinned].vertex_align =
             alignof(renderer::VertexLayout_Textured_Skinned_3D);
 
-		for (u32 i = 0; i < countof(materialVertexBuffer); i++) {
+        for (u32 i = 0; i < countof(materialVertexBuffer); i++) {
             DstStreams& stream = materialVertexBuffer[i];
             if (stream.vertex_size == 0) continue;
             allocator::reserve(stream.vertex, maxVertices, stream.vertex_size,
                                stream.vertex_align, pipelineContext.scratchArena);
             allocator::reserve(stream.index, maxVertices * 3 * 2, pipelineContext.scratchArena);
-		}
+        }
 
         // hack: only consider skinning from first mesh
         if (scene->meshes.count && scene->meshes[0]->skin_deformers.count) {
@@ -523,7 +523,7 @@ bool load_with_materials(
             const u32 mesh_vertices_count = (u32)mesh.num_vertices;
             const float3* mesh_vertices = &vertices.data[vertexOffset];
             MaterialVertexBufferContext ctx = {};
-			// tmp buffers to store the mapping between fbx mesh vertices and dest vertex streams
+            // tmp buffers to store the mapping between fbx mesh vertices and dest vertex streams
             ctx.dstvertex_to_fbxvertex =
                 ALLOC_ARRAY(pipelineContext.scratchArena, u32, mesh_vertices_count);
             ctx.dstvertex_to_fbxidx =
@@ -539,7 +539,7 @@ bool load_with_materials(
                             // we should use the alpha clip shader
                             DstStreams& stream = (mesh_mat.material->pbr.opacity.texture_enabled) ?
                                   materialVertexBuffer[renderer::ShaderTechnique::CutoutDiffuseSkinned]
-							    : materialVertexBuffer[renderer::ShaderTechnique::DiffuseSkinned];
+                                : materialVertexBuffer[renderer::ShaderTechnique::DiffuseSkinned];
 
                             assert(!stream.user); // we only support one textured-material of each pass
                             u32 stream_current_offset = (u32)stream.vertex.len;
@@ -686,9 +686,9 @@ bool load_with_materials(
         assetToAdd.max = max;
         assetToAdd.min = min;
 
-		for (u32 i = 0; i < countof(materialVertexBuffer); i++) {
-			DstStreams& stream = materialVertexBuffer[i];
-			if (!stream.vertex.len) { continue; }
+        for (u32 i = 0; i < countof(materialVertexBuffer); i++) {
+            DstStreams& stream = materialVertexBuffer[i];
+            if (!stream.vertex.len) { continue; }
 
             gfx::rhi::IndexedVertexBufferDesc desc = {};
             desc.vertexData = stream.vertex.data;
@@ -702,23 +702,21 @@ bool load_with_materials(
             desc.indexType = gfx::rhi::BufferItemType::U32;
             desc.type = gfx::rhi::BufferTopologyType::Triangles;
 
-            renderer::DrawMesh& mesh =
-                renderer::alloc_drawMesh(renderCore);
-            mesh = {};
-            mesh.shaderTechnique = (renderer::ShaderTechnique::Type)i;
+            auto mesh_alloc = allocator::alloc_pool(renderCore.meshes);
+            *mesh_alloc.elem = {};
+            mesh_alloc.elem->shaderTechnique = (renderer::ShaderTechnique::Type)i;
             gfx::rhi::create_indexed_vertex_buffer(
-                mesh.vertexBuffer, desc, pipelineContext.vertexAttrs[i],
+                mesh_alloc.elem->vertexBuffer, desc, pipelineContext.vertexAttrs[i],
                 pipelineContext.attr_count[i]);
             if (stream.user) {
                 const char* texturefile =
                     ((ufbx_texture*)stream.user)->filename.data;
                 gfx::rhi::create_texture_from_file(
-                    mesh.texture,
+                    mesh_alloc.elem->texture,
                     { pipelineContext.scratchArena, texturefile });
             }
-            assetToAdd.meshHandles[assetToAdd.meshCount++] =
-                handle_from_drawMesh(renderCore, mesh);
-		}
+            assetToAdd.meshHandles[assetToAdd.meshCount++] = mesh_alloc.handle;
+        }
         success = true;
     }
     return success;
@@ -1113,8 +1111,10 @@ void renderBaseScene(RenderSceneContext& sceneCtx) {
                 gfx::rhi::bind_blend_state(rsc.blendStateBlendOffAlpha);
 
                 // shadow mesh 
-                const DrawMesh& meshA = drawMesh_from_handle(rsc, sceneCtx.resources.unitSphereShadowA);
-                const DrawMesh& meshB = drawMesh_from_handle(rsc, sceneCtx.resources.unitSphereShadowB);
+                const DrawMesh& meshA = 
+                    *allocator::resolve_pool_handle(rsc.meshes, sceneCtx.resources.unitSphereShadowA);
+                const DrawMesh& meshB = 
+                    *allocator::resolve_pool_handle(rsc.meshes, sceneCtx.resources.unitSphereShadowB);
                 renderer::ShaderPrograms::Enum program =
                     rsc.shaderTechniques[meshA.shaderTechnique].
                         shaders[renderer::DrawType::Default];
@@ -1132,7 +1132,8 @@ void renderBaseScene(RenderSceneContext& sceneCtx) {
                 for (u32 i = 0; i < game::EntityTypes::Count; i++) {
                     game::Entity& e = sceneCtx.gameScene.entities[i];
                     if (e.shadowData) {
-                        gfx::rhi::RscCBuffer shadowData = cbuffer_from_handle(scene, e.shadow_cbuffer);
+                        gfx::rhi::RscCBuffer shadowData = 
+                            *allocator::resolve_pool_handle(scene.cbuffers, e.shadow_cbuffer);
                         gfx::rhi::RscCBuffer cbuffers[] = { scene_cbuffer, shadowData };
                         gfx::rhi::bind_cbuffers(rsc.shaderPrograms[program].shader, cbuffers, countof(cbuffers));
                         gfx::rhi::draw_indexed_vertex_buffer(meshA.vertexBuffer);
@@ -1144,7 +1145,8 @@ void renderBaseScene(RenderSceneContext& sceneCtx) {
                 for (u32 i = 0; i < game::EntityTypes::Count; i++) {
                     game::Entity& e = sceneCtx.gameScene.entities[i];
                     if (e.shadowData) {
-                        gfx::rhi::RscCBuffer shadowData = cbuffer_from_handle(scene, e.shadow_cbuffer);
+                        gfx::rhi::RscCBuffer shadowData = 
+                            *allocator::resolve_pool_handle(scene.cbuffers, e.shadow_cbuffer);
                         gfx::rhi::RscCBuffer cbuffers[] = { scene_cbuffer, shadowData };
                         gfx::rhi::bind_cbuffers(rsc.shaderPrograms[program].shader, cbuffers, countof(cbuffers));
                         gfx::rhi::draw_indexed_vertex_buffer(meshA.vertexBuffer);
@@ -1376,9 +1378,9 @@ void load_coreResources(
         { "assets/meshes/bird.fbx", game::Resources::AssetsMeta::Bird }
     };
     // very very hack: number of assets * 4 + 16 (for the meshes we load ourselves)
-    const size_t meshArenaSize = (countof(assets) * 4 + 16) * sizeof(renderer::DrawMesh);
-    renderCore.meshes = ALLOC_BYTES(persistentArena, renderer::DrawMesh, meshArenaSize, alignof(renderer::DrawMesh));
-    renderCore.num_meshes = 0;
+    const ptrdiff_t mesh_count = countof(assets) * 4 + 16;
+    allocator::init_pool(renderCore.meshes, mesh_count, persistentArena);
+    __DEBUGDEF(renderCore.meshes.name = "meshes";)
 
     camera::WindowProjection::Config& ortho =
         renderCore.windowProjection.config;
@@ -1620,7 +1622,6 @@ void load_coreResources(
     LOAD_VERTEX_LAYOUT_ATTRIBS;
 
     // cbuffer bindings
-    const gfx::rhi::CBufferBindingDesc* bufferBindings_null = nullptr;
     const gfx::rhi::CBufferBindingDesc bufferBindings_blit_clear_color[] = {
         { "type_BlitColor", gfx::rhi::CBufferStageMask::PS }
     };
@@ -1654,13 +1655,12 @@ void load_coreResources(
     };
 
     // texture bindings
-    const gfx::rhi::TextureBindingDesc* textureBindings_null = nullptr;
     const gfx::rhi::TextureBindingDesc textureBindings_base[] = { { "texDiffuse" } };
     const gfx::rhi::TextureBindingDesc textureBindings_fullscreenblit[] = { { "texSrc" } };
     const gfx::rhi::TextureBindingDesc textureBindings_fullscreenblit_depth[] = { { "texSrc" }, { "depthSrc" }};
 
     // shaders
-#define LOAD_SHADER(vsname, psname, programType, attrs, buffBindings, textBindings) { \
+#define LOAD_SHADER(vsname, psname, programType, attrs, buffBindings, buffBindings_count, textBindings, textBindings_count) { \
         gfx::ShaderDesc desc = {}; \
         gfx::rhi::VertexShaderRuntimeCompileParams& vs_params = desc.vs_params; \
         gfx::rhi::PixelShaderRuntimeCompileParams& ps_params = desc.ps_params; \
@@ -1669,9 +1669,9 @@ void load_coreResources(
         POPULATE_VSSHADER_PARAMS(vs_params, vsname) \
         POPULATE_PSSHADER_PARAMS(ps_params, psname) \
         desc.textureBindings = textBindings ? textBindings : nullptr; \
-        desc.textureBinding_count = textBindings ? countof(textBindings) : 0; \
+        desc.textureBinding_count = textBindings_count; \
         desc.bufferBindings = buffBindings ? buffBindings : nullptr; \
-        desc.bufferBinding_count = buffBindings ? countof(buffBindings) : 0; \
+        desc.bufferBinding_count = buffBindings_count; \
         renderer::ReloadableShader& shader = renderCore.shaderPrograms[programType]; \
         gfx::compile_shader(shader.shader, desc); \
         __DEBUGDEF(shader.vs_srcFile = vs_params.srcFile; \
@@ -1685,62 +1685,62 @@ void load_coreResources(
         gfx::shaders::vs_fullscreen_bufferless_clear_blit,
         gfx::shaders::ps_fullscreen_blit_clear_colored,
         renderer::ShaderPrograms::FullscreenBlitClearColor,
-        attribs_3d, bufferBindings_blit_clear_color, textureBindings_null);
+        attribs_3d, bufferBindings_blit_clear_color, countof(bufferBindings_blit_clear_color), nullptr, 0);
     LOAD_SHADER(
         gfx::shaders::vs_fullscreen_bufferless_textured_blit,
         gfx::shaders::ps_fullscreen_blit_sdf,
         renderer::ShaderPrograms::FullscreenBlitSDFScene,
-        attribs_3d, bufferBindings_blit_sdf, textureBindings_null);
+        attribs_3d, bufferBindings_blit_sdf, countof(bufferBindings_blit_sdf), nullptr, 0);
     LOAD_SHADER(
         gfx::shaders::vs_fullscreen_bufferless_textured_blit,
         gfx::shaders::ps_fullscreen_blit_textured,
         renderer::ShaderPrograms::FullscreenBlitTextured,
-        attribs_textured3d, bufferBindings_null, textureBindings_fullscreenblit);
+        attribs_textured3d, nullptr, 0, textureBindings_fullscreenblit, countof(textureBindings_fullscreenblit) );
     LOAD_SHADER(
         gfx::shaders::vs_fullscreen_bufferless_textured_blit,
         gfx::shaders::ps_fullscreen_blit_textured_depth,
         renderer::ShaderPrograms::FullscreenBlitTexturedDepth,
-        attribs_textured3d, bufferBindings_null, textureBindings_fullscreenblit_depth);
+        attribs_textured3d, nullptr, 0, textureBindings_fullscreenblit_depth, countof(textureBindings_fullscreenblit_depth));
     LOAD_SHADER(
         gfx::shaders::vs_color2d_base,
         gfx::shaders::ps_color3d_unlit,
         renderer::ShaderPrograms::DefaultColor2D,
-        attribs_2d, bufferBindings_untextured_base, textureBindings_null);
+        attribs_2d, bufferBindings_untextured_base, countof(bufferBindings_untextured_base), nullptr, 0);
     LOAD_SHADER(
         gfx::shaders::vs_3d_instanced_base,
         gfx::shaders::ps_color3d_unlit,
         renderer::ShaderPrograms::DefaultInstanced3D,
-        attribs_3d, bufferBindings_instanced_base, textureBindings_null);
+        attribs_3d, bufferBindings_instanced_base, countof(bufferBindings_instanced_base), nullptr, 0);
     LOAD_SHADER(
         gfx::shaders::vs_color3d_base,
         gfx::shaders::ps_color3d_unlit,
         renderer::ShaderPrograms::DefaultColor3D,
-        attribs_color3d, bufferBindings_untextured_base, textureBindings_null);
+        attribs_color3d, bufferBindings_untextured_base, countof(bufferBindings_untextured_base), nullptr, 0);
     LOAD_SHADER(
         gfx::shaders::vs_color3d_skinned_base,
         gfx::shaders::ps_color3d_unlit,
         renderer::ShaderPrograms::DefaultColor3DSkinned,
-        attribs_color3d_skinned, bufferBindings_skinned_untextured_base, textureBindings_null);
+        attribs_color3d_skinned, bufferBindings_skinned_untextured_base, countof(bufferBindings_skinned_untextured_base), nullptr, 0);
     LOAD_SHADER(
         gfx::shaders::vs_textured3d_base,
         gfx::shaders::ps_textured3d_base,
         renderer::ShaderPrograms::DefaultTextured3D,
-        attribs_textured3d, bufferBindings_textured_base, textureBindings_base);
+        attribs_textured3d, bufferBindings_textured_base, countof(bufferBindings_textured_base), textureBindings_base, countof(textureBindings_base));
     LOAD_SHADER(
         gfx::shaders::vs_textured3d_base,
         gfx::shaders::ps_textured3dalphaclip_base,
         renderer::ShaderPrograms::DefaultTextured3DAlphaClip,
-        attribs_textured3d, bufferBindings_textured_base, textureBindings_base);
+        attribs_textured3d, bufferBindings_textured_base, countof(bufferBindings_textured_base), textureBindings_base, countof(textureBindings_base));
     LOAD_SHADER(
         gfx::shaders::vs_textured3d_skinned_base,
         gfx::shaders::ps_textured3d_base,
         renderer::ShaderPrograms::DefaultTextured3DSkinned,
-        attribs_textured3d_skinned, bufferBindings_skinned_textured_base, textureBindings_base);
+        attribs_textured3d_skinned, bufferBindings_skinned_textured_base, countof(bufferBindings_skinned_textured_base), textureBindings_base, countof(textureBindings_base));
     LOAD_SHADER(
         gfx::shaders::vs_textured3d_skinned_base,
         gfx::shaders::ps_textured3dalphaclip_base,
         renderer::ShaderPrograms::DefaultTextured3DAlphaClipSkinned,
-        attribs_textured3d_skinned, bufferBindings_skinned_textured_base, textureBindings_base);
+        attribs_textured3d_skinned, bufferBindings_skinned_textured_base, countof(bufferBindings_skinned_textured_base), textureBindings_base, countof(textureBindings_base));
 
     // todo: actually implement alpha
     renderCore.shaderTechniques[renderer::ShaderTechnique::Instanced] = { { renderer::ShaderPrograms::DefaultInstanced3D, renderer::ShaderPrograms::DefaultInstanced3D } };
@@ -1755,31 +1755,31 @@ void load_coreResources(
 
     fbx::PipelineAssetContext ctx = { scratchArena, persistentArena };
     ctx.vertexAttrs[renderer::ShaderTechnique::VertexColor]
-		= attribs_color3d;
+        = attribs_color3d;
     ctx.attr_count[renderer::ShaderTechnique::VertexColor]
-		= countof(attribs_color3d);
+        = countof(attribs_color3d);
     ctx.vertexAttrs[renderer::ShaderTechnique::VertexColorSkinned]
-		= attribs_color3d_skinned;
+        = attribs_color3d_skinned;
     ctx.attr_count[renderer::ShaderTechnique::VertexColorSkinned]
-		= countof(attribs_color3d_skinned);
+        = countof(attribs_color3d_skinned);
     ctx.vertexAttrs[renderer::ShaderTechnique::Diffuse]
-		= attribs_textured3d;
+        = attribs_textured3d;
     ctx.attr_count[renderer::ShaderTechnique::Diffuse]
-		= countof(attribs_textured3d);
+        = countof(attribs_textured3d);
     ctx.vertexAttrs[renderer::ShaderTechnique::CutoutDiffuse]
-		= attribs_textured3d;
+        = attribs_textured3d;
     ctx.attr_count[renderer::ShaderTechnique::CutoutDiffuse]
-		= countof(attribs_textured3d);
+        = countof(attribs_textured3d);
     ctx.vertexAttrs[renderer::ShaderTechnique::DiffuseSkinned]
-		= attribs_textured3d_skinned;
+        = attribs_textured3d_skinned;
     ctx.attr_count[renderer::ShaderTechnique::DiffuseSkinned]
-		= countof(attribs_textured3d_skinned);
+        = countof(attribs_textured3d_skinned);
     ctx.vertexAttrs[renderer::ShaderTechnique::CutoutDiffuseSkinned]
-		= attribs_textured3d_skinned;
+        = attribs_textured3d_skinned;
     ctx.attr_count[renderer::ShaderTechnique::CutoutDiffuseSkinned]
-		= countof(attribs_textured3d_skinned);
+        = countof(attribs_textured3d_skinned);
     for (u32 asset_idx = 0; asset_idx < countof(assets); asset_idx++) {
-		ctx.scratchArena = scratchArena; // explicit copy
+        ctx.scratchArena = scratchArena; // explicit copy
         game::AssetInMemory& assetToAdd = core.assets[assets[asset_idx].assetId];
         assetToAdd = {};
         fbx::load_with_materials(assetToAdd, renderCore, ctx, assets[asset_idx].path);
@@ -1787,61 +1787,61 @@ void load_coreResources(
 
     // instanced cubes
     {
-        renderer::DrawMesh& mesh = renderer::alloc_drawMesh(renderCore);
-        mesh = {};
-        mesh.shaderTechnique = renderer::ShaderTechnique::Instanced;
+        auto mesh_alloc = allocator::alloc_pool(renderCore.meshes);
+        *mesh_alloc.elem = {};
+        mesh_alloc.elem->shaderTechnique = renderer::ShaderTechnique::Instanced;
         gfx::UntexturedCube cube;
         gfx::create_cube_coords(
             (uintptr_t)cube.vertices, sizeof(cube.vertices[0]),
             cube.indices, float3(1.f, 1.f, 1.f), float3(0.f, 0.f, 0.f));
         gfx::create_indexed_vertex_buffer_from_untextured_mesh(
-            mesh.vertexBuffer, cube.vertices, countof(cube.vertices),
+            mesh_alloc.elem->vertexBuffer, cube.vertices, countof(cube.vertices),
             cube.indices, countof(cube.indices));
-        core.instancedUnitCubeMesh = renderer::handle_from_drawMesh(renderCore, mesh);
+        core.instancedUnitCubeMesh = mesh_alloc.handle;
     }
 
     // unit spheres
     {
         {
-            renderer::DrawMesh& mesh = renderer::alloc_drawMesh(renderCore);
-            mesh = {};
-            mesh.shaderTechnique = renderer::ShaderTechnique::VertexColor;
+            auto mesh_alloc = allocator::alloc_pool(renderCore.meshes);
+            *mesh_alloc.elem = {};
+            mesh_alloc.elem->shaderTechnique = renderer::ShaderTechnique::VertexColor;
             gfx::ColoredSphere sphere;
             gfx::create_colored_sphere_coords(sphere, 1.f, Color32(1.f, 1.f, 1.f, 1.f));
             gfx::create_indexed_vertex_buffer_from_colored_mesh(
-                mesh.vertexBuffer, sphere.vertices, countof(sphere.vertices),
+                mesh_alloc.elem->vertexBuffer, sphere.vertices, countof(sphere.vertices),
                 sphere.indices, countof(sphere.indices));
-            core.unitSphere = renderer::handle_from_drawMesh(renderCore, mesh);
+            core.unitSphere = mesh_alloc.handle;
         }
         {
-            renderer::DrawMesh& mesh = renderer::alloc_drawMesh(renderCore);
-            mesh = {};
-            mesh.shaderTechnique = renderer::ShaderTechnique::VertexColor;
+            auto mesh_alloc = allocator::alloc_pool(renderCore.meshes);
+            *mesh_alloc.elem = {};
+            mesh_alloc.elem->shaderTechnique = renderer::ShaderTechnique::VertexColor;
             gfx::ColoredSphere sphere;
             gfx::create_colored_sphere_coords(sphere, 1.f, Color32(0.f, 0.f, 0.f, 0.65f));
             gfx::create_indexed_vertex_buffer_from_colored_mesh(
-                mesh.vertexBuffer, sphere.vertices, countof(sphere.vertices),
+                mesh_alloc.elem->vertexBuffer, sphere.vertices, countof(sphere.vertices),
                 sphere.indices, countof(sphere.indices));
-            core.unitSphereShadowA = renderer::handle_from_drawMesh(renderCore, mesh);
+            core.unitSphereShadowA = mesh_alloc.handle;
         }
         {
-            renderer::DrawMesh& mesh = renderer::alloc_drawMesh(renderCore);
-            mesh = {};
-            mesh.shaderTechnique = renderer::ShaderTechnique::VertexColor;
+            auto mesh_alloc = allocator::alloc_pool(renderCore.meshes);
+            *mesh_alloc.elem = {};
+            mesh_alloc.elem->shaderTechnique = renderer::ShaderTechnique::VertexColor;
             gfx::ColoredSphere sphere;
             gfx::create_colored_sphere_coords(sphere, 1.f, Color32(0.f, 0.f, 0.f, 1.f));
             gfx::create_indexed_vertex_buffer_from_colored_mesh(
-                mesh.vertexBuffer, sphere.vertices, countof(sphere.vertices),
+                mesh_alloc.elem->vertexBuffer, sphere.vertices, countof(sphere.vertices),
                 sphere.indices, countof(sphere.indices));
-            core.unitSphereShadowB = renderer::handle_from_drawMesh(renderCore, mesh);
+            core.unitSphereShadowB = mesh_alloc.handle;
         }
     }
 
     // ground
     {
-        renderer::DrawMesh& mesh = renderer::alloc_drawMesh(renderCore);
-        mesh = {};
-        mesh.shaderTechnique = renderer::ShaderTechnique::VertexColor;
+        auto mesh_alloc = allocator::alloc_pool(renderCore.meshes);
+        *mesh_alloc.elem = {};
+        mesh_alloc.elem->shaderTechnique = renderer::ShaderTechnique::VertexColor;
         f32 w = 30.f, h = 30.f;
         u32 c = Color32(0.13f, 0.51f, 0.23f, 1.f).ABGR();
         renderer::VertexLayout_Color_3D v[] = {
@@ -1878,13 +1878,13 @@ void load_coreResources(
                     gfx::rhi::BufferAttributeFormat::R8G8B8A8_UNORM)
         };
         gfx::rhi::create_indexed_vertex_buffer(
-            mesh.vertexBuffer, bufferParams, attribs, countof(attribs));
+            mesh_alloc.elem->vertexBuffer, bufferParams, attribs, countof(attribs));
 
         game::AssetInMemory& ground = core.assets[game::Resources::AssetsMeta::Ground];
         ground = {};
         ground.min = float3(-w, -h, 0.f);
         ground.max = float3(w, h, 0.f);
-        ground.meshHandles[ground.meshCount++] = renderer::handle_from_drawMesh(renderCore, mesh);
+        ground.meshHandles[ground.meshCount++] = mesh_alloc.handle;
         ground.skeleton.jointCount = 0;
     }
 
@@ -1978,9 +1978,9 @@ void load_coreResources(
         cpuBuffer.vertexCount = countof(vertices);
 
         // back mirror
-        renderer::DrawMesh& mesh = renderer::alloc_drawMesh(renderCore);
-        mesh = {};
-        mesh.shaderTechnique = renderer::ShaderTechnique::VertexColor;
+        auto mesh_alloc = allocator::alloc_pool(renderCore.meshes);
+        *mesh_alloc.elem = {};
+        mesh_alloc.elem->shaderTechnique = renderer::ShaderTechnique::VertexColor;
         bufferParams = {};
         bufferParams.vertexData = verticesBack;
         bufferParams.indexData = indicesBack;
@@ -1993,13 +1993,13 @@ void load_coreResources(
         bufferParams.indexType = gfx::rhi::BufferItemType::U16;
         bufferParams.type = gfx::rhi::BufferTopologyType::Triangles;
         gfx::rhi::create_indexed_vertex_buffer(
-            mesh.vertexBuffer, bufferParams, attribs, countof(attribs));
+            mesh_alloc.elem->vertexBuffer, bufferParams, attribs, countof(attribs));
 
         game::AssetInMemory& backMirrors = core.assets[game::Resources::AssetsMeta::BackMirrors];
         backMirrors = {};
         backMirrors.min = float3(-30.f, -30.f, 0.f);
         backMirrors.max = float3(30.f, 30.f, 0.f);
-        backMirrors.meshHandles[backMirrors.meshCount++] = renderer::handle_from_drawMesh(renderCore, mesh);
+        backMirrors.meshHandles[backMirrors.meshCount++] = mesh_alloc.handle;
         backMirrors.skeleton.jointCount = 0;
     }
 
@@ -2146,11 +2146,11 @@ void spawn_scene_mirrorRoom(
     size_t cbufferCount = maxDrawables * 2;
     size_t maxAnimNodes = countof(assetDefs);
     allocator::init_pool(renderScene.cbuffers, cbufferCount, sceneArena);
-	__DEBUGDEF(renderScene.cbuffers.name = "cbuffers";)
+    __DEBUGDEF(renderScene.cbuffers.name = "cbuffers";)
     allocator::init_pool(renderScene.drawables, maxDrawables, sceneArena);
-	__DEBUGDEF(renderScene.drawables.name = "drawables";)
+    __DEBUGDEF(renderScene.drawables.name = "drawables";)
     allocator::init_pool(animScene.nodes, maxAnimNodes, sceneArena);
-	__DEBUGDEF(animScene.nodes.name = "anim nodes";)
+    __DEBUGDEF(animScene.nodes.name = "anim nodes";)
 
     const u32 ball_count = (u32)countof(physics::Scene::balls);
     // physics
@@ -2353,7 +2353,9 @@ void spawn_scene_mirrorRoom(
                 prev = m;
                 prevSegment = segment;
             }
-            gfx::rhi::update_cbuffer(cbuffer_from_handle(renderScene, drawable.cbuffer_ext), instancedMatrices);
+            gfx::rhi::update_cbuffer(
+                *allocator::resolve_pool_handle(renderScene.cbuffers, drawable.cbuffer_ext),
+                instancedMatrices);
         }
     }
 

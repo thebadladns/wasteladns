@@ -1,6 +1,17 @@
 #ifndef __WASTELADNS_ANIMATION_H__
 #define __WASTELADNS_ANIMATION_H__
 
+// Pool type definitions 
+namespace animation {
+    struct Node;
+}
+namespace allocator {
+    template<> struct PoolHandle<animation::Node> : PoolHandle_Base<24, 8> {};
+}
+namespace animation {
+    typedef allocator::PoolHandle<Node> Handle;
+}
+
 namespace animation {
 struct Skeleton {
     float4x4 geometryFromRoot;
@@ -29,8 +40,6 @@ struct State {
     f32 time;
     f32 scale;
 };
-typedef u32 Handle;
-struct NodeMeta { enum Enum { HandleBits = 32, HandleMask = 0xffffffff, MaxNodes = HandleMask - 1 }; }; // handle=0 reserved for 0 initialization
 struct Node {
     Skeleton skeleton; // constant mesh_to_joint matrices, as well as posed joint_to_parent matrices
     Clip* clips;
@@ -40,13 +49,6 @@ struct Node {
 struct Scene {
     allocator::Pool<Node> nodes;
 };
-
-force_inline Node& get_node(Scene& scene, const Handle handle) {
-    return allocator::get_pool_slot(scene.nodes, handle - 1);
-}
-force_inline Handle handle_from_drawable(Scene& scene, Node& node) {
-    return allocator::get_pool_index(scene.nodes, node) + 1;
-}
 
 void updateAnimation(Scene& scene, const f32 dt) {
 

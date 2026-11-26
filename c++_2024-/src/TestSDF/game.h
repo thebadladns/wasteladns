@@ -9,7 +9,7 @@ const size_t scratchArenaSize = 4 * 1024 * 1024;
 #if __DEBUG
 struct CameraNode;
 namespace debug {
-struct DebugMenus { enum Enum { Main, Arenas, Gamepads, Count }; };
+struct DebugMenus { enum Enum { Main, Arenas, Pools, Gamepads, Count }; };
 struct VisualizationModes { enum Enum { Physics, Culling, BVH, Count }; };
 bool visualizationModes[VisualizationModes::Count] = {};
 bool debugMenus[DebugMenus::Count] = { true, false };
@@ -25,6 +25,7 @@ EventText eventLabel = {};
 bool capture_cameras_next_frame = false;
 im::Pane debugPane;
 im::Pane arenasPane;
+im::Pane poolsPane;
 im::Pane gamepadsPane;
 
 }
@@ -155,16 +156,19 @@ void start(Instance& game, platform::GameConfig& config) {
     im::ui.scale = (u8)platform::state.screen.window_scale;
     im::make_pane(
         debug::debugPane, "DEBUG MENU",
-        float2(game.resources.renderCore.windowProjection.config.left + im::ui.scale * 20,
-               game.resources.renderCore.windowProjection.config.top - im::ui.scale * 35));
+        float2(game.resources.renderCore.windowProjection.config.left + im::ui.scale * 20.f,
+               game.resources.renderCore.windowProjection.config.top - im::ui.scale * 35.f));
     im::make_pane(
         debug::arenasPane, "ARENAS MENU",
-        float2(0.f, game.resources.renderCore.windowProjection.config.top - im::ui.scale * 35));
+        float2(0.f, game.resources.renderCore.windowProjection.config.top - im::ui.scale * 35.f));
+    im::make_pane(
+        debug::poolsPane, "POOLS MENU",
+        float2(-im::ui.scale * 50.f, game.resources.renderCore.windowProjection.config.top - im::ui.scale * 35.f));
     im::make_pane(
         debug::gamepadsPane, "GAMEPADS MENU",
         float2(
-            game.resources.renderCore.windowProjection.config.right - im::ui.scale * 200,
-            game.resources.renderCore.windowProjection.config.top - im::ui.scale * 35));
+            game.resources.renderCore.windowProjection.config.right - im::ui.scale * 200.f,
+            game.resources.renderCore.windowProjection.config.top - im::ui.scale * 35.f));
 #endif
 }
 
@@ -334,11 +338,16 @@ void update(Instance& game, platform::GameConfig& config) {
 
             // update player render
             renderer::CBufferNodeData& nodeData =
-                renderer::drawable_from_handle(game.scene.renderScene, game.scene.entities[game::EntityTypes::Player].renderHandle).nodeData;
+                allocator::resolve_pool_handle(
+                    game.scene.renderScene.drawables, 
+                    game.scene.entities[game::EntityTypes::Player].renderHandle)->nodeData;
             nodeData.worldMatrix = game.scene.player.transform.matrix;
 
             { // animation hack
-                animation::Node& animatedData = animation::get_node(game.scene.animScene, game.scene.entities[game::EntityTypes::Player].animhandle);
+                animation::Node& animatedData =
+                    *allocator::resolve_pool_handle(
+                        game.scene.animScene.nodes,
+                        game.scene.entities[game::EntityTypes::Player].animhandle);
 
                 enum Cycle { Idle = 0, JerkyRun = 1, Run = 2 };
                 const f32 maxSpeed = 15.f;
@@ -397,8 +406,8 @@ void update(Instance& game, platform::GameConfig& config) {
                 }
 
                 // dust particles hack
-                renderer::Drawable& drawable = renderer::drawable_from_handle(
-                        game.scene.renderScene,
+                renderer::Drawable& drawable = *allocator::resolve_pool_handle(
+                        game.scene.renderScene.drawables,
                         game.scene.entities[EntityTypes::PlayerTrail].renderHandle);
                 float4x4* instancedMatrices = (float4x4*)drawable.ext_data;
                 for (u32 i = 0; i < drawable.instanceCount; i++) {
@@ -444,8 +453,8 @@ void update(Instance& game, platform::GameConfig& config) {
 
                 renderer::DrawableHandle renderHandle =
                     game.scene.entities[game::EntityTypes::FirstPhysicsBall + i].renderHandle;
-                renderer::Drawable& drawable = renderer::drawable_from_handle(
-                    game.scene.renderScene, renderHandle);
+                renderer::Drawable& drawable = *allocator::resolve_pool_handle(
+                    game.scene.renderScene.drawables, renderHandle);
 
                 float4x4& m = drawable.nodeData.worldMatrix;
                 m.col3.xyz = physicsScene.balls[i].pos;
@@ -571,11 +580,11 @@ void update(Instance& game, platform::GameConfig& config) {
 
                     Drawable& node = scene.drawables.data[n].state.live;
                     gfx::rhi::update_cbuffer(
-                            cbuffer_from_handle(scene, node.cbuffer_node),
+                            *allocator::resolve_pool_handle(scene.cbuffers, node.cbuffer_node),
                             &node.nodeData);
-                    if (node.cbuffer_ext) {
+                    if (node.cbuffer_ext.data) {
                         gfx::rhi::update_cbuffer(
-                                cbuffer_from_handle(scene, node.cbuffer_ext),
+                            *allocator::resolve_pool_handle(scene.cbuffers, node.cbuffer_ext),
                                 node.ext_data);
                     }
                 }
@@ -588,11 +597,11 @@ void update(Instance& game, platform::GameConfig& config) {
 
                     Drawable& node = scene.drawables.data[n].state.live;
                     gfx::rhi::update_cbuffer(
-                        cbuffer_from_handle(scene, node.cbuffer_node),
+                        *allocator::resolve_pool_handle(scene.cbuffers, node.cbuffer_node),
                         &node.nodeData);
-                    if (node.cbuffer_ext) {
+                    if (node.cbuffer_ext.data) {
                         gfx::rhi::update_cbuffer(
-                            cbuffer_from_handle(scene, node.cbuffer_ext),
+                            *allocator::resolve_pool_handle(scene.cbuffers, node.cbuffer_ext),
                             node.ext_data);
                     }
                 }
@@ -606,7 +615,8 @@ void update(Instance& game, platform::GameConfig& config) {
                     game::Entity& entity = game.scene.entities[i];
                     if (entity.shadowData) {
                         renderer::CBufferNodeData& shadowData = *(renderer::CBufferNodeData*)entity.shadowData;
-                        Drawable& d = renderer::drawable_from_handle(scene, entity.renderHandle);
+                        Drawable& d = 
+                            *allocator::resolve_pool_handle(scene.drawables, entity.renderHandle);
                         physics::RaycastResult result = physics::raycast(
                             d.nodeData.worldMatrix.col3.xyz,
                             math::add(d.nodeData.worldMatrix.col3.xyz, sundir));
@@ -620,7 +630,7 @@ void update(Instance& game, platform::GameConfig& config) {
                             shadowData.worldMatrix.col2.z = radius;
 
                             gfx::rhi::update_cbuffer(
-                                cbuffer_from_handle(scene, entity.shadow_cbuffer),
+                                *allocator::resolve_pool_handle(scene.cbuffers, entity.shadow_cbuffer),
                                 &shadowData);
                         }
                     }
@@ -718,8 +728,8 @@ void update(Instance& game, platform::GameConfig& config) {
                     gfx::rhi::RscCBuffer cbuffers[] =
                     { scene_cbuffer, node_cbuffer, instanced_cbuffer };
                     renderer::DrawMesh& drawMesh =
-                        renderer::drawMesh_from_handle(
-                            renderCore, game.resources.instancedUnitCubeMesh);
+                        *allocator::resolve_pool_handle(
+                            renderCore.meshes, game.resources.instancedUnitCubeMesh);
 
                     gfx::rhi::RscShaderSet& shader =
                         renderCore.shaderPrograms[
@@ -937,6 +947,8 @@ void update(Instance& game, platform::GameConfig& config) {
                     }
                     im::checkbox(
                         "Toggle memory arenas menu", &debug::debugMenus[debug::DebugMenus::Arenas]);
+                    im::checkbox(
+                        "Toggle memory pools menu", &debug::debugMenus[debug::DebugMenus::Pools]);
                     im::checkbox(
                         "Toggle gamepads menu", &debug::debugMenus[debug::DebugMenus::Gamepads]);
                     im::checkbox(
@@ -1182,6 +1194,68 @@ void update(Instance& game, platform::GameConfig& config) {
                 }
                 im::pane_end();
             }
+
+            if (debug::debugMenus[debug::DebugMenus::Pools])
+            {
+                auto renderPool = [](auto pool,
+                    const Color32 baseCol, const Color32 aliveCol) {
+                        const f32 barwidth = 150.f * im::ui.scale;
+                        const f32 barheight = 10.f * im::ui.scale;
+                        const f32 itemwidth = barwidth / pool.cap;
+                        const f32 occupancy = pool.count / (f32)pool.cap;
+                        im::label_format(
+                            aliveCol, "%s: %lu / %lu, %.3f%%",
+                            pool.name, pool.count, pool.cap,
+                            occupancy * 100.f);
+
+                        // compute extents in pane
+                        float2 extents(barwidth, barheight);
+                        float2 originWS;
+                        im::impl::adjust_bounds_in_parent(
+                            originWS, extents, /* match parent width */ false);
+
+                        im::box_2d(
+                            float2(originWS.x, originWS.y - extents.y),
+                            float2(originWS.x + extents.x, originWS.y), baseCol);
+                        for (u32 n = 0, count = 0; n < pool.cap && count < pool.count; n++) {
+                            if (pool.data[n].alive == 0) { continue; }
+                            count++;
+                            
+                            float data_originWS_x = originWS.x + itemwidth*n;
+                            im::box_2d(
+                                float2(data_originWS_x, originWS.y - extents.y),
+                                float2(data_originWS_x + itemwidth, originWS.y), aliveCol);
+                        }
+                    };
+
+                im::pane_start(debug::poolsPane);
+                {
+                    const f32 barwidth = 150.f * im::ui.scale;
+                    const f32 barheight = 10.f * im::ui.scale;
+                    {
+                        const Color32 poolbaseCol(0.65f, 0.65f, 0.65f, 0.4f);
+                        const Color32 poolaliveCol(0.95f, 0.35f, 0.8f, 1.f);
+                        renderPool( scene.drawables, poolbaseCol, poolaliveCol);
+                    }
+                    {
+                        const Color32 poolbaseCol(0.65f, 0.65f, 0.65f, 0.4f);
+                        const Color32 poolaliveCol(0.95f, 0.35f, 0.8f, 1.f);
+                        renderPool(scene.cbuffers, poolbaseCol, poolaliveCol);
+                    }
+                    {
+                        const Color32 poolbaseCol(0.65f, 0.65f, 0.65f, 0.4f);
+                        const Color32 poolaliveCol(0.95f, 0.35f, 0.8f, 1.f);
+                        renderPool(game.resources.renderCore.meshes, poolbaseCol, poolaliveCol);
+                    }
+                    {
+                        const Color32 poolbaseCol(0.65f, 0.65f, 0.65f, 0.4f);
+                        const Color32 poolaliveCol(0.95f, 0.35f, 0.8f, 1.f);
+                        renderPool(game.scene.animScene.nodes, poolbaseCol, poolaliveCol);
+                    }
+                }
+                im::pane_end();
+            }
+
 
             im::reset_frame();
 
