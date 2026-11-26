@@ -82,7 +82,6 @@ struct Memory {
     __DEBUGDEF(allocator::PagedArena debugArena;)
     allocator::PagedArena scratchArenaRoot; // to be passed by copy, so it works as a scoped stack allocator
     allocator::PagedArena frameArena;
-    u8* frameArenaBuffer; // used to reset allocator::frameArena every frame
     u8* sceneArenaBuffer; // used to reset allocator::sceneArena upon scene switches
     // used for debugging visualization
     __DEBUGDEF(u8* persistentArenaBuffer;)
@@ -130,7 +129,6 @@ void start(Instance& game, platform::GameConfig& config) {
             game.memory.scratchArenaRoot.highmark = &game.memory.scratchArenaHighmark;)
         allocator::init_arena(
             game.memory.frameArena, frameArenaSize);
-        game.memory.frameArenaBuffer = game.memory.frameArena.curr;
         __DEBUGDEF(game.memory.frameArenaHighmark =
                 (uintptr_t)game.memory.frameArena.curr;
             game.memory.frameArena.highmark = &game.memory.frameArenaHighmark;)
@@ -175,7 +173,7 @@ void start(Instance& game, platform::GameConfig& config) {
 void update(Instance& game, platform::GameConfig& config) {
 
     // frame arena reset
-    game.memory.frameArena.curr = game.memory.frameArenaBuffer;
+    allocator::PagedArena frame_arena_init = game.memory.frameArena;
 
     // frame timing calculations
     {
@@ -1109,7 +1107,7 @@ void update(Instance& game, platform::GameConfig& config) {
                         renderArena(
                             (u8*)math::max(
                                 (uintptr_t)game.memory.frameArena.end, game.memory.frameArenaHighmark),
-                            game.memory.frameArenaBuffer, game.memory.frameArenaHighmark,
+                            frame_arena_init.curr, game.memory.frameArenaHighmark,
                             "Frame arena", arenabaseCol, arenahighmarkCol);
                     }
                     {
@@ -1463,6 +1461,7 @@ void update(Instance& game, platform::GameConfig& config) {
         #endif
 
     }
+    game.memory.frameArena = frame_arena_init;
 }
 }
 

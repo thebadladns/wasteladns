@@ -164,8 +164,8 @@ template<typename T>
 struct PoolHandle;
 template<typename T>
 struct Pool {
-    // important: _T must be the first member of the union, so we can assume _T* = Slot<_T>*
-    static_assert(sizeof(T) > 2);
+    // important: T must be the first member of the union, so we can assume T* = Slot<T>*
+    static_assert(sizeof(T) >= 2); // T must be able to hold a next free pointer when not allocated
     struct Slot {
         union {
             T live;
