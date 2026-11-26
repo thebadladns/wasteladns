@@ -1379,8 +1379,8 @@ void load_coreResources(
     };
     // very very hack: number of assets * 4 + 16 (for the meshes we load ourselves)
     const ptrdiff_t mesh_count = countof(assets) * 4 + 16;
-    allocator::init_pool(renderCore.meshes, mesh_count, persistentArena);
-    __DEBUGDEF(renderCore.meshes.name = "meshes";)
+    allocator::init_pool(renderCore.meshes, mesh_count, persistentArena __DEBUGDEF(, "meshes"));
+   
 
     camera::WindowProjection::Config& ortho =
         renderCore.windowProjection.config;
@@ -2145,12 +2145,9 @@ void spawn_scene_mirrorRoom(
     size_t maxDrawables = math::max(game::EntityTypes::Count, 1024);
     size_t cbufferCount = maxDrawables * 2;
     size_t maxAnimNodes = countof(assetDefs);
-    allocator::init_pool(renderScene.cbuffers, cbufferCount, sceneArena);
-    __DEBUGDEF(renderScene.cbuffers.name = "cbuffers";)
-    allocator::init_pool(renderScene.drawables, maxDrawables, sceneArena);
-    __DEBUGDEF(renderScene.drawables.name = "drawables";)
-    allocator::init_pool(animScene.nodes, maxAnimNodes, sceneArena);
-    __DEBUGDEF(animScene.nodes.name = "anim nodes";)
+    allocator::init_pool(renderScene.cbuffers, cbufferCount, sceneArena __DEBUGDEF(, "cbuffers"));
+    allocator::init_pool(renderScene.drawables, maxDrawables, sceneArena __DEBUGDEF(, "drawables"));
+    allocator::init_pool(animScene.nodes, maxAnimNodes, sceneArena __DEBUGDEF(, "anim nodes"));
 
     const u32 ball_count = (u32)countof(physics::Scene::balls);
     // physics

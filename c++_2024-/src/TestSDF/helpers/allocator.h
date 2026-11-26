@@ -137,8 +137,14 @@ void reserve(Buffer<T>& b, ptrdiff_t cap, PagedArena& arena) {
     b.cap = cap;
 }
 
-// Pool
-
+// Pool allocator
+// Stores an array of elements, with additional metadata for each item as a footer, so that each
+// can be reinterpret-casted to the original type easily. Non-allocated items use the element's
+// memory to store a pointer of the next free available item in the pool. The pool then stores the
+// first item in this free list.
+// Pool generates handles that are expected to have an index and a generation, as well as a "data"
+// field that will be 0 when uninitialized. For this reason, indexes are internally stored with an
+// offset of 1, so the idx=0,gen=0 can be used as an uninitialized sentinel value.
 template<u32 index_bits, u32 generation_bits>
 struct PoolHandle_Base {
     static constexpr u32 IndexBits = index_bits;
@@ -153,13 +159,13 @@ struct PoolHandle_Base {
     };
     static_assert(TotalBits <= sizeof(u32) * 8);
 };
-
+// To be defined per type using the pool
 template<typename T>
 struct PoolHandle;
-
 template<typename T>
 struct Pool {
     // important: _T must be the first member of the union, so we can assume _T* = Slot<_T>*
+    static_assert(sizeof(T) > 2);
     struct Slot {
         union {
             T live;
@@ -169,12 +175,12 @@ struct Pool {
         u32 gen : PoolHandle<T>::GenerationBits;
     };
     __DEBUGDEF(const char* name;)
+    __DEBUGDEF(PagedArena* regrow_arena;)
     Slot* data;
     Slot* firstAvailable;
     ptrdiff_t cap;
     ptrdiff_t count;
 };
-
 template<typename T>
 T* resolve_pool_handle(Pool<T>& pool, PoolHandle<T> handle) {
     if (handle.idx <= 0 || handle.idx >= pool.cap)  { return nullptr; }
@@ -183,9 +189,8 @@ T* resolve_pool_handle(Pool<T>& pool, PoolHandle<T> handle) {
     if (handle.gen != slot.gen) { return nullptr; }
     return &slot.state.live;
 }
-
 template<typename T>
-void init_pool(Pool<T>& pool, ptrdiff_t cap, PagedArena& arena) {
+void init_pool(Pool<T>& pool, ptrdiff_t cap, PagedArena& arena __DEBUGDEF(, const char* name) ) {
     typedef typename Pool<T>::Slot Slot;
     pool.cap = cap;
     pool.data = (Slot*)allocator::alloc_arena(arena, sizeof(Slot) * cap, alignof(Slot));
@@ -194,6 +199,7 @@ void init_pool(Pool<T>& pool, ptrdiff_t cap, PagedArena& arena) {
     { pool.data[i].state.next = &(pool.data[i+1]); pool.data[i].alive = pool.data[i].gen = 0; }
     pool.data[cap - 1].state.next = nullptr; pool.data[cap - 1].alive = pool.data[cap - 1].gen = 0;
     pool.count = 0;
+    __DEBUGDEF(pool.name = name; pool.regrow_arena = &arena;)
 }
 template<typename T>
 struct AllocPoolResult {
@@ -203,9 +209,29 @@ struct AllocPoolResult {
 template<typename T>
 AllocPoolResult<T> alloc_pool(Pool<T>& pool) {
     typedef typename Pool<T>::Slot Slot;
-    assert(pool.firstAvailable); // todo: handle regrow
+#if __DEBUG
+    if (!pool.firstAvailable) {
+        Buffer_t regrow_buffer = { (u8*)pool.data, pool.cap, pool.cap };
+        grow(regrow_buffer, sizeof(Slot), alignof(Slot), *pool.regrow_arena);
+        pool.data = (Slot*)regrow_buffer.data;
+        for (u32 i = (u32)pool.cap; i < regrow_buffer.cap; i++) {
+            pool.data[i].alive = pool.data[i].gen = 0; // init newly allocated members
+        }
+        pool.cap = regrow_buffer.cap;
+        u32 last_free = (u32)pool.cap - 1; // rebuild free list so the last free slot is at the end
+        for (u32 i = (u32)pool.cap - 1; i-- > 0;) {
+            if (!pool.data[i].alive) {
+                pool.data[i].state.next = &pool.data[last_free];
+                last_free = i;
+            }
+        }
+        pool.firstAvailable = &pool.data[last_free];
+    }
+#else
+    assert(pool.firstAvailable);
+#endif
     Slot& slot = *pool.firstAvailable;
-    pool.firstAvailable->alive = 1;
+    slot.alive = 1;
     pool.firstAvailable = pool.firstAvailable->state.next;
     pool.count++;
     AllocPoolResult<T> out;
